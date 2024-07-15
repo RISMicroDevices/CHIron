@@ -736,103 +736,103 @@ namespace CHI {
 
         // field decay helper functions
         public:
-            inline constexpr        qos_t&              QoS             ()          noexcept { return decay<qos_t>(_QoS); }
-            inline constexpr        tgtid_t&            TgtID           ()          noexcept { return decay<tgtid_t>(_TgtID); }
-            inline constexpr        srcid_t&            SrcID           ()          noexcept { return decay<srcid_t>(_SrcID); }
-            inline constexpr        txnid_t&            TxnID           ()          noexcept { return decay<txnid_t>(_TxnID); }
-            inline constexpr        returnnid_t&        ReturnNID       ()          noexcept { return decay<returnnid_t>(_ReturnNID); }
-            inline constexpr        stashnid_t&         StashNID        ()          noexcept { return decay<stashnid_t>(_StashNID); }
+            inline constexpr        qos_t&              QoS             ()          noexcept { return CHI::decay<qos_t>(_QoS); }
+            inline constexpr        tgtid_t&            TgtID           ()          noexcept { return CHI::decay<tgtid_t>(_TgtID); }
+            inline constexpr        srcid_t&            SrcID           ()          noexcept { return CHI::decay<srcid_t>(_SrcID); }
+            inline constexpr        txnid_t&            TxnID           ()          noexcept { return CHI::decay<txnid_t>(_TxnID); }
+            inline constexpr        returnnid_t&        ReturnNID       ()          noexcept { return CHI::decay<returnnid_t>(_ReturnNID); }
+            inline constexpr        stashnid_t&         StashNID        ()          noexcept { return CHI::decay<stashnid_t>(_StashNID); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        slcrephint_t&       SLCRepHint      ()          noexcept { return decay<slcrephint_t>(_SLCRepHint); }
+            inline constexpr        slcrephint_t&       SLCRepHint      ()          noexcept { return CHI::decay<slcrephint_t>(_SLCRepHint); }
 #endif
-            inline constexpr        stashnidvalid_t&    StashNIDValid   ()          noexcept { return decay<stashnidvalid_t>(_StashNIDValid); }
-            inline constexpr        endian_t&           Endian          ()          noexcept { return decay<endian_t>(_Endian); }
+            inline constexpr        stashnidvalid_t&    StashNIDValid   ()          noexcept { return CHI::decay<stashnidvalid_t>(_StashNIDValid); }
+            inline constexpr        endian_t&           Endian          ()          noexcept { return CHI::decay<endian_t>(_Endian); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        deep_t&             Deep            ()          noexcept { return decay<deep_t>(_Deep); }
+            inline constexpr        deep_t&             Deep            ()          noexcept { return CHI::decay<deep_t>(_Deep); }
 #endif
-            inline constexpr        returntxnid_t&      ReturnTxnID     ()          noexcept { return decay<returntxnid_t>(_ReturnTxnID); }
-            inline constexpr        stashlpidvalid_t&   StashLPIDValid  ()          noexcept { return decay<stashlpidvalid_t>(_StashLPIDValid); }
-            inline constexpr        stashlpid_t&        StashLPID       ()          noexcept { return decay<stashlpid_t>(_StashLPID); }
-            inline constexpr        opcode_t&           Opcode          ()          noexcept { return decay<opcode_t>(_Opcode); }
-            inline constexpr        ssize_t&            Size            ()          noexcept { return decay<ssize_t>(_Size); }
-            inline constexpr        addr_t&             Addr            ()          noexcept { return decay<addr_t>(_Addr); }
-            inline constexpr        ns_t&               NS              ()          noexcept { return decay<ns_t>(_NS); }
-            inline constexpr        likelyshared_t&     LikelyShared    ()          noexcept { return decay<likelyshared_t>(_LikelyShared); }
-            inline constexpr        allowretry_t&       AllowRetry      ()          noexcept { return decay<allowretry_t>(_AllowRetry); }
-            inline constexpr        order_t&            Order           ()          noexcept { return decay<order_t>(_Order); }
-            inline constexpr        pcrdtype_t&         PCrdType        ()          noexcept { return decay<pcrdtype_t>(_PCrdType); }
-            inline constexpr        memattr_t&          MemAttr         ()          noexcept { return decay<memattr_t>(_MemAttr); }
-            inline constexpr        snpattr_t&          SnpAttr         ()          noexcept { return decay<snpattr_t>(_SnpAttr); }
+            inline constexpr        returntxnid_t&      ReturnTxnID     ()          noexcept { return CHI::decay<returntxnid_t>(_ReturnTxnID); }
+            inline constexpr        stashlpidvalid_t&   StashLPIDValid  ()          noexcept { return CHI::decay<stashlpidvalid_t>(_StashLPIDValid); }
+            inline constexpr        stashlpid_t&        StashLPID       ()          noexcept { return CHI::decay<stashlpid_t>(_StashLPID); }
+            inline constexpr        opcode_t&           Opcode          ()          noexcept { return CHI::decay<opcode_t>(_Opcode); }
+            inline constexpr        ssize_t&            Size            ()          noexcept { return CHI::decay<ssize_t>(_Size); }
+            inline constexpr        addr_t&             Addr            ()          noexcept { return CHI::decay<addr_t>(_Addr); }
+            inline constexpr        ns_t&               NS              ()          noexcept { return CHI::decay<ns_t>(_NS); }
+            inline constexpr        likelyshared_t&     LikelyShared    ()          noexcept { return CHI::decay<likelyshared_t>(_LikelyShared); }
+            inline constexpr        allowretry_t&       AllowRetry      ()          noexcept { return CHI::decay<allowretry_t>(_AllowRetry); }
+            inline constexpr        order_t&            Order           ()          noexcept { return CHI::decay<order_t>(_Order); }
+            inline constexpr        pcrdtype_t&         PCrdType        ()          noexcept { return CHI::decay<pcrdtype_t>(_PCrdType); }
+            inline constexpr        memattr_t&          MemAttr         ()          noexcept { return CHI::decay<memattr_t>(_MemAttr); }
+            inline constexpr        snpattr_t&          SnpAttr         ()          noexcept { return CHI::decay<snpattr_t>(_SnpAttr); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        dodwt_t&            DoDWT           ()          noexcept { return decay<dodwt_t>(_DoDWT); }
+            inline constexpr        dodwt_t&            DoDWT           ()          noexcept { return CHI::decay<dodwt_t>(_DoDWT); }
 #endif
-            inline constexpr        lpid_t&             LPID            ()          noexcept { return decay<lpid_t>(_LPID); }
+            inline constexpr        lpid_t&             LPID            ()          noexcept { return CHI::decay<lpid_t>(_LPID); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        pgroupid_t&         PGroupID        ()          noexcept { return decay<pgroupid_t>(_PGroupID); }
-            inline constexpr        stashgroupid_t&     StashGroupID    ()          noexcept { return decay<stashgroupid_t>(_StashGroupID); }
-            inline constexpr        taggroupid_t&       TagGroupID      ()          noexcept { return decay<taggroupid_t>(_TagGroupID); }
+            inline constexpr        pgroupid_t&         PGroupID        ()          noexcept { return CHI::decay<pgroupid_t>(_PGroupID); }
+            inline constexpr        stashgroupid_t&     StashGroupID    ()          noexcept { return CHI::decay<stashgroupid_t>(_StashGroupID); }
+            inline constexpr        taggroupid_t&       TagGroupID      ()          noexcept { return CHI::decay<taggroupid_t>(_TagGroupID); }
 #endif
-            inline constexpr        excl_t&             Excl            ()          noexcept { return decay<excl_t>(_Excl); }
-            inline constexpr        snoopme_t&          SnoopMe         ()          noexcept { return decay<snoopme_t>(_SnoopMe); }
-            inline constexpr        expcompack_t&       ExpCompAck      ()          noexcept { return decay<expcompack_t>(_ExpCompAck); }
+            inline constexpr        excl_t&             Excl            ()          noexcept { return CHI::decay<excl_t>(_Excl); }
+            inline constexpr        snoopme_t&          SnoopMe         ()          noexcept { return CHI::decay<snoopme_t>(_SnoopMe); }
+            inline constexpr        expcompack_t&       ExpCompAck      ()          noexcept { return CHI::decay<expcompack_t>(_ExpCompAck); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        tagop_t&            TagOp           ()          noexcept { return decay<tagop_t>(_TagOp); }
+            inline constexpr        tagop_t&            TagOp           ()          noexcept { return CHI::decay<tagop_t>(_TagOp); }
 #endif
-            inline constexpr        tracetag_t&         TraceTag        ()          noexcept { return decay<tracetag_t>(_TraceTag); }
+            inline constexpr        tracetag_t&         TraceTag        ()          noexcept { return CHI::decay<tracetag_t>(_TraceTag); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        mpam_t&             MPAM            ()          noexcept { return decay<mpam_t>(_MPAM); }
+            inline constexpr        mpam_t&             MPAM            ()          noexcept { return CHI::decay<mpam_t>(_MPAM); }
 #endif
-            inline constexpr        rsvdc_t&            RSVDC           ()          noexcept { return decay<rsvdc_t>(_RSVDC); }
+            inline constexpr        rsvdc_t&            RSVDC           ()          noexcept { return CHI::decay<rsvdc_t>(_RSVDC); }
 
         // field decay helper functions (const)
         public:
-            inline constexpr const  qos_t&              QoS             () const    noexcept { return decay<qos_t>(_QoS); }
-            inline constexpr const  tgtid_t&            TgtID           () const    noexcept { return decay<tgtid_t>(_TgtID); }
-            inline constexpr const  srcid_t&            SrcID           () const    noexcept { return decay<srcid_t>(_SrcID); }
-            inline constexpr const  txnid_t&            TxnID           () const    noexcept { return decay<txnid_t>(_TxnID); }
-            inline constexpr const  returnnid_t&        ReturnNID       () const    noexcept { return decay<returnnid_t>(_ReturnNID); }
-            inline constexpr const  stashnid_t&         StashNID        () const    noexcept { return decay<stashnid_t>(_StashNID); }
+            inline constexpr const  qos_t&              QoS             () const    noexcept { return CHI::decay<qos_t>(_QoS); }
+            inline constexpr const  tgtid_t&            TgtID           () const    noexcept { return CHI::decay<tgtid_t>(_TgtID); }
+            inline constexpr const  srcid_t&            SrcID           () const    noexcept { return CHI::decay<srcid_t>(_SrcID); }
+            inline constexpr const  txnid_t&            TxnID           () const    noexcept { return CHI::decay<txnid_t>(_TxnID); }
+            inline constexpr const  returnnid_t&        ReturnNID       () const    noexcept { return CHI::decay<returnnid_t>(_ReturnNID); }
+            inline constexpr const  stashnid_t&         StashNID        () const    noexcept { return CHI::decay<stashnid_t>(_StashNID); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  slcrephint_t&       SLCRepHint      () const    noexcept { return decay<slcrephint_t>(_SLCRepHint); }
+            inline constexpr const  slcrephint_t&       SLCRepHint      () const    noexcept { return CHI::decay<slcrephint_t>(_SLCRepHint); }
 #endif
-            inline constexpr const  stashnidvalid_t&    StashNIDValid   () const    noexcept { return decay<stashnidvalid_t>(_StashNIDValid); }
-            inline constexpr const  endian_t&           Endian          () const    noexcept { return decay<endian_t>(_Endian); }
+            inline constexpr const  stashnidvalid_t&    StashNIDValid   () const    noexcept { return CHI::decay<stashnidvalid_t>(_StashNIDValid); }
+            inline constexpr const  endian_t&           Endian          () const    noexcept { return CHI::decay<endian_t>(_Endian); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  deep_t&             Deep            () const    noexcept { return decay<deep_t>(_Deep); }
+            inline constexpr const  deep_t&             Deep            () const    noexcept { return CHI::decay<deep_t>(_Deep); }
 #endif
-            inline constexpr const  returntxnid_t&      ReturnTxnID     () const    noexcept { return decay<returntxnid_t>(_ReturnTxnID); }
-            inline constexpr const  stashlpidvalid_t&   StashLPIDValid  () const    noexcept { return decay<stashlpidvalid_t>(_StashLPIDValid); }
-            inline constexpr const  stashlpid_t&        StashLPID       () const    noexcept { return decay<stashlpid_t>(_StashLPID); }
-            inline constexpr const  opcode_t&           Opcode          () const    noexcept { return decay<opcode_t>(_Opcode); }
-            inline constexpr const  ssize_t&            Size            () const    noexcept { return decay<ssize_t>(_Size); }
-            inline constexpr const  addr_t&             Addr            () const    noexcept { return decay<addr_t>(_Addr); }
-            inline constexpr const  ns_t&               NS              () const    noexcept { return decay<ns_t>(_NS); }
-            inline constexpr const  likelyshared_t&     LikelyShared    () const    noexcept { return decay<likelyshared_t>(_LikelyShared); }
-            inline constexpr const  allowretry_t&       AllowRetry      () const    noexcept { return decay<allowretry_t>(_AllowRetry); }
-            inline constexpr const  order_t&            Order           () const    noexcept { return decay<order_t>(_Order); }
-            inline constexpr const  pcrdtype_t&         PCrdType        () const    noexcept { return decay<pcrdtype_t>(_PCrdType); }
-            inline constexpr const  memattr_t&          MemAttr         () const    noexcept { return decay<memattr_t>(_MemAttr); }
-            inline constexpr const  snpattr_t&          SnpAttr         () const    noexcept { return decay<snpattr_t>(_SnpAttr); }
+            inline constexpr const  returntxnid_t&      ReturnTxnID     () const    noexcept { return CHI::decay<returntxnid_t>(_ReturnTxnID); }
+            inline constexpr const  stashlpidvalid_t&   StashLPIDValid  () const    noexcept { return CHI::decay<stashlpidvalid_t>(_StashLPIDValid); }
+            inline constexpr const  stashlpid_t&        StashLPID       () const    noexcept { return CHI::decay<stashlpid_t>(_StashLPID); }
+            inline constexpr const  opcode_t&           Opcode          () const    noexcept { return CHI::decay<opcode_t>(_Opcode); }
+            inline constexpr const  ssize_t&            Size            () const    noexcept { return CHI::decay<ssize_t>(_Size); }
+            inline constexpr const  addr_t&             Addr            () const    noexcept { return CHI::decay<addr_t>(_Addr); }
+            inline constexpr const  ns_t&               NS              () const    noexcept { return CHI::decay<ns_t>(_NS); }
+            inline constexpr const  likelyshared_t&     LikelyShared    () const    noexcept { return CHI::decay<likelyshared_t>(_LikelyShared); }
+            inline constexpr const  allowretry_t&       AllowRetry      () const    noexcept { return CHI::decay<allowretry_t>(_AllowRetry); }
+            inline constexpr const  order_t&            Order           () const    noexcept { return CHI::decay<order_t>(_Order); }
+            inline constexpr const  pcrdtype_t&         PCrdType        () const    noexcept { return CHI::decay<pcrdtype_t>(_PCrdType); }
+            inline constexpr const  memattr_t&          MemAttr         () const    noexcept { return CHI::decay<memattr_t>(_MemAttr); }
+            inline constexpr const  snpattr_t&          SnpAttr         () const    noexcept { return CHI::decay<snpattr_t>(_SnpAttr); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  dodwt_t&            DoDWT           () const    noexcept { return decay<dodwt_t>(_DoDWT); }
+            inline constexpr const  dodwt_t&            DoDWT           () const    noexcept { return CHI::decay<dodwt_t>(_DoDWT); }
 #endif
-            inline constexpr const  lpid_t&             LPID            () const    noexcept { return decay<lpid_t>(_LPID); }
+            inline constexpr const  lpid_t&             LPID            () const    noexcept { return CHI::decay<lpid_t>(_LPID); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  pgroupid_t&         PGroupID        () const    noexcept { return decay<pgroupid_t>(_PGroupID); }
-            inline constexpr const  stashgroupid_t&     StashGroupID    () const    noexcept { return decay<stashgroupid_t>(_StashGroupID); }
-            inline constexpr const  taggroupid_t&       TagGroupID      () const    noexcept { return decay<taggroupid_t>(_TagGroupID); }
+            inline constexpr const  pgroupid_t&         PGroupID        () const    noexcept { return CHI::decay<pgroupid_t>(_PGroupID); }
+            inline constexpr const  stashgroupid_t&     StashGroupID    () const    noexcept { return CHI::decay<stashgroupid_t>(_StashGroupID); }
+            inline constexpr const  taggroupid_t&       TagGroupID      () const    noexcept { return CHI::decay<taggroupid_t>(_TagGroupID); }
 #endif
-            inline constexpr const  excl_t&             Excl            () const    noexcept { return decay<excl_t>(_Excl); }
-            inline constexpr const  snoopme_t&          SnoopMe         () const    noexcept { return decay<snoopme_t>(_SnoopMe); }
-            inline constexpr const  expcompack_t&       ExpCompAck      () const    noexcept { return decay<expcompack_t>(_ExpCompAck); }
+            inline constexpr const  excl_t&             Excl            () const    noexcept { return CHI::decay<excl_t>(_Excl); }
+            inline constexpr const  snoopme_t&          SnoopMe         () const    noexcept { return CHI::decay<snoopme_t>(_SnoopMe); }
+            inline constexpr const  expcompack_t&       ExpCompAck      () const    noexcept { return CHI::decay<expcompack_t>(_ExpCompAck); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  tagop_t&            TagOp           () const    noexcept { return decay<tagop_t>(_TagOp); }
+            inline constexpr const  tagop_t&            TagOp           () const    noexcept { return CHI::decay<tagop_t>(_TagOp); }
 #endif
-            inline constexpr const  tracetag_t&         TraceTag        () const    noexcept { return decay<tracetag_t>(_TraceTag); }
+            inline constexpr const  tracetag_t&         TraceTag        () const    noexcept { return CHI::decay<tracetag_t>(_TraceTag); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  mpam_t&             MPAM            () const    noexcept { return decay<mpam_t>(_MPAM); }
+            inline constexpr const  mpam_t&             MPAM            () const    noexcept { return CHI::decay<mpam_t>(_MPAM); }
 #endif
-            inline constexpr const  rsvdc_t&            RSVDC           () const    noexcept { return decay<rsvdc_t>(_RSVDC); }
+            inline constexpr const  rsvdc_t&            RSVDC           () const    noexcept { return CHI::decay<rsvdc_t>(_RSVDC); }
         };
 
 
@@ -1243,65 +1243,65 @@ namespace CHI {
 
         // field decay helper functions
         public:
-            inline constexpr        qos_t&              QoS             ()          noexcept    { return decay<qos_t>(_QoS); }
-            inline constexpr        tgtid_t&            TgtID           ()          noexcept    { return decay<tgtid_t>(_TgtID); }
-            inline constexpr        srcid_t&            SrcID           ()          noexcept    { return decay<srcid_t>(_SrcID); }
-            inline constexpr        txnid_t&            TxnID           ()          noexcept    { return decay<txnid_t>(_TxnID); }
-            inline constexpr        homenid_t&          HomeNID         ()          noexcept    { return decay<homenid_t>(_HomeNID); }
-            inline constexpr        opcode_t&           Opcode          ()          noexcept    { return decay<opcode_t>(_Opcode); }
-            inline constexpr        resperr_t&          RespErr         ()          noexcept    { return decay<resperr_t>(_RespErr); }
-            inline constexpr        resp_t&             Resp            ()          noexcept    { return decay<resp_t>(_Resp); }
-            inline constexpr        fwdstate_t&         FwdState        ()          noexcept    { return decay<fwdstate_t>(_FwdState); }
-            inline constexpr        datapull_t&         DataPull        ()          noexcept    { return decay<datapull_t>(_DataPull); }
-            inline constexpr        datasource_t&       DataSource      ()          noexcept    { return decay<datasource_t>(_DataSource); }
+            inline constexpr        qos_t&              QoS             ()          noexcept    { return CHI::decay<qos_t>(_QoS); }
+            inline constexpr        tgtid_t&            TgtID           ()          noexcept    { return CHI::decay<tgtid_t>(_TgtID); }
+            inline constexpr        srcid_t&            SrcID           ()          noexcept    { return CHI::decay<srcid_t>(_SrcID); }
+            inline constexpr        txnid_t&            TxnID           ()          noexcept    { return CHI::decay<txnid_t>(_TxnID); }
+            inline constexpr        homenid_t&          HomeNID         ()          noexcept    { return CHI::decay<homenid_t>(_HomeNID); }
+            inline constexpr        opcode_t&           Opcode          ()          noexcept    { return CHI::decay<opcode_t>(_Opcode); }
+            inline constexpr        resperr_t&          RespErr         ()          noexcept    { return CHI::decay<resperr_t>(_RespErr); }
+            inline constexpr        resp_t&             Resp            ()          noexcept    { return CHI::decay<resp_t>(_Resp); }
+            inline constexpr        fwdstate_t&         FwdState        ()          noexcept    { return CHI::decay<fwdstate_t>(_FwdState); }
+            inline constexpr        datapull_t&         DataPull        ()          noexcept    { return CHI::decay<datapull_t>(_DataPull); }
+            inline constexpr        datasource_t&       DataSource      ()          noexcept    { return CHI::decay<datasource_t>(_DataSource); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        cbusy_t&            CBusy           ()          noexcept    { return decay<cbusy_t>(_CBusy); }
+            inline constexpr        cbusy_t&            CBusy           ()          noexcept    { return CHI::decay<cbusy_t>(_CBusy); }
 #endif
-            inline constexpr        dbid_t&             DBID            ()          noexcept    { return decay<dbid_t>(_DBID); }
-            inline constexpr        ccid_t&             CCID            ()          noexcept    { return decay<ccid_t>(_CCID); }
-            inline constexpr        dataid_t&           DataID          ()          noexcept    { return decay<dataid_t>(_DataID); }
+            inline constexpr        dbid_t&             DBID            ()          noexcept    { return CHI::decay<dbid_t>(_DBID); }
+            inline constexpr        ccid_t&             CCID            ()          noexcept    { return CHI::decay<ccid_t>(_CCID); }
+            inline constexpr        dataid_t&           DataID          ()          noexcept    { return CHI::decay<dataid_t>(_DataID); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        tagop_t&            TagOp           ()          noexcept    { return decay<tagop_t>(_TagOp); }
-            inline constexpr        tag_t&              Tag             ()          noexcept    { return decay<tag_t>(_Tag); }
-            inline constexpr        tu_t&               TU              ()          noexcept    { return decay<tu_t>(_TU); }
+            inline constexpr        tagop_t&            TagOp           ()          noexcept    { return CHI::decay<tagop_t>(_TagOp); }
+            inline constexpr        tag_t&              Tag             ()          noexcept    { return CHI::decay<tag_t>(_Tag); }
+            inline constexpr        tu_t&               TU              ()          noexcept    { return CHI::decay<tu_t>(_TU); }
 #endif
-            inline constexpr        tracetag_t&         TraceTag        ()          noexcept    { return decay<tracetag_t>(_TraceTag); }
-            inline constexpr        rsvdc_t&            RSVDC           ()          noexcept    { return decay<rsvdc_t>(_RSVDC); }
-            inline constexpr        be_t&               BE              ()          noexcept    { return decay<be_t>(_BE); }
-            inline constexpr        data_t&             Data            ()          noexcept    { return decay<data_t>(_Data); }
-            inline constexpr        datacheck_t&        DataCheck       ()          noexcept    { return decay<datacheck_t>(_DataCheck); }
-            inline constexpr        poison_t&           Poison          ()          noexcept    { return decay<poison_t>(_Poison); }
+            inline constexpr        tracetag_t&         TraceTag        ()          noexcept    { return CHI::decay<tracetag_t>(_TraceTag); }
+            inline constexpr        rsvdc_t&            RSVDC           ()          noexcept    { return CHI::decay<rsvdc_t>(_RSVDC); }
+            inline constexpr        be_t&               BE              ()          noexcept    { return CHI::decay<be_t>(_BE); }
+            inline constexpr        data_t&             Data            ()          noexcept    { return CHI::decay<data_t>(_Data); }
+            inline constexpr        datacheck_t&        DataCheck       ()          noexcept    { return CHI::decay<datacheck_t>(_DataCheck); }
+            inline constexpr        poison_t&           Poison          ()          noexcept    { return CHI::decay<poison_t>(_Poison); }
 
         // field decay helper functions
         public:
-            inline constexpr const  qos_t&              QoS             () const    noexcept    { return decay<qos_t>(_QoS); }
-            inline constexpr const  tgtid_t&            TgtID           () const    noexcept    { return decay<tgtid_t>(_TgtID); }
-            inline constexpr const  srcid_t&            SrcID           () const    noexcept    { return decay<srcid_t>(_SrcID); }
-            inline constexpr const  txnid_t&            TxnID           () const    noexcept    { return decay<txnid_t>(_TxnID); }
-            inline constexpr const  homenid_t&          HomeNID         () const    noexcept    { return decay<homenid_t>(_HomeNID); }
-            inline constexpr const  opcode_t&           Opcode          () const    noexcept    { return decay<opcode_t>(_Opcode); }
-            inline constexpr const  resperr_t&          RespErr         () const    noexcept    { return decay<resperr_t>(_RespErr); }
-            inline constexpr const  resp_t&             Resp            () const    noexcept    { return decay<resp_t>(_Resp); }
-            inline constexpr const  fwdstate_t&         FwdState        () const    noexcept    { return decay<fwdstate_t>(_FwdState); }
-            inline constexpr const  datapull_t&         DataPull        () const    noexcept    { return decay<datapull_t>(_DataPull); }
-            inline constexpr const  datasource_t&       DataSource      () const    noexcept    { return decay<datasource_t>(_DataSource); }
+            inline constexpr const  qos_t&              QoS             () const    noexcept    { return CHI::decay<qos_t>(_QoS); }
+            inline constexpr const  tgtid_t&            TgtID           () const    noexcept    { return CHI::decay<tgtid_t>(_TgtID); }
+            inline constexpr const  srcid_t&            SrcID           () const    noexcept    { return CHI::decay<srcid_t>(_SrcID); }
+            inline constexpr const  txnid_t&            TxnID           () const    noexcept    { return CHI::decay<txnid_t>(_TxnID); }
+            inline constexpr const  homenid_t&          HomeNID         () const    noexcept    { return CHI::decay<homenid_t>(_HomeNID); }
+            inline constexpr const  opcode_t&           Opcode          () const    noexcept    { return CHI::decay<opcode_t>(_Opcode); }
+            inline constexpr const  resperr_t&          RespErr         () const    noexcept    { return CHI::decay<resperr_t>(_RespErr); }
+            inline constexpr const  resp_t&             Resp            () const    noexcept    { return CHI::decay<resp_t>(_Resp); }
+            inline constexpr const  fwdstate_t&         FwdState        () const    noexcept    { return CHI::decay<fwdstate_t>(_FwdState); }
+            inline constexpr const  datapull_t&         DataPull        () const    noexcept    { return CHI::decay<datapull_t>(_DataPull); }
+            inline constexpr const  datasource_t&       DataSource      () const    noexcept    { return CHI::decay<datasource_t>(_DataSource); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  cbusy_t&            CBusy           () const    noexcept    { return decay<cbusy_t>(_CBusy); }
+            inline constexpr const  cbusy_t&            CBusy           () const    noexcept    { return CHI::decay<cbusy_t>(_CBusy); }
 #endif
-            inline constexpr const  dbid_t&             DBID            () const    noexcept    { return decay<dbid_t>(_DBID); }
-            inline constexpr const  ccid_t&             CCID            () const    noexcept    { return decay<ccid_t>(_CCID); }
-            inline constexpr const  dataid_t&           DataID          () const    noexcept    { return decay<dataid_t>(_DataID); }
+            inline constexpr const  dbid_t&             DBID            () const    noexcept    { return CHI::decay<dbid_t>(_DBID); }
+            inline constexpr const  ccid_t&             CCID            () const    noexcept    { return CHI::decay<ccid_t>(_CCID); }
+            inline constexpr const  dataid_t&           DataID          () const    noexcept    { return CHI::decay<dataid_t>(_DataID); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  tagop_t&            TagOp           () const    noexcept    { return decay<tagop_t>(_TagOp); }
-            inline constexpr const  tag_t&              Tag             () const    noexcept    { return decay<tag_t>(_Tag); }
-            inline constexpr const  tu_t&               TU              () const    noexcept    { return decay<tu_t>(_TU); }
+            inline constexpr const  tagop_t&            TagOp           () const    noexcept    { return CHI::decay<tagop_t>(_TagOp); }
+            inline constexpr const  tag_t&              Tag             () const    noexcept    { return CHI::decay<tag_t>(_Tag); }
+            inline constexpr const  tu_t&               TU              () const    noexcept    { return CHI::decay<tu_t>(_TU); }
 #endif
-            inline constexpr const  tracetag_t&         TraceTag        () const    noexcept    { return decay<tracetag_t>(_TraceTag); }
-            inline constexpr const  rsvdc_t&            RSVDC           () const    noexcept    { return decay<rsvdc_t>(_RSVDC); }
-            inline constexpr const  be_t&               BE              () const    noexcept    { return decay<be_t>(_BE); }
-            inline constexpr const  data_t&             Data            () const    noexcept    { return decay<data_t>(_Data); }
-            inline constexpr const  datacheck_t&        DataCheck       () const    noexcept    { return decay<datacheck_t>(_DataCheck); }
-            inline constexpr const  poison_t&           Poison          () const    noexcept    { return decay<poison_t>(_Poison); }
+            inline constexpr const  tracetag_t&         TraceTag        () const    noexcept    { return CHI::decay<tracetag_t>(_TraceTag); }
+            inline constexpr const  rsvdc_t&            RSVDC           () const    noexcept    { return CHI::decay<rsvdc_t>(_RSVDC); }
+            inline constexpr const  be_t&               BE              () const    noexcept    { return CHI::decay<be_t>(_BE); }
+            inline constexpr const  data_t&             Data            () const    noexcept    { return CHI::decay<data_t>(_Data); }
+            inline constexpr const  datacheck_t&        DataCheck       () const    noexcept    { return CHI::decay<datacheck_t>(_DataCheck); }
+            inline constexpr const  poison_t&           Poison          () const    noexcept    { return CHI::decay<poison_t>(_Poison); }
         };
 
 
@@ -1611,55 +1611,55 @@ namespace CHI {
 
         // field decay helper functions
         public:
-            inline constexpr        qos_t&              QoS             ()          noexcept    { return decay<qos_t>(_QoS); }
-            inline constexpr        tgtid_t&            TgtID           ()          noexcept    { return decay<tgtid_t>(_TgtID); }
-            inline constexpr        srcid_t&            SrcID           ()          noexcept    { return decay<srcid_t>(_SrcID); }
-            inline constexpr        txnid_t&            TxnID           ()          noexcept    { return decay<txnid_t>(_TxnID); }
-            inline constexpr        opcode_t&           Opcode          ()          noexcept    { return decay<opcode_t>(_Opcode); }
-            inline constexpr        resperr_t&          RespErr         ()          noexcept    { return decay<resperr_t>(_RespErr); }
-            inline constexpr        resp_t&             Resp            ()          noexcept    { return decay<resp_t>(_Resp); }
-            inline constexpr        fwdstate_t&         FwdState        ()          noexcept    { return decay<fwdstate_t>(_FwdState); }
-            inline constexpr        datapull_t&         DataPull        ()          noexcept    { return decay<datapull_t>(_DataPull); }
+            inline constexpr        qos_t&              QoS             ()          noexcept    { return CHI::decay<qos_t>(_QoS); }
+            inline constexpr        tgtid_t&            TgtID           ()          noexcept    { return CHI::decay<tgtid_t>(_TgtID); }
+            inline constexpr        srcid_t&            SrcID           ()          noexcept    { return CHI::decay<srcid_t>(_SrcID); }
+            inline constexpr        txnid_t&            TxnID           ()          noexcept    { return CHI::decay<txnid_t>(_TxnID); }
+            inline constexpr        opcode_t&           Opcode          ()          noexcept    { return CHI::decay<opcode_t>(_Opcode); }
+            inline constexpr        resperr_t&          RespErr         ()          noexcept    { return CHI::decay<resperr_t>(_RespErr); }
+            inline constexpr        resp_t&             Resp            ()          noexcept    { return CHI::decay<resp_t>(_Resp); }
+            inline constexpr        fwdstate_t&         FwdState        ()          noexcept    { return CHI::decay<fwdstate_t>(_FwdState); }
+            inline constexpr        datapull_t&         DataPull        ()          noexcept    { return CHI::decay<datapull_t>(_DataPull); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        cbusy_t&            CBusy           ()          noexcept    { return decay<cbusy_t>(_CBusy); }
+            inline constexpr        cbusy_t&            CBusy           ()          noexcept    { return CHI::decay<cbusy_t>(_CBusy); }
 #endif
-            inline constexpr        dbid_t&             DBID            ()          noexcept    { return decay<dbid_t>(_DBID); }
+            inline constexpr        dbid_t&             DBID            ()          noexcept    { return CHI::decay<dbid_t>(_DBID); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        pgroupid_t&         PGroupID        ()          noexcept { return decay<pgroupid_t>(_PGroupID); }
-            inline constexpr        stashgroupid_t&     StashGroupID    ()          noexcept { return decay<stashgroupid_t>(_StashGroupID); }
-            inline constexpr        taggroupid_t&       TagGroupID      ()          noexcept { return decay<taggroupid_t>(_TagGroupID); }
+            inline constexpr        pgroupid_t&         PGroupID        ()          noexcept    { return CHI::decay<pgroupid_t>(_PGroupID); }
+            inline constexpr        stashgroupid_t&     StashGroupID    ()          noexcept    { return CHI::decay<stashgroupid_t>(_StashGroupID); }
+            inline constexpr        taggroupid_t&       TagGroupID      ()          noexcept    { return CHI::decay<taggroupid_t>(_TagGroupID); }
 #endif
-            inline constexpr        pcrdtype_t&         PCrdType        ()          noexcept { return decay<pcrdtype_t>(_PCrdType); }
+            inline constexpr        pcrdtype_t&         PCrdType        ()          noexcept    { return CHI::decay<pcrdtype_t>(_PCrdType); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        tagop_t&            TagOp           ()          noexcept { return decay<tagop_t>(_TagOp); }
+            inline constexpr        tagop_t&            TagOp           ()          noexcept    { return CHI::decay<tagop_t>(_TagOp); }
 #endif
-            inline constexpr        tracetag_t&         TraceTag        ()          noexcept { return decay<tracetag_t>(_TraceTag); }
+            inline constexpr        tracetag_t&         TraceTag        ()          noexcept    { return CHI::decay<tracetag_t>(_TraceTag); }
         
         // field decay helper functions
         public:
-            inline constexpr const  qos_t&              QoS             () const    noexcept    { return decay<qos_t>(_QoS); }
-            inline constexpr const  tgtid_t&            TgtID           () const    noexcept    { return decay<tgtid_t>(_TgtID); }
-            inline constexpr const  srcid_t&            SrcID           () const    noexcept    { return decay<srcid_t>(_SrcID); }
-            inline constexpr const  txnid_t&            TxnID           () const    noexcept    { return decay<txnid_t>(_TxnID); }
-            inline constexpr const  opcode_t&           Opcode          () const    noexcept    { return decay<opcode_t>(_Opcode); }
-            inline constexpr const  resperr_t&          RespErr         () const    noexcept    { return decay<resperr_t>(_RespErr); }
-            inline constexpr const  resp_t&             Resp            () const    noexcept    { return decay<resp_t>(_Resp); }
-            inline constexpr const  fwdstate_t&         FwdState        () const    noexcept    { return decay<fwdstate_t>(_FwdState); }
-            inline constexpr const  datapull_t&         DataPull        () const    noexcept    { return decay<datapull_t>(_DataPull); }
+            inline constexpr const  qos_t&              QoS             () const    noexcept    { return CHI::decay<qos_t>(_QoS); }
+            inline constexpr const  tgtid_t&            TgtID           () const    noexcept    { return CHI::decay<tgtid_t>(_TgtID); }
+            inline constexpr const  srcid_t&            SrcID           () const    noexcept    { return CHI::decay<srcid_t>(_SrcID); }
+            inline constexpr const  txnid_t&            TxnID           () const    noexcept    { return CHI::decay<txnid_t>(_TxnID); }
+            inline constexpr const  opcode_t&           Opcode          () const    noexcept    { return CHI::decay<opcode_t>(_Opcode); }
+            inline constexpr const  resperr_t&          RespErr         () const    noexcept    { return CHI::decay<resperr_t>(_RespErr); }
+            inline constexpr const  resp_t&             Resp            () const    noexcept    { return CHI::decay<resp_t>(_Resp); }
+            inline constexpr const  fwdstate_t&         FwdState        () const    noexcept    { return CHI::decay<fwdstate_t>(_FwdState); }
+            inline constexpr const  datapull_t&         DataPull        () const    noexcept    { return CHI::decay<datapull_t>(_DataPull); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  cbusy_t&            CBusy           () const    noexcept    { return decay<cbusy_t>(_CBusy); }
+            inline constexpr const  cbusy_t&            CBusy           () const    noexcept    { return CHI::decay<cbusy_t>(_CBusy); }
 #endif
-            inline constexpr const  dbid_t&             DBID            () const    noexcept    { return decay<dbid_t>(_DBID); }
+            inline constexpr const  dbid_t&             DBID            () const    noexcept    { return CHI::decay<dbid_t>(_DBID); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  pgroupid_t&         PGroupID        () const    noexcept { return decay<pgroupid_t>(_PGroupID); }
-            inline constexpr const  stashgroupid_t&     StashGroupID    () const    noexcept { return decay<stashgroupid_t>(_StashGroupID); }
-            inline constexpr const  taggroupid_t&       TagGroupID      () const    noexcept { return decay<taggroupid_t>(_TagGroupID); }
+            inline constexpr const  pgroupid_t&         PGroupID        () const    noexcept    { return CHI::decay<pgroupid_t>(_PGroupID); }
+            inline constexpr const  stashgroupid_t&     StashGroupID    () const    noexcept    { return CHI::decay<stashgroupid_t>(_StashGroupID); }
+            inline constexpr const  taggroupid_t&       TagGroupID      () const    noexcept    { return CHI::decay<taggroupid_t>(_TagGroupID); }
 #endif
-            inline constexpr const  pcrdtype_t&         PCrdType        () const    noexcept { return decay<pcrdtype_t>(_PCrdType); }
+            inline constexpr const  pcrdtype_t&         PCrdType        () const    noexcept    { return CHI::decay<pcrdtype_t>(_PCrdType); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  tagop_t&            TagOp           () const    noexcept { return decay<tagop_t>(_TagOp); }
+            inline constexpr const  tagop_t&            TagOp           () const    noexcept    { return CHI::decay<tagop_t>(_TagOp); }
 #endif
-            inline constexpr const  tracetag_t&         TraceTag        () const    noexcept { return decay<tracetag_t>(_TraceTag); }
+            inline constexpr const  tracetag_t&         TraceTag        () const    noexcept    { return CHI::decay<tracetag_t>(_TraceTag); }
         };
 
 
@@ -1925,48 +1925,48 @@ namespace CHI {
 
         // field decay helper functions
         public:
-            inline constexpr        qos_t&              QoS             ()          noexcept { return decay<qos_t>(_QoS); }
-            inline constexpr        srcid_t&            SrcID           ()          noexcept { return decay<srcid_t>(_SrcID); }
-            inline constexpr        txnid_t&            TxnID           ()          noexcept { return decay<txnid_t>(_TxnID); }
-            inline constexpr        fwdnid_t&           FwdNID          ()          noexcept { return decay<fwdnid_t>(_FwdNID); }
-            inline constexpr        fwdtxnid_t&         FwdTxnID        ()          noexcept { return decay<fwdtxnid_t>(_FwdTxnID); }
-            inline constexpr        stashlpid_t&        StashLPID       ()          noexcept { return decay<stashlpid_t>(_StashLPID); }
-            inline constexpr        stashlpidvalid_t&   StashLPIDValid  ()          noexcept { return decay<stashlpidvalid_t>(_StashLPIDValid); }
-            inline constexpr        vmidext_t&          VMIDExt         ()          noexcept { return decay<vmidext_t>(_VMIDExt); }
-            inline constexpr        opcode_t&           Opcode          ()          noexcept { return decay<opcode_t>(_Opcode); }
-            inline constexpr        addr_t&             Addr            ()          noexcept { return decay<addr_t>(_Addr); }
-            inline constexpr        ns_t&               NS              ()          noexcept { return decay<ns_t>(_NS); }
-            inline constexpr        donotgotosd_t&      DoNotGoSD       ()          noexcept { return decay<donotgotosd_t>(_DoNotGoToSD); }
+            inline constexpr        qos_t&              QoS             ()          noexcept { return CHI::decay<qos_t>(_QoS); }
+            inline constexpr        srcid_t&            SrcID           ()          noexcept { return CHI::decay<srcid_t>(_SrcID); }
+            inline constexpr        txnid_t&            TxnID           ()          noexcept { return CHI::decay<txnid_t>(_TxnID); }
+            inline constexpr        fwdnid_t&           FwdNID          ()          noexcept { return CHI::decay<fwdnid_t>(_FwdNID); }
+            inline constexpr        fwdtxnid_t&         FwdTxnID        ()          noexcept { return CHI::decay<fwdtxnid_t>(_FwdTxnID); }
+            inline constexpr        stashlpid_t&        StashLPID       ()          noexcept { return CHI::decay<stashlpid_t>(_StashLPID); }
+            inline constexpr        stashlpidvalid_t&   StashLPIDValid  ()          noexcept { return CHI::decay<stashlpidvalid_t>(_StashLPIDValid); }
+            inline constexpr        vmidext_t&          VMIDExt         ()          noexcept { return CHI::decay<vmidext_t>(_VMIDExt); }
+            inline constexpr        opcode_t&           Opcode          ()          noexcept { return CHI::decay<opcode_t>(_Opcode); }
+            inline constexpr        addr_t&             Addr            ()          noexcept { return CHI::decay<addr_t>(_Addr); }
+            inline constexpr        ns_t&               NS              ()          noexcept { return CHI::decay<ns_t>(_NS); }
+            inline constexpr        donotgotosd_t&      DoNotGoSD       ()          noexcept { return CHI::decay<donotgotosd_t>(_DoNotGoToSD); }
 #ifdef CHI_ISSUE_B_ENABLE
-            inline constexpr        donotdatapull_t&    DoNotDataPull   ()          noexcept { return decay<donotdatapull_t>(_DoNotDataPull); }
+            inline constexpr        donotdatapull_t&    DoNotDataPull   ()          noexcept { return CHI::decay<donotdatapull_t>(_DoNotDataPull); }
 #endif
-            inline constexpr        rettosrc_t&         RetToSrc        ()          noexcept { return decay<rettosrc_t>(_RetToSrc); }
-            inline constexpr        tracetag_t&         TraceTag        ()          noexcept { return decay<tracetag_t>(_TraceTag); }
+            inline constexpr        rettosrc_t&         RetToSrc        ()          noexcept { return CHI::decay<rettosrc_t>(_RetToSrc); }
+            inline constexpr        tracetag_t&         TraceTag        ()          noexcept { return CHI::decay<tracetag_t>(_TraceTag); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr        mpam_t&             MPAM            ()          noexcept { return decay<mpam_t>(_MPAM); }
+            inline constexpr        mpam_t&             MPAM            ()          noexcept { return CHI::decay<mpam_t>(_MPAM); }
 #endif
         
         // field decay helper functions (const)
         public:
-            inline constexpr const  qos_t&              QoS             () const    noexcept { return decay<qos_t>(_QoS); }
-            inline constexpr const  srcid_t&            SrcID           () const    noexcept { return decay<srcid_t>(_SrcID); }
-            inline constexpr const  txnid_t&            TxnID           () const    noexcept { return decay<txnid_t>(_TxnID); }
-            inline constexpr const  fwdnid_t&           FwdNID          () const    noexcept { return decay<fwdnid_t>(_FwdNID); }
-            inline constexpr const  fwdtxnid_t&         FwdTxnID        () const    noexcept { return decay<fwdtxnid_t>(_FwdTxnID); }
-            inline constexpr const  stashlpid_t&        StashLPID       () const    noexcept { return decay<stashlpid_t>(_StashLPID); }
-            inline constexpr const  stashlpidvalid_t&   StashLPIDValid  () const    noexcept { return decay<stashlpidvalid_t>(_StashLPIDValid); }
-            inline constexpr const  vmidext_t&          VMIDExt         () const    noexcept { return decay<vmidext_t>(_VMIDExt); }
-            inline constexpr const  opcode_t&           Opcode          () const    noexcept { return decay<opcode_t>(_Opcode); }
-            inline constexpr const  addr_t&             Addr            () const    noexcept { return decay<addr_t>(_Addr); }
-            inline constexpr const  ns_t&               NS              () const    noexcept { return decay<ns_t>(_NS); }
-            inline constexpr const  donotgotosd_t&      DoNotGoSD       () const    noexcept { return decay<donotgotosd_t>(_DoNotGoToSD); }
+            inline constexpr const  qos_t&              QoS             () const    noexcept { return CHI::decay<qos_t>(_QoS); }
+            inline constexpr const  srcid_t&            SrcID           () const    noexcept { return CHI::decay<srcid_t>(_SrcID); }
+            inline constexpr const  txnid_t&            TxnID           () const    noexcept { return CHI::decay<txnid_t>(_TxnID); }
+            inline constexpr const  fwdnid_t&           FwdNID          () const    noexcept { return CHI::decay<fwdnid_t>(_FwdNID); }
+            inline constexpr const  fwdtxnid_t&         FwdTxnID        () const    noexcept { return CHI::decay<fwdtxnid_t>(_FwdTxnID); }
+            inline constexpr const  stashlpid_t&        StashLPID       () const    noexcept { return CHI::decay<stashlpid_t>(_StashLPID); }
+            inline constexpr const  stashlpidvalid_t&   StashLPIDValid  () const    noexcept { return CHI::decay<stashlpidvalid_t>(_StashLPIDValid); }
+            inline constexpr const  vmidext_t&          VMIDExt         () const    noexcept { return CHI::decay<vmidext_t>(_VMIDExt); }
+            inline constexpr const  opcode_t&           Opcode          () const    noexcept { return CHI::decay<opcode_t>(_Opcode); }
+            inline constexpr const  addr_t&             Addr            () const    noexcept { return CHI::decay<addr_t>(_Addr); }
+            inline constexpr const  ns_t&               NS              () const    noexcept { return CHI::decay<ns_t>(_NS); }
+            inline constexpr const  donotgotosd_t&      DoNotGoSD       () const    noexcept { return CHI::decay<donotgotosd_t>(_DoNotGoToSD); }
 #ifdef CHI_ISSUE_B_ENABLE
-            inline constexpr const  donotdatapull_t&    DoNotDataPull   () const    noexcept { return decay<donotdatapull_t>(_DoNotDataPull); }
+            inline constexpr const  donotdatapull_t&    DoNotDataPull   () const    noexcept { return CHI::decay<donotdatapull_t>(_DoNotDataPull); }
 #endif
-            inline constexpr const  rettosrc_t&         RetToSrc        () const    noexcept { return decay<rettosrc_t>(_RetToSrc); }
-            inline constexpr const  tracetag_t&         TraceTag        () const    noexcept { return decay<tracetag_t>(_TraceTag); }
+            inline constexpr const  rettosrc_t&         RetToSrc        () const    noexcept { return CHI::decay<rettosrc_t>(_RetToSrc); }
+            inline constexpr const  tracetag_t&         TraceTag        () const    noexcept { return CHI::decay<tracetag_t>(_TraceTag); }
 #ifdef CHI_ISSUE_EB_ENABLE
-            inline constexpr const  mpam_t&             MPAM            () const    noexcept { return decay<mpam_t>(_MPAM); }
+            inline constexpr const  mpam_t&             MPAM            () const    noexcept { return CHI::decay<mpam_t>(_MPAM); }
 #endif
         };
     }
