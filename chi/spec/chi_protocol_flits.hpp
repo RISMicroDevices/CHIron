@@ -4,10 +4,9 @@
 //#define __CHI__CHI_PROTOCOL_FLITS
 
 #ifndef CHI_PROTOCOL_FLITS__STANDALONE
+#   define CHI_ISSUE_B_ENABLE
 #   include "chi_protocol_flits_header.hpp"
 #endif
-
-#include "chi_protocol_defines.hpp"
 
 
 /*

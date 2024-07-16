@@ -4,6 +4,7 @@
 //#define __CHI__CHI_PROTOCOL_ENCODING
 
 #ifndef CHI_PROTOCOL_ENCODING__STANDALONE
+#   include "chi_protocol_encoding_header.hpp"         // IWYU pragma: keep
 #   include "chi_protocol_flits.hpp"
 #endif
 
