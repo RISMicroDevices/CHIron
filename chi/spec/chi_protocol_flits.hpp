@@ -3,8 +3,11 @@
 //#ifndef __CHI__CHI_PROTOCOL_FLITS
 //#define __CHI__CHI_PROTOCOL_FLITS
 
+#ifndef CHI_PROTOCOL_FLITS__STANDALONE
+#   include "chi_protocol_flits_header.hpp"
+#endif
+
 #include "chi_protocol_defines.hpp"
-#include "chi_protocol_flits_header.hpp"
 
 
 /*

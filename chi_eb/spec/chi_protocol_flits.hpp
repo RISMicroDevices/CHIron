@@ -5,6 +5,7 @@
 
 #include "../../chi/spec/chi_protocol_flits_header.hpp"     // IWYU pragma: keep
 
+#define CHI_PROTOCOL_FLITS__STANDALONE
 
 namespace CHI::Eb {
 
@@ -13,5 +14,7 @@ namespace CHI::Eb {
     #undef  CHI_ISSUE_EB_ENABLE    
 }
 
+
+#undef CHI_PROTOCOL_FLITS__STANDALONE
 
 #endif // __CHI_EB__CHI_PROTOCOL_FLITS
