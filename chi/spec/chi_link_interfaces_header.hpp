@@ -1,0 +1,6 @@
+#pragma once
+
+#ifndef __CHI__CHI_LINK_INTERFACES_HEADER
+#define __CHI__CHI_LINK_INTERFACES_HEADER
+
+#endif // __CHI__CHI_LINK_INTERFACES_HEADER
