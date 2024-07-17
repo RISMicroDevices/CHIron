@@ -207,7 +207,7 @@ namespace CHI {
         }
 
         /*
-        SNP flit walker.
+        SNP flit de-serializer.
         */
         template<SNPFlitConfigurationConcept    config, 
                  CHI::IOLevelConnectionConcept  conn>
@@ -252,11 +252,11 @@ namespace CHI {
         }
 
         /*
-        DAT flit walker.
+        DAT flit de-serialzer.
         */
         template<DATFlitConfigurationConcept    config, 
                  CHI::IOLevelConnectionConcept  conn>
-        inline bool WalkDAT(DAT<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept
+        inline bool DeserializeDAT(DAT<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept
         {
             using DAT_t = DAT<config, conn>;
 
