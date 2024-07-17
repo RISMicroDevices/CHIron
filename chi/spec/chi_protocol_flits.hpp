@@ -1938,7 +1938,7 @@ namespace CHI {
             inline constexpr        opcode_t&           Opcode          ()          noexcept { return CHI::decay<opcode_t>(_Opcode); }
             inline constexpr        addr_t&             Addr            ()          noexcept { return CHI::decay<addr_t>(_Addr); }
             inline constexpr        ns_t&               NS              ()          noexcept { return CHI::decay<ns_t>(_NS); }
-            inline constexpr        donotgotosd_t&      DoNotGoSD       ()          noexcept { return CHI::decay<donotgotosd_t>(_DoNotGoToSD); }
+            inline constexpr        donotgotosd_t&      DoNotGoToSD     ()          noexcept { return CHI::decay<donotgotosd_t>(_DoNotGoToSD); }
 #ifdef CHI_ISSUE_B_ENABLE
             inline constexpr        donotdatapull_t&    DoNotDataPull   ()          noexcept { return CHI::decay<donotdatapull_t>(_DoNotDataPull); }
 #endif
@@ -1961,7 +1961,7 @@ namespace CHI {
             inline constexpr const  opcode_t&           Opcode          () const    noexcept { return CHI::decay<opcode_t>(_Opcode); }
             inline constexpr const  addr_t&             Addr            () const    noexcept { return CHI::decay<addr_t>(_Addr); }
             inline constexpr const  ns_t&               NS              () const    noexcept { return CHI::decay<ns_t>(_NS); }
-            inline constexpr const  donotgotosd_t&      DoNotGoSD       () const    noexcept { return CHI::decay<donotgotosd_t>(_DoNotGoToSD); }
+            inline constexpr const  donotgotosd_t&      DoNotGoToSD     () const    noexcept { return CHI::decay<donotgotosd_t>(_DoNotGoToSD); }
 #ifdef CHI_ISSUE_B_ENABLE
             inline constexpr const  donotdatapull_t&    DoNotDataPull   () const    noexcept { return CHI::decay<donotdatapull_t>(_DoNotDataPull); }
 #endif
