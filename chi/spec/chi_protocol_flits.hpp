@@ -999,7 +999,7 @@ namespace CHI {
             static constexpr size_t     DATASOURCE_WIDTH = 4;
 #endif
             static constexpr size_t     DATASOURCE_LSB   = RESP_MSB + 1;
-            static constexpr size_t     DATASOURCE_MSB   = RESP_MSB + DATAPULL_WIDTH;
+            static constexpr size_t     DATASOURCE_MSB   = RESP_MSB + DATASOURCE_WIDTH;
             static constexpr FlitRange  DATASOURCE_RANGE = { DATASOURCE_LSB, DATASOURCE_MSB };
 
             using datasource_t = uint_strict_t<DATASOURCE_WIDTH>;
@@ -1046,8 +1046,8 @@ namespace CHI {
             transaction request.
             */
             static constexpr size_t     CCID_WIDTH = 2;
-            static constexpr size_t     CCID_MSB   = DBID_MSB + 1;
-            static constexpr size_t     CCID_LSB   = DBID_MSB + CCID_WIDTH;
+            static constexpr size_t     CCID_LSB   = DBID_MSB + 1;
+            static constexpr size_t     CCID_MSB   = DBID_MSB + CCID_WIDTH;
             static constexpr FlitRange  CCID_RANGE = { CCID_LSB, CCID_MSB };
 
             using ccid_t = uint_fit_t<CCID_WIDTH>;
@@ -1057,8 +1057,8 @@ namespace CHI {
             Data Identifier. Provides the address offset of the data provided in the packet. 
             */
             static constexpr size_t     DATAID_WIDTH = 2;
-            static constexpr size_t     DATAID_MSB   = CCID_MSB + 1;
-            static constexpr size_t     DATAID_LSB   = CCID_MSB + DATAID_WIDTH;
+            static constexpr size_t     DATAID_LSB   = CCID_MSB + 1;
+            static constexpr size_t     DATAID_MSB   = CCID_MSB + DATAID_WIDTH;
             static constexpr FlitRange  DATAID_RANGE = { DATAID_LSB, DATAID_MSB };
 
             using dataid_t = uint_fit_t<DATAID_WIDTH>;
@@ -1071,8 +1071,8 @@ namespace CHI {
             */
 #ifdef CHI_ISSUE_EB_ENABLE
             static constexpr size_t     TAGOP_WIDTH = 2;
-            static constexpr size_t     TAGOP_MSB   = DATAID_MSB + 1;
-            static constexpr size_t     TAGOP_LSB   = DATAID_MSB + TAGOP_WIDTH;
+            static constexpr size_t     TAGOP_LSB   = DATAID_MSB + 1;
+            static constexpr size_t     TAGOP_MSB   = DATAID_MSB + TAGOP_WIDTH;
             static constexpr FlitRange  TAGOP_RANGE = { TAGOP_LSB, TAGOP_MSB };
 
             using tagop_t = uint_fit_t<TAGOP_WIDTH>;
@@ -1087,8 +1087,8 @@ namespace CHI {
             */
 #ifdef CHI_ISSUE_EB_ENABLE
             static constexpr size_t     TAG_WIDTH = config::tagWidth;
-            static constexpr size_t     TAG_MSB   = TAGOP_MSB + 1;
-            static constexpr size_t     TAG_LSB   = TAGOP_MSB + TAG_WIDTH;
+            static constexpr size_t     TAG_LSB   = TAGOP_MSB + 1;
+            static constexpr size_t     TAG_MSB   = TAGOP_MSB + TAG_WIDTH;
             static constexpr FlitRange  TAG_RANGE = { TAG_LSB, TAG_MSB };
 
             using tag_t = uint_fit_t<TAG_WIDTH>;
@@ -1102,8 +1102,8 @@ namespace CHI {
             */
 #ifdef CHI_ISSUE_EB_ENABLE
             static constexpr size_t     TU_WIDTH = config::tagUpdateWidth;
-            static constexpr size_t     TU_MSB   = TAG_MSB + 1;
-            static constexpr size_t     TU_LSB   = TAG_MSB + TU_WIDTH;
+            static constexpr size_t     TU_LSB   = TAG_MSB + 1;
+            static constexpr size_t     TU_MSB   = TAG_MSB + TU_WIDTH;
             static constexpr FlitRange  TU_RANGE = { TU_LSB, TU_MSB };
 
             using tu_t = uint_fit_t<TU_WIDTH>;
@@ -1116,12 +1116,12 @@ namespace CHI {
             */
             static constexpr size_t     TRACETAG_WIDTH = 1;
 #ifdef CHI_ISSUE_B_ENABLE
-            static constexpr size_t     TRACETAG_MSB   = DATAID_MSB + 1;
-            static constexpr size_t     TRACETAG_LSB   = DATAID_MSB + TRACETAG_WIDTH;
+            static constexpr size_t     TRACETAG_LSB   = DATAID_MSB + 1;
+            static constexpr size_t     TRACETAG_MSB   = DATAID_MSB + TRACETAG_WIDTH;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
-            static constexpr size_t     TRACETAG_MSB   = TU_MSB + 1;
-            static constexpr size_t     TRACETAG_LSB   = TU_MSB + TRACETAG_WIDTH;
+            static constexpr size_t     TRACETAG_LSB   = TU_MSB + 1;
+            static constexpr size_t     TRACETAG_MSB   = TU_MSB + TRACETAG_WIDTH;
 #endif
             static constexpr FlitRange  TRACETAG_RANGE = { TRACETAG_LSB, TRACETAG_MSB };
 
