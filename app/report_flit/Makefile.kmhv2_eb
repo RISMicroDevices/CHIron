@@ -1,0 +1,8 @@
+NODEID_WIDTH        := 11
+REQ_ADDR_WIDTH      := 48
+REQ_RSVDC_WIDTH     := 4
+DAT_RSVDC_WIDTH     := 4
+DATA_WIDTH          := 256
+DATACHECK_PRESENT   := false
+POISON_PRESENT      := false
+MPAM_PRESENT        := true

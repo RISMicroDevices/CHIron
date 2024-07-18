@@ -7,10 +7,12 @@ CHIRON_DIR := ../..
 
 ifeq ($(ISSUE), B)
 main := $(SRC_DIR)/report_flit_b.cpp
+include Makefile.kmhv2_b
 endif
 
 ifeq ($(ISSUE), E.b)
 main := $(SRC_DIR)/report_flit_eb.cpp
+include Makefile.kmhv2_eb
 endif
 
 ifeq ($(main),)
