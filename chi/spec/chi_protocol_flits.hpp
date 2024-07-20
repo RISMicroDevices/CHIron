@@ -6,6 +6,7 @@
 #ifndef CHI_PROTOCOL_FLITS__STANDALONE
 #   define CHI_ISSUE_B_ENABLE
 #   include "chi_protocol_flits_header.hpp"
+#include <concepts>
 #endif
 
 
@@ -837,6 +838,245 @@ namespace CHI {
             inline constexpr const  rsvdc_t&            RSVDC           () const    noexcept { return CHI::decay<rsvdc_t>(_RSVDC); }
         };
 
+        //
+        template<class T>
+        concept REQFlitFormatConcept = requires {
+
+            // QoS
+            { T::qos_t };
+            { T::QOS_WIDTH              } -> std::convertible_to<size_t>;
+            { T::QOS_LSB                } -> std::convertible_to<size_t>;
+            { T::QOS_MSB                } -> std::convertible_to<size_t>;
+
+            // TgtID
+            { T::tgtid_t };
+            { T::TGTID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TGTID_LSB              } -> std::convertible_to<size_t>;
+            { T::TGTID_MSB              } -> std::convertible_to<size_t>;
+
+            // SrcID
+            { T::srcid_t };
+            { T::SRCID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::SRCID_LSB              } -> std::convertible_to<size_t>;
+            { T::SRCID_MSB              } -> std::convertible_to<size_t>;
+
+            // TxnID
+            { T::txnid_t };
+            { T::TXNID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TXNID_LSB              } -> std::convertible_to<size_t>;
+            { T::TXNID_MSB              } -> std::convertible_to<size_t>;
+
+            // ReturnNID
+            { T::returnnid_t };
+            { T::RETURNNID_WIDTH        } -> std::convertible_to<size_t>;
+            { T::RETURNNID_LSB          } -> std::convertible_to<size_t>;
+            { T::RETURNNID_MSB          } -> std::convertible_to<size_t>;
+
+            // StashNID
+            { T::stashnid_t };
+            { T::STASHNID_WIDTH         } -> std::convertible_to<size_t>;
+            { T::STASHNID_LSB           } -> std::convertible_to<size_t>;
+            { T::STASHNID_MSB           } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // SLCRepHint
+            { T::slcrephint_t };
+            { T::SLCREPHINT_WIDTH       } -> std::convertible_to<size_t>;
+            { T::SLCREPHINT_LSB         } -> std::convertible_to<size_t>;
+            { T::SLCREPHINT_MSB         } -> std::convertible_to<size_t>;
+#endif
+
+            // StashNIDValid
+            { T::stashnidvalid_t };
+            { T::STASHNIDVALID_WIDTH    } -> std::convertible_to<size_t>;
+            { T::STASHNIDVALID_LSB      } -> std::convertible_to<size_t>;
+            { T::STASHNIDVALID_MSB      } -> std::convertible_to<size_t>;
+
+            // Endian
+            { T::endian_t };
+            { T::ENDIAN_WIDTH           } -> std::convertible_to<size_t>;
+            { T::ENDIAN_LSB             } -> std::convertible_to<size_t>;
+            { T::ENDIAN_MSB             } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // Deep
+            { T::deep_t };
+            { T::DEEP_WIDTH             } -> std::convertible_to<size_t>;
+            { T::DEEP_LSB               } -> std::convertible_to<size_t>;
+            { T::DEEP_MSB               } -> std::convertible_to<size_t>;
+#endif
+
+            // ReturnTxnID
+            { T::returntxnid_t };
+            { T::RETURNTXNID_WIDTH      } -> std::convertible_to<size_t>;
+            { T::RETURNTXNID_LSB        } -> std::convertible_to<size_t>;
+            { T::RETURNTXNID_MSB        } -> std::convertible_to<size_t>;
+
+            // StashLPID
+            { T::stashlpid_t };
+            { T::STASHLPID_WIDTH        } -> std::convertible_to<size_t>;
+            { T::STASHLPID_LSB          } -> std::convertible_to<size_t>;
+            { T::STASHLPID_MSB          } -> std::convertible_to<size_t>;
+
+            // StashLPIDValid
+            { T::stashlpidvalid_t };
+            { T::STASHLPIDVALID_WIDTH   } -> std::convertible_to<size_t>;
+            { T::STASHLPIDVALID_LSB     } -> std::convertible_to<size_t>;
+            { T::STASHLPIDVALID_MSB     } -> std::convertible_to<size_t>;
+
+            // Opcode
+            { T::opcode_t };
+            { T::OPCODE_WIDTH           } -> std::convertible_to<size_t>;
+            { T::OPCODE_LSB             } -> std::convertible_to<size_t>;
+            { T::OPCODE_MSB             } -> std::convertible_to<size_t>;
+
+            // Size
+            { T::ssize_t };
+            { T::SSIZE_WIDTH            } -> std::convertible_to<size_t>;
+            { T::SSIZE_LSB              } -> std::convertible_to<size_t>;
+            { T::SSIZE_MSB              } -> std::convertible_to<size_t>;
+
+            // Addr
+            { T::addr_t };
+            { T::ADDR_WIDTH             } -> std::convertible_to<size_t>;
+            { T::ADDR_LSB               } -> std::convertible_to<size_t>;
+            { T::ADDR_MSB               } -> std::convertible_to<size_t>;
+
+            // NS
+            { T::ns_t };
+            { T::NS_WIDTH               } -> std::convertible_to<size_t>;
+            { T::NS_LSB                 } -> std::convertible_to<size_t>;
+            { T::NS_MSB                 } -> std::convertible_to<size_t>;
+
+            // LikelyShared
+            { T::likelyshared_t };
+            { T::LIKELYSHARED_WIDTH     } -> std::convertible_to<size_t>;
+            { T::LIKELYSHARED_LSB       } -> std::convertible_to<size_t>;
+            { T::LIKELYSHARED_MSB       } -> std::convertible_to<size_t>;
+
+            // AllowRetry
+            { T::allowretry_t };
+            { T::ALLOWRETRY_WIDTH       } -> std::convertible_to<size_t>;
+            { T::ALLOWRETRY_LSB         } -> std::convertible_to<size_t>;
+            { T::ALLOWRETRY_MSB         } -> std::convertible_to<size_t>;
+
+            // Order
+            { T::order_t };
+            { T::ORDER_WIDTH            } -> std::convertible_to<size_t>;
+            { T::ORDER_LSB              } -> std::convertible_to<size_t>;
+            { T::ORDER_MSB              } -> std::convertible_to<size_t>;
+
+            // PCrdType
+            { T::pcrdtype_t };
+            { T::PCRDTYPE_WIDTH         } -> std::convertible_to<size_t>;
+            { T::PCRDTYPE_LSB           } -> std::convertible_to<size_t>;
+            { T::PCRDTYPE_MSB           } -> std::convertible_to<size_t>;
+
+            // MemAttr
+            { T::memattr_t };
+            { T::MEMATTR_WIDTH          } -> std::convertible_to<size_t>;
+            { T::MEMATTR_LSB            } -> std::convertible_to<size_t>;
+            { T::MEMATTR_MSB            } -> std::convertible_to<size_t>;
+
+            // SnpAttr
+            { T::snpattr_t };
+            { T::SNPATTR_WIDTH          } -> std::convertible_to<size_t>;
+            { T::SNPATTR_LSB            } -> std::convertible_to<size_t>;
+            { T::SNPATTR_MSB            } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // DoDWT
+            { T::dodwt_t };
+            { T::DODWT_WIDTH            } -> std::convertible_to<size_t>;
+            { T::DODWT_LSB              } -> std::convertible_to<size_t>;
+            { T::DODWT_MSB              } -> std::convertible_to<size_t>;
+#endif
+
+            // LPID
+            { T::lpid_t };
+            { T::LPID_WIDTH             } -> std::convertible_to<size_t>;
+            { T::LPID_LSB               } -> std::convertible_to<size_t>;
+            { T::LPID_MSB               } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // PGroupID
+            { T::pgroupid_t };
+            { T::PGROUPID_WIDTH         } -> std::convertible_to<size_t>;
+            { T::PGROUPID_LSB           } -> std::convertible_to<size_t>;
+            { T::PGROUPID_MSB           } -> std::convertible_to<size_t>;
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // StashGroupID
+            { T::stashgroupid_t };
+            { T::STASHGROUPID_WIDTH     } -> std::convertible_to<size_t>;
+            { T::STASHGROUPID_LSB       } -> std::convertible_to<size_t>;
+            { T::STASHGROUPID_MSB       } -> std::convertible_to<size_t>;
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // TagGroupID
+            { T::taggroupid_t };
+            { T::TAGGROUPID_WIDTH       } -> std::convertible_to<size_t>;
+            { T::TAGGROUPID_LSB         } -> std::convertible_to<size_t>;
+            { T::TAGGROUPID_MSB         } -> std::convertible_to<size_t>;
+#endif
+
+            // Excl
+            { T::excl_t };
+            { T::EXCL_WIDTH             } -> std::convertible_to<size_t>;
+            { T::EXCL_LSB               } -> std::convertible_to<size_t>;
+            { T::EXCL_MSB               } -> std::convertible_to<size_t>;
+
+            // SnoopMe
+            { T::snoppme_t };
+            { T::SNOOPME_WIDTH          } -> std::convertible_to<size_t>;
+            { T::SNOOPME_LSB            } -> std::convertible_to<size_t>;
+            { T::SNOOPME_MSB            } -> std::convertible_to<size_t>;
+
+            // ExpCompAck
+            { T::expcompack_t };
+            { T::EXPCOMPACK_WIDTH       } -> std::convertible_to<size_t>;
+            { T::EXPCOMPACK_LSB         } -> std::convertible_to<size_t>;
+            { T::EXPCOMPACK_MSB         } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // TagOp
+            { T::tagop_t };
+            { T::TAGOP_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TAGOP_LSB              } -> std::convertible_to<size_t>;
+            { T::TAGOP_MSB              } -> std::convertible_to<size_t>;
+#endif
+
+            // TraceTag
+            { T::tracetag_t };
+            { T::TRACETAG_WIDTH         } -> std::convertible_to<size_t>;
+            { T::TRACETAG_LSB           } -> std::convertible_to<size_t>;
+            { T::TRACETAG_MSB           } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // MPAM
+            { T::mpam_t };
+            { T::MPAM_WIDTH             } -> std::convertible_to<size_t>;
+            { T::MPAM_LSB               } -> std::convertible_to<size_t>;
+            { T::MPAM_MSB               } -> std::convertible_to<size_t>;
+            { T::hasMPAM                } -> std::convertible_to<bool>;
+#endif
+
+            // RSVDC
+            { T::rsvdc_t };
+            { T::RSVDC_WIDTH            } -> std::convertible_to<size_t>;
+            { T::RSVDC_LSB              } -> std::convertible_to<size_t>;
+            { T::RSVDC_MSB              } -> std::convertible_to<size_t>;
+            { T::hasRSVDC               } -> std::convertible_to<bool>;
+
+            //
+            { T::WIDTH                  } -> std::convertible_to<size_t>;
+            { T::LSB                    } -> std::convertible_to<size_t>;
+            { T::MSB                    } -> std::convertible_to<size_t>;
+        };
+
+
 
         //
         template<DATFlitConfigurationConcept    config      = FlitConfiguration<>,
@@ -1306,6 +1546,172 @@ namespace CHI {
             inline constexpr const  poison_t&           Poison          () const    noexcept    { return CHI::decay<poison_t>(_Poison); }
         };
 
+        //
+        template<class T>
+        concept DATFlitFormatConcept = requires {
+
+            // QoS
+            { T::qos_t };
+            { T::QOS_WIDTH              } -> std::convertible_to<size_t>;
+            { T::QOS_LSB                } -> std::convertible_to<size_t>;
+            { T::QOS_MSB                } -> std::convertible_to<size_t>;
+
+            // TgtID
+            { T::tgtid_t };
+            { T::TGTID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TGTID_LSB              } -> std::convertible_to<size_t>;
+            { T::TGTID_MSB              } -> std::convertible_to<size_t>;
+
+            // SrcID
+            { T::srcid_t };
+            { T::SRCID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::SRCID_LSB              } -> std::convertible_to<size_t>;
+            { T::SRCID_MSB              } -> std::convertible_to<size_t>;
+
+            // TxnID
+            { T::txnid_t };
+            { T::TXNID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TXNID_LSB              } -> std::convertible_to<size_t>;
+            { T::TXNID_MSB              } -> std::convertible_to<size_t>;
+
+            // HomeNID
+            { T::homenid_t };
+            { T::HOMENID_WIDTH          } -> std::convertible_to<size_t>;
+            { T::HOMENID_LSB            } -> std::convertible_to<size_t>;
+            { T::HOMENID_MSB            } -> std::convertible_to<size_t>;
+
+            // Opcode
+            { T::opcode_t };
+            { T::OPCODE_WIDTH           } -> std::convertible_to<size_t>;
+            { T::OPCODE_LSB             } -> std::convertible_to<size_t>;
+            { T::OPCODE_MSB             } -> std::convertible_to<size_t>;
+
+            // RespErr
+            { T::resperr_t };
+            { T::RESPERR_WIDTH          } -> std::convertible_to<size_t>;
+            { T::RESPERR_LSB            } -> std::convertible_to<size_t>;
+            { T::RESPERR_MSB            } -> std::convertible_to<size_t>;
+
+            // Resp
+            { T::resp_t };
+            { T::RESP_WIDTH             } -> std::convertible_to<size_t>;
+            { T::RESP_LSB               } -> std::convertible_to<size_t>;
+            { T::RESP_MSB               } -> std::convertible_to<size_t>;
+
+            // FwdState
+            { T::fwdstate_t };
+            { T::FWDSTATE_WIDTH         } -> std::convertible_to<size_t>;
+            { T::FWDSTATE_LSB           } -> std::convertible_to<size_t>;
+            { T::FWDSTATE_MSB           } -> std::convertible_to<size_t>;
+
+            // DataPull
+            { T::datapull_t };
+            { T::DATAPULL_WIDTH         } -> std::convertible_to<size_t>;
+            { T::DATAPULL_LSB           } -> std::convertible_to<size_t>;
+            { T::DATAPULL_MSB           } -> std::convertible_to<size_t>;
+
+            // DataSource
+            { T::datasource_t };
+            { T::DATASOURCE_WIDTH       } -> std::convertible_to<size_t>;
+            { T::DATASOURCE_LSB         } -> std::convertible_to<size_t>;
+            { T::DATASOURCE_MSB         } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // CBusy
+            { T::cbusy_t };
+            { T::CBUSY_WIDTH            } -> std::convertible_to<size_t>;
+            { T::CBUSY_LSB              } -> std::convertible_to<size_t>;
+            { T::CBUSY_MSB              } -> std::convertible_to<size_t>;
+#endif
+
+            // DBID
+            { T::dbid_t };
+            { T::DBID_WIDTH             } -> std::convertible_to<size_t>;
+            { T::DBID_LSB               } -> std::convertible_to<size_t>;
+            { T::DBID_MSB               } -> std::convertible_to<size_t>;
+
+            // CCID
+            { T::ccid_t };
+            { T::CCID_WIDTH             } -> std::convertible_to<size_t>;
+            { T::CCID_LSB               } -> std::convertible_to<size_t>;
+            { T::CCID_MSB               } -> std::convertible_to<size_t>;
+
+            // DataID
+            { T::dataid_t };
+            { T::DATAID_WIDTH           } -> std::convertible_to<size_t>;
+            { T::DATAID_LSB             } -> std::convertible_to<size_t>;
+            { T::DATAID_MSB             } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // TagOp
+            { T::tagop_t };
+            { T::TAGOP_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TAGOP_LSB              } -> std::convertible_to<size_t>;
+            { T::TAGOP_MSB              } -> std::convertible_to<size_t>;
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // Tag
+            { T::tag_t };
+            { T::TAG_WIDTH              } -> std::convertible_to<size_t>;
+            { T::TAG_LSB                } -> std::convertible_to<size_t>;
+            { T::TAG_MSB                } -> std::convertible_to<size_t>;
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // TU
+            { T::tu_t };
+            { T::TU_WIDTH               } -> std::convertible_to<size_t>;
+            { T::TU_LSB                 } -> std::convertible_to<size_t>;
+            { T::TU_MSB                 } -> std::convertible_to<size_t>;
+#endif
+
+            // TraceTag
+            { T::tracetag_t };
+            { T::TRACETAG_WIDTH         } -> std::convertible_to<size_t>;
+            { T::TRACETAG_LSB           } -> std::convertible_to<size_t>;
+            { T::TRACETAG_MSB           } -> std::convertible_to<size_t>;
+
+            // RSVDC
+            { T::rsvdc_t };
+            { T::RSVDC_WIDTH            } -> std::convertible_to<size_t>;
+            { T::RSVDC_LSB              } -> std::convertible_to<size_t>;
+            { T::RSVDC_MSB              } -> std::convertible_to<size_t>;
+            { T::hasRSVDC               } -> std::convertible_to<bool>;
+
+            // BE
+            { T::be_t };
+            { T::BE_WIDTH               } -> std::convertible_to<size_t>;
+            { T::BE_LSB                 } -> std::convertible_to<size_t>;
+            { T::BE_MSB                 } -> std::convertible_to<size_t>;
+
+            // Data
+            { T::data_t };
+            { T::DATA_WIDTH             } -> std::convertible_to<size_t>;
+            { T::DATA_LSB               } -> std::convertible_to<size_t>;
+            { T::DATA_MSB               } -> std::convertible_to<size_t>;
+
+            // DataCheck
+            { T::datacheck_t };
+            { T::DATACHECK_WIDTH        } -> std::convertible_to<size_t>;
+            { T::DATACHECK_LSB          } -> std::convertible_to<size_t>;
+            { T::DATACHECK_MSB          } -> std::convertible_to<size_t>;
+            { T::hasDataCheck           } -> std::convertible_to<bool>;
+
+            // Poison
+            { T::poison_t };
+            { T::POISON_WIDTH           } -> std::convertible_to<size_t>;
+            { T::POISON_LSB             } -> std::convertible_to<size_t>;
+            { T::POISON_MSB             } -> std::convertible_to<size_t>;
+            { T::hasPoison              } -> std::convertible_to<bool>;
+
+            //
+            { T::WIDTH                  } -> std::convertible_to<size_t>;
+            { T::LSB                    } -> std::convertible_to<size_t>;
+            { T::MSB                    } -> std::convertible_to<size_t>;
+        };
+
+
 
         //
         template<RSPFlitConfigurationConcept    config      = FlitConfiguration<>,
@@ -1664,6 +2070,129 @@ namespace CHI {
             inline constexpr const  tracetag_t&         TraceTag        () const    noexcept    { return CHI::decay<tracetag_t>(_TraceTag); }
         };
 
+        //
+        template<class T>
+        concept RSPFlitFormatConcept = requires {
+
+            // QoS
+            { T::qos_t };
+            { T::QOS_WIDTH              } -> std::convertible_to<size_t>;
+            { T::QOS_LSB                } -> std::convertible_to<size_t>;
+            { T::QOS_MSB                } -> std::convertible_to<size_t>;
+
+            // TgtID
+            { T::tgtid_t };
+            { T::TGTID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TGTID_LSB              } -> std::convertible_to<size_t>;
+            { T::TGTID_MSB              } -> std::convertible_to<size_t>;
+
+            // SrcID
+            { T::srcid_t };
+            { T::SRCID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::SRCID_LSB              } -> std::convertible_to<size_t>;
+            { T::SRCID_MSB              } -> std::convertible_to<size_t>;
+
+            // TxnID
+            { T::txnid_t };
+            { T::TXNID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TXNID_LSB              } -> std::convertible_to<size_t>;
+            { T::TXNID_MSB              } -> std::convertible_to<size_t>;
+
+            // Opcode
+            { T::opcode_t };
+            { T::OPCODE_WIDTH           } -> std::convertible_to<size_t>;
+            { T::OPCODE_LSB             } -> std::convertible_to<size_t>;
+            { T::OPCODE_MSB             } -> std::convertible_to<size_t>;
+
+            // RespErr
+            { T::resperr_t };
+            { T::RESPERR_WIDTH          } -> std::convertible_to<size_t>;
+            { T::RESPERR_LSB            } -> std::convertible_to<size_t>;
+            { T::RESPERR_MSB            } -> std::convertible_to<size_t>;
+
+            // Resp
+            { T::resp_t };
+            { T::RESP_WIDTH             } -> std::convertible_to<size_t>;
+            { T::RESP_LSB               } -> std::convertible_to<size_t>;
+            { T::RESP_MSB               } -> std::convertible_to<size_t>;
+
+            // FwdState
+            { T::fwdstate_t };
+            { T::FWDSTATE_WIDTH         } -> std::convertible_to<size_t>;
+            { T::FWDSTATE_LSB           } -> std::convertible_to<size_t>;
+            { T::FWDSTATE_MSB           } -> std::convertible_to<size_t>;
+
+            // DataPull
+            { T::datapull_t };
+            { T::DATAPULL_WIDTH         } -> std::convertible_to<size_t>;
+            { T::DATAPULL_LSB           } -> std::convertible_to<size_t>;
+            { T::DATAPULL_MSB           } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // CBusy
+            { T::cbusy_t };
+            { T::CBUSY_WIDTH            } -> std::convertible_to<size_t>;
+            { T::CBUSY_LSB              } -> std::convertible_to<size_t>;
+            { T::CBUSY_MSB              } -> std::convertible_to<size_t>;
+#endif
+
+            // DBID
+            { T::cbusy_t };
+            { T::DBID_WIDTH             } -> std::convertible_to<size_t>;
+            { T::DBID_LSB               } -> std::convertible_to<size_t>;
+            { T::DBID_MSB               } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // PGroupID
+            { T::pgroupid_t };
+            { T::PGROUPID_WIDTH         } -> std::convertible_to<size_t>;
+            { T::PGROUPID_LSB           } -> std::convertible_to<size_t>;
+            { T::PGROUPID_MSB           } -> std::convertible_to<size_t>;
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // StashGroupID
+            { T::stashgroupid_t };
+            { T::STASHGROUPID_WIDTH     } -> std::convertible_to<size_t>;
+            { T::STASHGROUPID_LSB       } -> std::convertible_to<size_t>;
+            { T::STASHGROUPID_MSB       } -> std::convertible_to<size_t>;
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // TagGroupID
+            { T::taggroupid_t };
+            { T::TAGGROUPID_WIDTH       } -> std::convertible_to<size_t>;
+            { T::TAGGROUPID_LSB         } -> std::convertible_to<size_t>;
+            { T::TAGGROUPID_MSB         } -> std::convertible_to<size_t>;
+#endif
+
+            // PCrdType
+            { T::pcrdtype_t };
+            { T::PCRDTYPE_WIDTH         } -> std::convertible_to<size_t>;
+            { T::PCRDTYPE_LSB           } -> std::convertible_to<size_t>;
+            { T::PCRDTYPE_MSB           } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // TagOp
+            { T::tagop_t };
+            { T::TAGOP_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TAGOP_LSB              } -> std::convertible_to<size_t>;
+            { T::TAGOP_MSB              } -> std::convertible_to<size_t>;
+#endif
+
+            // TraceTag
+            { T::tracetag_t };
+            { T::TRACETAG_WIDTH         } -> std::convertible_to<size_t>;
+            { T::TRACETAG_LSB           } -> std::convertible_to<size_t>;
+            { T::TRACETAG_MSB           } -> std::convertible_to<size_t>;
+
+            //
+            { T::WIDTH                  } -> std::convertible_to<size_t>;
+            { T::LSB                    } -> std::convertible_to<size_t>;
+            { T::MSB                    } -> std::convertible_to<size_t>;
+        };
+
+
 
         //
         template<SNPFlitConfigurationConcept    config      = FlitConfiguration<>,
@@ -1970,6 +2499,130 @@ namespace CHI {
 #ifdef CHI_ISSUE_EB_ENABLE
             inline constexpr const  mpam_t&             MPAM            () const    noexcept { return CHI::decay<mpam_t>(_MPAM); }
 #endif
+        };
+
+        //
+        template<class T>
+        concept SNPFlitFormatConcept = requires {
+            
+            // QoS
+            { T::qos_t };
+            { T::QOS_WIDTH              } -> std::convertible_to<size_t>;
+            { T::QOS_LSB                } -> std::convertible_to<size_t>;
+            { T::QOS_MSB                } -> std::convertible_to<size_t>;
+
+            // SrcID
+            { T::srcid_t };
+            { T::SRCID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::SRCID_LSB              } -> std::convertible_to<size_t>;
+            { T::SRCID_MSB              } -> std::convertible_to<size_t>;
+
+            // TxnID
+            { T::txnid_t };
+            { T::TXNID_WIDTH            } -> std::convertible_to<size_t>;
+            { T::TXNID_LSB              } -> std::convertible_to<size_t>;
+            { T::TXNID_MSB              } -> std::convertible_to<size_t>;
+
+            // FwdNID
+            { T::fwdnid_t };
+            { T::FWDNID_WIDTH           } -> std::convertible_to<size_t>;
+            { T::FWDNID_LSB             } -> std::convertible_to<size_t>;
+            { T::FWDNID_MSB             } -> std::convertible_to<size_t>;
+
+            // FwdTxnID:
+            { T::fwdtxnid_t };
+            { T::FWDTXNID_WIDTH         } -> std::convertible_to<size_t>;
+            { T::FWDTXNID_LSB           } -> std::convertible_to<size_t>;
+            { T::FWDTXNID_MSB           } -> std::convertible_to<size_t>;
+
+            // StashLPID
+            { T::stashlpid_t };
+            { T::STASHLPID_WIDTH        } -> std::convertible_to<size_t>;
+            { T::STASHLPID_LSB          } -> std::convertible_to<size_t>;
+            { T::STASHLPID_MSB          } -> std::convertible_to<size_t>;
+
+            // StashLPIDValid
+            { T::stashlpidvalid_t };
+            { T::STASHLPIDVALID_WIDTH   } -> std::convertible_to<size_t>;
+            { T::STASHLPIDVALID_LSB     } -> std::convertible_to<size_t>;
+            { T::STASHLPIDVALID_MSB     } -> std::convertible_to<size_t>;
+
+            // VMIDExt
+            { T::vmidext_t };
+            { T::VMIDEXT_WIDTH          } -> std::convertible_to<size_t>;
+            { T::VMIDEXT_LSB            } -> std::convertible_to<size_t>;
+            { T::VMIDEXT_MSB            } -> std::convertible_to<size_t>;
+
+            // Opcode
+            { T::opcode_t };
+            { T::OPCODE_WIDTH           } -> std::convertible_to<size_t>;
+            { T::OPCODE_LSB             } -> std::convertible_to<size_t>;
+            { T::OPCODE_MSB             } -> std::convertible_to<size_t>;
+
+            // Addr
+            { T::addr_t };
+            { T::ADDR_WIDTH             } -> std::convertible_to<size_t>;
+            { T::ADDR_LSB               } -> std::convertible_to<size_t>;
+            { T::ADDR_MSB               } -> std::convertible_to<size_t>;
+
+            // NS
+            { T::ns_t };
+            { T::NS_WIDTH               } -> std::convertible_to<size_t>;
+            { T::NS_LSB                 } -> std::convertible_to<size_t>;
+            { T::NS_MSB                 } -> std::convertible_to<size_t>;
+
+            // DoNotGoToSD
+            { T::donotgotosd_t };
+            { T::DONOTGOTOSD_WIDTH      } -> std::convertible_to<size_t>;
+            { T::DONOTGOTOSD_LSB        } -> std::convertible_to<size_t>;
+            { T::DONOTGOTOSD_MSB        } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_B_ENABLE
+            // DoNotDataPull
+            { T::donotdatapull_t };
+            { T::DONOTDATAPULL_WIDTH    } -> std::convertible_to<size_t>;
+            { T::DONOTDATAPULL_LSB      } -> std::convertible_to<size_t>;
+            { T::DONOTDATAPULL_MSB      } -> std::convertible_to<size_t>;
+#endif
+
+            // RetToSrc
+            { T::rettosrc_t };
+            { T::RETTOSRC_WIDTH         } -> std::convertible_to<size_t>;
+            { T::RETTOSRC_LSB           } -> std::convertible_to<size_t>;
+            { T::RETTOSRC_MSB           } -> std::convertible_to<size_t>;
+
+            // TraceTag
+            { T::tracetag_t };
+            { T::TRACETAG_WIDTH         } -> std::convertible_to<size_t>;
+            { T::TRACETAG_LSB           } -> std::convertible_to<size_t>;
+            { T::TRACETAG_MSB           } -> std::convertible_to<size_t>;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            // MPAM
+            { T::mpam_t };
+            { T::MPAM_WIDTH             } -> std::convertible_to<size_t>;
+            { T::MPAM_LSB               } -> std::convertible_to<size_t>;
+            { T::MPAM_MSB               } -> std::convertible_to<size_t>;
+            { T::hasMPAM                } -> std::convertible_to<bool>;
+#endif
+
+            //
+            { T::WIDTH                  } -> std::convertible_to<size_t>;
+            { T::LSB                    } -> std::convertible_to<size_t>;
+            { T::MSB                    } -> std::convertible_to<size_t>;
+        };
+
+
+
+        //
+        template<class T>
+        concept FlitOpcodeFormatConcept = requires {
+
+            // Opcode
+            { T::opcode_t };
+            { T::OPCODE_WIDTH           } -> std::convertible_to<size_t>;
+            { T::OPCODE_LSB             } -> std::convertible_to<size_t>;
+            { T::OPCODE_MSB             } -> std::convertible_to<size_t>;
         };
     }
 
