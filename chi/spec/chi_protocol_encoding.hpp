@@ -412,7 +412,7 @@ namespace CHI {
                     constexpr type          StashOnceShared                 = REQ::RN::StashOnceShared;             // from      RN-I
 #ifdef CHI_ISSUE_EB_ENABLE
                     constexpr type          StashOnceSepUnique              = REQ::RN::StashOnceSepUnique;          // from      RN-I
-                    constexpr type          StashOnceSepShared              = REQ::RN::StashOnceSepShared;          // from      RN-i
+                    constexpr type          StashOnceSepShared              = REQ::RN::StashOnceSepShared;          // from      RN-I
 #endif
                     constexpr type          WriteUniqueFull                 = REQ::RN::WriteUniqueFull;             // from      RN-I
                     constexpr type          WriteUniqueFullStash            = REQ::RN::WriteUniqueFullStash;        // from      RN-I
