@@ -1749,7 +1749,7 @@ namespace CHI {
             */
             static constexpr size_t     SRCID_WIDTH = config::nodeIdWidth;
             static constexpr size_t     SRCID_LSB   = TGTID_MSB + 1;
-            static constexpr size_t     SRCID_MSB   = TGTID_MSB + TGTID_WIDTH;
+            static constexpr size_t     SRCID_MSB   = TGTID_MSB + SRCID_WIDTH;
             static constexpr FlitRange  SRCID_RANGE = { SRCID_LSB, SRCID_MSB };
 
             using srcid_t = uint_fit_t<SRCID_WIDTH>;
