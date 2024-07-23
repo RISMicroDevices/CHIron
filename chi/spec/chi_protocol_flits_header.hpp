@@ -12,6 +12,7 @@
 #include "../../common/nonstdint.hpp"           // IWYU pragma: export
 
 #include "../basic/chi_conn.hpp"                // IWYU pragma: export
+#include "../basic/chi_parameters.hpp"          // IWYU pragma: export
 
 
 #endif

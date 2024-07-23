@@ -4,7 +4,7 @@
 //#define __CHI__CHI_PROTOCOL_FLITS
 
 #ifndef CHI_PROTOCOL_FLITS__STANDALONE
-#   define CHI_ISSUE_B_ENABLE
+#   define CHI_ISSUE_EB_ENABLE
 #   include "chi_protocol_flits_header.hpp"
 #   include <concepts>                                  // IWYU pragma: keep
 #endif
@@ -17,18 +17,16 @@ namespace CHI {
     namespace FlitConfigurationConstraints {
 
         template<unsigned int NodeIDWidth>
-        concept NodeID = NodeIDWidth >= 7 && NodeIDWidth <= 11;
+        concept NodeID  = CHI::CheckNodeIdWidth(NodeIDWidth);
 
         template<unsigned int ReqAddrWidth>
-        concept ReqAddr = ReqAddrWidth >= 44 && ReqAddrWidth <= 52;
+        concept ReqAddr = CHI::CheckReqAddrWidth(ReqAddrWidth);
 
         template<unsigned int RSVDCWidth>
-        concept RSVDC = RSVDCWidth == 0 || RSVDCWidth == 4  || RSVDCWidth == 8
-                                        || RSVDCWidth == 12 || RSVDCWidth == 16
-                                        || RSVDCWidth == 24 || RSVDCWidth == 32;
+        concept RSVDC   = CHI::CheckRSVDCWidth(RSVDCWidth);
 
         template<unsigned int DataWidth>
-        concept Data = DataWidth == 128 || DataWidth == 256 || DataWidth == 512;
+        concept Data    = CHI::CheckDataWidth(DataWidth);
     }
 
 
