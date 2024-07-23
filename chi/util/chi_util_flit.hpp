@@ -680,16 +680,13 @@ namespace CHI {
 
         inline bool REQMeasure::Parameters::Check() const noexcept
         {
-            if (!(nodeIdWidth >= 7 && nodeIdWidth <= 11))
+            if (!CHI::CheckNodeIdWidth(nodeIdWidth))
                 return false;
 
-            if (!(reqAddrWidth >= 44 && reqAddrWidth <= 52))
+            if (!CHI::CheckReqAddrWidth(reqAddrWidth))
                 return false;
 
-            if (!(reqRsvdcWidth == 0  || reqRsvdcWidth == 4
-               || reqRsvdcWidth == 8  || reqRsvdcWidth == 12
-               || reqRsvdcWidth == 16 || reqRsvdcWidth == 24
-               || reqRsvdcWidth == 32))
+            if (!CHI::CheckRSVDCWidth(reqRsvdcWidth))
                 return false;
 
             return true;
@@ -974,17 +971,14 @@ namespace CHI {
 
         inline bool DATMeasure::Parameters::Check() const noexcept
         {
-            if (!(nodeIdWidth >= 7 && nodeIdWidth <= 11))
+            if (!CHI::CheckNodeIdWidth(nodeIdWidth))
                 return false;
 
-            if (!(dataWidth == 128 || dataWidth == 256 || dataWidth == 512))
+            if (!CHI::CheckDataWidth(dataWidth))
                 return false;
 
-            if (!(datRsvdcWidth == 0  || datRsvdcWidth == 4
-               || datRsvdcWidth == 8 || datRsvdcWidth == 12
-               || datRsvdcWidth == 16 || datRsvdcWidth == 24
-               || datRsvdcWidth == 32))
-               return false;
+            if (!CHI::CheckRSVDCWidth(datRsvdcWidth))
+                return false;
 
             return true;
         }
@@ -1192,7 +1186,7 @@ namespace CHI {
 
         inline bool RSPMeasure::Parameters::Check() const noexcept
         {
-            if (!(nodeIdWidth >= 7 && nodeIdWidth <= 11))
+            if (!CHI::CheckNodeIdWidth(nodeIdWidth))
                 return false;
 
             return true;
@@ -1360,10 +1354,10 @@ namespace CHI {
 
         inline bool SNPMeasure::Parameters::Check() const noexcept
         {
-            if (!(nodeIdWidth >= 7 && nodeIdWidth <= 11))
+            if (!CHI::CheckNodeIdWidth(nodeIdWidth))
                 return false;
 
-            if (!(reqAddrWidth >= 44 && reqAddrWidth <= 52))
+            if (!CHI::CheckReqAddrWidth(reqAddrWidth))
                 return false;
 
             return true; 
