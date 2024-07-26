@@ -3,4 +3,5 @@ out
 *.user
 *.run
 *.log
+*.out
 .vscode
