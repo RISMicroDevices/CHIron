@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #ifndef __CHI__CLOG_T
 #define __CHI__CLOG_T
 
@@ -9,13 +10,69 @@
 #include <istream>
 #include <iomanip>
 #include <exception>
-#include <map>
+#include <functional>
+#include <unordered_map>
 
 #include "clog.hpp"
 
 
 namespace CLog::CLogT {
 
+    //
+    template<class TContext = void*>
+    class Parser;
+
+    // CLog.T parsers and executors
+    template<class TContext = void*>
+    using Executor          = std::function<bool(Parser<TContext>&, TContext&, std::istream&)>;
+
+    template<class TContext>
+    class Parser {
+    protected:
+        TContext                                            context;
+
+        std::unordered_map<std::string, Executor<TContext>> executors;
+        size_t                                              executionCounter;
+
+        bool                                                stopOnUnknownToken;
+        bool                                                stopOnExecutorFailure;
+
+    public:
+        template<class... Targs>
+        Parser(Targs... contextConstructorArgs) noexcept;
+
+    public:
+        bool                        Parse(std::istream&) noexcept;
+
+    public:
+        TContext&                   GetContext() noexcept;
+        const TContext&             GetContext() const noexcept;
+
+        bool                        IsStopOnUnknownToken() const noexcept;
+        void                        SetStopOnUnknownToken(bool stopOnUnknownToken) noexcept;
+
+        bool                        IsStopOnExecutorFailure() const noexcept;
+        void                        SetStopOnExecutorFailure(bool stopOnExecutorFailure) noexcept;
+
+        size_t                      GetExecutionCounter() const noexcept;
+        void                        SetExecutionCounter(size_t executionCounter) noexcept;
+
+    public:
+        void                        RegisterExecutor(const std::string& token, Executor<TContext> executor) noexcept;
+        void                        UnregisterExecutor(const std::string& token) noexcept;
+
+    protected:
+        virtual std::optional<Executor<TContext>> 
+                                    GetExecutor(const std::string& token) noexcept;
+
+    protected:
+        virtual void                OnException(const std::string& token, std::exception& exception) noexcept;
+        virtual void                OnTokenUnknown(const std::string& unknownToken) noexcept;
+    };
+
+    /*
+    * Spec-defined sentences & tokens for CLog.T
+    */
     namespace Sentence {
 
         /*
@@ -32,6 +89,13 @@ namespace CLog::CLogT {
         */
         namespace END {
             static constexpr const char*    Token   = "end";
+        }
+
+        /*
+        * Comment Token: Comment sentence
+        */
+        namespace COMMENT {
+            static constexpr const char*    Token = "comment";
         }
 
         /*
@@ -229,7 +293,226 @@ namespace CLog::CLogT {
 }
 
 
-// Implementations
+// Implementation of: class Parser
+namespace CLog::CLogT {
+    /*
+    TContext                                            context;
+
+    std::unordered_map<std::string, Executor<TContext>> executors;
+    size_t                                              executionCounter;
+
+    bool                                                stopOnUnknownToken;
+    bool                                                stopOnExecutorFailure;
+    */
+
+    template<class TContext>
+    template<class... Targs>
+    inline Parser<TContext>::Parser(Targs... contextConstructorArgs) noexcept
+        : context               (contextConstructorArgs...)
+        , executors             ()
+        , executionCounter      (0)
+        , stopOnUnknownToken    (false)
+        , stopOnExecutorFailure (false)
+    { }
+
+    template<class TContext>
+    inline bool Parser<TContext>::Parse(std::istream& is) noexcept
+    {
+        if (!is)
+            return true;
+
+        //
+        std::string         term;
+
+        std::ostringstream  sentence;
+        Executor<TContext>  executor;
+        std::string         executorToken;
+        bool                executorAvailable;
+
+        // parse first token
+        if (!(is >> term))
+            return true;
+
+        if (term.find_first_of('$') == 0)
+        {
+            term = term.substr(1);
+
+            if (!term.empty())
+            {
+                auto executor_optional = GetExecutor(term);
+
+                if (executor_optional)
+                {
+                    executor = *executor_optional;
+                    executorToken = term;
+                    executorAvailable = true;
+                }
+                else
+                {
+                    OnTokenUnknown(term);
+
+                    if (stopOnUnknownToken)
+                        return false;
+
+                    executorAvailable = false;
+                }
+            }
+            else
+                executorAvailable = false;  // implicit end token, both accepted for '$' and '$$'
+                                            // while for '$', it wouldn't go to any executor
+        }
+        else
+        {
+            // TODO: error info of first token
+            return false;
+        }
+
+        // parse sentences
+        while (is >> term)
+        {
+            if (term.find_first_of('$') == 0)
+            {
+                // execute previous token
+                if (executorAvailable)
+                {
+                    std::istringstream sentence_terminated(sentence.str());
+
+                    try {
+                        if (!executor(*this, context, sentence_terminated) && stopOnExecutorFailure)
+                            return false;
+
+                        executionCounter++;
+                    } catch (std::exception& e) {
+                        OnException(executorToken, e);
+
+                        if (stopOnExecutorFailure)
+                            return false;
+                    }
+                }
+
+                sentence = std::ostringstream();
+
+                // parse next token
+                term = term.substr(1);
+
+                if (!term.empty())
+                {
+                    auto executor_optional = GetExecutor(term);
+
+                    if (executor_optional)
+                    {
+                        executor = *executor_optional;
+                        executorToken = term;
+                        executorAvailable = true;
+                    }
+                    else
+                    {
+                        OnTokenUnknown(term);
+
+                        if (stopOnUnknownToken)
+                            return false;
+
+                        executorAvailable = false;
+                    }
+                }
+                else
+                    executorAvailable = false;
+            }
+            else
+                sentence << term << " ";
+        }
+
+        // execute last token
+        if (executorAvailable)
+        {
+            std::istringstream sentence_terminated(sentence.str());
+
+            try {
+                if (!executor(*this, context, sentence_terminated) && stopOnExecutorFailure)
+                    return false;
+
+                executionCounter++;
+            } catch (std::exception& e) {
+                OnException(executorToken, e);
+
+                if (stopOnExecutorFailure)
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    template<class TContext>
+    inline TContext& Parser<TContext>::GetContext() noexcept
+    {
+        return context;
+    }
+
+    template<class TContext>
+    inline const TContext& Parser<TContext>::GetContext() const noexcept
+    {
+        return context;
+    }
+
+    template<class TContext>
+    inline bool Parser<TContext>::IsStopOnUnknownToken() const noexcept
+    {
+        return stopOnUnknownToken;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::SetStopOnUnknownToken(bool stopOnUnknownToken) noexcept
+    {
+        this->stopOnUnknownToken = stopOnUnknownToken;
+    }
+
+    template<class TContext>
+    inline bool Parser<TContext>::IsStopOnExecutorFailure() const noexcept
+    {
+        return stopOnExecutorFailure;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::SetStopOnExecutorFailure(bool stopOnExecutorFailure) noexcept
+    {
+        this->stopOnExecutorFailure = stopOnExecutorFailure;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::RegisterExecutor(const std::string& token, Executor<TContext> executor) noexcept
+    {
+        this->executors[token] = executor;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::UnregisterExecutor(const std::string& token) noexcept
+    {
+        this->executors.erase(token);
+    }
+
+    template<class TContext>
+    inline std::optional<Executor<TContext>> Parser<TContext>::GetExecutor(const std::string& token) noexcept
+    {
+        auto iter = this->executors.find(token);
+
+        if (iter == this->executors.end())
+            return std::nullopt;
+
+        return { iter->second };
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::OnException(const std::string& token, std::exception& exception) noexcept
+    { }
+
+    template<class TContext>
+    inline void Parser<TContext>::OnTokenUnknown(const std::string& unknownToken) noexcept
+    { }
+}
+
+
+// Implementations of Sentences
 namespace CLog::CLogT {
 
     namespace shared_details {
@@ -284,7 +567,7 @@ namespace CLog::CLogT {
 
         //
         template<class Tk, class Tv>
-        inline bool ReadMapped(const std::map<Tk, Tv>& map, const Tk& key, Tv& val)
+        inline bool ReadMapped(const std::unordered_map<Tk, Tv>& map, const Tk& key, Tv& val)
         {
             auto res = map.find(key);
 
@@ -328,7 +611,7 @@ namespace CLog::CLogT {
                     std::string term;
                     is >> term;
 
-                    static const std::map<std::string, Issue> map = {
+                    static const std::unordered_map<std::string, Issue> map = {
                         {B,     Issue::B},
                         {Eb,    Issue::Eb}
                     };
@@ -499,7 +782,7 @@ namespace CLog::CLogT {
                     std::string term;
                     is >> term;
 
-                    static const std::map<std::string, NodeType> map = {
+                    static const std::unordered_map<std::string, NodeType> map = {
                         {RNF,   NodeType::RN_F},
                         {RND,   NodeType::RN_D},
                         {RNI,   NodeType::RN_I},
@@ -593,7 +876,7 @@ namespace CLog::CLogT {
                     std::string term;
                     is >> term;
 
-                    static const std::map<std::string, Channel> map = {
+                    static const std::unordered_map<std::string, Channel> map = {
                         {TXREQ, Channel::TXREQ},
                         {TXRSP, Channel::TXRSP},
                         {TXDAT, Channel::TXDAT},
