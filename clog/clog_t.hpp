@@ -12,6 +12,8 @@
 #include <exception>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
+#include <initializer_list>
 
 #include "clog.hpp"
 
@@ -36,6 +38,17 @@ namespace CLog::CLogT {
 
         bool                                                stopOnUnknownToken;
         bool                                                stopOnExecutorFailure;
+        bool                                                stopOnSegmentEnd;
+
+        bool                                                segmentMode;
+        bool                                                segmentMaskEnable;
+        std::string                                         segmentBeginToken;
+        std::string                                         segmentEndToken;
+        std::unordered_set<std::string>                     segmentMask;
+
+        bool                                                inSegment;
+        bool                                                startOfSegment;
+        bool                                                endOfSegment;
 
     public:
         template<class... Targs>
@@ -54,8 +67,33 @@ namespace CLog::CLogT {
         bool                        IsStopOnExecutorFailure() const noexcept;
         void                        SetStopOnExecutorFailure(bool stopOnExecutorFailure) noexcept;
 
+        bool                        IsStopOnSegmentEnd() const noexcept;
+        void                        SetStopOnSegmentEnd(bool stopOnSegmentEnd) noexcept;
+
         size_t                      GetExecutionCounter() const noexcept;
         void                        SetExecutionCounter(size_t executionCounter) noexcept;
+
+        bool                        IsSegmentMode() const noexcept;
+        void                        SetSegmentMode(bool segmentMode) noexcept;
+        void                        SetSegmentToken(const std::string& segmentBeginToken, const std::string& segmentEndToken) noexcept;
+        void                        AddSegmentMask(const std::string& token) noexcept;
+        void                        AddSegmentMask(std::initializer_list<std::string> tokens) noexcept;
+        void                        EraseSegmentMask(const std::string& token) noexcept;
+        void                        EraseSegmentMask(std::initializer_list<std::string> tokens) noexcept;
+        void                        ClearSegmentMask() noexcept;
+
+        bool                        IsSegmentMaskEnable() const noexcept;
+        void                        SetSegmentMaskEnable(bool enable = true) noexcept;
+
+        bool                        IsInSegment() const noexcept;
+        bool                        IsStartOfSegment() const noexcept;
+        bool                        IsEndOfSegment() const noexcept;
+
+        void                        SetSegmentBeginToken(const std::string& segmentBeginToken) noexcept;
+        std::string                 GetSegmentBeginToken() const noexcept;
+
+        void                        SetSegmentEndToken(const std::string& segmentEndToken) noexcept;
+        std::string                 GetSegmentEndToken() const noexcept;
 
     public:
         void                        RegisterExecutor(const std::string& token, Executor<TContext> executor) noexcept;
@@ -68,6 +106,9 @@ namespace CLog::CLogT {
     protected:
         virtual void                OnException(const std::string& token, std::exception& exception) noexcept;
         virtual void                OnTokenUnknown(const std::string& unknownToken) noexcept;
+        
+        virtual void                OnSegmentEnter(const std::string& token) noexcept;
+        virtual void                OnSegmentExit(const std::string& token) noexcept;
     };
 
     /*
@@ -289,6 +330,41 @@ namespace CLog::CLogT {
             }
         }
         //
+
+        /*
+        * Segmental Token: Comment / Ignored Segement
+        */
+        //
+        namespace CLOG_SEGMENT_IGNORE {
+            static constexpr const char*    Token   = "$#";
+        }
+        //
+
+        /*
+        * Segmental Token: CHI Parameter Segment
+        */
+        //
+        namespace CLOG_SEGMENT_PARAM_BEGIN {
+            static constexpr const char*    Token   = "clog.segment.param.begin";
+        }
+        //
+        namespace CLOG_SEGMENT_PARAM_END {
+            static constexpr const char*    Token   = "clog.segment.param.end";
+        }
+        //
+
+        /*
+        * Segmental Token: CHI Topology Information Segement
+        */
+        //
+        namespace CLOG_SEGMENT_TOPO_BEGIN {
+            static constexpr const char*    Token   = "clog.segment.topo.begin";
+        }
+        //
+        namespace CLOG_SEGMENT_TOPO_END {
+            static constexpr const char*    Token   = "clog.segment.topo.end";
+        }
+        //
     }
 }
 
@@ -303,6 +379,17 @@ namespace CLog::CLogT {
 
     bool                                                stopOnUnknownToken;
     bool                                                stopOnExecutorFailure;
+    bool                                                stopOnSegmentEnd;
+
+    bool                                                segmentMode;
+    bool                                                segmentMaskEnable;
+    std::string                                         segmentBeginToken;
+    std::string                                         segmentEndToken;
+    std::unordered_set<std::string>                     segmentExecutorMask;
+
+    bool                                                inSegment;
+    bool                                                startOfSegment;
+    bool                                                endOfSegment;
     */
 
     template<class TContext>
@@ -313,6 +400,15 @@ namespace CLog::CLogT {
         , executionCounter      (0)
         , stopOnUnknownToken    (false)
         , stopOnExecutorFailure (false)
+        , stopOnSegmentEnd      (false)
+        , segmentMode           (false)
+        , segmentMaskEnable     (false)
+        , segmentBeginToken     ()
+        , segmentEndToken       ()
+        , segmentMask   ()
+        , inSegment             (false)
+        , startOfSegment        (false)
+        , endOfSegment          (false)
     { }
 
     template<class TContext>
@@ -339,63 +435,35 @@ namespace CLog::CLogT {
 
             if (!term.empty())
             {
-                auto executor_optional = GetExecutor(term);
-
-                if (executor_optional)
+                if (segmentMode)
                 {
-                    executor = *executor_optional;
-                    executorToken = term;
-                    executorAvailable = true;
+                    if (segmentBeginToken.compare(term) == 0)
+                    {
+                        OnSegmentEnter(term);
+                        inSegment = true;
+
+                        auto executor_optional = GetExecutor(term);
+
+                        if (executor_optional)
+                        {
+                            executor = *executor_optional;
+                            executorToken = term;
+                            executorAvailable = true;
+                        }
+                        else
+                        {
+                            OnTokenUnknown(term);
+
+                            if (stopOnUnknownToken)
+                                return false;
+
+                            executorAvailable = false;
+                        }
+                    }
+                    else
+                        executorAvailable = false;
                 }
                 else
-                {
-                    OnTokenUnknown(term);
-
-                    if (stopOnUnknownToken)
-                        return false;
-
-                    executorAvailable = false;
-                }
-            }
-            else
-                executorAvailable = false;  // implicit end token, both accepted for '$' and '$$'
-                                            // while for '$', it wouldn't go to any executor
-        }
-        else
-        {
-            // TODO: error info of first token
-            return false;
-        }
-
-        // parse sentences
-        while (is >> term)
-        {
-            if (term.find_first_of('$') == 0)
-            {
-                // execute previous token
-                if (executorAvailable)
-                {
-                    std::istringstream sentence_terminated(sentence.str());
-
-                    try {
-                        if (!executor(*this, context, sentence_terminated) && stopOnExecutorFailure)
-                            return false;
-
-                        executionCounter++;
-                    } catch (std::exception& e) {
-                        OnException(executorToken, e);
-
-                        if (stopOnExecutorFailure)
-                            return false;
-                    }
-                }
-
-                sentence = std::ostringstream();
-
-                // parse next token
-                term = term.substr(1);
-
-                if (!term.empty())
                 {
                     auto executor_optional = GetExecutor(term);
 
@@ -415,11 +483,120 @@ namespace CLog::CLogT {
                         executorAvailable = false;
                     }
                 }
-                else
-                    executorAvailable = false;
             }
             else
+                executorAvailable = false;  // implicit end token, both accepted for '$' and '$$'
+                                            // while for '$', it wouldn't go to any executor
+        }
+        else
+        {
+            // TODO: error info of first token
+            //       the first character is required to be '$'
+            return false;
+        }
+
+        // parse sentences
+        while (is >> term)
+        {
+            if (term.find_first_of('$') == 0)
+            {
+                // execute previous token
+                if (executorAvailable)
+                {
+                    std::istringstream sentence_terminated(sentence.str());
+
+                    try {
+                        if (!executor(*this, context, sentence_terminated) && stopOnExecutorFailure)
+                            return false;
+
+                        executionCounter++;
+
+                    } catch (std::exception& e) {
+                        OnException(executorToken, e);
+
+                        if (stopOnExecutorFailure)
+                            return false;
+                    }
+                }
+
+                if (endOfSegment && stopOnSegmentEnd)
+                    return true;
+
+                startOfSegment = false;
+                endOfSegment   = false;
+
+                sentence = std::ostringstream();
+
+                // parse next token
+                term = term.substr(1);
+
+                if (!term.empty())
+                {
+                    if (segmentMode)
+                    {
+                        if (!inSegment && segmentBeginToken.compare(term) == 0)
+                        {
+                            OnSegmentEnter(term);
+                            inSegment = true;
+
+                            startOfSegment = true;
+                        }
+                        else if (inSegment && segmentEndToken.compare(term) == 0)
+                        {
+                            OnSegmentExit(term);
+                            inSegment = false;
+
+                            endOfSegment = true;
+                        }
+                        else if (inSegment)
+                            ;
+                        else
+                        {
+                            executorAvailable = false;
+                            continue;
+                        }
+                    }
+
+                    if (segmentMode && inSegment && segmentMaskEnable && !startOfSegment && !endOfSegment)
+                    {
+                        if (segmentMask.find(term) == segmentMask.end())
+                        {
+                            executorAvailable = false;
+                            continue;
+                        }
+                    }
+
+                    auto executor_optional = GetExecutor(term);
+
+                    if (executor_optional)
+                    {
+                        executor = *executor_optional;
+                        executorToken = term;
+                        executorAvailable = true;
+                        continue;
+                    }
+                    else
+                    {
+                        OnTokenUnknown(term);
+
+                        if (stopOnUnknownToken)
+                            return false;
+
+                        executorAvailable = false;
+                        continue;
+                    }
+                }
+                else
+                {
+                    executorAvailable = false;
+                    continue;
+                }
+            }
+            else
+            {
                 sentence << term << " ";
+                continue;
+            }
         }
 
         // execute last token
@@ -480,6 +657,128 @@ namespace CLog::CLogT {
     }
 
     template<class TContext>
+    inline bool Parser<TContext>::IsStopOnSegmentEnd() const noexcept
+    {
+        return stopOnSegmentEnd;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::SetStopOnSegmentEnd(bool stopOnSegmentEnd) noexcept
+    {
+        this->stopOnSegmentEnd = stopOnSegmentEnd;
+    }
+
+    template<class TContext>
+    inline size_t Parser<TContext>::GetExecutionCounter() const noexcept
+    {
+        return executionCounter;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::SetExecutionCounter(size_t executionCounter) noexcept
+    {
+        this->executionCounter = executionCounter;
+    }
+
+    template<class TContext>
+    inline bool Parser<TContext>::IsSegmentMode() const noexcept
+    {
+        return segmentMode;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::SetSegmentMode(bool segmentMode) noexcept
+    {
+        this->segmentMode = segmentMode;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::SetSegmentToken(const std::string& segmentBeginToken, const std::string& segmentEndToken) noexcept
+    {
+        this->segmentBeginToken = segmentBeginToken;
+        this->segmentEndToken   = segmentEndToken;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::AddSegmentMask(const std::string& token) noexcept
+    {
+        this->segmentMask.insert(token);
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::AddSegmentMask(std::initializer_list<std::string> tokens) noexcept
+    {
+        this->segmentMask.insert(tokens);
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::EraseSegmentMask(const std::string& token) noexcept
+    {
+        this->segmentMask.erase(token);
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::EraseSegmentMask(std::initializer_list<std::string> tokens) noexcept
+    {
+        for (const std::string& token : tokens)
+            EraseSegmentMask(token);
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::ClearSegmentMask() noexcept
+    {
+        this->segmentMask.clear();
+    }
+
+    template<class TContext>
+    inline bool Parser<TContext>::IsSegmentMaskEnable() const noexcept
+    {
+        return segmentMaskEnable;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::SetSegmentMaskEnable(bool segmentMaskEnable) noexcept
+    {
+        this->segmentMaskEnable = segmentMaskEnable;
+    }
+
+    template<class TContext>
+    inline bool Parser<TContext>::IsInSegment() const noexcept
+    {
+       return inSegment;
+    }
+
+    template<class TContext>
+    inline bool Parser<TContext>::IsEndOfSegment() const noexcept
+    {
+        return endOfSegment;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::SetSegmentBeginToken(const std::string& segmentBeginToken) noexcept
+    {
+        this->segmentBeginToken = segmentBeginToken;
+    }
+
+    template<class TContext>
+    inline std::string Parser<TContext>::GetSegmentBeginToken() const noexcept
+    {
+        return segmentBeginToken;
+    }
+
+    template<class TContext>
+    inline void Parser<TContext>::SetSegmentEndToken(const std::string& segmentEndToken) noexcept
+    {
+        this->segmentEndToken = segmentEndToken;
+    }
+
+    template<class TContext>
+    inline std::string Parser<TContext>::GetSegmentEndToken() const noexcept
+    {
+        return segmentEndToken;
+    }
+
+    template<class TContext>
     inline void Parser<TContext>::RegisterExecutor(const std::string& token, Executor<TContext> executor) noexcept
     {
         this->executors[token] = executor;
@@ -508,6 +807,14 @@ namespace CLog::CLogT {
 
     template<class TContext>
     inline void Parser<TContext>::OnTokenUnknown(const std::string& unknownToken) noexcept
+    { }
+
+    template<class TContext>
+    inline void Parser<TContext>::OnSegmentEnter(const std::string& token) noexcept
+    { }
+
+    template<class TContext>
+    inline void Parser<TContext>::OnSegmentExit(const std::string& token) noexcept
     { }
 }
 
@@ -929,43 +1236,6 @@ namespace CLog::CLogT {
             }
         }
         //
-
-        /*
-        * Segmental Token: Comment / Ignored Segement
-        */
-        //
-        namespace CLOG_SEGMENT_IGNORE {
-            static constexpr const char*    Token   = "$#";
-        }
-        //
-
-        /*
-        * Segmental Token: CHI Parameter Segment
-        */
-        //
-        namespace CLOG_SEGMENT_PARAM_BEGIN {
-            static constexpr const char*    Token   = "clog.segment.param.begin";
-        }
-        //
-        namespace CLOG_SEGMENT_PARAM_END {
-            static constexpr const char*    Token   = "clog.segment.param.end";
-        }
-        //
-
-        /*
-        * Segmental Token: CHI Topology Information Segement
-        */
-        //
-        namespace CLOG_SEGMENT_TOPO_BEGIN {
-            static constexpr const char*    Token   = "clog.segment.topo.begin";
-        }
-        //
-        namespace CLOG_SEGMENT_TOPO_END {
-            static constexpr const char*    Token   = "clog.segment.topo.end";
-        }
-        //
-
-        
     }
 
 
