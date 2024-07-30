@@ -1,6 +1,5 @@
 #pragma once
 
-#include <optional>
 #ifndef __CHI__CLOG_T
 #define __CHI__CLOG_T
 
@@ -14,6 +13,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <initializer_list>
+#include <optional>
 
 #include "clog.hpp"
 
