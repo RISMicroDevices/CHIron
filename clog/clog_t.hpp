@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <initializer_list>
 #include <optional>
+#include <variant>
 
 #include "clog.hpp"
 
@@ -21,11 +22,11 @@
 namespace CLog::CLogT {
 
     //
-    template<class TContext = void*>
+    template<class TContext = std::monostate>
     class Parser;
 
     // CLog.T parsers and executors
-    template<class TContext = void*>
+    template<class TContext = std::monostate>
     using Executor          = std::function<bool(Parser<TContext>&, TContext&, std::istream&)>;
 
     template<class TContext>
