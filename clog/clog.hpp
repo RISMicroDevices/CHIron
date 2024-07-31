@@ -51,6 +51,7 @@ namespace CLog {
     */
     class Parameters {
     protected:
+        Issue       issue;
         size_t      nodeIdWidth;
         size_t      reqAddrWidth;
         size_t      reqRsvdcWidth;
@@ -64,6 +65,7 @@ namespace CLog {
         Parameters() noexcept;
 
     public:
+        void        SetIssue(Issue issue) noexcept;
         bool        SetNodeIdWidth(size_t nodeIdWidth) noexcept;
         bool        SetReqAddrWidth(size_t reqAddrWidth) noexcept;
         bool        SetReqRSVDCWidth(size_t reqRsvdcWidth) noexcept;
@@ -74,6 +76,7 @@ namespace CLog {
         void        SetMPAMPresent(bool mpamPresent) noexcept;
 
     public:
+        Issue       GetIssue() const noexcept;
         size_t      GetNodeIdWidth() const noexcept;
         size_t      GetReqAddrWidth() const noexcept;
         size_t      GetReqRSVDCWidth() const noexcept;
@@ -89,6 +92,7 @@ namespace CLog {
 // Implementation of: class Parameters
 namespace CLog {
     /*
+    Issue       issue;
     size_t      nodeIdWidth;
     size_t      reqAddrWidth;
     size_t      reqRsvdcWidth;
@@ -98,6 +102,23 @@ namespace CLog {
     bool        poisonPresent;
     bool        mpamPresent;
     */
+
+    inline Parameters::Parameters() noexcept
+        : issue             (Issue::B)
+        , nodeIdWidth       (7)
+        , reqAddrWidth      (44)
+        , reqRsvdcWidth     (0)
+        , datRsvdcWidth     (0)
+        , dataWidth         (128)
+        , dataCheckPresent  (false)
+        , poisonPresent     (false)
+        , mpamPresent       (false)
+    { }
+
+    inline void Parameters::SetIssue(Issue issue) noexcept
+    {
+        this->issue = issue;
+    }
 
     inline bool Parameters::SetNodeIdWidth(size_t nodeIdWidth) noexcept
     {
@@ -162,6 +183,11 @@ namespace CLog {
     inline void Parameters::SetMPAMPresent(bool mpamPresent) noexcept
     {
         this->mpamPresent = mpamPresent;
+    }
+
+    inline Issue Parameters::GetIssue() const noexcept
+    {
+        return issue;
     }
 
     inline size_t Parameters::GetNodeIdWidth() const noexcept
