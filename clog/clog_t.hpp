@@ -138,6 +138,13 @@ namespace CLog::CLogT {
         */
         namespace COMMENT {
             static constexpr const char*    Token = "comment";
+            //
+            namespace Term {
+                //
+                bool Write(std::ostream& os, const std::string& comment);
+                //
+                bool Read(std::istream& is, std::string& comment);
+            }
         }
 
         /*
@@ -1241,7 +1248,48 @@ namespace CLog::CLogT {
 
 
     //
-    #define WriteCHISentence(writeEnd, os, sentence, val...) \
+    inline void WriteCHISentence(
+        std::ostream&       os,
+        const std::string&  token,
+        bool                writeEnd = false)
+    {
+        os << "$" << token << " ";
+        if (writeEnd)
+            os << "$" << Sentence::END::Token;
+        os << std::endl;
+    }
+
+    //
+    inline void WriteCLogSegmentParamBegin(
+        std::ostream&       os,
+        bool                writeEnd = false)
+    {
+        WriteCHISentence(os, Sentence::CLOG_SEGMENT_PARAM_BEGIN::Token, writeEnd);
+    }
+
+    inline void WriteCLogSegmentParamEnd(
+        std::ostream&       os,
+        bool                writeEnd = false)
+    {
+        WriteCHISentence(os, Sentence::CLOG_SEGMENT_PARAM_END::Token, writeEnd);
+    }
+
+    inline void WriteCLogSegmentTopoBegin(
+        std::ostream&       os,
+        bool                writeEnd = false)
+    {
+        WriteCHISentence(os, Sentence::CLOG_SEGMENT_TOPO_BEGIN::Token, writeEnd);
+    }
+
+    inline void WriteCLogSegmentTopoEnd(
+        std::ostream&       os, 
+        bool                writeEnd = false)
+    {
+        WriteCHISentence(os, Sentence::CLOG_SEGMENT_TOPO_END::Token, writeEnd);
+    }
+
+    //
+    #define WRITE_CHI_SENTENCE(writeEnd, os, sentence, val...) \
         os << "$" << sentence::Token << " "; \
         if (!sentence::Term::Write(os, val)) \
             return false; \
@@ -1252,12 +1300,20 @@ namespace CLog::CLogT {
         return true;
 
     //
+    inline bool WriteCHISentenceComment(
+        std::ostream&       os,
+        const std::string&  comment,
+        bool                writeEnd = false)
+    {
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::COMMENT, comment);
+    }
+
     inline bool WriteCHISentenceIssue(
         std::ostream&   os,
         Issue           issue,
         bool            writeEnd            = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_ISSUE, issue);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_ISSUE, issue);
     }
 
     inline bool WriteCHISentenceNodeIDWidth(
@@ -1265,7 +1321,7 @@ namespace CLog::CLogT {
         size_t          nodeIdWidth,
         bool            writeEnd            = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_WIDTH_NODEID, nodeIdWidth);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_WIDTH_NODEID, nodeIdWidth);
     }
 
     inline bool WriteCHISentenceAddrWidth(
@@ -1273,7 +1329,7 @@ namespace CLog::CLogT {
         size_t          addrWidth,
         bool            writeEnd            = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_WIDTH_ADDR, addrWidth);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_WIDTH_ADDR, addrWidth);
     }
 
     inline bool WriteCHISentenceReqRSVDCWidth(
@@ -1281,7 +1337,7 @@ namespace CLog::CLogT {
         size_t          reqRsvdcWidth,
         bool            writeEnd            = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_WIDTH_RSVDC_REQ, reqRsvdcWidth);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_WIDTH_RSVDC_REQ, reqRsvdcWidth);
     }
 
     inline bool WriteCHISentenceDatRSVDCWidth(
@@ -1289,7 +1345,7 @@ namespace CLog::CLogT {
         size_t          datRsvdcWidth,
         bool            writeEnd            = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_WIDTH_RSVDC_DAT, datRsvdcWidth);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_WIDTH_RSVDC_DAT, datRsvdcWidth);
     }
 
     inline bool WriteCHISentenceDataWidth(
@@ -1297,7 +1353,7 @@ namespace CLog::CLogT {
         size_t          dataWith,
         bool            writeEnd            = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_WIDTH_DATA, dataWith);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_WIDTH_DATA, dataWith);
     }
 
     inline bool WriteCHISentenceDataCheckPresent(
@@ -1305,7 +1361,7 @@ namespace CLog::CLogT {
         bool            dataCheckPresent,
         bool            writeEnd            = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_ENABLE_DATACHECK, dataCheckPresent);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_ENABLE_DATACHECK, dataCheckPresent);
     }
 
     inline bool WriteCHISentencePoisonPresent(
@@ -1313,7 +1369,7 @@ namespace CLog::CLogT {
         bool            poisonPresent,
         bool            writeEnd            = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_ENABLE_POISON, poisonPresent);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_ENABLE_POISON, poisonPresent);
     }
 
     inline bool WriteCHISentenceMPAMPresent(
@@ -1321,7 +1377,7 @@ namespace CLog::CLogT {
         bool            mpamPresent,
         bool            writeEnd                = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_ENABLE_MPAM, mpamPresent);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_ENABLE_MPAM, mpamPresent);
     }
 
     inline bool WriteCHISentenceTopo(
@@ -1330,7 +1386,7 @@ namespace CLog::CLogT {
         NodeType        nodeType,
         bool            writeEnd                = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_TOPO, nodeId, nodeType);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_TOPO, nodeId, nodeType);
     }
 
     inline bool WriteCHISentenceLog(
@@ -1342,7 +1398,7 @@ namespace CLog::CLogT {
         size_t          flitLength,
         bool            writeEnd                = false)
     {
-        WriteCHISentence(writeEnd, os, Sentence::CHI_LOG, time, nodeId, channel, flit, flitLength);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_LOG, time, nodeId, channel, flit, flitLength);
     }
 
     #undef WriteCHISentence
