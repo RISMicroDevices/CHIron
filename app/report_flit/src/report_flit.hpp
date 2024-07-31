@@ -72,8 +72,21 @@
 
 #define INFO_FORMAT(root, name) NUM_FORMATL << root<config>::name##_WIDTH << std::right << "    Range: [" << NUM_FORMATR << root<config>::name##_MSB << ":" << NUM_FORMATR << root<config>::name##_LSB << "]"
 
+static void print_version() noexcept
+{
+    std::cerr << std::endl;
+    std::cerr << "                CHIron Toolset" << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "           report_flit - " << __DATE__ << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "  report_flit: Static CHI Flit information reporter" << std::endl;
+    std::cerr << std::endl;
+}
+
 inline int report_flit_main()
 {
+    print_version();
+
     //
     std::cout << "========================================================" << std::endl;
 #ifdef CHI_ISSUE_B_ENABLE
