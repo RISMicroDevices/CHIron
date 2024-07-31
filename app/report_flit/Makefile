@@ -1,7 +1,8 @@
 ISSUE ?= B
+O ?= build
 
 SRC_DIR := src
-BUILD_DIR := build
+BUILD_DIR := $(O)
 
 CHIRON_DIR := ../..
 
@@ -33,7 +34,7 @@ build: $(main) FORCE
 		-D_MPAM_PRESENT=$(MPAM_PRESENT)
 
 run:
-	$(BUILD_DIR)/./report_flit
+	@$(BUILD_DIR)/./report_flit
 
 clean:
 	rm -rf build
