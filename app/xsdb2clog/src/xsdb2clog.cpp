@@ -9,11 +9,13 @@
 #include <cstdlib>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "xsdb2clog.hpp"
 
 #include "../../../clog/clog_b.hpp"
 #include "../../../clog/clog_t.hpp"
+#include "../../../clog/clog_t_util.hpp"
 
 
 std::string     current_site;
@@ -119,6 +121,8 @@ static void print_help() noexcept
     std::cout << "  -T, --clogT             *default* specify output format as CLog.T" << std::endl;
     std::cout << "  -B, --clogB             [WIP] specify output format as CLog.B" << std::endl;
     std::cout << "  -Z, --clogBz            [WIP] specify output format as CLog.Bz" << std::endl;
+    std::cout << "  -f, --param-file        specify CLog input files for CHI parameters" << std::endl;
+    std::cout << "  -s, --seg, --segment    enable segment mode for CLog input files for CHI parameters" << std::endl;
     std::cout << std::endl;
 }
 
@@ -130,6 +134,9 @@ int main(int argc, char* argv[])
 
     std::string xsdbTableName   = "CHILog";
 
+    std::vector<std::string>    clogParamFiles;
+    bool                        clogParamFilesSegmentMode = false;
+
     // input parameters
     const struct option long_options[] = {
         { "help"            , 0, NULL, 'h' },
@@ -139,12 +146,15 @@ int main(int argc, char* argv[])
         { "clogT"           , 0, NULL, 'T' },
         { "clogB"           , 0, NULL, 'B' },
         { "clogBz"          , 0, NULL, 'Z' },
+        { "segment"         , 0, NULL, 's' },
+        { "seg"             , 0, NULL, 's' },
+        { "param-file"      , 1, NULL, 'f' },
         { 0                 , 0, NULL,  0  }
     };
 
     int long_index = 0;
     int o;
-    while ((o = getopt_long(argc, argv, "hvi:o:TBZ", long_options, &long_index)) != -1)
+    while ((o = getopt_long(argc, argv, "hvi:o:TBZsf:", long_options, &long_index)) != -1)
     {
         switch (o)
         {
@@ -183,6 +193,14 @@ int main(int argc, char* argv[])
                 std::cerr << "$ERROR: format CLog.Bz not supported currently, hold tight on future versions!" << std::endl;
                 return 1;
 
+            case 's':
+                clogParamFilesSegmentMode = true;
+                break;
+
+            case 'f':
+                clogParamFiles.push_back(std::string(optarg));
+                break;
+
             default:
                 print_help();
                 return 1;
@@ -195,8 +213,48 @@ int main(int argc, char* argv[])
     //
     if (xsdbFile.empty())
     {
-        std::cerr << "%ERROR: please specify input XiangShan ChiselDB file with option '-D' or '--xsdb'" << std::endl;
+        std::cerr << "%ERROR: please specify input XiangShan ChiselDB file with option '-i' or '--xsdb'" << std::endl;
         return 2;
+    }
+
+    /* Extract parameters from param-file(s) */
+    CLog::CLogT::Parser<>           parser;
+
+    CLog::Parameters                params;
+    CLog::CLogT::ParametersSerDes<> paramsSerDes;
+
+    parser.SetStopOnSegmentEnd(true);
+    parser.SetSegmentMode(clogParamFilesSegmentMode);
+
+    paramsSerDes.SetParametersReference(&params);
+    paramsSerDes.RegisterAsDeserializer(parser);
+    paramsSerDes.ApplySegmentToken(parser);
+    paramsSerDes.ApplySegmentMask(parser);
+
+    for (auto& clogParamFile : clogParamFiles)
+    {
+        if (clogParamFile.empty())
+            continue;
+
+        std::ifstream ifs(clogParamFile);
+
+        if (!ifs)
+        {
+            std::cerr << "%ERROR: cannot open input param file: " << clogParamFile << std::endl;
+            return 3;
+        }
+
+        std::cerr << "%INFO: reading params from input param-file: " << clogParamFile;
+
+        if (!parser.Parse(ifs))
+        {
+            std::cerr << "%ERROR: CLog.T parsing error on file: " << clogParamFile 
+                << ", after " << parser.GetExecutionCounter() << " tokens."  << std::endl;
+            return -1;
+        }
+
+        std::cerr << ": " << parser.GetExecutionCounter() << std::endl;
+        parser.SetExecutionCounter(0);
     }
 
     /* Specify output direction */
@@ -216,7 +274,12 @@ int main(int argc, char* argv[])
         }
 
         output = &foutput;
+
+        std::cerr << "%INFO: ready to write into output file: " << clogFile << std::endl;
     }
+
+    /* Write param segment */
+    paramsSerDes.SerializeTo(foutput, true);
 
     /* */
     sqlite3*        db;
