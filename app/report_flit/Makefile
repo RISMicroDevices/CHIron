@@ -6,6 +6,9 @@ BUILD_DIR := $(O)
 
 CHIRON_DIR := ../..
 
+-include Makefile.user
+-include Makefile.config
+
 ifeq ($(ISSUE), B)
 main := $(SRC_DIR)/report_flit_b.cpp
 endif
@@ -17,9 +20,6 @@ endif
 ifeq ($(main),)
 $(error "Unknown CHI Issue specified: $(ISSUE)")
 endif
-
--include Makefile.user
--include Makefile.config
 
 build: $(main) FORCE
 	test -d $(BUILD_DIR) || mkdir $(BUILD_DIR)
