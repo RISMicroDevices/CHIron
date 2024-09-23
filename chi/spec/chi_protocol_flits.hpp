@@ -46,6 +46,7 @@ namespace CHI {
             >
     requires FlitConfigurationConstraints::NodeID<NodeIDWidth>
           && FlitConfigurationConstraints::ReqAddr<ReqAddrWidth>
+          && FlitConfigurationConstraints::RSVDC<REQRSVDCWidth>
           && FlitConfigurationConstraints::RSVDC<DATRSVDCWidth>
           && FlitConfigurationConstraints::Data<DataWidth>
     struct FlitConfiguration {
