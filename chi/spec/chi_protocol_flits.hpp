@@ -35,8 +35,8 @@ namespace CHI {
     */
     template<   unsigned int NodeIDWidth           = 7
              ,  unsigned int ReqAddrWidth          = 48
-             ,  unsigned int REQRSVDCWidth         = 4
-             ,  unsigned int DATRSVDCWidth         = 4
+             ,  unsigned int ReqRSVDCWidth         = 4
+             ,  unsigned int DatRSVDCWidth         = 4
              ,  unsigned int DataWidth             = 256
              ,  bool         DataCheckPresent      = false
              ,  bool         PoisonPresent         = false
@@ -46,8 +46,8 @@ namespace CHI {
             >
     requires FlitConfigurationConstraints::NodeID<NodeIDWidth>
           && FlitConfigurationConstraints::ReqAddr<ReqAddrWidth>
-          && FlitConfigurationConstraints::RSVDC<REQRSVDCWidth>
-          && FlitConfigurationConstraints::RSVDC<DATRSVDCWidth>
+          && FlitConfigurationConstraints::RSVDC<ReqRSVDCWidth>
+          && FlitConfigurationConstraints::RSVDC<DatRSVDCWidth>
           && FlitConfigurationConstraints::Data<DataWidth>
     struct FlitConfiguration {
         static constexpr unsigned int   nodeIdWidth             = NodeIDWidth;
@@ -57,8 +57,8 @@ namespace CHI {
         static constexpr unsigned int   tagWidth                = DataWidth / 32;
         static constexpr unsigned int   tagUpdateWidth          = DataWidth / 128;
 #endif
-        static constexpr unsigned int   reqRsvdcWidth           = REQRSVDCWidth;
-        static constexpr unsigned int   datRsvdcWidth           = DATRSVDCWidth;
+        static constexpr unsigned int   reqRsvdcWidth           = ReqRSVDCWidth;
+        static constexpr unsigned int   datRsvdcWidth           = DatRSVDCWidth;
         static constexpr unsigned int   dataWidth               = DataWidth;
         static constexpr unsigned int   byteEnableWidth         = DataWidth / 8;
         static constexpr unsigned int   dataCheckWidth          = DataCheckPresent ? (DataWidth / 8) : 0;
