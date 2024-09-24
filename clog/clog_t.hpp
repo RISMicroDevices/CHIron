@@ -1256,7 +1256,7 @@ namespace CLog::CLogT {
         os << "$" << token << " ";
         if (writeEnd)
             os << "$" << Sentence::END::Token;
-        os << std::endl;
+        os <<'\n';
     }
 
     //
@@ -1296,7 +1296,7 @@ namespace CLog::CLogT {
         os << " "; \
         if (writeEnd) \
             os << "$" << Sentence::END::Token; \
-        os << std::endl; \
+        os << '\n'; \
         return true;
 
     //
@@ -1350,10 +1350,10 @@ namespace CLog::CLogT {
 
     inline bool WriteCHISentenceDataWidth(
         std::ostream&   os,
-        size_t          dataWith,
+        size_t          dataWidth,
         bool            writeEnd            = false)
     {
-        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_WIDTH_DATA, dataWith);
+        WRITE_CHI_SENTENCE(writeEnd, os, Sentence::CHI_WIDTH_DATA, dataWidth);
     }
 
     inline bool WriteCHISentenceDataCheckPresent(
@@ -1394,7 +1394,7 @@ namespace CLog::CLogT {
         uint64_t        time,
         uint64_t        nodeId,
         Channel         channel,
-        uint32_t*       flit,
+        const uint32_t* flit,
         size_t          flitLength,
         bool            writeEnd                = false)
     {
