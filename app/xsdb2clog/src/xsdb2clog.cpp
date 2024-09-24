@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <chrono>
 
 #include "xsdb2clog.hpp"
 
@@ -318,6 +319,8 @@ int main(int argc, char* argv[])
     /* Execute SQL statement */
     std::cerr << "%INFO: converting xsdb to clog ... " << std::endl;
 
+    auto beforeTime = std::chrono::system_clock::now();
+
     rc = sqlite3_prepare_v2(db, sql.str().c_str(), sql.str().length(), &dbstmt, &zTail);
 
     if (rc != SQLITE_OK)
@@ -395,8 +398,11 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    auto afterTime = std::chrono::system_clock::now();
+
     std::cerr << std::endl;
-    std::cerr << "%INFO: operation done for " << record_count << " records" << std::endl;
+    std::cerr << "%INFO: operation done for " << record_count << " records" 
+        << " in " << std::chrono::duration<double, std::milli>(afterTime - beforeTime).count() << " ms" << std::endl;
 
     sqlite3_finalize(dbstmt);
     sqlite3_close(db);
