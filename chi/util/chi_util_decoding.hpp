@@ -60,7 +60,7 @@ namespace CHI {
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
         class DecoderBase {
         protected:
-            static constexpr size_t     OPCODE_SLOT_COUNT = _Tflit::OPCODE_WIDTH << 1;
+            static constexpr size_t     OPCODE_SLOT_COUNT = 1 << _Tflit::OPCODE_WIDTH;
 
         protected:
             OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>  opcodes[OPCODE_SLOT_COUNT];
@@ -230,8 +230,8 @@ namespace CHI {
         template<class _Topcode, class _Tcompanion>
         inline OpcodeInfo<_Topcode, _Tcompanion>::OpcodeInfo() noexcept
             : valid     (false)
-            , channel   (0)
-            , opcode    (0)
+            , channel   ()
+            , opcode    ()
             , name      ("")
             , companion ()
         { }
@@ -305,7 +305,7 @@ namespace CHI {
     namespace Opcodes {
         /*
         protected:
-            static constexpr size_t     OPCODE_SLOT_COUNT = _Tflit::OPCODE_WIDTH << 1;
+            static constexpr size_t     OPCODE_SLOT_COUNT = 1 << _Tflit::OPCODE_WIDTH;
 
         protected:
             OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>  opcodes[OPCODE_SLOT_COUNT];
@@ -463,11 +463,16 @@ namespace CHI {
 
         #define OPCODE_INFO_SET(name) \
             this->opcodes[name] \
-                = OpcodeInfo<_Tflit, _Tcompanion>(OpcodeInfo<_Tflit, _Tcompanion>::Channel::REQ, \
-                name, #name)
+                = OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>( \
+                    OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>::Channel::REQ, \
+                    name, #name)
 
         #define OPCODE_MASK_SET(target, name) \
-            this->mask_##target[name].set()
+            this->mask_##target[name] = true
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline Decoder<_Tflit, _Tcompanion>::~Decoder() noexcept
+        {}
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
         inline Decoder<_Tflit, _Tcompanion>::Decoder() noexcept
@@ -1141,11 +1146,16 @@ namespace CHI {
         
         #define OPCODE_INFO_SET(name) \
             this->opcodes[name] \
-                = OpcodeInfo<_Tflit, _Tcompanion>(OpcodeInfo<_Tflit, _Tcompanion>::Channel::SNP, \
-                name, #name)
+                = OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>( \
+                    OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>::Channel::SNP, \
+                    name, #name)
 
         #define OPCODE_MASK_SET(target, name) \
-            this->mask_##target[name].set()
+            this->mask_##target[name] = true
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline Decoder<_Tflit, _Tcompanion>::~Decoder() noexcept
+        { }
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
         inline Decoder<_Tflit, _Tcompanion>::Decoder() noexcept
@@ -1300,11 +1310,16 @@ namespace CHI {
 
         #define OPCODE_INFO_SET(name) \
             this->opcodes[name] \
-                = OpcodeInfo<_Tflit, _Tcompanion>(OpcodeInfo<_Tflit, _Tcompanion>::Channel::DAT, \
-                name, #name)
+                = OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>( \
+                    OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>::Channel::DAT, \
+                    name, #name)
 
         #define OPCODE_MASK_SET(target, name) \
-            this->mask_##target[name].set()
+            this->mask_##target[name] = true
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline Decoder<_Tflit, _Tcompanion>::~Decoder() noexcept
+        { }
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
         inline Decoder<_Tflit, _Tcompanion>::Decoder() noexcept
@@ -1492,11 +1507,16 @@ namespace CHI {
 
         #define OPCODE_INFO_SET(name) \
             this->opcodes[name] \
-                = OpcodeInfo<_Tflit, _Tcompanion>(OpcodeInfo<_Tflit, _Tcompanion>::Channel::RSP, \
-                name, #name)
+                = OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>( \
+                    OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>::Channel::RSP, \
+                    name, #name)
 
         #define OPCODE_MASK_SET(target, name) \
-            this->mask_##target[name].set()
+            this->mask_##target[name] = true
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline Decoder<_Tflit, _Tcompanion>::~Decoder() noexcept
+        { }
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
         inline Decoder<_Tflit, _Tcompanion>::Decoder() noexcept
