@@ -196,7 +196,7 @@ inline int report_flit_main()
 #ifdef CHI_ISSUE_EB_ENABLE
     std::cout << "      -> PGroupID         Width: " << INFO_FORMAT(RSP, PGROUPID)          << std::endl;
     std::cout << "      -> StashGroupID     Width: " << INFO_FORMAT(RSP, STASHGROUPID)      << std::endl;
-    std::cout << "      -> TagGrooupID      Width: " << INFO_FORMAT(RSP, TAGGROUPID)        << std::endl;
+    std::cout << "      -> TagGroupID       Width: " << INFO_FORMAT(RSP, TAGGROUPID)        << std::endl;
 #endif
     std::cout << "CHI RSP::PCrdType         Width: " << INFO_FORMAT(RSP, PCRDTYPE)          << std::endl;
 #ifdef CHI_ISSUE_EB_ENABLE
