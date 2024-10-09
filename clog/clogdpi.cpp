@@ -98,6 +98,36 @@ extern "C" void CLogT_CloseFile(void*           handle)
 
 
 //
+extern "C" void CLogT_WriteSegmentParamBegin(void*  handle)
+{
+    CLogHandle* chandle = (CLogHandle*) handle;
+
+    CLog::CLogT::WriteCLogSegmentParamBegin(*chandle->ofs);
+}
+
+extern "C" void CLogT_WriteSegmentParamEnd(void*    handle)
+{
+    CLogHandle* chandle = (CLogHandle*) handle;
+
+    CLog::CLogT::WriteCLogSegmentParamEnd(*chandle->ofs);
+}
+
+extern "C" void CLogT_WriteSegmentTopoBegin(void*   handle)
+{
+    CLogHandle* chandle = (CLogHandle*) handle;
+
+    CLog::CLogT::WriteCLogSegmentTopoBegin(*chandle->ofs);
+}
+
+extern "C" void CLogT_WriteSegmentTopoEnd(void*     handle)
+{
+    CLogHandle* chandle = (CLogHandle*) handle;
+
+    CLog::CLogT::WriteCLogSegmentTopoEnd(*chandle->ofs);
+}
+
+
+//
 extern "C" void CLogT_WriteIssue(void*          handle,
                                  uint32_t       issue)
 {

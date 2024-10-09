@@ -38,6 +38,22 @@ import "DPI-C" function void CLogT_CloseFile (
 /*
 * CLog.T operations.
 */
+import "DPI-C" function void CLogT_WriteSegmentParamBegin (
+    input   chandle             handle
+);
+
+import "DPI-C" function void CLogT_WriteSegmentParamEnd (
+    input   chandle             handle
+);
+
+import "DPI-C" function void CLogT_WriteSegmentTopoBegin (
+    input   chandle             handle
+);
+
+import "DPI-C" function void CLogT_WriteSegmentTopoEnd (
+    input   chandle             handle
+);
+
 import "DPI-C" function void CLogT_WriteIssue (
     input   chandle             handle,
     input   int                 issue

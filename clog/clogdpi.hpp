@@ -13,6 +13,21 @@ extern "C" void CLogT_CloseFile(
     void*               handle);
 
 /*
+* CLog.T segment write operations.
+*/
+extern "C" void CLogT_WriteSegmentParamBegin(
+    void*               handle);
+
+extern "C" void CLogT_WriteSegmentParamEnd(
+    void*               handle);
+
+extern "C" void CLogT_WriteSegmentTopoBegin(
+    void*               handle);
+
+extern "C" void CLogT_WriteSegmentTopoEnd(
+    void*               handle);
+
+/*
 * CLog.T parameters write operations.
 */
 extern "C" void CLogT_WriteIssue(
