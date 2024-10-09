@@ -51,12 +51,15 @@ namespace CLog::CLogT {
         bool                                                startOfSegment;
         bool                                                endOfSegment;
 
+        bool                                                hasLastTerm;
+        std::string                                         lastTerm;
+
     public:
         template<class... Targs>
         Parser(Targs... contextConstructorArgs) noexcept;
 
     public:
-        bool                        Parse(std::istream&) noexcept;
+        bool                        Parse(std::istream&, bool step = false) noexcept;
 
     public:
         TContext&                   GetContext() noexcept;
@@ -334,6 +337,7 @@ namespace CLog::CLogT {
                 // --------
                     size_t              flitLength,
                 // --------
+                    size_t*             flitLengthRead  = nullptr,
                     bool*               flitOverflow    = nullptr);
             }
         }
@@ -417,10 +421,12 @@ namespace CLog::CLogT {
         , inSegment             (false)
         , startOfSegment        (false)
         , endOfSegment          (false)
+        , hasLastTerm           (false)
+        , lastTerm              ()
     { }
 
     template<class TContext>
-    inline bool Parser<TContext>::Parse(std::istream& is) noexcept
+    inline bool Parser<TContext>::Parse(std::istream& is, bool step) noexcept
     {
         if (!is)
             return true;
@@ -434,7 +440,12 @@ namespace CLog::CLogT {
         bool                executorAvailable;
 
         // parse first token
-        if (!(is >> term))
+        if (hasLastTerm)
+        {
+            term = lastTerm;
+            hasLastTerm = false;
+        }
+        else if (!(is >> term))
             return true;
 
         if (term.find_first_of('$') == 0)
@@ -534,6 +545,14 @@ namespace CLog::CLogT {
                 endOfSegment   = false;
 
                 sentence = std::ostringstream();
+
+                // by step
+                if (step)
+                {
+                    lastTerm    = term;
+                    hasLastTerm = true;
+                    return true;
+                }
 
                 // parse next token
                 term = term.substr(1);
@@ -1180,6 +1199,7 @@ namespace CLog::CLogT {
                 // --------
                     size_t              flitLength,
                 // --------
+                    size_t*             flitLengthRead,
                     bool*               flitOverflow)
                 {
                     if (!shared_details::ReadUInt64(is, time))
@@ -1217,6 +1237,9 @@ namespace CLog::CLogT {
 
                         try {
                             flit[flit_i++] = std::stoll(curr, nullptr, 16);
+
+                            if (flitLengthRead)
+                                (*flitLengthRead)++;
                         } catch (std::exception&) {
                             return false;
                         }
@@ -1232,6 +1255,9 @@ namespace CLog::CLogT {
 
                     try {
                         flit[flit_i++] = std::stoll(term, nullptr, 16);
+
+                        if (flitLengthRead)
+                            (*flitLengthRead)++;
                     } catch (std::exception&) {
                         return false;
                     }
