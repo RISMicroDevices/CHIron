@@ -152,73 +152,73 @@ namespace BullsEye {
     template<unsigned _Len, typename _TNA = void>
     using uint_fit_t = typename uint_fit<_Len, _TNA>::type;
 
-    template<> struct uint_fit<1>       { using type = uint1_t; };
-    template<> struct uint_fit<2>       { using type = uint2_t; };
-    template<> struct uint_fit<3>       { using type = uint3_t; };
-    template<> struct uint_fit<4>       { using type = uint4_t; };
-    template<> struct uint_fit<5>       { using type = uint5_t; };
-    template<> struct uint_fit<6>       { using type = uint6_t; };
-    template<> struct uint_fit<7>       { using type = uint7_t; };
-    template<> struct uint_fit<8>       { using type = uint8_t; };
+    template<typename _TNA> struct uint_fit<1 , _TNA>    { using type = uint1_t; };
+    template<typename _TNA> struct uint_fit<2 , _TNA>    { using type = uint2_t; };
+    template<typename _TNA> struct uint_fit<3 , _TNA>    { using type = uint3_t; };
+    template<typename _TNA> struct uint_fit<4 , _TNA>    { using type = uint4_t; };
+    template<typename _TNA> struct uint_fit<5 , _TNA>    { using type = uint5_t; };
+    template<typename _TNA> struct uint_fit<6 , _TNA>    { using type = uint6_t; };
+    template<typename _TNA> struct uint_fit<7 , _TNA>    { using type = uint7_t; };
+    template<typename _TNA> struct uint_fit<8 , _TNA>    { using type = uint8_t; };
 
-    template<> struct uint_fit<9>       { using type = uint9_t; };
-    template<> struct uint_fit<10>      { using type = uint10_t; };
-    template<> struct uint_fit<11>      { using type = uint11_t; };
-    template<> struct uint_fit<12>      { using type = uint12_t; };
-    template<> struct uint_fit<13>      { using type = uint13_t; };
-    template<> struct uint_fit<14>      { using type = uint14_t; };
-    template<> struct uint_fit<15>      { using type = uint15_t; };
-    template<> struct uint_fit<16>      { using type = uint16_t; };
+    template<typename _TNA> struct uint_fit<9 , _TNA>    { using type = uint9_t; };
+    template<typename _TNA> struct uint_fit<10, _TNA>   { using type = uint10_t; };
+    template<typename _TNA> struct uint_fit<11, _TNA>   { using type = uint11_t; };
+    template<typename _TNA> struct uint_fit<12, _TNA>   { using type = uint12_t; };
+    template<typename _TNA> struct uint_fit<13, _TNA>   { using type = uint13_t; };
+    template<typename _TNA> struct uint_fit<14, _TNA>   { using type = uint14_t; };
+    template<typename _TNA> struct uint_fit<15, _TNA>   { using type = uint15_t; };
+    template<typename _TNA> struct uint_fit<16, _TNA>   { using type = uint16_t; };
 
-    template<> struct uint_fit<17>      { using type = uint17_t; };
-    template<> struct uint_fit<18>      { using type = uint18_t; };
-    template<> struct uint_fit<19>      { using type = uint19_t; };
-    template<> struct uint_fit<20>      { using type = uint20_t; };
-    template<> struct uint_fit<21>      { using type = uint21_t; };
-    template<> struct uint_fit<22>      { using type = uint22_t; };
-    template<> struct uint_fit<23>      { using type = uint23_t; };
-    template<> struct uint_fit<24>      { using type = uint24_t; };
-    template<> struct uint_fit<25>      { using type = uint25_t; };
-    template<> struct uint_fit<26>      { using type = uint26_t; };
-    template<> struct uint_fit<27>      { using type = uint27_t; };
-    template<> struct uint_fit<28>      { using type = uint28_t; };
-    template<> struct uint_fit<29>      { using type = uint29_t; };
-    template<> struct uint_fit<30>      { using type = uint30_t; };
-    template<> struct uint_fit<31>      { using type = uint31_t; };
-    template<> struct uint_fit<32>      { using type = uint32_t; };
+    template<typename _TNA> struct uint_fit<17, _TNA>   { using type = uint17_t; };
+    template<typename _TNA> struct uint_fit<18, _TNA>   { using type = uint18_t; };
+    template<typename _TNA> struct uint_fit<19, _TNA>   { using type = uint19_t; };
+    template<typename _TNA> struct uint_fit<20, _TNA>   { using type = uint20_t; };
+    template<typename _TNA> struct uint_fit<21, _TNA>   { using type = uint21_t; };
+    template<typename _TNA> struct uint_fit<22, _TNA>   { using type = uint22_t; };
+    template<typename _TNA> struct uint_fit<23, _TNA>   { using type = uint23_t; };
+    template<typename _TNA> struct uint_fit<24, _TNA>   { using type = uint24_t; };
+    template<typename _TNA> struct uint_fit<25, _TNA>   { using type = uint25_t; };
+    template<typename _TNA> struct uint_fit<26, _TNA>   { using type = uint26_t; };
+    template<typename _TNA> struct uint_fit<27, _TNA>   { using type = uint27_t; };
+    template<typename _TNA> struct uint_fit<28, _TNA>   { using type = uint28_t; };
+    template<typename _TNA> struct uint_fit<29, _TNA>   { using type = uint29_t; };
+    template<typename _TNA> struct uint_fit<30, _TNA>   { using type = uint30_t; };
+    template<typename _TNA> struct uint_fit<31, _TNA>   { using type = uint31_t; };
+    template<typename _TNA> struct uint_fit<32, _TNA>   { using type = uint32_t; };
 
-    template<> struct uint_fit<33>      { using type = uint33_t; };
-    template<> struct uint_fit<34>      { using type = uint34_t; };
-    template<> struct uint_fit<35>      { using type = uint35_t; };
-    template<> struct uint_fit<36>      { using type = uint36_t; };
-    template<> struct uint_fit<37>      { using type = uint37_t; };
-    template<> struct uint_fit<38>      { using type = uint38_t; };
-    template<> struct uint_fit<39>      { using type = uint39_t; };
-    template<> struct uint_fit<40>      { using type = uint40_t; };
-    template<> struct uint_fit<41>      { using type = uint41_t; };
-    template<> struct uint_fit<42>      { using type = uint42_t; };
-    template<> struct uint_fit<43>      { using type = uint43_t; };
-    template<> struct uint_fit<44>      { using type = uint44_t; };
-    template<> struct uint_fit<45>      { using type = uint45_t; };
-    template<> struct uint_fit<46>      { using type = uint46_t; };
-    template<> struct uint_fit<47>      { using type = uint47_t; };
-    template<> struct uint_fit<48>      { using type = uint48_t; };
-    template<> struct uint_fit<49>      { using type = uint49_t; };
-    template<> struct uint_fit<50>      { using type = uint50_t; };
-    template<> struct uint_fit<51>      { using type = uint51_t; };
-    template<> struct uint_fit<52>      { using type = uint52_t; };
-    template<> struct uint_fit<53>      { using type = uint53_t; };
-    template<> struct uint_fit<54>      { using type = uint54_t; };
-    template<> struct uint_fit<55>      { using type = uint55_t; };
-    template<> struct uint_fit<56>      { using type = uint56_t; };
-    template<> struct uint_fit<57>      { using type = uint57_t; };
-    template<> struct uint_fit<58>      { using type = uint58_t; };
-    template<> struct uint_fit<59>      { using type = uint59_t; };
-    template<> struct uint_fit<60>      { using type = uint60_t; };
-    template<> struct uint_fit<61>      { using type = uint61_t; };
-    template<> struct uint_fit<62>      { using type = uint62_t; };
-    template<> struct uint_fit<63>      { using type = uint63_t; };
-    template<> struct uint_fit<64>      { using type = uint64_t; };
+    template<typename _TNA> struct uint_fit<33, _TNA>   { using type = uint33_t; };
+    template<typename _TNA> struct uint_fit<34, _TNA>   { using type = uint34_t; };
+    template<typename _TNA> struct uint_fit<35, _TNA>   { using type = uint35_t; };
+    template<typename _TNA> struct uint_fit<36, _TNA>   { using type = uint36_t; };
+    template<typename _TNA> struct uint_fit<37, _TNA>   { using type = uint37_t; };
+    template<typename _TNA> struct uint_fit<38, _TNA>   { using type = uint38_t; };
+    template<typename _TNA> struct uint_fit<39, _TNA>   { using type = uint39_t; };
+    template<typename _TNA> struct uint_fit<40, _TNA>   { using type = uint40_t; };
+    template<typename _TNA> struct uint_fit<41, _TNA>   { using type = uint41_t; };
+    template<typename _TNA> struct uint_fit<42, _TNA>   { using type = uint42_t; };
+    template<typename _TNA> struct uint_fit<43, _TNA>   { using type = uint43_t; };
+    template<typename _TNA> struct uint_fit<44, _TNA>   { using type = uint44_t; };
+    template<typename _TNA> struct uint_fit<45, _TNA>   { using type = uint45_t; };
+    template<typename _TNA> struct uint_fit<46, _TNA>   { using type = uint46_t; };
+    template<typename _TNA> struct uint_fit<47, _TNA>   { using type = uint47_t; };
+    template<typename _TNA> struct uint_fit<48, _TNA>   { using type = uint48_t; };
+    template<typename _TNA> struct uint_fit<49, _TNA>   { using type = uint49_t; };
+    template<typename _TNA> struct uint_fit<50, _TNA>   { using type = uint50_t; };
+    template<typename _TNA> struct uint_fit<51, _TNA>   { using type = uint51_t; };
+    template<typename _TNA> struct uint_fit<52, _TNA>   { using type = uint52_t; };
+    template<typename _TNA> struct uint_fit<53, _TNA>   { using type = uint53_t; };
+    template<typename _TNA> struct uint_fit<54, _TNA>   { using type = uint54_t; };
+    template<typename _TNA> struct uint_fit<55, _TNA>   { using type = uint55_t; };
+    template<typename _TNA> struct uint_fit<56, _TNA>   { using type = uint56_t; };
+    template<typename _TNA> struct uint_fit<57, _TNA>   { using type = uint57_t; };
+    template<typename _TNA> struct uint_fit<58, _TNA>   { using type = uint58_t; };
+    template<typename _TNA> struct uint_fit<59, _TNA>   { using type = uint59_t; };
+    template<typename _TNA> struct uint_fit<60, _TNA>   { using type = uint60_t; };
+    template<typename _TNA> struct uint_fit<61, _TNA>   { using type = uint61_t; };
+    template<typename _TNA> struct uint_fit<62, _TNA>   { using type = uint62_t; };
+    template<typename _TNA> struct uint_fit<63, _TNA>   { using type = uint63_t; };
+    template<typename _TNA> struct uint_fit<64, _TNA>   { using type = uint64_t; };
 
     //
     template<unsigned _Llsh = 0> using uint1_strict_t   = truncated_uint8_t<1, _Llsh, true>;
@@ -518,79 +518,79 @@ namespace BullsEye {
     using int63_t               = truncated_int64_t<63>;
 
     //
-    template<unsigned _Len>
-    struct int_fit { using type = void; };
+    template<unsigned _Len, typename _TNA = void>
+    struct int_fit { using type = _TNA; };
 
     template<unsigned _Len>
     using int_fit_t = typename int_fit<_Len>::type;
 
-    template<> struct int_fit<1>        { using type = int1_t; };
-    template<> struct int_fit<2>        { using type = int2_t; };
-    template<> struct int_fit<3>        { using type = int3_t; };
-    template<> struct int_fit<4>        { using type = int4_t; };
-    template<> struct int_fit<5>        { using type = int5_t; };
-    template<> struct int_fit<6>        { using type = int6_t; };
-    template<> struct int_fit<7>        { using type = int7_t; };
-    template<> struct int_fit<8>        { using type = int8_t; };
+    template<typename _TNA> struct int_fit<1 , _TNA>    { using type = int1_t; };
+    template<typename _TNA> struct int_fit<2 , _TNA>    { using type = int2_t; };
+    template<typename _TNA> struct int_fit<3 , _TNA>    { using type = int3_t; };
+    template<typename _TNA> struct int_fit<4 , _TNA>    { using type = int4_t; };
+    template<typename _TNA> struct int_fit<5 , _TNA>    { using type = int5_t; };
+    template<typename _TNA> struct int_fit<6 , _TNA>    { using type = int6_t; };
+    template<typename _TNA> struct int_fit<7 , _TNA>    { using type = int7_t; };
+    template<typename _TNA> struct int_fit<8 , _TNA>    { using type = int8_t; };
 
-    template<> struct int_fit<9>        { using type = int9_t; };
-    template<> struct int_fit<10>       { using type = int10_t; };
-    template<> struct int_fit<11>       { using type = int11_t; };
-    template<> struct int_fit<12>       { using type = int12_t; };
-    template<> struct int_fit<13>       { using type = int13_t; };
-    template<> struct int_fit<14>       { using type = int14_t; };
-    template<> struct int_fit<15>       { using type = int15_t; };
-    template<> struct int_fit<16>       { using type = int16_t; };
+    template<typename _TNA> struct int_fit<9 , _TNA>    { using type = int9_t; };
+    template<typename _TNA> struct int_fit<10, _TNA>    { using type = int10_t; };
+    template<typename _TNA> struct int_fit<11, _TNA>    { using type = int11_t; };
+    template<typename _TNA> struct int_fit<12, _TNA>    { using type = int12_t; };
+    template<typename _TNA> struct int_fit<13, _TNA>    { using type = int13_t; };
+    template<typename _TNA> struct int_fit<14, _TNA>    { using type = int14_t; };
+    template<typename _TNA> struct int_fit<15, _TNA>    { using type = int15_t; };
+    template<typename _TNA> struct int_fit<16, _TNA>    { using type = int16_t; };
 
-    template<> struct int_fit<17>       { using type = int17_t; };
-    template<> struct int_fit<18>       { using type = int18_t; };
-    template<> struct int_fit<19>       { using type = int19_t; };
-    template<> struct int_fit<20>       { using type = int20_t; };
-    template<> struct int_fit<21>       { using type = int21_t; };
-    template<> struct int_fit<22>       { using type = int22_t; };
-    template<> struct int_fit<23>       { using type = int23_t; };
-    template<> struct int_fit<24>       { using type = int24_t; };
-    template<> struct int_fit<25>       { using type = int25_t; };
-    template<> struct int_fit<26>       { using type = int26_t; };
-    template<> struct int_fit<27>       { using type = int27_t; };
-    template<> struct int_fit<28>       { using type = int28_t; };
-    template<> struct int_fit<29>       { using type = int29_t; };
-    template<> struct int_fit<30>       { using type = int30_t; };
-    template<> struct int_fit<31>       { using type = int31_t; };
-    template<> struct int_fit<32>       { using type = int32_t; };
+    template<typename _TNA> struct int_fit<17, _TNA>    { using type = int17_t; };
+    template<typename _TNA> struct int_fit<18, _TNA>    { using type = int18_t; };
+    template<typename _TNA> struct int_fit<19, _TNA>    { using type = int19_t; };
+    template<typename _TNA> struct int_fit<20, _TNA>    { using type = int20_t; };
+    template<typename _TNA> struct int_fit<21, _TNA>    { using type = int21_t; };
+    template<typename _TNA> struct int_fit<22, _TNA>    { using type = int22_t; };
+    template<typename _TNA> struct int_fit<23, _TNA>    { using type = int23_t; };
+    template<typename _TNA> struct int_fit<24, _TNA>    { using type = int24_t; };
+    template<typename _TNA> struct int_fit<25, _TNA>    { using type = int25_t; };
+    template<typename _TNA> struct int_fit<26, _TNA>    { using type = int26_t; };
+    template<typename _TNA> struct int_fit<27, _TNA>    { using type = int27_t; };
+    template<typename _TNA> struct int_fit<28, _TNA>    { using type = int28_t; };
+    template<typename _TNA> struct int_fit<29, _TNA>    { using type = int29_t; };
+    template<typename _TNA> struct int_fit<30, _TNA>    { using type = int30_t; };
+    template<typename _TNA> struct int_fit<31, _TNA>    { using type = int31_t; };
+    template<typename _TNA> struct int_fit<32, _TNA>    { using type = int32_t; };
 
-    template<> struct int_fit<33>       { using type = int33_t; };
-    template<> struct int_fit<34>       { using type = int34_t; };
-    template<> struct int_fit<35>       { using type = int35_t; };
-    template<> struct int_fit<36>       { using type = int36_t; };
-    template<> struct int_fit<37>       { using type = int37_t; };
-    template<> struct int_fit<38>       { using type = int38_t; };
-    template<> struct int_fit<39>       { using type = int39_t; };
-    template<> struct int_fit<40>       { using type = int40_t; };
-    template<> struct int_fit<41>       { using type = int41_t; };
-    template<> struct int_fit<42>       { using type = int42_t; };
-    template<> struct int_fit<43>       { using type = int43_t; };
-    template<> struct int_fit<44>       { using type = int44_t; };
-    template<> struct int_fit<45>       { using type = int45_t; };
-    template<> struct int_fit<46>       { using type = int46_t; };
-    template<> struct int_fit<47>       { using type = int47_t; };
-    template<> struct int_fit<48>       { using type = int48_t; };
-    template<> struct int_fit<49>       { using type = int49_t; };
-    template<> struct int_fit<50>       { using type = int50_t; };
-    template<> struct int_fit<51>       { using type = int51_t; };
-    template<> struct int_fit<52>       { using type = int52_t; };
-    template<> struct int_fit<53>       { using type = int53_t; };
-    template<> struct int_fit<54>       { using type = int54_t; };
-    template<> struct int_fit<55>       { using type = int55_t; };
-    template<> struct int_fit<56>       { using type = int56_t; };
-    template<> struct int_fit<57>       { using type = int57_t; };
-    template<> struct int_fit<58>       { using type = int58_t; };
-    template<> struct int_fit<59>       { using type = int59_t; };
-    template<> struct int_fit<60>       { using type = int60_t; };
-    template<> struct int_fit<61>       { using type = int61_t; };
-    template<> struct int_fit<62>       { using type = int62_t; };
-    template<> struct int_fit<63>       { using type = int63_t; };
-    template<> struct int_fit<64>       { using type = int64_t; };
+    template<typename _TNA> struct int_fit<33, _TNA>    { using type = int33_t; };
+    template<typename _TNA> struct int_fit<34, _TNA>    { using type = int34_t; };
+    template<typename _TNA> struct int_fit<35, _TNA>    { using type = int35_t; };
+    template<typename _TNA> struct int_fit<36, _TNA>    { using type = int36_t; };
+    template<typename _TNA> struct int_fit<37, _TNA>    { using type = int37_t; };
+    template<typename _TNA> struct int_fit<38, _TNA>    { using type = int38_t; };
+    template<typename _TNA> struct int_fit<39, _TNA>    { using type = int39_t; };
+    template<typename _TNA> struct int_fit<40, _TNA>    { using type = int40_t; };
+    template<typename _TNA> struct int_fit<41, _TNA>    { using type = int41_t; };
+    template<typename _TNA> struct int_fit<42, _TNA>    { using type = int42_t; };
+    template<typename _TNA> struct int_fit<43, _TNA>    { using type = int43_t; };
+    template<typename _TNA> struct int_fit<44, _TNA>    { using type = int44_t; };
+    template<typename _TNA> struct int_fit<45, _TNA>    { using type = int45_t; };
+    template<typename _TNA> struct int_fit<46, _TNA>    { using type = int46_t; };
+    template<typename _TNA> struct int_fit<47, _TNA>    { using type = int47_t; };
+    template<typename _TNA> struct int_fit<48, _TNA>    { using type = int48_t; };
+    template<typename _TNA> struct int_fit<49, _TNA>    { using type = int49_t; };
+    template<typename _TNA> struct int_fit<50, _TNA>    { using type = int50_t; };
+    template<typename _TNA> struct int_fit<51, _TNA>    { using type = int51_t; };
+    template<typename _TNA> struct int_fit<52, _TNA>    { using type = int52_t; };
+    template<typename _TNA> struct int_fit<53, _TNA>    { using type = int53_t; };
+    template<typename _TNA> struct int_fit<54, _TNA>    { using type = int54_t; };
+    template<typename _TNA> struct int_fit<55, _TNA>    { using type = int55_t; };
+    template<typename _TNA> struct int_fit<56, _TNA>    { using type = int56_t; };
+    template<typename _TNA> struct int_fit<57, _TNA>    { using type = int57_t; };
+    template<typename _TNA> struct int_fit<58, _TNA>    { using type = int58_t; };
+    template<typename _TNA> struct int_fit<59, _TNA>    { using type = int59_t; };
+    template<typename _TNA> struct int_fit<60, _TNA>    { using type = int60_t; };
+    template<typename _TNA> struct int_fit<61, _TNA>    { using type = int61_t; };
+    template<typename _TNA> struct int_fit<62, _TNA>    { using type = int62_t; };
+    template<typename _TNA> struct int_fit<63, _TNA>    { using type = int63_t; };
+    template<typename _TNA> struct int_fit<64, _TNA>    { using type = int64_t; };
 
     //
     template<unsigned _Llsh = 0> using int1_strict_t    = truncated_int8_t<1, _Llsh, true>;
@@ -849,7 +849,7 @@ namespace BullsEye {
 
     public:
         constexpr _truncated_uint_base() noexcept = default;
-        constexpr _truncated_uint_base(const _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>&) noexcept;
+        constexpr _truncated_uint_base(const _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>&) noexcept = default;
         constexpr _truncated_uint_base(const _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>&) noexcept;
         constexpr _truncated_uint_base(_Tuv val) noexcept;
 
@@ -967,7 +967,7 @@ namespace BullsEye {
     public:
         constexpr _truncated_int_base() noexcept = default;
         constexpr _truncated_int_base(const _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>&) noexcept;
-        constexpr _truncated_int_base(const _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>&) noexcept;
+        constexpr _truncated_int_base(const _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>&) noexcept = default;
         constexpr _truncated_int_base(_Tsv val) noexcept;
 
         template<class _Tother>
@@ -1100,12 +1100,6 @@ namespace BullsEye {
     //
     // _Tuv    val;
     //
-
-    template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
-    inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>
-        ::_truncated_uint_base(const _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>& other) noexcept
-        : val(other.val)
-    { }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>
@@ -1725,12 +1719,6 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>
         ::_truncated_int_base(const _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>& other) noexcept
         : val(static_cast<_Tsv>(other))
-    { }
-
-    template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
-    inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>
-        ::_truncated_int_base(const _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>& other) noexcept
-        : val(other.val)
     { }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
