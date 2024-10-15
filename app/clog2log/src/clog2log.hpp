@@ -18,6 +18,7 @@
 
 #include "../../../clog/clog_t.hpp"
 #include "../../../clog/clog_t_util.hpp"
+#include "../../../clog/clog_b/clog_b.hpp"
 
 #include "../../../common/concurrentqueue.hpp"
 
@@ -125,9 +126,8 @@ static void print_help() noexcept
     std::cout << "  -h, --help              print help info" << std::endl;
     std::cout << "  -v, --version           print version info" << std::endl;
     std::cout << "  -i, --input=FILE        specify CLog input file" << std::endl;
-    std::cout << "  -T, --clogT             *default* specify input format as CLog.T" << std::endl;
+    std::cout << "  -T, --clogT             specify input format as CLog.T" << std::endl;
     std::cout << "  -B, --clogB             specify input format as CLog.B" << std::endl;
-    std::cout << "  -Z, --clogBz            specify input format as CLog.Bz" << std::endl;
     std::cout << "  -o, --output            specify output file" << std::endl;
     std::cout << "  -j, --json              output as json format" << std::endl;
     std::cout << std::endl;
@@ -261,6 +261,9 @@ inline int clog2log(int argc, char* argv[])
 
     bool asJson = false;
 
+    bool clogT = false;
+    bool clogB = false;
+
     // input parameters
     const struct option long_options[] = {
         { "help"            , 0, NULL, 'h' },
@@ -268,14 +271,13 @@ inline int clog2log(int argc, char* argv[])
         { "input"           , 1, NULL, 'i' },
         { "clogT"           , 0, NULL, 'T' },
         { "clogB"           , 0, NULL, 'B' },
-        { "clogBz"          , 0, NULL, 'Z' },
         { "output"          , 1, NULL, 'o' },
         { "json"            , 0, NULL, 'j' }
     };
 
     int long_index = 0;
     int o;
-    while ((o = getopt_long(argc, argv, "hvi:TBZo:j", long_options, &long_index)) != -1)
+    while ((o = getopt_long(argc, argv, "hvi:TBo:j", long_options, &long_index)) != -1)
     {
         switch (o)
         {
@@ -300,15 +302,22 @@ inline int clog2log(int argc, char* argv[])
                 break;
 
             case 'T':
+                if (clogB)
+                {
+                    std::cerr << "%ERROR: multiple source format specified, '-T' confliction" << std::endl;
+                    return 1;
+                }
+                clogT = true;
                 break;
 
             case 'B':
-                std::cerr << "$ERROR: format CLog.B not supported currently, hold tight on future versions!" << std::endl;
-                return 1;
-
-            case 'Z':
-                std::cerr << "$ERROR: format CLog.Bz not supported currently, hold tight on future versions!" << std::endl;
-                return 1;
+                if (clogT)
+                {
+                    std::cerr << "%ERROR: multiple source format specified, '-B' confliction" << std::endl;
+                    return 1;
+                }
+                clogB = true;
+                break;
 
             case 'o':
                 outputFile = optarg;
@@ -337,6 +346,12 @@ inline int clog2log(int argc, char* argv[])
     if (outputFile.empty())
     {
         std::cerr << "%ERROR: please specify output file with option '-o' or '--output'" << std::endl;
+        return 2;
+    }
+
+    if (!(clogT || clogB))
+    {
+        std::cerr << "%ERROR: please specify input format" << std::endl;
         return 2;
     }
 
@@ -379,6 +394,8 @@ inline int clog2log(int argc, char* argv[])
 
     CLog::Parameters                params;
     CLog::CLogT::ParametersSerDes<> paramsSerDes;
+
+    CLog::CLogB::ReaderWithCallback reader;
 
     paramsSerDes.SetParametersReference(&params);
     paramsSerDes.RegisterAsDeserializer(parser);
@@ -535,7 +552,7 @@ inline int clog2log(int argc, char* argv[])
                 //
                 default:
                     std::cerr << "%ERROR: unknown CHI channel: " << uint32_t(task.channel) << std::endl;
-                    finished = true;
+                    errored = true;
                     return false;
             }
 
@@ -543,6 +560,129 @@ inline int clog2log(int argc, char* argv[])
 
             return true;
     });
+
+    reader.callbackOnTagCHIParameters = [&](std::shared_ptr<CLog::CLogB::TagCHIParameters>  tag, 
+                                            std::string&                                    errorMessage) -> bool {
+        params = (*tag).parameters;
+        return true;
+    };
+
+    reader.callbackOnTagCHIRecords = [&](std::shared_ptr<CLog::CLogB::TagCHIRecords>    tag,
+                                         std::string&                                   errorMessage) -> bool {
+        uint64_t time = tag->head.timeBase;
+        for (auto& record : (*tag).records)
+        {
+            time += record.timeShift;
+
+            ParseAndWriteTask task;
+            task.time       = time;
+            task.nodeId     = record.nodeId;
+            task.channel    = record.channel;
+
+            switch (record.channel)
+            {
+                //
+                case CLog::Channel::RXREQ:
+                case CLog::Channel::TXREQ:
+
+                    if (record.flitLength != ((flitLengthREQ + 3) >> 2))
+                        std::cerr << "%WARNING: mismatched REQ flit length."
+                                  << " read: " << record.flitLength << ", expected: " << flitLengthREQ << "." << std::endl;
+
+                    if (!
+#ifdef CHI_ISSUE_B_ENABLE
+                        CHI::B::Flits::DeserializeREQ<config>(task.flit.req, record.flit.get(), REQ_t::WIDTH)
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+                        CHI::Eb::Flits::DeserializeREQ<config>(task.flit.req, record.flit.get(), REQ_t::WIDTH)
+#endif
+                    )
+                    {
+                        std::cerr << "%ERROR: unable to deserialize REQ flit" << std::endl;
+                        return false;
+                    }
+
+                    break;
+
+                //
+                case CLog::Channel::RXRSP:
+                case CLog::Channel::TXRSP:
+
+                    if (record.flitLength != ((flitLengthRSP + 3) >> 2))
+                        std::cerr << "%WARNING: mismatched RSP flit length."
+                                  << " read: " << record.flitLength << ", expected: " << flitLengthRSP << "." << std::endl;
+
+                    if (!
+#ifdef CHI_ISSUE_B_ENABLE
+                        CHI::B::Flits::DeserializeRSP<config>(task.flit.rsp, record.flit.get(), RSP_t::WIDTH)
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+                        CHI::Eb::Flits::DeserializeRSP<config>(task.flit.rsp, record.flit.get(), RSP_t::WIDTH)
+#endif
+                    )
+                    {
+                        std::cerr << "%ERROR: unable to deserialize RSP flit" << std::endl;
+                        return false;
+                    }
+
+                    break;
+
+                //
+                case CLog::Channel::RXDAT:
+                case CLog::Channel::TXDAT:
+
+                    if (record.flitLength != ((flitLengthDAT + 3) >> 2))
+                        std::cerr << "%WARNING: mismatched DAT flit length."
+                                  << " read: " << record.flitLength << ", expected: " << flitLengthDAT << "." << std::endl;
+
+                    if (!
+#ifdef CHI_ISSUE_B_ENABLE
+                        CHI::B::Flits::DeserializeDAT<config>(task.flit.dat, record.flit.get(), DAT_t::WIDTH)
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+                        CHI::Eb::Flits::DeserializeDAT<config>(task.flit.dat, record.flit.get(), DAT_t::WIDTH)
+#endif
+                    )
+                    {
+                        std::cerr << "%ERROR: unable to deserialize DAT flit" << std::endl;
+                        return false;
+                    }
+
+                    break;
+
+                //
+                case CLog::Channel::RXSNP:
+                case CLog::Channel::TXSNP:
+
+                    if (record.flitLength != ((flitLengthSNP + 3) >> 2))
+                        std::cerr << "%WARNING: mismatched SNP flit length."
+                                  << " read: " << record.flitLength << ", expected: " << flitLengthSNP << "." << std::endl;
+
+                    if (!
+#ifdef CHI_ISSUE_B_ENABLE
+                        CHI::B::Flits::DeserializeSNP<config>(task.flit.snp, record.flit.get(), SNP_t::WIDTH)
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+                        CHI::Eb::Flits::DeserializeSNP<config>(task.flit.snp, record.flit.get(), SNP_t::WIDTH)
+#endif
+                    )
+                    {
+                        std::cerr << "%ERROR: unable to deserialize SNP flit" << std::endl;
+                        return false;
+                    }
+
+                    break;
+
+                default:
+                    std::cerr << "%ERROR: unknown CHI channel: " << uint32_t(task.channel) << std::endl;
+                    errored = true;
+                    return false;
+            }
+
+            while (!queue->try_enqueue(task));
+        }
+        return true;
+    };
 
     // open output file
     std::ofstream ofs(outputFile);
@@ -578,6 +718,8 @@ inline int clog2log(int argc, char* argv[])
         {
             if (queue->try_dequeue(task))
             {
+                continue;
+
                 if (asJson)
                 {
                     if (first)
@@ -909,36 +1051,76 @@ inline int clog2log(int argc, char* argv[])
 
     int dotCount = 0;
 
+    uint64_t counter = 0;
     while (1)
     {
-        if (errored)
+        if (clogT)
         {
-            std::cerr << "%ERROR: CLog.T CHI decoding error on file: " << clogFile 
-                << ", after " << parser.GetExecutionCounter() << " tokens."  << std::endl;
-            break;
+            if (errored)
+            {
+                std::cerr << "%ERROR: CLog.T CHI decoding error on file: " << clogFile 
+                    << ", after " << parser.GetExecutionCounter() << " tokens."  << std::endl;
+                break;
+            }
+
+            if (!parser.Parse(ifs, true))
+            {
+                std::cerr << "%ERROR: CLog.T parsing error on file: " << clogFile 
+                    << ", after " << parser.GetExecutionCounter() << " tokens."  << std::endl;
+                errored = true;
+                break;
+            }
+
+            if (!ifs)
+                break;
+
+            if (!(parser.GetExecutionCounter() & 0xFFFF))
+            {
+                dotCount++;
+                std::cout << "." << std::flush;
+            }
+
+            if (dotCount == 31)
+            {
+                dotCount = 0;
+                std::cout << std::endl;
+            }
         }
 
-        if (!parser.Parse(ifs, true))
+        if (clogB)
         {
-            std::cerr << "%ERROR: CLog.T parsing error on file: " << clogFile 
-                << ", after " << parser.GetExecutionCounter() << " tokens."  << std::endl;
-            errored = true;
-            break;
-        }
+            std::string errorMessage;
 
-        if (!ifs)
-            break;
+            if (errored)
+            {
+                std::cerr << "%ERROR: CLog.B CHI decoding error on file: " << clogFile
+                    << ", after" << counter << " tags." << std::endl;
+                break;
+            }
 
-        if (!(parser.GetExecutionCounter() & 0xFFFF))
-        {
-            dotCount++;
-            std::cout << "." << std::flush;
-        }
+            if (!reader.Next(ifs, errorMessage))
+            {
+                std::cerr << "%ERROR: CLog.B reading error on file: " << clogFile
+                    << ", after " << counter << "tags: " << errorMessage << std::endl;
+                errored = true;
+                break;
+            }
+            counter++;
 
-        if (dotCount == 31)
-        {
-            dotCount = 0;
-            std::cout << std::endl;
+            if (!ifs)
+                break;
+
+            if (!(counter & 0xFFFF))
+            {
+                dotCount++;
+                std::cout << "." << std::flush;
+            }
+
+            if (dotCount == 31)
+            {
+                dotCount = 0;
+                std::cout << std::endl;
+            }
         }
     }
 
