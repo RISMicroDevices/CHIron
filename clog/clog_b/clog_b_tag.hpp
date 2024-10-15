@@ -182,6 +182,21 @@ namespace CLog::CLogB {
 }
 
 
+// Implementation of: class Tag
+namespace CLog::CLogB {
+    /*
+    tagtype_t   type;
+    */
+
+    inline Tag::Tag(tagtype_t type) noexcept
+        : type  (type)
+    { }
+
+    inline Tag::~Tag() noexcept
+    { }
+}
+
+
 // Implementation of: class TagCHIParameters
 namespace CLog::CLogB {
     /*
