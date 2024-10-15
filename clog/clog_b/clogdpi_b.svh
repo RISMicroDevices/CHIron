@@ -72,7 +72,7 @@ import "DPI-C" function void CLogB_WriteTopoEnd (
 */
 import "DPI-C" function void CLogB_WriteRecord (
     input   chandle             handle,
-    input   longint             time,
+    input   longint             cycletime,
     input   int                 nodeId,
     input   int                 channel,
     input   bit [511:0]         flit,
