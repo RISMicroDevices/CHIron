@@ -2,13 +2,15 @@
 
 #include <atomic>
 #include <cstdint>
+#include <ios>
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <cstring>
 
 #include "../../common/concurrentqueue.hpp"
 
-#include "clog_b_tag.hpp"
+#include "clog_b.hpp"
 
 
 #define CLOG_B_RECORD_BLOCK_LIMIT           1048576
@@ -73,12 +75,7 @@ extern "C" void* CLogB_OpenFile(
         {
             if (handle->queue->try_dequeue(records))
             {
-                // write tag type
-                handle->ofs->write(reinterpret_cast<char*>(&records->type), 1);
-
-                // write tag
-                records->Serialize(*handle->ofs);
-
+                CLog::CLogB::Writer().Next(*handle->ofs, records);
                 delete records;
             }
             else if (handle->stop)
@@ -93,6 +90,12 @@ extern "C" void CLogB_CloseFile(
     void*               handle)
 {
     CLogBHandle* chandle = (CLogBHandle*) handle;
+
+    if (chandle->records)
+    {
+        while (!chandle->queue->try_enqueue(chandle->records));
+        chandle->records = nullptr;
+    }
 
     while (chandle->queue->size_approx());
 
@@ -145,11 +148,7 @@ extern "C" void CLogB_WriteParameters(
     CLog::CLogB::TagCHIParameters tag;
     tag.parameters = params;
 
-    // write tag type
-    chandle->ofs->write(reinterpret_cast<char*>(&tag.type), 1);
-
-    // write tag
-    tag.Serialize(*chandle->ofs);
+    CLog::CLogB::Writer().Next(*chandle->ofs, &tag);
 }
 
 
@@ -177,11 +176,7 @@ extern "C" void CLogB_WriteTopoEnd(
     CLog::CLogB::TagCHITopologies tag;
     tag.nodes = chandle->topos;
 
-    // write tag type
-    chandle->ofs->write(reinterpret_cast<char*>(&tag.type), 1);
-
-    // write tag
-    tag.Serialize(*chandle->ofs);
+    CLog::CLogB::Writer().Next(*chandle->ofs, &tag);
 }
 
 
@@ -196,6 +191,10 @@ extern "C" void CLogB_WriteRecord(
     const uint32_t*     flit,
     uint32_t            flitLength)
 {
+    //
+    size_t flitLength8 = (flitLength + 7) >> 3;
+
+    //
     CLogBHandle* chandle = (CLogBHandle*) handle;
 
     uint64_t timeShift = chandle->records ? (time - (
@@ -224,16 +223,16 @@ extern "C" void CLogB_WriteRecord(
     }
 
     // append record
-    size_t flitLength32 = (flitLength + 3) >> 2;
+    size_t flitLength32 = (flitLength8 + 3) >> 2;
     std::shared_ptr<uint32_t[]> flitData(new uint32_t[flitLength32]);
 
-    std::memcpy(flitData.get(), flit, flitLength32 << 2);
+    std::memcpy(flitData.get(), flit, flitLength8);
 
     chandle->records->records.push_back({
         .timeShift  = uint32_t(timeShift),
         .nodeId     = uint16_t(nodeId),
         .channel    = CLog::Channel(channel),
-        .flitLength = uint8_t(flitLength),
+        .flitLength = uint8_t(flitLength8),
         .flit       = flitData
     });
 }
