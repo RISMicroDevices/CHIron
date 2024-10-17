@@ -385,6 +385,8 @@ inline int clog2log(int argc, char* argv[])
     DecoderSNP_t*   decoderSnp = new DecoderSNP_t;
 
     /* Parse CLog file */
+    uint64_t                        recordCount = 0;
+
     bool                            finished = false;
     bool                            errored  = false;
 
@@ -453,6 +455,8 @@ inline int clog2log(int argc, char* argv[])
                 std::cerr << "%ERROR: chi.log term reading error" << std::endl;
                 return false;
             }
+
+            recordCount++;
 
             //
             switch (task.channel)
@@ -718,8 +722,6 @@ inline int clog2log(int argc, char* argv[])
         {
             if (queue->try_dequeue(task))
             {
-                continue;
-
                 if (asJson)
                 {
                     if (first)
@@ -1098,13 +1100,18 @@ inline int clog2log(int argc, char* argv[])
                 break;
             }
 
-            if (!reader.Next(ifs, errorMessage))
+            std::shared_ptr<CLog::CLogB::Tag> tag;
+            if (!(tag = reader.Next(ifs, errorMessage)))
             {
                 std::cerr << "%ERROR: CLog.B reading error on file: " << clogFile
-                    << ", after " << counter << "tags: " << errorMessage << std::endl;
+                    << ", after " << counter << " tags: " << errorMessage << std::endl;
                 errored = true;
                 break;
             }
+
+            if (tag->type == CLog::CLogB::Encodings::_EOF)
+                break;
+
             counter++;
 
             if (!ifs)
@@ -1121,6 +1128,128 @@ inline int clog2log(int argc, char* argv[])
                 dotCount = 0;
                 std::cout << std::endl;
             }
+
+            if (tag->type == CLog::CLogB::Encodings::CHI_RECORDS)
+            {
+                CLog::CLogB::TagCHIRecords* records = reinterpret_cast<CLog::CLogB::TagCHIRecords*>(tag.get());
+                uint64_t recordTime = records->head.timeBase;
+
+                for (auto& record : records->records)
+                {
+                    recordTime += record.timeShift;
+
+                    ParseAndWriteTask task;
+                    task.channel = record.channel;
+                    task.time    = recordTime;
+                    task.nodeId  = record.nodeId;
+
+                    //
+                    switch (task.channel)
+                    {
+                        //
+                        case CLog::Channel::RXREQ:
+                        case CLog::Channel::TXREQ:
+
+                            if (size_t(record.flitLength) > flitLengthREQ)
+                                std::cerr << "%WARNING: overflowed REQ flit length."
+                                          << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthREQ << "." << std::endl;
+
+                            if (!
+#ifdef CHI_ISSUE_B_ENABLE
+                                CHI::B::Flits::DeserializeREQ<config>(task.flit.req, flit, REQ_t::WIDTH)
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+                                CHI::Eb::Flits::DeserializeREQ<config>(task.flit.req, record.flit.get(), REQ_t::WIDTH)
+#endif
+                            )
+                            {
+                                std::cerr << "%ERROR: unable to deserialize REQ flit" << std::endl;
+                                return false;
+                            }
+                    
+                            break;
+
+                        //
+                        case CLog::Channel::RXRSP:
+                        case CLog::Channel::TXRSP:
+
+                            if (size_t(record.flitLength) > flitLengthRSP)
+                                std::cerr << "%WARNING: overflowed RSP flit length."
+                                          << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthRSP << "." << std::endl;
+
+                            if (!
+#ifdef CHI_ISSUE_B_ENABLE
+                                CHI::B::Flits::DeserializeRSP<config>(task.flit.rsp, flit, RSP_t::WIDTH)
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+                                CHI::Eb::Flits::DeserializeRSP<config>(task.flit.rsp, record.flit.get(), RSP_t::WIDTH)
+#endif
+                            )
+                            {
+                                std::cerr << "%ERROR: unable to deserialize RSP flit" << std::endl;
+                                return false;
+                            }
+
+                            break;
+
+                        //
+                        case CLog::Channel::RXDAT:
+                        case CLog::Channel::TXDAT:
+
+                            if (size_t(record.flitLength) > flitLengthDAT)
+                                std::cerr << "%WARNING: overflowed DAT flit length."
+                                          << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthDAT << "." << std::endl;
+
+                            if (!
+#ifdef CHI_ISSUE_B_ENABLE
+                                CHI::B::Flits::DeserializeDAT<config>(task.flit.dat, flit, DAT_t::WIDTH)
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+                                CHI::Eb::Flits::DeserializeDAT<config>(task.flit.dat, record.flit.get(), DAT_t::WIDTH)
+#endif
+                            )
+                            {
+                                std::cerr << "%ERROR: unable to deserialize DAT flit" << std::endl;
+                                return false;
+                            }
+
+                            break;
+
+                        //
+                        case CLog::Channel::RXSNP:
+                        case CLog::Channel::TXSNP:
+
+                            if (size_t(record.flitLength) > flitLengthSNP)
+                                std::cerr << "%WARNING: overflowed SNP flit length."
+                                          << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthSNP << "." << std::endl;
+
+                            if (!
+#ifdef CHI_ISSUE_B_ENABLE
+                                CHI::B::Flits::DeserializeSNP<config>(task.flit.snp, flit, SNP_t::WIDTH)
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+                                CHI::Eb::Flits::DeserializeSNP<config>(task.flit.snp, record.flit.get(), SNP_t::WIDTH)
+#endif
+                            )
+                            {
+                                std::cerr << "%ERROR: unable to deserialize SNP flit" << std::endl;
+                                return false;
+                            }
+
+                            break;
+
+                        //
+                        default:
+                            std::cerr << "%ERROR: unknown CHI channel: " << uint32_t(task.channel) << std::endl;
+                            errored = true;
+                            return false;
+                    }
+
+                    while (!queue->try_enqueue(task));
+                }
+
+                recordCount += records->records.size();
+            }
         }
     }
 
@@ -1131,7 +1260,7 @@ inline int clog2log(int argc, char* argv[])
     auto afterTime = std::chrono::system_clock::now();
 
     std::cout << std::endl;
-    std::cout << "%INFO: operation done for " << parser.GetExecutionCounter() << " records" 
+    std::cout << "%INFO: operation done for " << recordCount << " records" 
         << " in " << std::chrono::duration<double, std::milli>(afterTime - beforeTime).count() << " ms" << std::endl;
 
     ofs.close();

@@ -23,7 +23,7 @@ endif
 
 build: $(main) FORCE
 	test -d $(BUILD_DIR) || mkdir $(BUILD_DIR)
-	$(CXX) -std=c++20 $(main) -I$(SRC_DIR) -I$(CHIRON_DIR) -g -fsanitize=address -o $(BUILD_DIR)/clog2log \
+	$(CXX) -std=c++20 -O3 $(main) -I$(SRC_DIR) -I$(CHIRON_DIR) -lz -o $(BUILD_DIR)/clog2log \
 		-DCHI_NODEID_WIDTH=$(NODEID_WIDTH) \
 		-DCHI_REQ_ADDR_WIDTH=$(REQ_ADDR_WIDTH) \
 		-DCHI_REQ_RSVDC_WIDTH=$(REQ_RSVDC_WIDTH) \
