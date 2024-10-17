@@ -4,8 +4,8 @@
 #include <fstream>
 #include <vector>
 
-#include "../../../clog/clog_t.hpp"
-#include "../../../clog/clog_t_util.hpp"
+#include "../../../clog/clog_t/clog_t.hpp"
+#include "../../../clog/clog_t/clog_t_util.hpp"
 
 //
 std::ostream*   output;
