@@ -16,8 +16,8 @@
 #include <set>
 #include <chrono>
 
-#include "../../../clog/clog_t.hpp"
-#include "../../../clog/clog_t_util.hpp"
+#include "../../../clog/clog_t/clog_t.hpp"
+#include "../../../clog/clog_t/clog_t_util.hpp"
 #include "../../../clog/clog_b/clog_b.hpp"
 
 #include "../../../common/concurrentqueue.hpp"
