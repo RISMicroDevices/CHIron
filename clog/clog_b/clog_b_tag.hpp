@@ -25,6 +25,7 @@ namespace CLog::CLogB {
         static constexpr tagtype_t CHI_PARAMETERS   = 0x00;
         static constexpr tagtype_t CHI_TOPOS        = 0x01;
         static constexpr tagtype_t CHI_RECORDS      = 0x10;
+        static constexpr tagtype_t _EOF             = 0xFF;
     }
 
     /* CLog.B Tag base class */
@@ -150,6 +151,19 @@ namespace CLog::CLogB {
         virtual void            Serialize(std::ostream& os) const noexcept override;
     };
 
+
+    // Phantom Tag: EOF
+    class TagEOF : public Tag {
+    public:
+        TagEOF() noexcept;
+        virtual ~TagEOF() noexcept;
+
+        virtual std::string     GetName() const noexcept override;
+        virtual std::string     GetCanonicalName() const noexcept override;
+
+        virtual bool            Deserialize(std::istream& is, std::string& errorMessage) noexcept override;
+        virtual void            Serialize(std::ostream& os) const noexcept override;
+    };
 
 
     // details
@@ -704,11 +718,11 @@ namespace CLog::CLogB {
 
             // read flit
 
-            // record.flit = std::make_shared<uint32_t[]>((head.length + 3) >> 2);
+            // record.flit = std::make_shared<uint32_t[]>((record.flitLength + 3) >> 2);
             // * for legacy c++ header support:
-            record.flit = std::shared_ptr<uint32_t[]>(new uint32_t[(head.length + 3) >> 2]);
+            record.flit = std::shared_ptr<uint32_t[]>(new uint32_t[(record.flitLength + 3) >> 2]);
 
-            if (!ibs.read(reinterpret_cast<char*>(record.flit.get()), head.length))
+            if (!ibs.read(reinterpret_cast<char*>(record.flit.get()), record.flitLength))
             {
                 errorMessage = StringAppender("Tag CHIRecords: ")
                     .Append("record(", i, "): ")
@@ -810,6 +824,38 @@ namespace CLog::CLogB {
             }
         }
     }
+}
+
+
+// implementation of: class TagEOF
+namespace CLog::CLogB {
+    /*
+    */
+
+    inline TagEOF::TagEOF() noexcept
+        : Tag   (Encodings::_EOF)
+    { }
+
+    inline TagEOF::~TagEOF() noexcept
+    { }
+
+    inline std::string TagEOF::GetName() const noexcept
+    {
+        return "EOF";
+    }
+
+    inline std::string TagEOF::GetCanonicalName() const noexcept
+    {
+        return "EOF";
+    }
+
+    inline bool TagEOF::Deserialize(std::istream& is, std::string& errorMessage) noexcept
+    {
+        return true;
+    }
+
+    inline void TagEOF::Serialize(std::ostream& os) const noexcept
+    { }
 }
 
 
