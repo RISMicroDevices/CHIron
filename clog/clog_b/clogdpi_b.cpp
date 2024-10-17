@@ -32,6 +32,7 @@ struct CLogBHandle {
                                             topos;
 
     CLog::CLogB::TagCHIRecords*             records;
+    uint64_t                                lastRecordTime;
 };
 
 
@@ -199,7 +200,7 @@ extern "C" void CLogB_WriteRecord(
 
     uint64_t timeShift = chandle->records ? (time - (
         chandle->records->records.empty() ? chandle->records->head.timeBase
-                                          : chandle->records->records.back().timeShift
+                                          : chandle->lastRecordTime
     )) : 0;
 
     // allocate or split block
@@ -235,4 +236,6 @@ extern "C" void CLogB_WriteRecord(
         .flitLength = uint8_t(flitLength8),
         .flit       = flitData
     });
+
+    chandle->lastRecordTime = time;
 }
