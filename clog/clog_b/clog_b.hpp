@@ -77,15 +77,12 @@ namespace CLog::CLogB {
         tagtype_t type;
 
         if (!is.read(reinterpret_cast<char*>(&type), 1))
-        {
-            errorMessage = "Reader: type: unexpected EOF";
-            return nullptr;
-        }
+            return std::shared_ptr<Tag>(new TagEOF);
 
         // read length
         size_t length;
 
-        if (!is.read(reinterpret_cast<char*>(&length), 4))
+        if (!is.read(reinterpret_cast<char*>(&length), 8))
         {
             errorMessage = "Reader: length: unexpected EOF";
             return nullptr;
