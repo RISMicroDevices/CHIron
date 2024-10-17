@@ -16,7 +16,7 @@
 #include <optional>
 #include <variant>
 
-#include "clog.hpp"
+#include "../clog.hpp"
 
 
 namespace CLog::CLogT {

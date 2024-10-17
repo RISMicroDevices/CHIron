@@ -1,4 +1,4 @@
-#include "clogdpi.hpp"
+#include "clogdpi_t.hpp"
 
 #include <atomic>
 #include <ios>
@@ -6,7 +6,7 @@
 #include <fstream>
 #include <thread>
 
-#include "../common/concurrentqueue.hpp"
+#include "../../common/concurrentqueue.hpp"
 
 #include "clog_t.hpp"
 
