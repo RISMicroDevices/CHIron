@@ -14,9 +14,9 @@
 
 #include "xsdb2clog.hpp"
 
-#include "../../../clog/clog_b.hpp"
-#include "../../../clog/clog_t.hpp"
-#include "../../../clog/clog_t_util.hpp"
+#include "../../../clog/clog_b/clog_b.hpp"
+#include "../../../clog/clog_t/clog_t.hpp"
+#include "../../../clog/clog_t/clog_t_util.hpp"
 
 
 std::string     current_site;
