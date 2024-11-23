@@ -1221,7 +1221,7 @@ namespace CHI {
             using datapull_t = uint_strict_t<DATAPULL_WIDTH>;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
-            using datapull_t = uint_strict_t<4 /*DATASOURCE_WIDTH*/, DATAPULL_WIDTH>;
+            using datapull_t = uintfitn_strict_t<4 /*DATASOURCE_WIDTH*/, DATAPULL_WIDTH>;
 #endif
 
             /*
