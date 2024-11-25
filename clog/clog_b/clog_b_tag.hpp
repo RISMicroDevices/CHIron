@@ -25,7 +25,7 @@ namespace CLog::CLogB {
         static constexpr tagtype_t CHI_PARAMETERS   = 0x00;
         static constexpr tagtype_t CHI_TOPOS        = 0x01;
         static constexpr tagtype_t CHI_RECORDS      = 0x10;
-        static constexpr tagtype_t _EOF             = 0xFF;
+        static constexpr tagtype_t _EOF             = 0x7F;
     }
 
     /* CLog.B Tag base class */
