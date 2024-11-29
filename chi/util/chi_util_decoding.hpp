@@ -62,6 +62,27 @@ namespace CHI {
         protected:
             static constexpr size_t     OPCODE_SLOT_COUNT = 1 << _Tflit::OPCODE_WIDTH;
 
+        public:
+            class OpcodeIterator {
+            private:
+                const DecoderBase<_Tflit, _Tcompanion>* host;
+                bool                                    masked;
+                std::bitset<OPCODE_SLOT_COUNT>          mask;
+                size_t                                  ptr;
+
+            public:
+                OpcodeIterator(const DecoderBase<_Tflit, _Tcompanion>*  host) noexcept;
+
+                OpcodeIterator(const DecoderBase<_Tflit, _Tcompanion>*  host,
+                               bool                                     masked,
+                               std::bitset<OPCODE_SLOT_COUNT>           mask) noexcept;
+
+                const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+                    Next() noexcept;
+            };
+
+            friend class OpcodeIterator;
+
         protected:
             OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>  opcodes[OPCODE_SLOT_COUNT];
             OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>  opcode_invalid;
@@ -95,6 +116,12 @@ namespace CHI {
 
             virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
                 GetInvalid() const noexcept;
+
+            virtual OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+                Invalid() noexcept;
+
+            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+                Invalid() const noexcept;
 
         public:
             /*
@@ -151,7 +178,55 @@ namespace CHI {
             */
             virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
                 DecodeMN(typename _Tflit::opcode_t opcode) const noexcept;
+            
+        public:
+            /*
+            Opcode iteration (for the entire opcode set)
+            */
+            virtual OpcodeIterator Iterate() const noexcept;
+
+        public:
+            /*
+            Opcode iteration for RN-F
+            */
+            virtual OpcodeIterator IterateRNF() const noexcept;
+
+            /*
+            Opcode iteration for RN-D
+            */
+            virtual OpcodeIterator IterateRND() const noexcept;
+
+            /*
+            Opcode iteration for RN-I
+            */
+            virtual OpcodeIterator IterateRNI() const noexcept;
+
+            /*
+            Opcode iteration for HN-F
+            */
+            virtual OpcodeIterator IterateHNF() const noexcept;
+
+            /*
+            Opcode iteration for HN-I
+            */
+            virtual OpcodeIterator IterateHNI() const noexcept;
+
+            /*
+            Opcode iteration for SN-F
+            */
+            virtual OpcodeIterator IterateSNF() const noexcept;
+
+            /*
+            Opcode iteration for SN-I
+            */
+            virtual OpcodeIterator IterateSNI() const noexcept;
+
+            /*
+            Opcode iteration for MN
+            */
+            virtual OpcodeIterator IterateMN() const noexcept;
         };
+
     
         //
         namespace REQ {
@@ -358,6 +433,20 @@ namespace CHI {
         }
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+            DecoderBase<_Tflit, _Tcompanion>::Invalid() noexcept
+        {
+            return GetInvalid();
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+            DecoderBase<_Tflit, _Tcompanion>::Invalid() const noexcept
+        {
+            return GetInvalid();
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
         inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
             DecoderBase<_Tflit, _Tcompanion>::Decode(typename _Tflit::opcode_t opcode) const noexcept
         {
@@ -448,6 +537,123 @@ namespace CHI {
                 return opcode_invalid;
 
             return Decode(opcode);
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+            DecoderBase<_Tflit, _Tcompanion>::Iterate() const noexcept
+        {
+            return OpcodeIterator(this);
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+            DecoderBase<_Tflit, _Tcompanion>::IterateRNF() const noexcept
+        {
+            return OpcodeIterator(this, true, mask_RNF);
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+            DecoderBase<_Tflit, _Tcompanion>::IterateRND() const noexcept
+        {
+            return OpcodeIterator(this, true, mask_RND);
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+            DecoderBase<_Tflit, _Tcompanion>::IterateRNI() const noexcept
+        {
+            return OpcodeIterator(this, true, mask_RNI);
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+            DecoderBase<_Tflit, _Tcompanion>::IterateHNF() const noexcept
+        {
+            return OpcodeIterator(this, true, mask_HNF);
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+            DecoderBase<_Tflit, _Tcompanion>::IterateHNI() const noexcept
+        {
+            return OpcodeIterator(this, true, mask_HNI);
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+            DecoderBase<_Tflit, _Tcompanion>::IterateSNF() const noexcept
+        {
+            return OpcodeIterator(this, true, mask_SNF);
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+            DecoderBase<_Tflit, _Tcompanion>::IterateSNI() const noexcept
+        {
+            return OpcodeIterator(this, true, mask_SNI);
+        }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+            DecoderBase<_Tflit, _Tcompanion>::IterateMN() const noexcept
+        {
+            return OpcodeIterator(this, true, mask_MN);
+        }
+    }
+/*
+}
+*/
+
+
+// Implementation of: class DecoderBase::OpcodeIterator
+/*
+namespace CHI {
+*/
+    namespace Opcodes {
+        /*
+        DecoderBase<_Tflit, _Tcompanion>*   host;
+        bool                                masked;
+        std::bitset<OPCODE_SLOT_COUNT>      mask;
+        size_t                              ptr;
+        */
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator::OpcodeIterator(
+            const DecoderBase<_Tflit, _Tcompanion>* host
+        ) noexcept
+            : host      (host)
+            , masked    (false)
+            , mask      ()
+            , ptr       (0)
+        { }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator::OpcodeIterator(
+            const DecoderBase<_Tflit, _Tcompanion>* host,
+            bool                                    masked,
+            std::bitset<OPCODE_SLOT_COUNT>          mask
+        ) noexcept
+            : host      (host)
+            , masked    (masked)
+            , mask      (mask)
+            , ptr       (0)
+        { }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+        inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>& 
+            DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator::Next() noexcept
+        {
+            while (ptr < OPCODE_SLOT_COUNT)
+            {
+                if ((!masked || mask[ptr]) && host->opcodes[ptr].IsValid())
+                    return host->opcodes[ptr++];
+
+                ptr++;
+            }
+
+            return host->Invalid();
         }
     }
 /*
@@ -578,9 +784,9 @@ namespace CHI {
                                                                 // 0x40 | 0x1D
             OPCODE_INFO_SET(WriteCleanFullCleanShPerSep);       // 0x40 | 0x1E
                                                                 // 0x40 | 0x1F
-            OPCODE_INFO_SET(WriteNoSnpFullCleanSh);             // 0x40 | 0x20
-            OPCODE_INFO_SET(WriteNoSnpFullCleanInv);            // 0x40 | 0x21
-            OPCODE_INFO_SET(WriteNoSnpFullCleanShPerSep);       // 0x40 | 0x22
+            OPCODE_INFO_SET(WriteNoSnpPtlCleanSh);              // 0x40 | 0x20
+            OPCODE_INFO_SET(WriteNoSnpPtlCleanInv);             // 0x40 | 0x21
+            OPCODE_INFO_SET(WriteNoSnpPtlCleanShPerSep);        // 0x40 | 0x22
                                                                 // 0x40 | 0x23
             OPCODE_INFO_SET(WriteUniquePtlCleanSh);             // 0x40 | 0x24
                                                                 // 0x40 | 0x25
@@ -599,6 +805,7 @@ namespace CHI {
             OPCODE_MASK_SET(RNF, WriteNoSnpPtl);
 #ifdef CHI_ISSUE_EB_ENABLE
             OPCODE_MASK_SET(RNF, WriteNoSnpZero);
+            OPCODE_MASK_SET(HNF, ReadNoSnpSep);
 #endif
             //----------------------------------------------------------------
             OPCODE_MASK_SET(RNF, ReadClean);
@@ -608,6 +815,25 @@ namespace CHI {
 #ifdef CHI_ISSUE_EB_ENABLE
             OPCODE_MASK_SET(RNF, ReadPreferUnique);
             OPCODE_MASK_SET(RNF, MakeReadUnique);
+#endif
+            OPCODE_MASK_SET(RNF, CleanUnique);
+            OPCODE_MASK_SET(RNF, MakeUnique);
+            OPCODE_MASK_SET(RNF, Evict);
+            OPCODE_MASK_SET(RNF, WriteBackPtl);
+            OPCODE_MASK_SET(RNF, WriteBackFull);
+            OPCODE_MASK_SET(RNF, WriteCleanFull);
+            OPCODE_MASK_SET(RNF, WriteEvictFull);
+#ifdef CHI_ISSUE_EB_ENABLE
+            OPCODE_MASK_SET(RNF, WriteEvictOrEvict);
+#endif
+            OPCODE_MASK_SET(RNF, ReadOnce);
+#ifdef CHI_ISSUE_EB_ENABLE
+            OPCODE_MASK_SET(RNF, ReadOnceCleanInvalid);
+            OPCODE_MASK_SET(RNF, ReadOnceMakeInvalid);
+            OPCODE_MASK_SET(RNF, StashOnceUnique);
+            OPCODE_MASK_SET(RNF, StashOnceShared);
+            OPCODE_MASK_SET(RNF, StashOnceSepUnique);
+            OPCODE_MASK_SET(RNF, StashOnceSepShared);
 #endif
             OPCODE_MASK_SET(RNF, WriteUniqueFull);
             OPCODE_MASK_SET(RNF, WriteUniqueFullStash);
