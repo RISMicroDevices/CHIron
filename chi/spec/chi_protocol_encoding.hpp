@@ -9,8 +9,8 @@
 #endif
 
 
-#if !defined(__CHI__CHI_PROTOCOL_ENCODING_B) \
- && !defined(__CHI__CHI_PROTOCOL_ENCODING_EB)
+#if (!defined(CHI_ISSUE_B_ENABLE)  || !defined(__CHI__CHI_PROTOCOL_ENCODING_B)) \
+ && (!defined(CHI_ISSUE_EB_ENABLE) || !defined(__CHI__CHI_PROTOCOL_ENCODING_EB))
 
 #ifdef CHI_ISSUE_B_ENABLE
 #   define __CHI__CHI_PROTOCOL_ENCODING_B
