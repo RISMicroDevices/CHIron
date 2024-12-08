@@ -10,6 +10,17 @@
 #endif
 
 
+#if !defined(__CHI__CHI_UTIL_DECODING_B) \
+ && !defined(__CHI__CHI_UTIL_DECODING_EB)
+
+#ifdef CHI_ISSUE_B_ENABLE
+
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+
+#endif
+
+
 /*
 namespace CHI {
 */
@@ -2079,5 +2090,7 @@ namespace CHI {
 }
 */
 
+
+#endif // __CHI__CHI_UTIL_DECODING_*
 
 //#endif __CHI__CHI_UTIL_DECODING

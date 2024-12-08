@@ -9,6 +9,17 @@
 #endif
 
 
+#if !defined(__CHI__CHI_UTIL_FLIT_B) \
+ && !defined(__CHI__CHI_UTIL_FLIT_EB)
+
+#ifdef CHI_ISSUE_B_ENABLE
+#   define __CHI__CHI_UTIL_FLIT_B
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+#   define __CHI__CHI_UTIL_FLIT_EB
+#endif
+
+
 /*
 namespace CHI {
 */
@@ -1497,5 +1508,6 @@ namespace CHI {
 */
 
 
+#endif // __CHI__CHI_UTIL_FLIT_*
 
 //#endif // __CHI__CHI_UTIL_FLIT
