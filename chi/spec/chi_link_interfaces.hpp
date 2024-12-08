@@ -9,6 +9,17 @@
 #endif
 
 
+#if !defined(__CHI__CHI_LINK_INTERFACES_B) \
+ && !defined(__CHI__CHI_LINK_INTERFACES_EB)
+
+#ifdef CHI_ISSUE_B_ENABLE
+#   define __CHI__CHI_LINK_INTERFACES_B
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+#   define __CHI__CHI_LINK_INTERFACES_EB
+#endif
+
+
 /*
 namespace CHI {
 */   
@@ -191,5 +202,8 @@ namespace CHI {
 /*
 }
 */
+
+
+#endif // __CHI__CHI_LINK_INTERFACES_*
 
 //#endif // __CHI_B__CHI_LINK_INTERFACES

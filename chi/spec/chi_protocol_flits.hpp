@@ -10,6 +10,17 @@
 #endif
 
 
+#if !defined(__CHI__CHI_PROTOCOL_FLITS_B) \
+ && !defined(__CHI__CHI_PROTOCOL_FLITS_EB)
+
+#ifdef CHI_ISSUE_B_ENABLE
+#   define __CHI__CHI_PROTOCOL_FLITS_B
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+#   define __CHI__CHI_PROTOCOL_FLITS_EB
+#endif
+
+
 /*
 namespace CHI {
 */
@@ -2628,3 +2639,5 @@ namespace CHI {
 /*
 }
 */
+
+#endif // __CHI__CHI_PROTOCOL_FLITS_*

@@ -9,6 +9,17 @@
 #endif
 
 
+#if !defined(__CHI__CHI_LINK_LINKS_B) \
+ && !defined(__CHI__CHI_LINK_LINKS_EB)
+
+#ifdef CHI_ISSUE_B_ENABLE
+#   define __CHI__CHI_LINK_LINKS_B
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+#   define __CHI__CHI_LINK_LINKS_EB
+#endif
+
+
 /*
 namespace CHI {
 */
@@ -162,5 +173,8 @@ namespace CHI {
 /*
 }
 */
+
+
+#endif // __CHI__CHI_LINK_LINKS_*
 
 // #endif // __CHI__CHI_LINK_LINKS

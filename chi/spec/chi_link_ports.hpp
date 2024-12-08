@@ -8,6 +8,17 @@
 #endif
 
 
+#if !defined(__CHI__CHI_LINK_PORTS_B) \
+ && !defined(__CHI__CHI_LINK_PORTS_EB)
+
+#ifdef CHI_ISSUE_B_ENABLE
+#   define __CHI__CHI_LINK_PORTS_B
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+#   define __CHI__CHI_LINK_PORTS_EB
+#endif
+
+
 /*
 namespace CHI::B {
 */
@@ -93,5 +104,8 @@ namespace CHI::B {
 /*
 }
 */
+
+
+#endif // __CHI__CHI_LINK_PORTS_*
 
 //#endif // __CHI__CHI_LINK_PORTS
