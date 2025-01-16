@@ -4,6 +4,7 @@
 #define __CHI__CLOG
 
 #include <cstdint>                          // IWYU pragma: keep
+#include <string>
 
 #include "../chi/basic/chi_parameters.hpp"
 
@@ -30,6 +31,8 @@ namespace CLog {
         SN_I    = 11,
         MN      = 12
     };
+
+    std::string NodeTypeToString(NodeType type) noexcept;
 
     /*
     * Enumeration of CHI channels
@@ -228,6 +231,26 @@ namespace CLog {
     inline bool Parameters::IsMPAMPresent() const noexcept
     {
         return mpamPresent;
+    }
+}
+
+
+// Implementation of: NodeTypeToString
+namespace CLog {
+    inline std::string NodeTypeToString(NodeType type) noexcept
+    {
+        switch (type)
+        {
+            case NodeType::RN_F:    return "RN-F";
+            case NodeType::RN_D:    return "RN-D";
+            case NodeType::RN_I:    return "RN-I";
+            case NodeType::HN_F:    return "HN-F";
+            case NodeType::HN_I:    return "HN-I";
+            case NodeType::SN_F:    return "SN-F";
+            case NodeType::SN_I:    return "SN-I";
+            case NodeType::MN:      return "MN";
+            default:                return "";
+        }
     }
 }
 
