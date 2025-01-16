@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ostream>
-#include <variant>
 #ifndef CLOG2LOG__STANDALONE
 #   define CHI_ISSUE_EB_ENABLE
 #endif
@@ -9,8 +7,10 @@
 #include <getopt.h>
 
 #include <iostream>
+#include <ostream>
 #include <fstream>
 #include <sstream>
+#include <variant>
 #include <atomic>
 #include <stdexcept>
 #include <set>
@@ -589,9 +589,9 @@ inline int clog2log(int argc, char* argv[])
                 case CLog::Channel::RXREQ:
                 case CLog::Channel::TXREQ:
 
-                    if (record.flitLength != ((flitLengthREQ + 3) >> 2))
+                    if (size_t(record.flitLength) != flitLengthREQ)
                         std::cerr << "%WARNING: mismatched REQ flit length."
-                                  << " read: " << record.flitLength << ", expected: " << flitLengthREQ << "." << std::endl;
+                                  << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthREQ << "." << std::endl;
 
                     if (!
 #ifdef CHI_ISSUE_B_ENABLE
@@ -612,9 +612,9 @@ inline int clog2log(int argc, char* argv[])
                 case CLog::Channel::RXRSP:
                 case CLog::Channel::TXRSP:
 
-                    if (record.flitLength != ((flitLengthRSP + 3) >> 2))
+                    if (size_t(record.flitLength) != flitLengthRSP)
                         std::cerr << "%WARNING: mismatched RSP flit length."
-                                  << " read: " << record.flitLength << ", expected: " << flitLengthRSP << "." << std::endl;
+                                  << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthRSP << "." << std::endl;
 
                     if (!
 #ifdef CHI_ISSUE_B_ENABLE
@@ -635,9 +635,9 @@ inline int clog2log(int argc, char* argv[])
                 case CLog::Channel::RXDAT:
                 case CLog::Channel::TXDAT:
 
-                    if (record.flitLength != ((flitLengthDAT + 3) >> 2))
+                    if (size_t(record.flitLength) != flitLengthDAT)
                         std::cerr << "%WARNING: mismatched DAT flit length."
-                                  << " read: " << record.flitLength << ", expected: " << flitLengthDAT << "." << std::endl;
+                                  << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthDAT << "." << std::endl;
 
                     if (!
 #ifdef CHI_ISSUE_B_ENABLE
@@ -658,9 +658,9 @@ inline int clog2log(int argc, char* argv[])
                 case CLog::Channel::RXSNP:
                 case CLog::Channel::TXSNP:
 
-                    if (record.flitLength != ((flitLengthSNP + 3) >> 2))
+                    if (size_t(record.flitLength) != flitLengthSNP)
                         std::cerr << "%WARNING: mismatched SNP flit length."
-                                  << " read: " << record.flitLength << ", expected: " << flitLengthSNP << "." << std::endl;
+                                  << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthSNP << "." << std::endl;
 
                     if (!
 #ifdef CHI_ISSUE_B_ENABLE
@@ -683,6 +683,8 @@ inline int clog2log(int argc, char* argv[])
                     return false;
             }
 
+            recordCount++;
+
             while (!queue->try_enqueue(task));
         }
         return true;
@@ -702,6 +704,9 @@ inline int clog2log(int argc, char* argv[])
 
     #define PRINT_FIELD_HEX(channel, field) \
         print_field_hex(ofs, asJson, whitelist, blacklist, #field, task.flit.channel.field())
+
+    #define PRINT_FIELD_HEX_LSH(channel, field, lsh) \
+        print_field_hex(ofs, asJson, whitelist, blacklist, #field, (task.flit.channel.field() << lsh))
 
     #define PRINT_FIELD_HEX_DATA(channel, field, width) \
         print_field_hex_data(ofs, asJson, whitelist, blacklist, #field, task.flit.channel.field(), width)
@@ -1000,7 +1005,7 @@ inline int clog2log(int argc, char* argv[])
                         PRINT_FIELD_DEC(snp, StashLPIDValid);
                         PRINT_FIELD_DEC(snp, StashLPID);
                         PRINT_FIELD_DEC(snp, VMIDExt);
-                        PRINT_FIELD_HEX(snp, Addr);
+                        PRINT_FIELD_HEX_LSH(snp, Addr, 3);
                         PRINT_FIELD_DEC(snp, NS);
                         PRINT_FIELD_DEC(snp, DoNotGoToSD);
 #ifdef CHI_ISSUE_B_ENABLE
@@ -1127,128 +1132,6 @@ inline int clog2log(int argc, char* argv[])
             {
                 dotCount = 0;
                 std::cout << std::endl;
-            }
-
-            if (tag->type == CLog::CLogB::Encodings::CHI_RECORDS)
-            {
-                CLog::CLogB::TagCHIRecords* records = reinterpret_cast<CLog::CLogB::TagCHIRecords*>(tag.get());
-                uint64_t recordTime = records->head.timeBase;
-
-                for (auto& record : records->records)
-                {
-                    recordTime += record.timeShift;
-
-                    ParseAndWriteTask task;
-                    task.channel = record.channel;
-                    task.time    = recordTime;
-                    task.nodeId  = record.nodeId;
-
-                    //
-                    switch (task.channel)
-                    {
-                        //
-                        case CLog::Channel::RXREQ:
-                        case CLog::Channel::TXREQ:
-
-                            if (size_t(record.flitLength) > flitLengthREQ)
-                                std::cerr << "%WARNING: overflowed REQ flit length."
-                                          << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthREQ << "." << std::endl;
-
-                            if (!
-#ifdef CHI_ISSUE_B_ENABLE
-                                CHI::B::Flits::DeserializeREQ<config>(task.flit.req, flit, REQ_t::WIDTH)
-#endif
-#ifdef CHI_ISSUE_EB_ENABLE
-                                CHI::Eb::Flits::DeserializeREQ<config>(task.flit.req, record.flit.get(), REQ_t::WIDTH)
-#endif
-                            )
-                            {
-                                std::cerr << "%ERROR: unable to deserialize REQ flit" << std::endl;
-                                return false;
-                            }
-                    
-                            break;
-
-                        //
-                        case CLog::Channel::RXRSP:
-                        case CLog::Channel::TXRSP:
-
-                            if (size_t(record.flitLength) > flitLengthRSP)
-                                std::cerr << "%WARNING: overflowed RSP flit length."
-                                          << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthRSP << "." << std::endl;
-
-                            if (!
-#ifdef CHI_ISSUE_B_ENABLE
-                                CHI::B::Flits::DeserializeRSP<config>(task.flit.rsp, flit, RSP_t::WIDTH)
-#endif
-#ifdef CHI_ISSUE_EB_ENABLE
-                                CHI::Eb::Flits::DeserializeRSP<config>(task.flit.rsp, record.flit.get(), RSP_t::WIDTH)
-#endif
-                            )
-                            {
-                                std::cerr << "%ERROR: unable to deserialize RSP flit" << std::endl;
-                                return false;
-                            }
-
-                            break;
-
-                        //
-                        case CLog::Channel::RXDAT:
-                        case CLog::Channel::TXDAT:
-
-                            if (size_t(record.flitLength) > flitLengthDAT)
-                                std::cerr << "%WARNING: overflowed DAT flit length."
-                                          << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthDAT << "." << std::endl;
-
-                            if (!
-#ifdef CHI_ISSUE_B_ENABLE
-                                CHI::B::Flits::DeserializeDAT<config>(task.flit.dat, flit, DAT_t::WIDTH)
-#endif
-#ifdef CHI_ISSUE_EB_ENABLE
-                                CHI::Eb::Flits::DeserializeDAT<config>(task.flit.dat, record.flit.get(), DAT_t::WIDTH)
-#endif
-                            )
-                            {
-                                std::cerr << "%ERROR: unable to deserialize DAT flit" << std::endl;
-                                return false;
-                            }
-
-                            break;
-
-                        //
-                        case CLog::Channel::RXSNP:
-                        case CLog::Channel::TXSNP:
-
-                            if (size_t(record.flitLength) > flitLengthSNP)
-                                std::cerr << "%WARNING: overflowed SNP flit length."
-                                          << " read: " << size_t(record.flitLength) << ", expected: " << flitLengthSNP << "." << std::endl;
-
-                            if (!
-#ifdef CHI_ISSUE_B_ENABLE
-                                CHI::B::Flits::DeserializeSNP<config>(task.flit.snp, flit, SNP_t::WIDTH)
-#endif
-#ifdef CHI_ISSUE_EB_ENABLE
-                                CHI::Eb::Flits::DeserializeSNP<config>(task.flit.snp, record.flit.get(), SNP_t::WIDTH)
-#endif
-                            )
-                            {
-                                std::cerr << "%ERROR: unable to deserialize SNP flit" << std::endl;
-                                return false;
-                            }
-
-                            break;
-
-                        //
-                        default:
-                            std::cerr << "%ERROR: unknown CHI channel: " << uint32_t(task.channel) << std::endl;
-                            errored = true;
-                            return false;
-                    }
-
-                    while (!queue->try_enqueue(task));
-                }
-
-                recordCount += records->records.size();
             }
         }
     }
