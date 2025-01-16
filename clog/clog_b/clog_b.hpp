@@ -23,9 +23,9 @@ namespace CLog::CLogB {
         std::shared_ptr<Tag>    Next(std::istream& is, std::string& errorMessage) noexcept;
 
     public:
-        virtual bool    OnTagCHIParameters(std::shared_ptr<TagCHIParameters> tag, std::string& errorMessage) noexcept = 0;
-        virtual bool    OnTagCHITopologies(std::shared_ptr<TagCHITopologies> tag, std::string& errorMessage) noexcept = 0;
-        virtual bool    OnTagCHIRecords(std::shared_ptr<TagCHIRecords> tag, std::string& errorMessage) noexcept = 0;
+        virtual bool    OnTagCHIParameters(std::shared_ptr<TagCHIParameters> tag, std::string& errorMessage) noexcept;
+        virtual bool    OnTagCHITopologies(std::shared_ptr<TagCHITopologies> tag, std::string& errorMessage) noexcept;
+        virtual bool    OnTagCHIRecords(std::shared_ptr<TagCHIRecords> tag, std::string& errorMessage) noexcept;
     };
 
     /* CLog.B Tag Reader with Callbacks */
@@ -71,6 +71,21 @@ namespace CLog::CLogB {
     inline Reader::~Reader() noexcept
     { }
 
+    inline bool Reader::OnTagCHIParameters(std::shared_ptr<TagCHIParameters> tag, std::string& errorMessage) noexcept
+    {
+        return true;
+    }
+
+    inline bool Reader::OnTagCHITopologies(std::shared_ptr<TagCHITopologies> tag, std::string& errorMessage) noexcept
+    {
+        return true;
+    }
+
+    inline bool Reader::OnTagCHIRecords(std::shared_ptr<TagCHIRecords> tag, std::string& errorMessage) noexcept
+    {
+        return true;
+    }
+
     inline std::shared_ptr<Tag> Reader::Next(std::istream& is, std::string& errorMessage) noexcept
     {
         // read tag type
@@ -98,6 +113,9 @@ namespace CLog::CLogB {
             if (!tag->Deserialize(is, errorMessage))
                 return nullptr;
 
+            if (!OnTagCHIParameters(tag, errorMessage))
+                return nullptr;
+
             return tag;
         }
         else if (type == Encodings::CHI_TOPOS)
@@ -107,6 +125,9 @@ namespace CLog::CLogB {
             if (!tag->Deserialize(is, errorMessage))
                 return nullptr;
 
+            if (!OnTagCHITopologies(tag, errorMessage))
+                return nullptr;
+
             return tag;
         }
         else if (type == Encodings::CHI_RECORDS)
@@ -114,6 +135,9 @@ namespace CLog::CLogB {
             std::shared_ptr<TagCHIRecords> tag(new TagCHIRecords);
 
             if (!tag->Deserialize(is, errorMessage))
+                return nullptr;
+
+            if (!OnTagCHIRecords(tag, errorMessage))
                 return nullptr;
 
             return tag;
