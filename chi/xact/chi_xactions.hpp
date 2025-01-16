@@ -3,7 +3,6 @@
 //#ifndef __CHI__CHI_XACT_XACTIONS
 //#define __CHI__CHI_XACT_XACTIONS
 
-#include <initializer_list>
 #ifndef CHI_XACT_XACTIONS__STANDALONE
 #   include "chi_xactions_header.hpp"               // IWYU pragma: keep
 #   include "chi_xact_base_header.hpp"              // IWYU pragma: keep
@@ -39,10 +38,6 @@ namespace CHI {
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class Xaction {
-        public:
-            using FiredRequestFlit  = FiredRequestFlit<config, conn>;
-            using FiredResponseFlit = FiredResponseFlit<config, conn>;
-
         private:
             // *NOTICE: Subsequence Key contains several critical attributes and fields
             //          of fired response flits to speed up Xaction query operations,
@@ -55,92 +50,117 @@ namespace CHI {
                     Flits::RSP<config, conn>::opcode_t rsp;
                     Flits::DAT<config, conn>::opcode_t dat;
                 }               opcode;
+                bool            hasDBID;
 
-                SubsequenceKey(XactDenialEnum, Flits::RSP<config, conn>::opcode_t) noexcept;
-                SubsequenceKey(XactDenialEnum, Flits::DAT<config, conn>::opcode_t) noexcept;
+                SubsequenceKey() noexcept;
+                SubsequenceKey(XactDenialEnum, Flits::RSP<config, conn>::opcode_t, bool hasDBID) noexcept;
+                SubsequenceKey(XactDenialEnum, Flits::DAT<config, conn>::opcode_t, bool hasDBID) noexcept;
 
                 bool        IsRSP() const noexcept;
                 bool        IsDAT() const noexcept;
 
                 bool        IsAccepted() const noexcept;
                 bool        IsDenied() const noexcept;
+
+                bool        HasDBID() const noexcept;
             };
 
         private:
-            const XactionType                       type;
+            const XactionType                               type;
 
         protected:
-            FiredRequestFlit                        first;
-            XactDenialEnum                          firstDenial;
-            std::vector<FiredResponseFlit>          subsequence;
-            std::vector<SubsequenceKey>             subsequenceKeys;
+            FiredRequestFlit<config, conn>                  first;
+            XactDenialEnum                                  firstDenial;
+            std::vector<FiredResponseFlit<config, conn>>    subsequence;
+            std::vector<SubsequenceKey>                     subsequenceKeys;
 
-            bool                                    resent;
-            std::shared_ptr<Xaction<config, conn>>  resentXaction;
-            FiredResponseFlit                       sourcePCredit;
-            XactDenialEnum                          resentDenial;
+            bool                                            resent;
+            std::shared_ptr<Xaction<config, conn>>          resentXaction;
+            FiredResponseFlit<config, conn>                 sourcePCredit;
+            XactDenialEnum                                  resentDenial;
+
+            bool                                            retried;
+            std::shared_ptr<Xaction<config, conn>>          retriedXaction;
 
         public:
-            Xaction(XactionType type, const FiredRequestFlit& first) noexcept;
+            Xaction(XactionType                             type, 
+                    const FiredRequestFlit<config, conn>&   first) noexcept;
+
+            Xaction(XactionType                             type, 
+                    const FiredRequestFlit<config, conn>&   first,
+                    std::shared_ptr<Xaction<config, conn>>  retried) noexcept;
 
             XactionType                             GetType() const noexcept;
 
         public:
-            const FiredRequestFlit&                 GetFirst() const noexcept;
-            const XactDenialEnum                    GetFirstDenial() const noexcept;
-            const std::vector<FiredResponseFlit>&   GetSubsequence() const noexcept;
+            const FiredRequestFlit<config, conn>&   GetFirst() const noexcept;
+            XactDenialEnum                          GetFirstDenial() const noexcept;
+            const std::vector<FiredResponseFlit<config, conn>>&   
+                                                    GetSubsequence() const noexcept;
             XactDenialEnum                          GetSubsequentDenial(size_t index) const noexcept;
+
+            XactDenialEnum                          GetLastDenial() const noexcept;
+            void                                    SetLastDenial(XactDenialEnum) noexcept;
             
             size_t                                  Revert(size_t count = 1) noexcept;
+
+        public:
+            bool                                    IsSecondTry() const noexcept;
+            std::shared_ptr<Xaction<config, conn>>  GetFirstTry() const noexcept;
 
         public:
             bool                                    HasRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
             bool                                    HasDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
 
-            const FiredResponseFlit*                GetFirstRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit*                GetFirstDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit*                GetLastRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit*                GetLastDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config, conn>*  GetFirstRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config, conn>*  GetFirstDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config, conn>*  GetLastRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config, conn>*  GetLastDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
+
+            bool                                    GotDBID() const noexcept;
+            std::optional<typename Flits::RSP<config, conn>::dbid_t>
+                                                    GetDBID() const noexcept;
+            const FiredResponseFlit<config, conn>*  GetDBIDSource() const noexcept;
+            const FiredResponseFlit<config, conn>*  GetLastDBIDSourceRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config, conn>*  GetLastDBIDSourceDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
 
             bool                                    GotRetryAck() const noexcept;
-            const FiredResponseFlit*                GetRetryAck() const noexcept;
+            const FiredResponseFlit<config, conn>*  GetRetryAck() const noexcept;
 
             bool                                    IsResent() const noexcept;
             std::shared_ptr<Xaction<config, conn>>  GetResentXaction() const noexcept;
-            const FiredResponseFlit&                GetPCreditSource() const noexcept;
+            const FiredResponseFlit<config, conn>&  GetPCreditSource() const noexcept;
 
-            virtual XactDenialEnum                  Next(const Topology& topo, const FiredResponseFlit& flit) noexcept;
-            virtual XactDenialEnum                  NextRSP(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept;
-            virtual XactDenialEnum                  NextDAT(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept;
+            virtual XactDenialEnum                  Next(const Topology& topo, const FiredResponseFlit<config, conn>& flit, bool& hasDBID, bool& firstDBID) noexcept;
+            virtual XactDenialEnum                  NextRSP(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
+            virtual XactDenialEnum                  NextDAT(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
 
-            virtual XactDenialEnum                  Resend(FiredResponseFlit pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
+            virtual XactDenialEnum                  Resend(FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
             virtual bool                            RevertResent() noexcept;
 
             virtual bool                            IsComplete(const Topology& topo) const noexcept = 0;
 
         protected:
-            virtual XactDenialEnum                  NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept = 0;
-            virtual XactDenialEnum                  NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept = 0;
+            virtual XactDenialEnum                  NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept = 0;
+            virtual XactDenialEnum                  NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept = 0;
 
         protected:
-            virtual XactDenialEnum                  NextRetryAckNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept;
+            virtual XactDenialEnum                  NextRetryAckNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit) noexcept;
         
-            virtual XactDenialEnum                  ResendNoRecord(FiredResponseFlit pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
+            virtual XactDenialEnum                  ResendNoRecord(FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
         
-            virtual bool                            NextDataID(Flits::REQ<config, conn>::ssize_t, const FiredResponseFlit& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) noexcept;
-            virtual bool                            NextREQDataID(const FiredResponseFlit& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) noexcept;
-            virtual bool                            NextSNPDataID(const FiredResponseFlit& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) noexcept;
+            virtual bool                            NextDataID(Flits::REQ<config, conn>::ssize_t, const FiredResponseFlit<config, conn>& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) noexcept;
+            virtual bool                            NextREQDataID(const FiredResponseFlit<config, conn>& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> = {}) noexcept;
+            virtual bool                            NextSNPDataID(const FiredResponseFlit<config, conn>& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> = {}) noexcept;
         };
 
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class XactionAllocatingRead : public Xaction<config, conn> {
         public:
-            using FiredRequestFlit  = Xaction<config, conn>::FiredRequestFlit;
-            using FiredResponseFlit = Xaction<config, conn>::FiredResponseFlit;
-
-        public:
-            XactionAllocatingRead(const Topology& topo, const FiredRequestFlit& first) noexcept;
+            XactionAllocatingRead(const Topology&                           topo, 
+                                  const FiredRequestFlit<config, conn>&     first,
+                                  std::shared_ptr<Xaction<config, conn>>    retried = nullptr) noexcept;
 
         public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
@@ -150,8 +170,8 @@ namespace CHI {
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
         protected:
-            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
 
         // TODO: XactionNonAllocatingRead
@@ -164,11 +184,9 @@ namespace CHI {
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class XactionCopyBackWrite : public Xaction<config, conn> {
         public:
-            using FiredRequestFlit  = Xaction<config, conn>::FiredRequestFlit;
-            using FiredResponseFlit = Xaction<config, conn>::FiredResponseFlit;
-
-        public:
-            XactionCopyBackWrite(const Topology& topo, const FiredRequestFlit& first) noexcept;
+            XactionCopyBackWrite(const Topology&                        topo,
+                                 const FiredRequestFlit<config, conn>&  first,
+                                 std::shared_ptr<Xaction<config, conn>> retried) noexcept;
 
         public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
@@ -178,8 +196,8 @@ namespace CHI {
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
         public:
-            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
 
         // TODO: XactionCombinedImmediateWriteAndCMO
@@ -196,11 +214,9 @@ namespace CHI {
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class XactionDataless : public Xaction<config, conn> {
         public:
-            using FiredRequestFlit  = Xaction<config, conn>::FiredRequestFlit;
-            using FiredResponseFlit = Xaction<config, conn>::FiredResponseFlit;
-
-        public:
-            XactionDataless(const Topology& topo, const FiredRequestFlit& first) noexcept;
+            XactionDataless(const Topology&                         topo,
+                            const FiredRequestFlit<config, conn>&   first,
+                            std::shared_ptr<Xaction<config, conn>>  retried) noexcept;
 
         public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
@@ -209,8 +225,8 @@ namespace CHI {
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
         public:
-            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
 
         // TODO: XactionPrefetch
@@ -233,11 +249,7 @@ namespace CHI {
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class XactionHomeSnoop : public Xaction<config, conn> {
         public:
-            using FiredRequestFlit  = Xaction<config, conn>::FiredRequestFlit;
-            using FiredResponseFlit = Xaction<config, conn>::FiredResponseFlit;
-
-        public:
-            XactionHomeSnoop(const Topology& topo, const FiredRequestFlit& first) noexcept;
+            XactionHomeSnoop(const Topology& topo, const FiredRequestFlit<config, conn>& first) noexcept;
 
         public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
@@ -246,19 +258,15 @@ namespace CHI {
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
         public:
-            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
 
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class XactionForwardSnoop : public Xaction<config, conn> {
         public:
-            using FiredRequestFlit  = Xaction<config, conn>::FiredRequestFlit;
-            using FiredResponseFlit = Xaction<config, conn>::FiredResponseFlit;
-
-        public:
-            XactionForwardSnoop(const Topology& topo, const FiredRequestFlit& first) noexcept;
+            XactionForwardSnoop(const Topology& topo, const FiredRequestFlit<config, conn>& first) noexcept;
 
         public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
@@ -269,8 +277,8 @@ namespace CHI {
             bool                            IsDCT() const noexcept;
 
         public:
-            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
     }
 
@@ -309,20 +317,20 @@ namespace /*CHI::*/Xact::details {
         typename Flits::DAT<config, conn>::dataid_t dataID) noexcept
     {
         std::bitset<4> collectedDataID;
-        unsigned int requestSize = 1 << reqSize;
+        unsigned int requestSize = (1 << reqSize) << 3;
 
         if constexpr (config::dataWidth == 512)
+        {
             collectedDataID.set(0);
-
-        if constexpr (config::dataWidth == 256)
+        }
+        else if constexpr (config::dataWidth == 256)
         {
             if (requestSize <= 256)
                 collectedDataID.set(0);
             else // 512
                 collectedDataID.set(dataID & 0x02);
         }
-
-        if constexpr (config::dataWidth == 128)
+        else if constexpr (config::dataWidth == 128)
         {
             if (requestSize <= 128)
                 collectedDataID.set(0);
@@ -348,9 +356,11 @@ namespace /*CHI::*/Xact::details {
         for (const FiredResponseFlit<config, conn>& flit : vec)
         {
             if (flit.IsDAT() && validFunc(index, flit))
+            {
                 collectedDataID |= CollectDataID<config, conn>(
                     reqSize, flit.flit.dat.DataID());
-
+            }
+            
             index++;
         }
 
@@ -363,7 +373,7 @@ namespace /*CHI::*/Xact::details {
         typename Flits::REQ<config, conn>::ssize_t  reqSize) noexcept
     {
         std::bitset<4> collectedDataID;
-        unsigned int requestSize = 1 << reqSize;
+        unsigned int requestSize = (1 << reqSize) << 3;
 
         if constexpr (config::dataWidth == 512)
         {
@@ -409,24 +419,134 @@ namespace /*CHI::*/Xact::details {
 
 
 
-// Implementation of: class Xaction
+// Implementation of: class Xaction::SubsequenceKey
 namespace /*CHI::*/Xact {
     /*
-    FiredRequestFlit                first;
-    XactDenialEnum                  firstDenial;
-    std::vector<FiredResponseFlit>  subsequence;
-    std::vector<XactDenialEnum>     subsequentDenial;
-    Retry                           retry;
+    ...
     */
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline Xaction<config, conn>::Xaction(XactionType type, const FiredRequestFlit& first) noexcept
+    inline Xaction<config, conn>::SubsequenceKey::SubsequenceKey() noexcept
+    {
+        this->denial        = XactDenial::NOT_INITIALIZED;
+        this->isRSP         = false;
+        this->hasDBID       = false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline Xaction<config, conn>::SubsequenceKey::SubsequenceKey(
+        XactDenialEnum                      denial,
+        Flits::RSP<config, conn>::opcode_t  opcode,
+        bool                                hasDBID) noexcept
+    {
+        this->denial        = denial;
+        this->isRSP         = true;
+        this->opcode.rsp    = opcode;
+        this->hasDBID       = hasDBID;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline Xaction<config, conn>::SubsequenceKey::SubsequenceKey(
+        XactDenialEnum                      denial,
+        Flits::DAT<config, conn>::opcode_t  opcode,
+        bool                                hasDBID) noexcept
+    {
+        this->denial        = denial;
+        this->isRSP         = false;
+        this->opcode.dat    = opcode;
+        this->hasDBID       = hasDBID;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Xaction<config, conn>::SubsequenceKey::IsRSP() const noexcept
+    {
+        return isRSP;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Xaction<config, conn>::SubsequenceKey::IsDAT() const noexcept
+    {
+        return !IsRSP();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Xaction<config, conn>::SubsequenceKey::IsAccepted() const noexcept
+    {
+        return denial == XactDenial::ACCEPTED;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Xaction<config, conn>::SubsequenceKey::IsDenied() const noexcept
+    {
+        return !IsAccepted();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Xaction<config, conn>::SubsequenceKey::HasDBID() const noexcept
+    {
+        return hasDBID;
+    }
+}
+
+
+// Implementation of: class Xaction
+namespace /*CHI::*/Xact {
+    /*
+    FiredRequestFlit<config, conn>                  first;
+    XactDenialEnum                                  firstDenial;
+    std::vector<FiredResponseFlit<config, conn>>    subsequence;
+    std::vector<SubsequenceKey>                     subsequenceKeys;
+
+    bool                                            resent;
+    std::shared_ptr<Xaction<config, conn>>          resentXaction;
+    FiredResponseFlit<config, conn>                 sourcePCredit;
+    XactDenialEnum                                  resentDenial;
+
+    bool                                            retried;
+    std::shared_ptr<Xaction<config, conn>>          retriedXaction;
+    */
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline Xaction<config, conn>::Xaction(XactionType                               type, 
+                                          const FiredRequestFlit<config, conn>&     first) noexcept
         : type              (type)
         , first             (first)
-        , firstDenial       (XactDenial::ACCEPTED)
+        , firstDenial       (XactDenial::NOT_INITIALIZED)
         , subsequence       ()
         , subsequenceKeys   ()
+        , resent            (false)
+        , resentXaction     (nullptr)
+        , sourcePCredit     ()
+        , resentDenial      (XactDenial::NOT_INITIALIZED)
+        , retried           (false)
+        , retriedXaction    (nullptr)
+    { }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline Xaction<config, conn>::Xaction(XactionType                               type, 
+                                          const FiredRequestFlit<config, conn>&     first,
+                                          std::shared_ptr<Xaction<config, conn>>    retried) noexcept
+        : type              (type)
+        , first             (first)
+        , firstDenial       (XactDenial::NOT_INITIALIZED)
+        , subsequence       ()
+        , subsequenceKeys   ()
+        , resent            (false)
+        , resentXaction     (nullptr)
+        , sourcePCredit     ()
+        , resentDenial      (XactDenial::NOT_INITIALIZED)
+        , retried           (retried)
+        , retriedXaction    (retried)
     { }
 
     template<FlitConfigurationConcept       config,
@@ -438,21 +558,21 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline const Xaction<config, conn>::FiredRequestFlit& Xaction<config, conn>::GetFirst() const noexcept
+    inline const FiredRequestFlit<config, conn>& Xaction<config, conn>::GetFirst() const noexcept
     {
         return first;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline const XactDenialEnum Xaction<config, conn>::GetFirstDenial() const noexcept
+    inline XactDenialEnum Xaction<config, conn>::GetFirstDenial() const noexcept
     {
         return firstDenial;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline const std::vector<typename Xaction<config, conn>::FiredResponseFlit>& Xaction<config, conn>::GetSubsequence() const noexcept
+    inline const std::vector<FiredResponseFlit<config, conn>>& Xaction<config, conn>::GetSubsequence() const noexcept
     {
         return subsequence;
     }
@@ -462,6 +582,26 @@ namespace /*CHI::*/Xact {
     inline XactDenialEnum Xaction<config, conn>::GetSubsequentDenial(size_t index) const noexcept
     {
         return subsequenceKeys[index].denial;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum Xaction<config, conn>::GetLastDenial() const noexcept
+    {
+        if (subsequenceKeys.empty())
+            return firstDenial;
+
+        return subsequenceKeys.back().denial;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline void Xaction<config, conn>::SetLastDenial(XactDenialEnum denial) noexcept
+    {
+        if (subsequenceKeys.empty())
+            this->firstDenial = denial;
+
+        subsequenceKeys.back().denial = denial;
     }
 
     template<FlitConfigurationConcept       config,
@@ -478,6 +618,20 @@ namespace /*CHI::*/Xact {
         }
 
         return rCount;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Xaction<config, conn>::IsSecondTry() const noexcept
+    {
+        return retried;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> Xaction<config, conn>::GetFirstTry() const noexcept
+    {
+        return retriedXaction;
     }
 
     template<FlitConfigurationConcept       config,
@@ -530,7 +684,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline const Xaction<config, conn>::FiredResponseFlit* Xaction<config, conn>::GetFirstRSP(
+    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstRSP(
         std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
     {
         size_t index = 0;
@@ -555,7 +709,7 @@ namespace /*CHI::*/Xact {
     
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline const Xaction<config, conn>::FiredResponseFlit* Xaction<config, conn>::GetFirstDAT(
+    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstDAT(
         std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
     {
         size_t index = 0;
@@ -580,7 +734,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline const Xaction<config, conn>::FiredResponseFlit* Xaction<config, conn>::GetLastRSP(
+    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastRSP(
         std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
@@ -593,11 +747,11 @@ namespace /*CHI::*/Xact {
                 continue;
 
             if (opcodes.size() == 0)
-                return subsequence[index];
+                return &(subsequence[index]);
 
             for (auto opcode : opcodes)
                 if (iter->opcode.rsp == opcode)
-                    return subsequence[index];
+                    return &(subsequence[index]);
         }
 
         return nullptr;
@@ -605,7 +759,7 @@ namespace /*CHI::*/Xact {
     
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline const Xaction<config, conn>::FiredResponseFlit* Xaction<config, conn>::GetLastDAT(
+    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDAT(
         std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
@@ -623,6 +777,109 @@ namespace /*CHI::*/Xact {
             for (auto opcode : opcodes)
                 if (iter->opcode.dat == opcode)
                     return subsequence[index];
+        }
+
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Xaction<config, conn>::GotDBID() const noexcept
+    {
+        return GetDBIDSource() != nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::optional<typename Flits::RSP<config, conn>::dbid_t> Xaction<config, conn>::GetDBID() const noexcept
+    {
+        const FiredResponseFlit<config, conn>* dbidSource = GetDBIDSource();
+
+        if (dbidSource != nullptr)
+        {
+            if (dbidSource->IsRSP())
+                return { dbidSource->flit.rsp.DBID() };
+            else
+                return { static_cast<Flits::RSP<config, conn>::dbid_t>(dbidSource->flit.dat.DBID()) };
+        }
+
+        return std::nullopt;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetDBIDSource() const noexcept
+    {
+        size_t index = subsequenceKeys.size() - 1;
+        for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
+        {
+            if (iter->IsDenied())
+                continue;
+
+            if (iter->HasDBID())
+                return &(subsequence[index]);
+        }
+
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDBIDSourceRSP(
+        std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
+    {
+        size_t index = subsequenceKeys.size() - 1;
+        for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
+        {
+            if (iter->IsDenied())
+                continue;
+
+            if (!iter->IsRSP())
+                continue;
+
+            if (opcodes.size() == 0)
+            {
+                if (iter->HasDBID())
+                    return subsequence[index];
+            }
+            else
+            {
+                for (auto opcode : opcodes)
+                    if (iter->opcode.rsp == opcode)
+                        if (iter->HasDBID())
+                            return subsequence[index];
+            }
+        }
+
+        return nullptr;
+    }
+    
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDBIDSourceDAT(
+        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
+    {
+        size_t index = subsequenceKeys.size() - 1;
+        for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
+        {
+            if (iter->IsDenied())
+                continue;
+
+            if (!iter->IsDAT())
+                continue;
+
+            if (opcodes.size() == 0)
+            {
+                if (iter->HasDBID())
+                    return subsequence[index];
+            }
+            else
+            {
+                for (auto opcode : opcodes)
+                    if (iter->opcode.dat == opcode)
+                        if (iter->HasDBID())
+                            return subsequence[index];
+            }
         }
 
         return nullptr;
@@ -637,9 +894,9 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline const Xaction<config, conn>::FiredResponseFlit* Xaction<config, conn>::GetRetryAck() const noexcept
+    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetRetryAck() const noexcept
     {
-        return GetLastRSP(Opcodes::RSP::RetryAck);
+        return GetLastRSP({ Opcodes::RSP::RetryAck });
     }
 
     template<FlitConfigurationConcept       config,
@@ -658,51 +915,57 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline const Xaction<config, conn>::FiredResponseFlit& Xaction<config, conn>::GetPCreditSource() const noexcept
+    inline const FiredResponseFlit<config, conn>& Xaction<config, conn>::GetPCreditSource() const noexcept
     {
         return sourcePCredit;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::Next(const Topology& topo, const FiredResponseFlit& flit) noexcept
+    inline XactDenialEnum Xaction<config, conn>::Next(const Topology& topo, const FiredResponseFlit<config, conn>& flit, bool& hasDBID, bool& firstDBID) noexcept
     {
-        return flit.IsRSP() ? NextRSP(topo, flit) : NextDAT(topo, flit);
+        return flit.IsRSP() ? NextRSP(topo, flit, hasDBID, firstDBID) : NextDAT(topo, flit, hasDBID, firstDBID);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::NextRSP(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept
+    inline XactDenialEnum Xaction<config, conn>::NextRSP(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
+        hasDBID = false;
+        firstDBID = false;
+
         if (!rspFlit.IsRSP()) [[unlikely]]
             return XactDenial::DENIED_CHANNEL;
 
-        XactDenialEnum denial = NextRSPNoRecord(topo, rspFlit);
+        XactDenialEnum denial = NextRSPNoRecord(topo, rspFlit, hasDBID, firstDBID);
 
         subsequence.push_back(rspFlit);
-        subsequenceKeys.emplace_back(denial, rspFlit.flit.rsp);
+        subsequenceKeys.emplace_back(denial, rspFlit.flit.rsp.Opcode(), hasDBID);
 
         return denial;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::NextDAT(const Topology& topo, const FiredResponseFlit& datFlit) noexcept
+    inline XactDenialEnum Xaction<config, conn>::NextDAT(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
+        hasDBID = false;
+        firstDBID = false;
+
         if (!datFlit.IsDAT()) [[unlikely]]
             return XactDenial::DENIED_CHANNEL;
 
-        XactDenialEnum denial = NextDATNoRecord(topo, datFlit);
+        XactDenialEnum denial = NextDATNoRecord(topo, datFlit, hasDBID, firstDBID);
 
         subsequence.push_back(datFlit);
-        subsequenceKeys.emplace_back(denial, datFlit.flit.dat);
+        subsequenceKeys.emplace_back(denial, datFlit.flit.dat.Opcode(), hasDBID);
 
         return denial;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::Resend(FiredResponseFlit pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
+    inline XactDenialEnum Xaction<config, conn>::Resend(FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
     {
         XactDenialEnum denial = ResendNoRecord(pCrdFlit, xaction);
 
@@ -729,7 +992,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::NextRetryAckNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept
+    inline XactDenialEnum Xaction<config, conn>::NextRetryAckNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit) noexcept
     {
         if (!rspFlit.IsRSP())
             return XactDenial::DENIED_CHANNEL;
@@ -754,7 +1017,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::ResendNoRecord(FiredResponseFlit pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
+    inline XactDenialEnum Xaction<config, conn>::ResendNoRecord(FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
     {
         // *TODO: Do not check XactionType right now for KunminghuV2 workaround.
         /*
@@ -765,7 +1028,7 @@ namespace /*CHI::*/Xact {
         if (!pCrdFlit.IsRSP())
             return XactDenial::DENIED_CHANNEL;
 
-        if (!xaction->GetFirst().flit.IsREQ())
+        if (!xaction->GetFirst().IsREQ())
             return XactDenial::DENIED_CHANNEL;
 
         auto retryAck = GetRetryAck();
@@ -782,31 +1045,34 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    bool Xaction<config, conn>::NextDataID(
+    inline bool Xaction<config, conn>::NextDataID(
         Flits::REQ<config, conn>::ssize_t                                   size, 
-        const FiredResponseFlit&                                            datFlit,
+        const FiredResponseFlit<config, conn>&                              datFlit,
         std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>  opcodes) noexcept
     {
-        std::bitset<4> collectedDataID = details::CollectDataID(
-            size, this->subsequence, [&](size_t i, const FiredResponseFlit& flit) {
+        std::function<bool(size_t, const FiredResponseFlit<config, conn>&)> validFunc = 
+            [&](size_t i, const FiredResponseFlit<config, conn>& flit) -> bool
+        {
+            bool opcodeMatch = false;
+            if (opcodes.size() == 0)
+                opcodeMatch = true;
+            else
+            {
+                for (auto opcode : opcodes)
+                    if (opcode == flit.flit.dat.Opcode())
+                    {
+                        opcodeMatch = true;
+                        break;
+                    }
+            }
 
-                bool opcodeMatch = false;
-                if (opcodes.size() == 0)
-                    opcodeMatch = true;
-                else
-                {
-                    for (auto opcode : opcodes)
-                        if (opcode == flit.flit.dat.Opcode())
-                        {
-                            opcodeMatch = true;
-                            break;
-                        }
-                }
+            return opcodeMatch && this->subsequenceKeys[i].denial == XactDenial::ACCEPTED;
+        };
 
-                return opcodeMatch && !this->subsequenceKeys[i].denial;
-            });
+        std::bitset<4> collectedDataID = details::CollectDataID<config, conn>(
+            size, this->subsequence, validFunc);
 
-        std::bitset<4> nextDataID = details::CollectDataID(
+        std::bitset<4> nextDataID = details::CollectDataID<config, conn>(
             size, datFlit.flit.dat.DataID());
 
         return (collectedDataID & nextDataID).none();
@@ -814,8 +1080,8 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    bool Xaction<config, conn>::NextREQDataID(
-        const FiredResponseFlit&                                            datFlit,
+    inline bool Xaction<config, conn>::NextREQDataID(
+        const FiredResponseFlit<config, conn>&                              datFlit,
         std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>  opcodes) noexcept
     {
         return NextDataID(this->first.flit.req.Size(), datFlit, opcodes);
@@ -823,8 +1089,8 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    bool Xaction<config, conn>::NextSNPDataID(
-        const FiredResponseFlit&                                            datFlit,
+    inline bool Xaction<config, conn>::NextSNPDataID(
+        const FiredResponseFlit<config, conn>&                              datFlit,
         std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>  opcodes) noexcept
     {
         return NextDataID(Size<64>::value, datFlit, opcodes);
@@ -839,14 +1105,17 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactionAllocatingRead<config, conn>::XactionAllocatingRead(const Topology& topo, const FiredRequestFlit& firstFlit) noexcept
-        : Xaction<config, conn>(XactionType::AllocatingRead, firstFlit)
+    inline XactionAllocatingRead<config, conn>::XactionAllocatingRead(
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   firstFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+        : Xaction<config, conn>(XactionType::AllocatingRead, firstFlit, retried)
     {
         // *NOTICE: AllowRetry should be checked by external scoreboards.
 
         this->firstDenial = XactDenial::ACCEPTED;
 
-        if (!this->first.flit.IsREQ())
+        if (!this->first.IsREQ())
         {
             this->firstDenial = XactDenial::DENIED_CHANNEL;
             return;
@@ -869,7 +1138,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromRequesterToHome(topo))
         {
-            this->firstDenial = XactDenial::DENIED_COMMUNICATION;
+            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
             return;
         }
 
@@ -886,21 +1155,21 @@ namespace /*CHI::*/Xact {
             if (this->subsequenceKeys[index].IsDenied())
                 continue;
 
-            if (!iter->flit.IsToRequester(topo))
+            if (!iter->IsToRequester(topo))
                 continue;
 
-            if (iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData)
+            if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData)
                 return true;
 
 #ifdef CHI_ISSUE_EB_ENABLE
-            if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::RespSepData)
+            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::RespSepData)
                 return true;
 #endif
 
 #ifdef CHI_ISSUE_EB_ENABLE
             // MakeReadUnique only
             if (this->first.flit.req.Opcode() == Opcodes::REQ::MakeReadUnique)
-                if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
+                if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
                     return true;
 #endif
         }
@@ -923,23 +1192,23 @@ namespace /*CHI::*/Xact {
             if (this->subsequenceKeys[index].IsDenied())
                 continue;
 
-            if (!iter->flit.IsToRequester(topo))
+            if (!iter->IsToRequester(topo))
                 continue;
 
-            if (iter->flit.IsDAT() && 
+            if (iter->IsDAT() && 
 #ifdef CHI_ISSUE_EB_ENABLE
                 (iter->flit.dat.Opcode() == Opcodes::DAT::DataSepResp || 
 #endif
                  iter->flit.dat.Opcode() == Opcodes::DAT::CompData))
             {
                 collectedDataID |= details::CollectDataID<config, conn>(
-                    this->first.flit.req.Size(), iter->flit.dat.DataID(), [&](size_t i) { return !this->subsequenceKeys[i].denial; });
+                    this->first.flit.req.Size(), iter->flit.dat.DataID());
             }
 
 #ifdef CHI_ISSUE_EB_ENABLE
             // MakeReadUnique only
             if (this->first.flit.req.Opcode() == Opcodes::REQ::MakeReadUnique)
-                if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
+                if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
                     return true;
 #endif
         }
@@ -957,7 +1226,7 @@ namespace /*CHI::*/Xact {
             if (this->subsequenceKeys[index].IsDenied())
                 continue;
 
-            if (!iter->flit.IsRSP() || !iter->flit.IsToHome(topo))
+            if (!iter->IsRSP() || !iter->IsToHome(topo))
                 continue;
 
             if (iter->flit.rsp.Opcode() == Opcodes::RSP::CompAck)
@@ -976,7 +1245,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionAllocatingRead<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept
+    inline XactDenialEnum XactionAllocatingRead<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
             return XactDenial::DENIED_COMPLETED;
@@ -992,8 +1261,8 @@ namespace /*CHI::*/Xact {
          || rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp
         )
         {
-            if (!rspFlit.IsToRequester(topo))
-                return XactDenial::DENIED_COMMUNICATION;
+            if (!rspFlit.IsFromHomeToRequester(topo))
+                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_TGTID_MISMATCH;
@@ -1003,36 +1272,73 @@ namespace /*CHI::*/Xact {
 
             if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RespSepData)
             {
-                if (this->HasDAT(Opcodes::DAT::CompData))
+                if (this->HasRSP({ Opcodes::RSP::RespSepData }))
+                    return XactDenial::DENIED_RESPSEP_AFTER_RESPSEP;
+
+                if (this->HasDAT({ Opcodes::DAT::CompData }))
                     return XactDenial::DENIED_RESPSEP_AFTER_COMPDATA;
 
-                if (this->HasRSP(Opcodes::RSP::Comp))
+                if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_RESPSEP_AFTER_COMP;
             }
             else // Comp
             {
-                if (this->HasRSP(Opcodes::RSP::RespSepData))
+                if (this->first.flit.req.Opcode() != Opcodes::REQ::MakeReadUnique)
+                    return XactDenial::DENIED_OPCODE;
+
+                if (this->HasRSP({ Opcodes::RSP::Comp }))
+                    return XactDenial::DENIED_COMP_AFTER_COMP;
+
+                if (this->HasRSP({ Opcodes::RSP::RespSepData }))
                     return XactDenial::DENIED_COMP_AFTER_RESPSEP;
 
-                if (this->HasDAT(Opcodes::DAT::DataSepResp))
+                if (this->HasDAT({ Opcodes::DAT::DataSepResp }))
                     return XactDenial::DENIED_COMP_AFTER_DATASEP;
 
-                if (this->HasDAT(Opcodes::DAT::CompData))
+                if (this->HasDAT({ Opcodes::DAT::CompData }))
                     return XactDenial::DENIED_COMP_AFTER_COMPDATA;
             }
+
+            auto optDBID = this->GetDBID();
+            if (optDBID)
+            {
+                if (rspFlit.flit.rsp.DBID() != *optDBID)
+                    return XactDenial::DENIED_DBID_MISMATCH;
+            }
+            else
+                firstDBID = true;
+
+            // TODO: pass through Flit Field Checkers here
+
+            hasDBID = true;
+
+            return XactDenial::ACCEPTED;
+        }
+#endif
+        else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompAck)
+        {
+            if (!rspFlit.IsFromRequesterToHome(topo))
+                return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
+
+            auto optDBID = this->GetDBID();
+
+            if (!optDBID)
+                return XactDenial::DENIED_COMPACK_BEFORE_DBID;
+
+            if (rspFlit.flit.rsp.TxnID() != *optDBID)
+                return XactDenial::DENIED_TXNID_MISMATCH;
 
             // TODO: pass through Flit Field Checkers here
 
             return XactDenial::ACCEPTED;
         }
-#endif
 
         return XactDenial::DENIED_OPCODE;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionAllocatingRead<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept
+    inline XactDenialEnum XactionAllocatingRead<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
             return XactDenial::DENIED_COMPLETED;
@@ -1050,7 +1356,7 @@ namespace /*CHI::*/Xact {
         )
         {
             if (!datFlit.IsToRequester(topo))
-                return XactDenial::DENIED_COMMUNICATION;
+                return XactDenial::DENIED_DAT_NOT_TO_RN;
 
             if (datFlit.flit.dat.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_TGTID_MISMATCH;
@@ -1060,28 +1366,39 @@ namespace /*CHI::*/Xact {
 
             if (datFlit.flit.dat.Opcode() == Opcodes::DAT::CompData)
             {
-                if (this->HasDAT(Opcodes::DAT::DataSepResp))
+                if (this->HasDAT({ Opcodes::DAT::DataSepResp }))
                     return XactDenial::DENIED_COMPDATA_AFTER_DATASEP;
 
-                if (this->HasRSP(Opcodes::RSP::RespSepData))
+                if (this->HasRSP({ Opcodes::RSP::RespSepData }))
                     return XactDenial::DENIED_COMPDATA_AFTER_RESPSEP;
 
-                if (this->HasRSP(Opcodes::RSP::Comp))
+                if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_COMPDATA_AFTER_COMP;
             }
 #ifdef CHI_ISSUE_EB_ENABLE
             else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::DataSepResp)
             {
-                if (this->HasDAT(Opcodes::DAT::CompData))
+                if (this->HasDAT({ Opcodes::DAT::CompData }))
                     return XactDenial::DENIED_DATASEP_AFTER_COMPDATA;
 
-                if (this->HasRSP(Opcodes::RSP::Comp))
+                if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_DATASEP_AFTER_COMP;
             }
 #endif
 
             if (!this->NextREQDataID(datFlit))
                 return XactDenial::DENIED_DUPLICATED_DATAID;
+
+            auto optDBID = this->GetDBID();
+            if (optDBID)
+            {
+                if (datFlit.flit.dat.DBID() != *optDBID)
+                    return XactDenial::DENIED_DBID_MISMATCH;
+            }
+            else
+                firstDBID = true;
+
+            hasDBID = true;
             
             //
             return XactDenial::ACCEPTED;
@@ -1097,14 +1414,17 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactionCopyBackWrite<config, conn>::XactionCopyBackWrite(const Topology& topo, const FiredRequestFlit& firstFlit) noexcept
-        : Xaction<config, conn>(XactionType::CopyBackWrite, firstFlit)
+    inline XactionCopyBackWrite<config, conn>::XactionCopyBackWrite(
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   firstFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+        : Xaction<config, conn>(XactionType::CopyBackWrite, firstFlit, retried)
     {
         // *NOTICE: AllowRetry should be checked by external scoreboards.
 
         this->firstDenial = XactDenial::ACCEPTED;
 
-        if (!this->first.flit.IsREQ())
+        if (!this->first.IsREQ())
         {
             this->firstDenial = XactDenial::DENIED_CHANNEL;
             return;
@@ -1126,7 +1446,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromRequesterToHome(topo))
         {
-            this->firstDenial = XactDenial::DENIED_COMMUNICATION;
+            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
             return;
         }
 
@@ -1143,16 +1463,16 @@ namespace /*CHI::*/Xact {
             if (this->subsequenceKeys[index].IsDenied())
                 continue;
 
-            if (!iter->flit.IsToRequester(topo))
+            if (!iter->IsToRequester(topo))
                 continue;
 
-            if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
+            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
                 return true;
 
 #ifdef CHI_ISSUE_EB_ENABLE
             // WriteEvictOrEvictOnly
             if (this->first.flit.req.Opcode() == Opcodes::REQ::WriteEvictOrEvict)
-                if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
+                if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
                     return true;
 #endif
         }
@@ -1178,14 +1498,14 @@ namespace /*CHI::*/Xact {
 #ifdef CHI_ISSUE_EB_ENABLE
             // WriteEvictOrEvict only
             if (this->first.flit.req.Opcode() == Opcodes::REQ::WriteEvictOrEvict)
-                if (iter->flit.IsRSP() && iter->flit.IsFromHome(topo) && iter->flit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
+                if (iter->IsRSP() && iter->IsFromHome(topo) && iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
                     return true;
 #endif
 
-            if (!iter->flit.IsFromRequester(topo))
+            if (!iter->IsFromRequester(topo))
                 continue;
 
-            if (iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CopyBackWrData)
+            if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CopyBackWrData)
             {
                 collectedDataID |= details::CollectDataID<config, conn>(
                     this->first.flit.req.Size(), iter->flit.dat.DataID());
@@ -1209,13 +1529,13 @@ namespace /*CHI::*/Xact {
                 if (this->subsequenceKeys[index].IsDenied())
                     continue;
 
-                if (iter->flit.IsRSP() && iter->flit.IsFromHome(topo) && iter->flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
+                if (iter->IsRSP() && iter->IsFromHome(topo) && iter->flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
                     return true;
 
-                if (!iter->flit.IsToHome(topo))
+                if (!iter->IsToHome(topo))
                     continue;
 
-                if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::CompAck)
+                if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::CompAck)
                     return true;
             }
         }
@@ -1237,7 +1557,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionCopyBackWrite<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept
+    inline XactDenialEnum XactionCopyBackWrite<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
             return XactDenial::DENIED_COMPLETED;
@@ -1254,15 +1574,8 @@ namespace /*CHI::*/Xact {
 #endif
         )
         {
-#ifdef CHI_ISSUE_EB_ENABLE
-            // WriteEvictOrEvict only
-            if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
-                if (this->first.flit.req.Opcode() != Opcodes::REQ::WriteEvictOrEvict)
-                    return XactDenial::DENIED_OPCODE;
-#endif
-
             if (!rspFlit.IsFromHomeToRequester(topo))
-                return XactDenial::DENIED_COMMUNICATION;
+                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_TGTID_MISMATCH;
@@ -1270,7 +1583,35 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_TXNID_MISMATCH;
 
+            if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
+            {
+                if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
+                    return XactDenial::DENIED_COMPDBIDRESP_AFTER_COMPDBIDRESP;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+                if (this->HasRSP({ Opcodes::RSP::Comp }))
+                    return XactDenial::DENIED_COMPDBIDRESP_AFTER_COMP;
+#endif
+            }
+#ifdef CHI_ISSUE_EB_ENABLE
+            // WriteEvictOrEvict only
+            else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
+            {
+                if (this->first.flit.req.Opcode() != Opcodes::REQ::WriteEvictOrEvict)
+                    return XactDenial::DENIED_OPCODE;
+
+                if (this->HasRSP({ Opcodes::RSP::Comp }))
+                    return XactDenial::DENIED_COMP_AFTER_COMP;
+                
+                if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
+                    return XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP;
+            }
+#endif
+
             // TODO: pass through Flit Field Checkers here
+
+            hasDBID = true;
+            firstDBID = true;
 
             return XactDenial::ACCEPTED;
         }
@@ -1284,13 +1625,19 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_OPCODE;
 
             if (!rspFlit.IsFromRequesterToHome(topo))
-                return XactDenial::DENIED_COMMUNICATION;
+                return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
-            if (!this->HasRSP(Opcodes::RSP::Comp))
+            if (!this->HasRSP({ Opcodes::RSP::Comp }))
                 return XactDenial::DENIED_COMPACK_BEFORE_COMP;
 
-            if (this->HasRSP(Opcodes::RSP::CompDBIDResp))
+            if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
                 return XactDenial::DENIED_COMPACK_AFTER_DBIDRESP;
+
+            auto optDBID = this->GetDBID();
+            assert(optDBID && "unable to get DBID after Comp");
+
+            if (rspFlit.flit.rsp.TxnID() != *optDBID)
+                return XactDenial::DENIED_TXNID_MISMATCH;
 
             // TODO: pass through Flit Field Checkers here
 
@@ -1303,7 +1650,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionCopyBackWrite<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept
+    inline XactDenialEnum XactionCopyBackWrite<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
             return XactDenial::DENIED_COMPLETED;
@@ -1314,20 +1661,22 @@ namespace /*CHI::*/Xact {
         if (datFlit.flit.dat.Opcode() == Opcodes::DAT::CopyBackWrData)
         {
             if (!datFlit.IsFromRequesterToHome(topo))
-                return XactDenial::DENIED_COMMUNICATION;
-
-            if (datFlit.flit.dat.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_DAT_NOT_FROM_RN_TO_HN;
 
 #ifdef CHI_ISSUE_EB_ENABLE
             // WriteEvictOrEvict only
             if (this->first.flit.req.Opcode() != Opcodes::REQ::WriteEvictOrEvict)
-                if (this->HasRSP(Opcodes::RSP::Comp))
+                if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_DATA_AFTER_COMP;
 #endif
 
-            if (!this->HasRSP(Opcodes::RSP::CompDBIDResp))
+            auto optDBID = this->GetDBID();
+
+            if (!optDBID)
                 return XactDenial::DENIED_DATA_BEFORE_DBID;
+
+            if (datFlit.flit.dat.TxnID() != *optDBID)
+                return XactDenial::DENIED_TXNID_MISMATCH;
 
             if (!this->NextREQDataID(datFlit))
                 return XactDenial::DENIED_DUPLICATED_DATAID;
@@ -1346,8 +1695,11 @@ namespace /*CHI::*/Xact {
     
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactionDataless<config, conn>::XactionDataless(const Topology& topo, const FiredRequestFlit& first) noexcept
-        : Xaction<config, conn>(XactionType::Dataless, first)
+    inline XactionDataless<config, conn>::XactionDataless(
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   first,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+        : Xaction<config, conn>(XactionType::Dataless, first, retried)
     {
         // *NOTICE: AllowRetry should be checked by external scoreboards.
 
@@ -1379,7 +1731,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromRequesterToHome(topo))
         {
-            this->firstDenial = XactDenial::DENIED_COMMUNICATION;
+            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
             return;
         }
 
@@ -1463,7 +1815,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionDataless<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept
+    inline XactDenialEnum XactionDataless<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
             return XactDenial::DENIED_COMPLETED;
@@ -1487,7 +1839,7 @@ namespace /*CHI::*/Xact {
                 if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
                 {
                     if (!rspFlit.IsFromHomeToRequester(topo))
-                        return XactDenial::DENIED_COMMUNICATION;
+                        return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
                     
                     if (this->HasRSP({ Opcodes::RSP::Comp }))
                         return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -1512,7 +1864,7 @@ namespace /*CHI::*/Xact {
                 if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
                 {
                     if (!rspFlit.IsFromHomeToRequester(topo))
-                        return XactDenial::DENIED_COMMUNICATION;
+                        return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
                     
                     if (this->HasRSP({ Opcodes::RSP::Comp }))
                         return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -1525,12 +1877,15 @@ namespace /*CHI::*/Xact {
 
                     // TODO: pass through Flit Field Checkers here
 
-                    return XactDenial::ACCEPTED;   
+                    hasDBID = true;
+                    firstDBID = true;
+
+                    return XactDenial::ACCEPTED;
                 }
                 else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompAck)
                 {
                     if (!rspFlit.IsFromRequesterToHome(topo))
-                        return XactDenial::DENIED_COMMUNICATION;
+                        return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
                     if (this->HasRSP({ Opcodes::RSP::CompAck }))
                         return XactDenial::DENIED_COMPACK_AFTER_COMPACK;
@@ -1558,7 +1913,7 @@ namespace /*CHI::*/Xact {
                 if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompPersist)
                 {
                     if (!rspFlit.IsFromHomeToRequester(topo))
-                        return XactDenial::DENIED_COMMUNICATION;
+                        return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
                     
                     if (this->HasRSP({ Opcodes::RSP::Comp }))
                         return XactDenial::DENIED_COMPPERSIST_AFTER_COMP;
@@ -1585,7 +1940,7 @@ namespace /*CHI::*/Xact {
                 else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
                 {
                     if (!rspFlit.IsFromHomeToRequester(topo))
-                        return XactDenial::DENIED_COMMUNICATION;
+                        return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
                     
                     if (this->HasRSP({ Opcodes::RSP::Comp }))
                         return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -1606,7 +1961,7 @@ namespace /*CHI::*/Xact {
                 else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Persist)
                 {
                     if (!rspFlit.IsFromHomeToRequester(topo) && !rspFlit.IsFromSubordinateToRequester(topo))
-                        return XactDenial::DENIED_COMMUNICATION;
+                        return XactDenial::DENIED_RSP_NOT_TO_RN;
                     
                     if (this->HasRSP({ Opcodes::RSP::Persist }))
                         return XactDenial::DENIED_PERSIST_AFTER_PERSIST;
@@ -1632,7 +1987,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionDataless<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept
+    inline XactDenialEnum XactionDataless<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         return XactDenial::DENIED_CHANNEL;
     }
@@ -1644,7 +1999,7 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactionHomeSnoop<config, conn>::XactionHomeSnoop(const Topology& topo, const FiredRequestFlit& first) noexcept
+    inline XactionHomeSnoop<config, conn>::XactionHomeSnoop(const Topology& topo, const FiredRequestFlit<config, conn>& first) noexcept
         : Xaction<config, conn>(XactionType::HomeSnoop, first)
     {
         this->firstDenial = XactDenial::ACCEPTED;
@@ -1676,9 +2031,9 @@ namespace /*CHI::*/Xact  {
             return;
         }
 
-        if (!this->first.IsFromRequesterToHome(topo))
+        if (!this->first.IsFromHomeToRequester(topo))
         {
-            this->firstDenial = XactDenial::DENIED_COMMUNICATION;
+            this->firstDenial = XactDenial::DENIED_SNP_NOT_FROM_HN_TO_RN;
             return;
         }
 
@@ -1695,9 +2050,9 @@ namespace /*CHI::*/Xact  {
             if (this->subsequenceKeys[index].IsDenied())
                 continue;
 
-            if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpResp
-             || iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespData
-             || iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpResp
+             || iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespData
+             || iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
                 return true;
         }
 
@@ -1721,11 +2076,11 @@ namespace /*CHI::*/Xact  {
             if (this->subsequenceKeys[index].IsDenied())
                 continue;
 
-            if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
                 return true;
 
-            if (iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespData
-             || iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+            if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespData
+             || iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
             {
                 needCollectedSnpDataID = true;
                 collectedSnpDataID |= details::CollectDataID<config, conn>(
@@ -1746,7 +2101,7 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept
+    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
             return XactDenial::DENIED_COMPLETED;
@@ -1757,7 +2112,7 @@ namespace /*CHI::*/Xact  {
         if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
         {
             if (!rspFlit.IsFromRequesterToHome(topo))
-                return XactDenial::DENIED_COMMUNICATION;
+                return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.snp.SrcID())
                 return XactDenial::DENIED_TGTID_MISMATCH;
@@ -1785,7 +2140,7 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept
+    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
             return XactDenial::DENIED_COMPLETED;
@@ -1799,7 +2154,7 @@ namespace /*CHI::*/Xact  {
         )
         {
             if (!datFlit.IsFromRequesterToHome(topo))
-                return XactDenial::DENIED_COMMUNICATION;
+                return XactDenial::DENIED_DAT_NOT_FROM_RN_TO_HN;
 
             if (datFlit.flit.dat.TgtID() != this->first.flit.snp.SrcID())
                 return XactDenial::DENIED_TGTID_MISMATCH;
@@ -1827,7 +2182,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactionForwardSnoop<config, conn>::XactionForwardSnoop(const Topology& topo, const FiredRequestFlit& first) noexcept
+    inline XactionForwardSnoop<config, conn>::XactionForwardSnoop(const Topology& topo, const FiredRequestFlit<config, conn>& first) noexcept
         : Xaction<config, conn>(XactionType::ForwardSnoop, first)
     {
         this->firstDenial = XactDenial::ACCEPTED;
@@ -1870,11 +2225,11 @@ namespace /*CHI::*/Xact {
             if (this->subsequenceKeys[index].IsDenied())
                 continue;
 
-            if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpResp
-             || iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespData
-             || iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl
-             || iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded
-             || iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
+            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpResp
+             || iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespData
+             || iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl
+             || iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded
+             || iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
                 return true;
         }
 
@@ -1900,22 +2255,22 @@ namespace /*CHI::*/Xact {
             if (this->subsequenceKeys[index].IsDenied())
                 continue;
 
-            if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
                 return true;
-            else if (iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespData
-             || iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+            else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespData
+                  || iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
             {
                 needCollectedSnpDataID = true;
                 collectedSnpDataID |= details::CollectDataID<config, conn>(
                     Size<64>::value, iter->flit.dat.DataID());
                 continue;
             }
-            else if (iter->flit.IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+            else if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
             {
                 needCollectedFwdDataID = true;
                 continue;
             }
-            else if (iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
+            else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
             {
                 needCollectedFwdDataID = true;
                 needCollectedSnpDataID = true;
@@ -1923,7 +2278,7 @@ namespace /*CHI::*/Xact {
                     Size<64>::value, iter->flit.dat.DataID());
                 continue;
             }
-            else if (iter->flit.IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData)
+            else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData)
             {
                 collectedFwdDataID |= details::CollectDataID<config, conn>(
                     Size<64>::value, iter->flit.dat.DataID());
@@ -1951,7 +2306,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionForwardSnoop<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit& rspFlit) noexcept
+    inline XactDenialEnum XactionForwardSnoop<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
             return XactDenial::DENIED_COMPLETED;
@@ -1994,7 +2349,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionForwardSnoop<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit& datFlit) noexcept
+    inline XactDenialEnum XactionForwardSnoop<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
             return XactDenial::DENIED_COMPLETED;
@@ -2060,8 +2415,6 @@ namespace /*CHI::*/Xact {
         return XactDenial::DENIED_OPCODE;
     }
 }
-
-
 
 
 

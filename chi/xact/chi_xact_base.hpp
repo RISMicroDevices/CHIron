@@ -3,7 +3,6 @@
 //#ifndef __CHI__CHI_XACT_BASE
 //#define __CHI__CHI_XACT_BASE
 
-#include <unordered_map>
 #ifndef CHI_XACT_BASE__STANDALONE
 #   include "chi_xact_base_header.hpp"                  // IWYU pragma: keep
 #   include "../spec/chi_protocol_encoding_header.hpp"  // IWYU pragma: keep
@@ -85,24 +84,35 @@ namespace CHI {
         using XactDenialEnum = const XactDenialEnumBack*;
 
         namespace XactDenial {
+            inline constexpr XactDenialEnumBack NOT_INITIALIZED                     ("XACT_NOT_INITIALIZED",                    0xFFFF0000 |  0);
+
             inline constexpr XactDenialEnumBack ACCEPTED                            ("XACT_ACCEPTED",                           0x00000000 |  0);
             inline constexpr XactDenialEnumBack DENIED_COMPLETED                    ("XACT_DENIED_COMPLETED",                   0x00000000 |  1);
             inline constexpr XactDenialEnumBack DENIED_SCOPE                        ("XACT_DENIED_SCOPE",                       0x00000000 |  2);
             inline constexpr XactDenialEnumBack DENIED_CHANNEL                      ("XACT_DENIED_CHANNEL",                     0x00000000 |  3);
             inline constexpr XactDenialEnumBack DENIED_COMMUNICATION                ("XACT_DENIED_COMMUNICATION",               0x00000000 |  4);
+            inline constexpr XactDenialEnumBack DENIED_TXNID_IN_USE                 ("XACT_DENIED_TXNID_IN_USE",                0x00000000 |  5);
+            inline constexpr XactDenialEnumBack DENIED_TXNID_NOT_EXIST              ("XACT_DENIED_TXNID_NOT_EXIST",             0x00000000 |  6);
+            inline constexpr XactDenialEnumBack DENIED_DBID_IN_USE                  ("XACT_DENIED_DBID_IN_USE",                 0x00000000 |  7);
+            inline constexpr XactDenialEnumBack DENIED_DBID_NOT_EXIST               ("XACT_DENIED_DBID_NOT_EXIST",              0x00000000 |  8);
 
             inline constexpr XactDenialEnumBack DENIED_OPCODE                       ("XACT_DENIED_OPCODE",                      0x00010000 |  0);
 
-            inline constexpr XactDenialEnumBack DENIED_REQ_NOT_TO_RN                ("XACT_DENIED_REQ_NOT_TO_RN",               0x00020000 |  0);
-            inline constexpr XactDenialEnumBack DENIED_REQ_NOT_TO_SN                ("XACT_DENIED_REQ_NOT_TO_SN",               0x00020000 |  1);
-            inline constexpr XactDenialEnumBack DENIED_RSP_NOT_TO_RN                ("XACT_DENIED_RSP_NOT_TO_RN",               0x00020000 |  2);
-            inline constexpr XactDenialEnumBack DENIED_RSP_NOT_TO_HN                ("XACT_DENIED_RSP_NOT_TO_HN",               0x00020000 |  3);
-            inline constexpr XactDenialEnumBack DENIED_RSP_NOT_TO_SN                ("XACT_DENIED_RSP_NOT_TO_SN",               0x00020000 |  4);
-            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_RN                ("XACT_DENIED_DAT_NOT_TO_RN",               0x00020000 |  5);
-            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_HN                ("XACT_DENIED_DAT_NOT_TO_HN",               0x00020000 |  6);
-            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_SN                ("XACT_DENIED_DAT_NOT_TO_SN",               0x00020000 |  7);
-            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_TO_RN                ("XACT_DENIED_SNP_NOT_TO_RN",               0x00020000 |  8);
-            
+            inline constexpr XactDenialEnumBack DENIED_REQ_NOT_TO_HN                ("XACT_DENIED_REQ_NOT_TO_HN",               0x00020000 |  0);
+            inline constexpr XactDenialEnumBack DENIED_REQ_NOT_FROM_RN_TO_HN        ("XACT_DENIED_REQ_NOT_FROM_RN_TO_HN",       0x00020000 |  1);
+            inline constexpr XactDenialEnumBack DENIED_REQ_NOT_FROM_SN_TO_HN        ("XACT_DENIED_REQ_NOT_FROM_SN_TO_HN",       0x00020000 |  2);
+            inline constexpr XactDenialEnumBack DENIED_RSP_NOT_TO_RN                ("XACT_DENIED_RSP_NOT_TO_RN",               0x00020000 |  3);
+            inline constexpr XactDenialEnumBack DENIED_RSP_NOT_FROM_HN_TO_RN        ("XACT_DENIED_RSP_NOT_FROM_HN_TO_RN",       0x00020000 |  4);
+            inline constexpr XactDenialEnumBack DENIED_RSP_NOT_TO_HN                ("XACT_DENIED_RSP_NOT_TO_HN",               0x00020000 |  5);
+            inline constexpr XactDenialEnumBack DENIED_RSP_NOT_FROM_RN_TO_HN        ("XACT_DENIED_RSP_NOT_FROM_RN_TO_HN",       0x00020000 |  6);
+            inline constexpr XactDenialEnumBack DENIED_RSP_NOT_TO_SN                ("XACT_DENIED_RSP_NOT_TO_SN",               0x00020000 |  7);
+            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_RN                ("XACT_DENIED_DAT_NOT_TO_RN",               0x00020000 |  8);
+            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_HN                ("XACT_DENIED_DAT_NOT_TO_HN",               0x00020000 |  9);
+            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_FROM_RN_TO_HN        ("XACT_DENIED_DAT_NOT_FROM_RN_TO_HN",       0x00020000 | 10);
+            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_SN                ("XACT_DENIED_DAT_NOT_TO_SN",               0x00020000 | 11);
+            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_TO_RN                ("XACT_DENIED_SNP_NOT_TO_RN",               0x00020000 | 12);
+            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_FROM_HN_TO_RN        ("XACT_DENIED_SNP_NOT_FROM_HN_TO_RN",       0x00020000 | 13);
+
             inline constexpr XactDenialEnumBack DENIED_TXNID_MISMATCH               ("XACT_DENIED_TXNID_MISMATCH",              0x00040000 |  1);
             inline constexpr XactDenialEnumBack DENIED_DBID_MISMATCH                ("XACT_DENIED_DBID_MISMATCH",               0x00040000 |  2);
             inline constexpr XactDenialEnumBack DENIED_TGTID_MISMATCH               ("XACT_DENIED_TGTID_MISMATCH",              0x00040000 |  3);
@@ -130,23 +140,30 @@ namespace CHI {
             
             inline constexpr XactDenialEnumBack DENIED_DATA_BEFORE_DBID             ("XACT_DENIED_DATA_BEFORE_DBID",            0x000B0000 | 10);
             inline constexpr XactDenialEnumBack DENIED_DATA_AFTER_COMP              ("XACT_DENIED_DATA_AFTER_COMP",             0x000B0000 | 11);
-            inline constexpr XactDenialEnumBack DENIED_COMPACK_BEFORE_COMP          ("XACT_DENIED_COMPACK_BEFORE_COMP",         0x000B0000 | 12);
-            inline constexpr XactDenialEnumBack DENIED_COMPACK_BEFORE_COMPDATA      ("XACT_DENIED_COMPACK_BEFORE_COMPDATA",     0x000B0000 | 13);
-            inline constexpr XactDenialEnumBack DENIED_COMPACK_AFTER_DBIDRESP       ("XACT_DENIED_COMPACK_AFTER_DBIDRESP",      0x000B0000 | 14);
-            inline constexpr XactDenialEnumBack DENIED_COMPACK_AFTER_COMPACK        ("XACT_DENIED_COMPACK_AFTER_COMPACK",       0x000B0000 | 15);
+            inline constexpr XactDenialEnumBack DENIED_COMPACK_BEFORE_DBID          ("XACT_DENIED_COMPACK_BEFORE_DBID",         0x000B0000 | 12);
+            inline constexpr XactDenialEnumBack DENIED_COMPACK_BEFORE_COMP          ("XACT_DENIED_COMPACK_BEFORE_COMP",         0x000B0000 | 13);
+            inline constexpr XactDenialEnumBack DENIED_COMPACK_BEFORE_COMPDATA      ("XACT_DENIED_COMPACK_BEFORE_COMPDATA",     0x000B0000 | 14);
+            inline constexpr XactDenialEnumBack DENIED_COMPACK_AFTER_DBIDRESP       ("XACT_DENIED_COMPACK_AFTER_DBIDRESP",      0x000B0000 | 15);
+            inline constexpr XactDenialEnumBack DENIED_COMPACK_AFTER_COMPACK        ("XACT_DENIED_COMPACK_AFTER_COMPACK",       0x000B0000 | 16);
 
-            inline constexpr XactDenialEnumBack DENIED_COMP_AFTER_COMP              ("XACT_DENIED_COMP_AFTER_COMP",             0x000B0000 | 16);
-            inline constexpr XactDenialEnumBack DENIED_COMP_AFTER_COMPPERSIST       ("XACT_DENIED_COMP_AFTER_COMPPERSIST",      0x000B0000 | 17);
-            inline constexpr XactDenialEnumBack DENIED_PERSIST_AFTER_PERSIST        ("XACT_DENIED_COMP_AFTER_PERSIST",          0x000B0000 | 18);
-            inline constexpr XactDenialEnumBack DENIED_PERSIST_AFTER_COMPPERSIST    ("XACT_DENIED_COMP_AFTER_COMPPERSIST",      0x000B0000 | 19);
-            inline constexpr XactDenialEnumBack DENIED_COMPPERSIST_AFTER_COMP       ("XACT_DENIED_COMPPERSIST_AFTER_COMP",      0x000B0000 | 20);
-            inline constexpr XactDenialEnumBack DENIED_COMPPERSIST_AFTER_PERSIST    ("XACT_DENIED_COMPPERSIST_AFTER_PERSIST",   0x000B0000 | 21);
-            inline constexpr XactDenialEnumBack DENIED_COMPPERSIST_AFTER_COMPPERSIST("XACT_DENIED_COMPPERSIST_AFTER_COMPPERSIST", 0x000B0000 | 22);
+            inline constexpr XactDenialEnumBack DENIED_COMP_AFTER_COMP              ("XACT_DENIED_COMP_AFTER_COMP",             0x000B0000 | 17);
+            inline constexpr XactDenialEnumBack DENIED_COMP_AFTER_COMPPERSIST       ("XACT_DENIED_COMP_AFTER_COMPPERSIST",      0x000B0000 | 18);
+            inline constexpr XactDenialEnumBack DENIED_COMP_AFTER_COMPDBIDRESP      ("XACT_DENIED_COMP_AFTER_COMPDBIDRESP",     0x000B0000 | 19);
+            inline constexpr XactDenialEnumBack DENIED_PERSIST_AFTER_PERSIST        ("XACT_DENIED_COMP_AFTER_PERSIST",          0x000B0000 | 20);
+            inline constexpr XactDenialEnumBack DENIED_PERSIST_AFTER_COMPPERSIST    ("XACT_DENIED_COMP_AFTER_COMPPERSIST",      0x000B0000 | 21);
+            inline constexpr XactDenialEnumBack DENIED_COMPPERSIST_AFTER_COMP       ("XACT_DENIED_COMPPERSIST_AFTER_COMP",      0x000B0000 | 22);
+            inline constexpr XactDenialEnumBack DENIED_COMPPERSIST_AFTER_PERSIST    ("XACT_DENIED_COMPPERSIST_AFTER_PERSIST",   0x000B0000 | 23);
+            inline constexpr XactDenialEnumBack DENIED_COMPPERSIST_AFTER_COMPPERSIST("XACT_DENIED_COMPPERSIST_AFTER_COMPPERSIST", 0x000B0000 | 24);
+            inline constexpr XactDenialEnumBack DENIED_RESPSEP_AFTER_RESPSEP        ("XACT_DENIED_RESPSEP_AFTER_RESPSEP",       0x000B0000 | 25);
+            inline constexpr XactDenialEnumBack DENIED_COMPDBIDRESP_AFTER_COMPDBIDRESP  ("XACT_DENIED_COMPDBIDRESP_AFTER_COMPDBIDRESP", 0x000B0000 | 26);
+            inline constexpr XactDenialEnumBack DENIED_COMPDBIDRESP_AFTER_COMP      ("XACT_DENIED_COMPDBIDRESP_AFTER_COMP",     0x000B0000 | 27);
 
-            inline constexpr XactDenialEnumBack DENIED_DUPLICATED_DATAID            ("XACT_DENIED_DUPLICATED_DATAID",           0x000B0000 | 16);
+            inline constexpr XactDenialEnumBack DENIED_DUPLICATED_DATAID            ("XACT_DENIED_DUPLICATED_DATAID",           0x000B0000 | 28);
 
             inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_XACT_TYPE         ("XACT_DENIED_RETRY_DIFF_XACT_TYPE",        0x000C0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_RETRY_NO_ALLOWRETRY          ("XACT_DENIED_RETRY_NO_ALLOWRETRY",         0x000C0000 |  1);
+            inline constexpr XactDenialEnumBack DENIED_NO_MATCHING_RETRY            ("XACT_DENIED_NO_MATCHING_RETRY",           0x000C0000 |  2);
+            inline constexpr XactDenialEnumBack DENIED_NO_MATCHING_PCREDIT          ("XACT_DENIED_NO_MATCHING_PCREDIT",         0x000C0000 |  3);
         //  inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_QOS               ("XACT_DENIED_RETRY_DIFF_QOS",              0x000C0000 | 31);
         //  inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_TGTID             ("XACT_DENIED_RETRY_DIFF_TGTID",            0x000C0000 | 32);
             inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_SRCID             ("XACT_DENIED_RETRY_DIFF_SRCID",            0x000C0000 | 33);
@@ -287,7 +304,7 @@ namespace CHI {
             bool            isTX;
 
         public:
-            FiredFlit(XactScopeEnum scope, uint64_t time, bool isTX) noexcept;
+            FiredFlit(XactScopeEnum scope, bool isTX, uint64_t time) noexcept;
 
         public:
             bool            IsTX() const noexcept;
@@ -305,8 +322,8 @@ namespace CHI {
             }               flit;
 
         public:
-            FiredRequestFlit(uint64_t time, const Flits::REQ<config, conn>& reqFlit) noexcept;
-            FiredRequestFlit(uint64_t time, const Flits::SNP<config, conn>& snpFlit) noexcept;
+            FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::REQ<config, conn>& reqFlit) noexcept;
+            FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::SNP<config, conn>& snpFlit) noexcept;
 
         public:
             bool            IsREQ() const noexcept;
@@ -348,8 +365,9 @@ namespace CHI {
             }               flit;
 
         public:
-            FiredResponseFlit(uint64_t time, const Flits::RSP<config, conn>& rspFlit) noexcept;
-            FiredResponseFlit(uint64_t time, const Flits::DAT<config, conn>& datFlit) noexcept;
+            FiredResponseFlit() noexcept;
+            FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::RSP<config, conn>& rspFlit) noexcept;
+            FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::DAT<config, conn>& datFlit) noexcept;
         
         public:
             bool            IsRSP() const noexcept;
@@ -492,7 +510,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline FiredFlit<config, conn>::FiredFlit(XactScopeEnum scope, uint64_t time, bool isTX) noexcept
+    inline FiredFlit<config, conn>::FiredFlit(XactScopeEnum scope, bool isTX, uint64_t time) noexcept
         : scope     (scope)
         , time      (time)
         , isTX      (isTX)
@@ -526,16 +544,18 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline FiredRequestFlit<config, conn>::FiredRequestFlit(uint64_t time, const Flits::REQ<config, conn>& reqFlit) noexcept
-        : isREQ (true)
+    inline FiredRequestFlit<config, conn>::FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::REQ<config, conn>& reqFlit) noexcept
+        : FiredFlit<config, conn>   (scope, isTX, time)
+        , isREQ                     (true)
     { 
         flit.req = reqFlit;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline FiredRequestFlit<config, conn>::FiredRequestFlit(uint64_t time, const Flits::SNP<config, conn>& snpFlit) noexcept
-        : isREQ (false)
+    inline FiredRequestFlit<config, conn>::FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::SNP<config, conn>& snpFlit) noexcept
+        : FiredFlit<config, conn>   (scope, isTX, time)
+        , isREQ                     (false)
     {
         flit.snp = snpFlit;
     }
@@ -790,16 +810,25 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline FiredResponseFlit<config, conn>::FiredResponseFlit(uint64_t time, const Flits::RSP<config, conn>& rspFlit) noexcept
-        : isRSP (true)
+    inline FiredResponseFlit<config, conn>::FiredResponseFlit() noexcept
+        : FiredFlit<config, conn>   (XactScope::Requester, false, 0)
+        , isRSP                     (false)
+    { }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline FiredResponseFlit<config, conn>::FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::RSP<config, conn>& rspFlit) noexcept
+        : FiredFlit<config, conn>   (scope, isTX, time)
+        , isRSP                     (true)
     {
         flit.rsp = rspFlit;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline FiredResponseFlit<config, conn>::FiredResponseFlit(uint64_t time, const Flits::DAT<config, conn>& datFlit) noexcept
-        : isRSP (false)
+    inline FiredResponseFlit<config, conn>::FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::DAT<config, conn>& datFlit) noexcept
+        : FiredFlit<config, conn>   (scope, isTX, time)
+        , isRSP                     (false)
     {
         flit.dat = datFlit;
     }
@@ -878,7 +907,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsToHome(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsTXRSP() && topo.IsHome(flit.rsp.TgtID()) 
@@ -900,7 +929,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsToSubordinate(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
 #ifdef CHI_ISSUE_B_ENABLE
@@ -926,7 +955,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsToRequesterDCT(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsTXRSP() && topo.IsRequester(flit.rsp.TgtID())
@@ -949,7 +978,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsToRequesterDMT(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsRXDAT() && topo.IsSubordinate(flit.dat.SrcID());
@@ -970,7 +999,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsToRequesterDWT(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsRXRSP() && topo.IsSubordinate(flit.rsp.SrcID());
@@ -992,7 +1021,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsToSubordinateDWT(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsTXDAT() && topo.IsSubordinate(flit.dat.TgtID());
@@ -1013,7 +1042,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsFromRequester(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsTX()
@@ -1033,9 +1062,30 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredResponseFlit<config, conn>::IsFromHome(const Topology& topo) const noexcept
+    {
+        switch (*this->scope)
+        {
+            case XactScope::Requester:
+                return this->IsRXRSP() && topo.IsHome(flit.rsp.SrcID())
+                    || this->IsRXDAT() && topo.IsHome(flit.dat.SrcID());
+
+            case XactScope::Home:
+                return this->IsTX();
+
+            case XactScope::Subordinate:
+                return this->IsRXDAT() && topo.IsHome(flit.dat.SrcID());
+
+            [[unlikely]] default:
+                return false;
+        }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsFromSubordinate(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
 #ifdef CHI_ISSUE_B_ENABLE
@@ -1061,7 +1111,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsFromRequesterDCT(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsTXRSP() && topo.IsRequester(flit.rsp.TgtID())
@@ -1084,7 +1134,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsFromSubordinateDMT(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsRXDAT() && topo.IsSubordinate(flit.dat.SrcID());
@@ -1105,7 +1155,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsFromRequesterDWT(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsTXDAT() && topo.IsSubordinate(flit.dat.TgtID());
@@ -1127,7 +1177,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool FiredResponseFlit<config, conn>::IsFromSubordinateDWT(const Topology& topo) const noexcept
     {
-        switch (this->scope)
+        switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsRXRSP() && topo.IsSubordinate(flit.rsp.SrcID());

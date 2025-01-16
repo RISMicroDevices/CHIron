@@ -21,18 +21,6 @@ namespace CHI {
 */
     namespace Xact {
 
-        enum class FieldConvention {
-            A0      = 0,        // 
-            A1      = 1,
-            I0,
-            X,
-            Y,
-            B8,
-            B64,
-            S
-        };
-
-
         // Request Field
         class RequestFieldMappingBack {
         public:
@@ -226,7 +214,14 @@ namespace CHI {
         };
 
         class RequestFieldMappingTable {
+        private:
+            RequestFieldMapping    table[1 << Flits::REQ<>::OPCODE_WIDTH];
 
+        public:
+            RequestFieldMappingTable() noexcept;
+
+            RequestFieldMapping     Get(Flits::REQ<>::opcode_t opcode) const noexcept;
+            RequestFieldMapping     Get(size_t index) const noexcept;
         };
 
 
@@ -317,7 +312,14 @@ namespace CHI {
         };
 
         class ResponseFieldMappingTable {
+        private:
+            ResponseFieldMapping    table[1 << Flits::RSP<>::OPCODE_WIDTH];
 
+        public:
+            ResponseFieldMappingTable() noexcept;
+
+            ResponseFieldMapping    Get(Flits::RSP<>::opcode_t opcode) const noexcept;
+            ResponseFieldMapping    Get(size_t index) const noexcept;
         };
 
 
@@ -420,6 +422,17 @@ namespace CHI {
             inline constexpr DataFieldMappingBack WriteDataCancel                   (Y , Y , Y , Y , Y , Y , Y , I0, X , Y , Y , Y , A0, Y , I0, I0, I0, I0, Y , Y , Y , Y , Y , Y);
         }
 
+        class DataFieldMappingTable {
+        private:
+            DataFieldMapping    table[1 << Flits::DAT<>::OPCODE_WIDTH];
+
+        public:
+            DataFieldMappingTable() noexcept;
+
+            DataFieldMapping    Get(Flits::DAT<>::opcode_t opcode) const noexcept;
+            DataFieldMapping    Get(size_t index) const noexcept;
+        };
+
 
         // Snoop Field
         class SnoopFieldMappingBack {
@@ -504,10 +517,246 @@ namespace CHI {
             inline constexpr SnoopFieldMappingBack SnpQuery                         (Y , Y , Y , Y , Y , Y , I0, I0, I0, I0, I0, A1, I0, Y , D );
             inline constexpr SnoopFieldMappingBack SnpDVMOp                         (Y , Y , Y , Y , Y , I0, I0, S , S , S , Y , I0, I0, Y , I0);
         }
+
+        class SnoopFieldMappingTable {
+        private:
+            SnoopFieldMapping   table[1 << Flits::SNP<>::OPCODE_WIDTH];
+
+        public:
+            SnoopFieldMappingTable() noexcept;
+
+            SnoopFieldMapping   Get(Flits::SNP<>::opcode_t opcode) const noexcept;
+            SnoopFieldMapping   Get(size_t index) const noexcept;
+        };
     }
 /*
 }
 */
+
+
+// Implementation of: class RequestFieldMappingTable
+namespace /*CHI::*/Xact {
+
+    inline RequestFieldMappingTable::RequestFieldMappingTable() noexcept
+    {
+        std::memset(table, 0, sizeof(RequestFieldMapping) * (1 << Flits::REQ<>::OPCODE_WIDTH));
+
+        //
+        table[Opcodes::REQ::ReqLCrdReturn               ] = &RequestFieldMappings::ReqLCrdReturn;
+        table[Opcodes::REQ::PCrdReturn                  ] = &RequestFieldMappings::PCrdReturn;
+        table[Opcodes::REQ::DVMOp                       ] = &RequestFieldMappings::DVMOp;
+        table[Opcodes::REQ::PrefetchTgt                 ] = &RequestFieldMappings::PrefetchTgt;
+        table[Opcodes::REQ::ReadNoSnp                   ] = &RequestFieldMappings::ReadNoSnp;
+        table[Opcodes::REQ::ReadNoSnpSep                ] = &RequestFieldMappings::ReadNoSnpSep;
+        table[Opcodes::REQ::ReadOnce                    ] = &RequestFieldMappings::ReadOnce;
+        table[Opcodes::REQ::ReadOnceCleanInvalid        ] = &RequestFieldMappings::ReadOnceCleanInvalid;
+        table[Opcodes::REQ::ReadOnceMakeInvalid         ] = &RequestFieldMappings::ReadOnceMakeInvalid;
+        table[Opcodes::REQ::ReadClean                   ] = &RequestFieldMappings::ReadClean;
+        table[Opcodes::REQ::ReadNotSharedDirty          ] = &RequestFieldMappings::ReadNotSharedDirty;
+        table[Opcodes::REQ::ReadShared                  ] = &RequestFieldMappings::ReadShared;
+        table[Opcodes::REQ::ReadUnique                  ] = &RequestFieldMappings::ReadUnique;
+        table[Opcodes::REQ::ReadPreferUnique            ] = &RequestFieldMappings::ReadPreferUnique;
+        table[Opcodes::REQ::MakeReadUnique              ] = &RequestFieldMappings::MakeReadUnique;
+        table[Opcodes::REQ::CleanShared                 ] = &RequestFieldMappings::CleanShared;
+        table[Opcodes::REQ::CleanSharedPersist          ] = &RequestFieldMappings::CleanSharedPersist;
+        table[Opcodes::REQ::CleanSharedPersistSep       ] = &RequestFieldMappings::CleanSharedPersistSep;
+        table[Opcodes::REQ::CleanInvalid                ] = &RequestFieldMappings::CleanInvalid;
+        table[Opcodes::REQ::MakeInvalid                 ] = &RequestFieldMappings::MakeInvalid;
+        table[Opcodes::REQ::CleanUnique                 ] = &RequestFieldMappings::CleanUnique;
+        table[Opcodes::REQ::MakeUnique                  ] = &RequestFieldMappings::MakeUnique;
+        table[Opcodes::REQ::Evict                       ] = &RequestFieldMappings::Evict;
+        //
+        table[Opcodes::REQ::WriteNoSnpPtl               ] = &RequestFieldMappings::WriteNoSnpPtl;
+        table[Opcodes::REQ::WriteNoSnpPtlCleanInv       ] = &RequestFieldMappings::WriteNoSnpPtlCleanInv;
+        table[Opcodes::REQ::WriteNoSnpPtlCleanSh        ] = &RequestFieldMappings::WriteNoSnpPtlCleanSh;
+        table[Opcodes::REQ::WriteNoSnpPtlCleanShPerSep  ] = &RequestFieldMappings::WriteNoSnpPtlCleanShPerSep;
+        table[Opcodes::REQ::WriteNoSnpFull              ] = &RequestFieldMappings::WriteNoSnpFull;
+        table[Opcodes::REQ::WriteNoSnpFullCleanInv      ] = &RequestFieldMappings::WriteNoSnpFullCleanInv;
+        table[Opcodes::REQ::WriteNoSnpFullCleanSh       ] = &RequestFieldMappings::WriteNoSnpFullCleanSh;
+        table[Opcodes::REQ::WriteNoSnpFullCleanShPerSep ] = &RequestFieldMappings::WriteNoSnpFullCleanShPerSep;
+        table[Opcodes::REQ::WriteNoSnpZero              ] = &RequestFieldMappings::WriteNoSnpZero;
+        table[Opcodes::REQ::WriteUniquePtlStash         ] = &RequestFieldMappings::WriteUniquePtlStash;
+        table[Opcodes::REQ::WriteUniqueFullStash        ] = &RequestFieldMappings::WriteUniqueFullStash;
+        table[Opcodes::REQ::WriteUniquePtl              ] = &RequestFieldMappings::WriteUniquePtl;
+        table[Opcodes::REQ::WriteUniquePtlCleanSh       ] = &RequestFieldMappings::WriteUniquePtlCleanSh;
+        table[Opcodes::REQ::WriteUniquePtlCleanShPerSep ] = &RequestFieldMappings::WriteUniquePtlCleanShPerSep;
+        table[Opcodes::REQ::WriteUniqueFull             ] = &RequestFieldMappings::WriteUniqueFull;
+        table[Opcodes::REQ::WriteUniqueFullCleanSh      ] = &RequestFieldMappings::WriteUniqueFullCleanSh;
+        table[Opcodes::REQ::WriteUniqueFullCleanShPerSep] = &RequestFieldMappings::WriteUniqueFullCleanShPerSep; 
+        table[Opcodes::REQ::WriteUniqueZero             ] = &RequestFieldMappings::WriteUniqueZero;
+        table[Opcodes::REQ::WriteBackPtl                ] = &RequestFieldMappings::WriteBackPtl;
+        table[Opcodes::REQ::WriteBackFull               ] = &RequestFieldMappings::WriteBackFull;
+        table[Opcodes::REQ::WriteBackFullCleanInv       ] = &RequestFieldMappings::WriteBackFullCleanInv;
+        table[Opcodes::REQ::WriteBackFullCleanSh        ] = &RequestFieldMappings::WriteBackFullCleanSh;
+        table[Opcodes::REQ::WriteBackFullCleanShPerSep  ] = &RequestFieldMappings::WriteBackFullCleanShPerSep;
+        table[Opcodes::REQ::WriteCleanFull              ] = &RequestFieldMappings::WriteCleanFull;
+        table[Opcodes::REQ::WriteCleanFullCleanSh       ] = &RequestFieldMappings::WriteCleanFullCleanSh;
+        table[Opcodes::REQ::WriteCleanFullCleanShPerSep ] = &RequestFieldMappings::WriteCleanFullCleanShPerSep;
+        table[Opcodes::REQ::WriteEvictFull              ] = &RequestFieldMappings::WriteEvictFull;
+        table[Opcodes::REQ::WriteEvictOrEvict           ] = &RequestFieldMappings::WriteEvictOrEvict;
+        //
+        table[Opcodes::REQ::StashOnceUnique             ] = &RequestFieldMappings::StashOnceUnique;
+        table[Opcodes::REQ::StashOnceSepUnique          ] = &RequestFieldMappings::StashOnceSepUnique;
+        table[Opcodes::REQ::StashOnceShared             ] = &RequestFieldMappings::StashOnceShared;
+        table[Opcodes::REQ::StashOnceSepShared          ] = &RequestFieldMappings::StashOnceSepShared;
+        table[Opcodes::REQ::AtomicLoad::ADD             ] = &RequestFieldMappings::AtomicLoad;
+        table[Opcodes::REQ::AtomicLoad::CLR             ] = &RequestFieldMappings::AtomicLoad;
+        table[Opcodes::REQ::AtomicLoad::EOR             ] = &RequestFieldMappings::AtomicLoad;
+        table[Opcodes::REQ::AtomicLoad::SET             ] = &RequestFieldMappings::AtomicLoad;
+        table[Opcodes::REQ::AtomicLoad::SMAX            ] = &RequestFieldMappings::AtomicLoad;
+        table[Opcodes::REQ::AtomicLoad::SMIN            ] = &RequestFieldMappings::AtomicLoad;
+        table[Opcodes::REQ::AtomicLoad::UMAX            ] = &RequestFieldMappings::AtomicLoad;
+        table[Opcodes::REQ::AtomicLoad::UMIN            ] = &RequestFieldMappings::AtomicLoad;
+        table[Opcodes::REQ::AtomicStore::ADD            ] = &RequestFieldMappings::AtomicStore;
+        table[Opcodes::REQ::AtomicStore::CLR            ] = &RequestFieldMappings::AtomicStore;
+        table[Opcodes::REQ::AtomicStore::EOR            ] = &RequestFieldMappings::AtomicStore;
+        table[Opcodes::REQ::AtomicStore::SET            ] = &RequestFieldMappings::AtomicStore;
+        table[Opcodes::REQ::AtomicStore::SMAX           ] = &RequestFieldMappings::AtomicStore;
+        table[Opcodes::REQ::AtomicStore::SMIN           ] = &RequestFieldMappings::AtomicStore;
+        table[Opcodes::REQ::AtomicStore::UMAX           ] = &RequestFieldMappings::AtomicStore;
+        table[Opcodes::REQ::AtomicStore::UMIN           ] = &RequestFieldMappings::AtomicStore;
+        table[Opcodes::REQ::AtomicCompare               ] = &RequestFieldMappings::AtomicCompare;
+        table[Opcodes::REQ::AtomicSwap                  ] = &RequestFieldMappings::AtomicSwap;
+    }
+
+    inline RequestFieldMapping RequestFieldMappingTable::Get(Flits::REQ<>::opcode_t opcode) const noexcept
+    {
+        return table[opcode];
+    }
+
+    inline RequestFieldMapping RequestFieldMappingTable::Get(size_t index) const noexcept
+    {
+        if (index < (1 << Flits::REQ<>::OPCODE_WIDTH))
+            return table[index];
+
+        return nullptr;
+    }
+}
+
+
+// Implementation of: class ResponseFieldMappingTable
+namespace /*CHI::*/Xact {
+
+    inline ResponseFieldMappingTable::ResponseFieldMappingTable() noexcept
+    {
+        std::memset(table, 0, sizeof(ResponseFieldMapping) * (1 << Flits::RSP<>::OPCODE_WIDTH));
+
+        //
+        table[Opcodes::RSP::RespLCrdReturn              ] = &ResponseFieldMappings::RspLCrdReturn;
+        table[Opcodes::RSP::SnpResp                     ] = &ResponseFieldMappings::SnpResp;
+        table[Opcodes::RSP::SnpRespFwded                ] = &ResponseFieldMappings::SnpRespFwded;
+        table[Opcodes::RSP::CompAck                     ] = &ResponseFieldMappings::CompAck;
+        table[Opcodes::RSP::RetryAck                    ] = &ResponseFieldMappings::RetryAck;
+        table[Opcodes::RSP::Comp                        ] = &ResponseFieldMappings::Comp;
+        table[Opcodes::RSP::CompCMO                     ] = &ResponseFieldMappings::CompCMO;
+        table[Opcodes::RSP::Persist                     ] = &ResponseFieldMappings::Persist;
+        table[Opcodes::RSP::CompPersist                 ] = &ResponseFieldMappings::CompPersist;
+        table[Opcodes::RSP::StashDone                   ] = &ResponseFieldMappings::StashDone;
+        table[Opcodes::RSP::CompStashDone               ] = &ResponseFieldMappings::CompStashDone;
+        table[Opcodes::RSP::RespSepData                 ] = &ResponseFieldMappings::RespSepData;
+        table[Opcodes::RSP::CompDBIDResp                ] = &ResponseFieldMappings::CompDBIDResp;
+        table[Opcodes::RSP::DBIDResp                    ] = &ResponseFieldMappings::DBIDResp;
+        table[Opcodes::RSP::DBIDRespOrd                 ] = &ResponseFieldMappings::DBIDRespOrd;
+        table[Opcodes::RSP::TagMatch                    ] = &ResponseFieldMappings::TagMatch;
+        table[Opcodes::RSP::PCrdGrant                   ] = &ResponseFieldMappings::PCrdGrant;
+        table[Opcodes::RSP::ReadReceipt                 ] = &ResponseFieldMappings::ReadReceipt;
+    }
+
+    inline ResponseFieldMapping ResponseFieldMappingTable::Get(Flits::RSP<>::opcode_t opcode) const noexcept
+    {
+        return table[opcode];
+    }
+
+    inline ResponseFieldMapping ResponseFieldMappingTable::Get(size_t index) const noexcept
+    {
+        if (index < (1 << Flits::RSP<>::OPCODE_WIDTH))
+            return table[index];
+
+        return nullptr;
+    }
+}
+
+
+// Implementation of: class DataFieldMappingTable
+namespace /*CHI::*/Xact {
+
+    inline DataFieldMappingTable::DataFieldMappingTable() noexcept
+    {
+        std::memset(table, 0, sizeof(DataFieldMapping) * (1 << Flits::DAT<>::OPCODE_WIDTH));
+
+        //
+        table[Opcodes::DAT::DataLCrdReturn              ] = &DataFieldMappings::DatLCrdReturn;
+        table[Opcodes::DAT::SnpRespData                 ] = &DataFieldMappings::SnpRespData;
+        table[Opcodes::DAT::SnpRespDataFwded            ] = &DataFieldMappings::SnpRespDataFwded;
+        table[Opcodes::DAT::CopyBackWrData              ] = &DataFieldMappings::CopyBackWrData;
+        table[Opcodes::DAT::NonCopyBackWrData           ] = &DataFieldMappings::NonCopyBackWrData;
+        table[Opcodes::DAT::NCBWrDataCompAck            ] = &DataFieldMappings::NCBWrDataCompAck;
+        table[Opcodes::DAT::CompData                    ] = &DataFieldMappings::CompData;
+        table[Opcodes::DAT::DataSepResp                 ] = &DataFieldMappings::DataSepResp;
+        table[Opcodes::DAT::SnpRespDataPtl              ] = &DataFieldMappings::SnpRespDataPtl;
+        table[Opcodes::DAT::WriteDataCancel             ] = &DataFieldMappings::WriteDataCancel;
+    }
+
+    inline DataFieldMapping DataFieldMappingTable::Get(Flits::DAT<>::opcode_t opcode) const noexcept
+    {
+        return table[opcode];
+    }
+
+    inline DataFieldMapping DataFieldMappingTable::Get(size_t index) const noexcept
+    {
+        if (index < (1 << Flits::DAT<>::OPCODE_WIDTH))
+            return table[index];
+
+        return nullptr;
+    }
+}
+
+
+// Implementation of: class SnoopFieldMappingTable
+namespace /*CHI::*/Xact {
+
+    inline SnoopFieldMappingTable::SnoopFieldMappingTable() noexcept
+    {
+        std::memset(table, 0, sizeof(SnoopFieldMapping) * (1 << Flits::SNP<>::OPCODE_WIDTH));
+
+        //
+        table[Opcodes::SNP::SnpLCrdReturn               ] = &SnoopFieldMappings::SnpLCrdReturn;
+        table[Opcodes::SNP::SnpShared                   ] = &SnoopFieldMappings::SnpShared;
+        table[Opcodes::SNP::SnpClean                    ] = &SnoopFieldMappings::SnpClean;
+        table[Opcodes::SNP::SnpOnce                     ] = &SnoopFieldMappings::SnpOnce;
+        table[Opcodes::SNP::SnpNotSharedDirty           ] = &SnoopFieldMappings::SnpNotSharedDirty;
+        table[Opcodes::SNP::SnpUnique                   ] = &SnoopFieldMappings::SnpUnique;
+        table[Opcodes::SNP::SnpPreferUnique             ] = &SnoopFieldMappings::SnpPreferUnique;
+        table[Opcodes::SNP::SnpCleanShared              ] = &SnoopFieldMappings::SnpCleanShared;
+        table[Opcodes::SNP::SnpCleanInvalid             ] = &SnoopFieldMappings::SnpCleanInvalid;
+        table[Opcodes::SNP::SnpMakeInvalid              ] = &SnoopFieldMappings::SnpMakeInvalid;
+        table[Opcodes::SNP::SnpSharedFwd                ] = &SnoopFieldMappings::SnpSharedFwd;
+        table[Opcodes::SNP::SnpCleanFwd                 ] = &SnoopFieldMappings::SnpCleanFwd;
+        table[Opcodes::SNP::SnpOnceFwd                  ] = &SnoopFieldMappings::SnpOnceFwd;
+        table[Opcodes::SNP::SnpNotSharedDirtyFwd        ] = &SnoopFieldMappings::SnpNotSharedDirtyFwd;
+        table[Opcodes::SNP::SnpUniqueFwd                ] = &SnoopFieldMappings::SnpUniqueFwd;
+        table[Opcodes::SNP::SnpPreferUniqueFwd          ] = &SnoopFieldMappings::SnpPreferUniqueFwd;
+        table[Opcodes::SNP::SnpUniqueStash              ] = &SnoopFieldMappings::SnpUniqueStash;
+        table[Opcodes::SNP::SnpMakeInvalidStash         ] = &SnoopFieldMappings::SnpMakeInvalidStash;
+        table[Opcodes::SNP::SnpStashUnique              ] = &SnoopFieldMappings::SnpStashUnique;
+        table[Opcodes::SNP::SnpStashShared              ] = &SnoopFieldMappings::SnpStashShared;
+        table[Opcodes::SNP::SnpQuery                    ] = &SnoopFieldMappings::SnpQuery;
+        table[Opcodes::SNP::SnpDVMOp                    ] = &SnoopFieldMappings::SnpDVMOp;
+    }
+
+    inline SnoopFieldMapping SnoopFieldMappingTable::Get(Flits::SNP<>::opcode_t opcode) const noexcept
+    {
+        return table[opcode];
+    }
+
+    inline SnoopFieldMapping SnoopFieldMappingTable::Get(size_t index) const noexcept
+    {
+        if (index < (1 << Flits::SNP<>::OPCODE_WIDTH))
+            return table[index];
+
+        return nullptr;
+    }
+}
 
 
 #endif // CHI_ISSUE_EB_ENABLE
