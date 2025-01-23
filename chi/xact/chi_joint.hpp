@@ -60,6 +60,16 @@ namespace CHI {
         public:
             JointXactionAcceptedEvent(Joint<config, conn>&                      joint, 
                                       std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+                                    
+            JointXactionAcceptedEvent(Joint<config, conn>&                      joint,
+                                      std::shared_ptr<Xaction<config, conn>>    xaction,
+                                      Flits::REQ<config, conn>::srcid_t         snpTgtId) noexcept;
+
+        private:
+            Flits::REQ<config, conn>::srcid_t   snoopTargetID;
+
+        public:
+            Flits::REQ<config, conn>::srcid_t   GetSnoopTargetID() const noexcept;
         };
 
         template<FlitConfigurationConcept       config,
@@ -73,11 +83,57 @@ namespace CHI {
 
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        class JointXactionTxnIDAllocationEvent : public JointXactionEventBase<config, conn>,
+                                                 public Gravity::Event<JointXactionTxnIDAllocationEvent<config, conn>> {
+        public:
+            JointXactionTxnIDAllocationEvent(Joint<config, conn>&                      joint,
+                                             std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+        };
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        class JointXactionTxnIDFreeEvent : public JointXactionEventBase<config, conn>,
+                                           public Gravity::Event<JointXactionTxnIDFreeEvent<config, conn>> {
+        public:
+            JointXactionTxnIDFreeEvent(Joint<config, conn>&                      joint,
+                                       std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+        };
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        class JointXactionDBIDAllocationEvent : public JointXactionEventBase<config, conn>,
+                                                public Gravity::Event<JointXactionDBIDAllocationEvent<config, conn>> {
+        public:
+            JointXactionDBIDAllocationEvent(Joint<config, conn>&                      joint,
+                                            std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+        };
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        class JointXactionDBIDFreeEvent : public JointXactionEventBase<config, conn>,
+                                          public Gravity::Event<JointXactionDBIDFreeEvent<config, conn>> {
+        public:
+            JointXactionDBIDFreeEvent(Joint<config, conn>&                      joint,
+                                      std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+        };
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class JointXactionCompleteEvent : public JointXactionEventBase<config, conn>,
                                           public Gravity::Event<JointXactionCompleteEvent<config, conn>> {
         public:
             JointXactionCompleteEvent(Joint<config, conn>&                      joint,
                                       std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+
+            JointXactionCompleteEvent(Joint<config, conn>&                      joint,
+                                      std::shared_ptr<Xaction<config, conn>>    xaction,
+                                      Flits::REQ<config, conn>::srcid_t         snpTgtId) noexcept;
+
+        private:
+            Flits::REQ<config, conn>::srcid_t   snoopTargetID;
+
+        public:
+            Flits::REQ<config, conn>::srcid_t   GetSnoopTargetID() const noexcept;
         };
 
 
@@ -88,14 +144,24 @@ namespace CHI {
         public:
             Gravity::EventBus<JointXactionAcceptedEvent<config, conn>>  OnAccepted;
             Gravity::EventBus<JointXactionRetryEvent<config, conn>>     OnRetry;
+            Gravity::EventBus<JointXactionTxnIDAllocationEvent<config, conn>>
+                                                                        OnTxnIDAllocation;
+            Gravity::EventBus<JointXactionTxnIDFreeEvent<config, conn>> OnTxnIDFree;
+            Gravity::EventBus<JointXactionDBIDAllocationEvent<config, conn>>
+                                                                        OnDBIDAllocation;
+            Gravity::EventBus<JointXactionDBIDFreeEvent<config, conn>>  OnDBIDFree;
             Gravity::EventBus<JointXactionCompleteEvent<config, conn>>  OnComplete;
 
         public:
             Joint() noexcept;
 
         public:
+            virtual void            Clear() noexcept = 0;
+
+        public:
             virtual XactDenialEnum  NextTXREQ(uint64_t time, const Topology& topo, const Flits::REQ<config, conn>& reqFlit) noexcept = 0;
-            virtual XactDenialEnum  NextRXSNP(uint64_t time, const Topology& topo, const Flits::SNP<config, conn>& snpFlit) noexcept = 0;
+            virtual XactDenialEnum  NextRXSNP(uint64_t time, const Topology& topo, const Flits::SNP<config, conn>& snpFlit,
+                                                                                   const Flits::REQ<config, conn>::srcid_t snpTgtId) noexcept = 0;
             virtual XactDenialEnum  NextTXRSP(uint64_t time, const Topology& topo, const Flits::RSP<config, conn>& rspFlit) noexcept = 0;
             virtual XactDenialEnum  NextRXRSP(uint64_t time, const Topology& topo, const Flits::RSP<config, conn>& rspFlit) noexcept = 0;
             virtual XactDenialEnum  NextTXDAT(uint64_t time, const Topology& topo, const Flits::DAT<config, conn>& datFlit) noexcept = 0;
@@ -121,6 +187,7 @@ namespace CHI {
                 struct {
                     Flits::RSP<config, conn>::dbid_t    db;     // same for DAT
                     Flits::RSP<config, conn>::srcid_t   src;    // same for DAT
+                    Flits::RSP<config, conn>::tgtid_t   tgt;    // same for DAT
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -130,6 +197,7 @@ namespace CHI {
                 struct {
                     Flits::SNP<config, conn>::txnid_t   txn;
                     Flits::SNP<config, conn>::srcid_t   src;
+                    Flits::REQ<config, conn>::srcid_t   tgt;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -138,6 +206,14 @@ namespace CHI {
             using pcrd_t = union __pcrd_t {
                 struct {
                     Flits::RSP<config, conn>::tgtid_t   tgt;
+                    Flits::RSP<config, conn>::srcid_t   src;
+                }           id;
+                uint64_t    value;
+                inline operator uint64_t() const noexcept { return value; }
+            };
+
+            using rnsrc_t = union __rnsrc_t {
+                struct {
                     Flits::RSP<config, conn>::srcid_t   src;
                 }           id;
                 uint64_t    value;
@@ -156,7 +232,8 @@ namespace CHI {
 
             std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        txDBIDTransactions;
 
-            std::list<std::shared_ptr<Xaction<config, conn>>>                           txRetriedTransactions;
+            std::unordered_map<uint64_t, std::list<std::shared_ptr<Xaction<config, conn>>>>
+                                                                                        txRetriedTransactions;
 
             std::unordered_map<uint64_t, std::list<FiredResponseFlit<config, conn>>>    grantedPCredits[1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH];
 
@@ -166,6 +243,8 @@ namespace CHI {
         protected:
             static std::shared_ptr<Xaction<config, conn>>   ConstructNone(const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructAllocatingRead(const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructNonAllocatingRead(const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructImmediateWrite(const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructCopyBackWrite(const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructDataless(const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructHomeSnoop(const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
@@ -175,8 +254,12 @@ namespace CHI {
             RNFJoint() noexcept;
 
         public:
+            virtual void            Clear() noexcept override;
+
+        public:
             virtual XactDenialEnum  NextTXREQ(uint64_t time, const Topology& topo, const Flits::REQ<config, conn>& reqFlit) noexcept override;
-            virtual XactDenialEnum  NextRXSNP(uint64_t time, const Topology& topo, const Flits::SNP<config, conn>& snpFlit) noexcept override;
+            virtual XactDenialEnum  NextRXSNP(uint64_t time, const Topology& topo, const Flits::SNP<config, conn>& snpFlit,
+                                                                                   const Flits::REQ<config, conn>::srcid_t snpTgtId) noexcept override;
             virtual XactDenialEnum  NextTXRSP(uint64_t time, const Topology& topo, const Flits::RSP<config, conn>& rspFlit) noexcept override;
             virtual XactDenialEnum  NextRXRSP(uint64_t time, const Topology& topo, const Flits::RSP<config, conn>& rspFlit) noexcept override;
             virtual XactDenialEnum  NextTXDAT(uint64_t time, const Topology& topo, const Flits::DAT<config, conn>& datFlit) noexcept override;
@@ -245,6 +328,24 @@ namespace /*CHI::*/Xact {
     ) noexcept
         : JointXactionEventBase<config, conn>   (joint, xaction)
     { }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline JointXactionAcceptedEvent<config, conn>::JointXactionAcceptedEvent(
+        Joint<config, conn>&                    joint,
+        std::shared_ptr<Xaction<config, conn>>  xaction,
+        Flits::REQ<config, conn>::srcid_t       snpTgtId
+    ) noexcept
+        : JointXactionEventBase<config, conn>   (joint, xaction)
+        , snoopTargetID                         (snpTgtId)
+    { }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline Flits::REQ<config, conn>::srcid_t JointXactionAcceptedEvent<config, conn>::GetSnoopTargetID() const noexcept
+    {
+        return snoopTargetID;
+    }
 }
 
 // Implementation of: class JointXactionRetryEvent
@@ -260,12 +361,83 @@ namespace /*CHI::*/Xact {
     { }
 }
 
-// Implementation of: class JointXactionDeniedEvent
+// Implementation of: class JointXactionCompleteEvent
 namespace /*CHI::*/Xact {
     
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline JointXactionCompleteEvent<config, conn>::JointXactionCompleteEvent(
+        Joint<config, conn>&                    joint,
+        std::shared_ptr<Xaction<config, conn>>  xaction
+    ) noexcept
+        : JointXactionEventBase<config, conn>   (joint, xaction)
+        , snoopTargetID                         (0)
+    { }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline JointXactionCompleteEvent<config, conn>::JointXactionCompleteEvent(
+        Joint<config, conn>&                    joint,
+        std::shared_ptr<Xaction<config, conn>>  xaction,
+        Flits::REQ<config, conn>::srcid_t       snpTgtId
+    ) noexcept
+        : JointXactionEventBase<config, conn>   (joint, xaction)
+        , snoopTargetID                         (snpTgtId)
+    { }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline Flits::REQ<config, conn>::srcid_t JointXactionCompleteEvent<config, conn>::GetSnoopTargetID() const noexcept
+    {
+        return snoopTargetID;
+    }
+}
+
+// Implementation of: class JointXactionTxnIDAllocationEvent
+namespace /*CHI::*/Xact {
+    
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline JointXactionTxnIDAllocationEvent<config, conn>::JointXactionTxnIDAllocationEvent(
+        Joint<config, conn>&                    joint,
+        std::shared_ptr<Xaction<config, conn>>  xaction
+    ) noexcept
+        : JointXactionEventBase<config, conn>   (joint, xaction)
+    { }
+}
+
+// Implementation of: class JointXactionTxnIDFreeEvent
+namespace /*CHI::*/Xact {
+    
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline JointXactionTxnIDFreeEvent<config, conn>::JointXactionTxnIDFreeEvent(
+        Joint<config, conn>&                    joint,
+        std::shared_ptr<Xaction<config, conn>>  xaction
+    ) noexcept
+        : JointXactionEventBase<config, conn>   (joint, xaction)
+    { }
+}
+
+// Implementation of: class JointXactionDBIDAllocationEvent
+namespace /*CHI::*/Xact {
+    
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline JointXactionDBIDAllocationEvent<config, conn>::JointXactionDBIDAllocationEvent(
+        Joint<config, conn>&                    joint,
+        std::shared_ptr<Xaction<config, conn>>  xaction
+    ) noexcept
+        : JointXactionEventBase<config, conn>   (joint, xaction)
+    { }
+}
+
+// Implementation of: class JointXactionDBIDFreeEvent
+namespace /*CHI::*/Xact {
+    
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline JointXactionDBIDFreeEvent<config, conn>::JointXactionDBIDFreeEvent(
         Joint<config, conn>&                    joint,
         std::shared_ptr<Xaction<config, conn>>  xaction
     ) noexcept
@@ -280,9 +452,13 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline Joint<config, conn>::Joint() noexcept
-        : OnAccepted    (0)
-        , OnRetry       (0)
-        , OnComplete    (0)
+        : OnAccepted            (0)
+        , OnRetry               (0)
+        , OnTxnIDAllocation     (0)
+        , OnTxnIDFree           (0)
+        , OnDBIDAllocation      (0)
+        , OnDBIDFree            (0)
+        , OnComplete            (0)
     { }
 }
 
@@ -311,6 +487,26 @@ namespace /*CHI::*/Xact {
         std::shared_ptr<Xaction<config, conn>>  retried) noexcept
     {
         return std::make_shared<XactionAllocatingRead<config, conn>>(topo, reqFlit, retried);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructNonAllocatingRead(
+        const Topology&                         topo, 
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionNonAllocatingRead<config, conn>>(topo, reqFlit, retried);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructImmediateWrite(
+        const Topology&                         topo, 
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionImmediateWrite<config, conn>>(topo, reqFlit, retried);
     }
 
     template<FlitConfigurationConcept       config,
@@ -364,8 +560,8 @@ namespace /*CHI::*/Xact {
         SET_REQ_XACTION(ReqLCrdReturn               , None              );  // 0x00
         SET_REQ_XACTION(ReadShared                  , AllocatingRead    );  // 0x01
         SET_REQ_XACTION(ReadClean                   , AllocatingRead    );  // 0x02
-        SET_REQ_XACTION(ReadOnce                    , None              );  // 0x03
-        SET_REQ_XACTION(ReadNoSnp                   , None              );  // 0x04
+        SET_REQ_XACTION(ReadOnce                    , NonAllocatingRead );  // 0x03
+        SET_REQ_XACTION(ReadNoSnp                   , NonAllocatingRead );  // 0x04
         SET_REQ_XACTION(PCrdReturn                  , None              );  // 0x05
                                                                             // 0x06
         SET_REQ_XACTION(ReadUnique                  , AllocatingRead    );  // 0x07
@@ -385,20 +581,20 @@ namespace /*CHI::*/Xact {
         SET_REQ_XACTION(WriteEvictFull              , CopyBackWrite     );  // 0x15
                                                                             // 0x16
         SET_REQ_XACTION(WriteCleanFull              , CopyBackWrite     );  // 0x17
-        SET_REQ_XACTION(WriteUniquePtl              , None              );  // 0x18
-        SET_REQ_XACTION(WriteUniqueFull             , None              );  // 0x19
+        SET_REQ_XACTION(WriteUniquePtl              , ImmediateWrite    );  // 0x18
+        SET_REQ_XACTION(WriteUniqueFull             , ImmediateWrite    );  // 0x19
         SET_REQ_XACTION(WriteBackPtl                , CopyBackWrite     );  // 0x1A
         SET_REQ_XACTION(WriteBackFull               , CopyBackWrite     );  // 0x1B
-        SET_REQ_XACTION(WriteNoSnpPtl               , None              );  // 0x1C
-        SET_REQ_XACTION(WriteNoSnpFull              , None              );  // 0x1D
+        SET_REQ_XACTION(WriteNoSnpPtl               , ImmediateWrite    );  // 0x1C
+        SET_REQ_XACTION(WriteNoSnpFull              , ImmediateWrite    );  // 0x1D
                                                                             // 0x1E
                                                                             // 0x1F
-        SET_REQ_XACTION(WriteUniqueFullStash        , None              );  // 0x20
-        SET_REQ_XACTION(WriteUniquePtlStash         , None              );  // 0x21
+        SET_REQ_XACTION(WriteUniqueFullStash        , ImmediateWrite    );  // 0x20
+        SET_REQ_XACTION(WriteUniquePtlStash         , ImmediateWrite    );  // 0x21
         SET_REQ_XACTION(StashOnceShared             , None              );  // 0x22
         SET_REQ_XACTION(StashOnceUnique             , None              );  // 0x23
-        SET_REQ_XACTION(ReadOnceCleanInvalid        , None              );  // 0x24
-        SET_REQ_XACTION(ReadOnceMakeInvalid         , None              );  // 0x25
+        SET_REQ_XACTION(ReadOnceCleanInvalid        , NonAllocatingRead );  // 0x24
+        SET_REQ_XACTION(ReadOnceMakeInvalid         , NonAllocatingRead );  // 0x25
         SET_REQ_XACTION(ReadNotSharedDirty          , AllocatingRead    );  // 0x26
         SET_REQ_XACTION(CleanSharedPersist          , Dataless          );  // 0x27
         SET_REQ_XACTION(AtomicStore::ADD            , None              );  // 0x28
@@ -534,6 +730,21 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline void RNFJoint<config, conn>::Clear() noexcept
+    {
+        txTransactions.clear();
+        rxTransactions.clear();
+
+        txDBIDTransactions.clear();
+
+        txRetriedTransactions.clear();
+
+        for (int i = 0; i < (1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH); i++)
+            grantedPCredits[i].clear();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNFJoint<config, conn>::NextTXREQ(
         uint64_t                        time,
         const Topology&                 topo,
@@ -548,8 +759,6 @@ namespace /*CHI::*/Xact {
 
         //
         FiredRequestFlit<config, conn> firedReqFlit(XactScope::Requester, true, time, reqFlit);
-
-        std::shared_ptr<Xaction<config, conn>> xaction;
 
         const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, GetXaction>& opcodeInfo = 
             reqDecoder.DecodeRNF(reqFlit.Opcode());
@@ -566,16 +775,26 @@ namespace /*CHI::*/Xact {
             // iterate and compare retry transactions
             // TODO: simplified retry mapping by TxnID, temporary workaround for KunminghuV2
             //       specification retry mapping implementation here
-            auto xactionIter = txRetriedTransactions.begin();
+            rnsrc_t rnKey;
+            rnKey.value     = 0;
+            rnKey.id.src    = reqFlit.SrcID();
 
-            for (; xactionIter != txRetriedTransactions.end(); xactionIter++)
+            auto xactionList = txRetriedTransactions.find(rnKey);
+            if (xactionList == txRetriedTransactions.end())
+                return XactDenial::DENIED_NO_MATCHING_RETRY;
+
+            auto xactionIter = xactionList->second.begin();
+
+            for (; xactionIter != xactionList->second.end(); xactionIter++)
                 if (reqFlit.TxnID() == xactionIter->get()->GetFirst().flit.req.TxnID())
                     break;
 
-            if (xactionIter == txRetriedTransactions.end())
+            if (xactionIter == xactionList->second.end())
                 return XactDenial::DENIED_NO_MATCHING_RETRY;
 
             std::shared_ptr<Xaction<config, conn>> firstXaction = *xactionIter;
+
+            xactionList->second.erase(xactionIter);
 
             std::shared_ptr<Xaction<config, conn>> retryXaction =
                 opcodeInfo.GetCompanion()(topo, firedReqFlit, firstXaction);
@@ -586,10 +805,12 @@ namespace /*CHI::*/Xact {
             if (retryXaction->GetFirstDenial() != XactDenial::ACCEPTED)
                 return retryXaction->GetFirstDenial();
 
+            assert(firstXaction->GetRetryAck() && "transaction not getting RetryAck but lies in retried list");
+
             // check granted P-Credit
             pcrd_t pCrdKey;
             pCrdKey.value   = 0;
-            pCrdKey.id.src  = reqFlit.TgtID();
+            pCrdKey.id.src  = firstXaction->GetRetryAck()->flit.rsp.SrcID();
             pCrdKey.id.tgt  = reqFlit.SrcID();
 
             std::unordered_map<uint64_t, std::list<FiredResponseFlit<config, conn>>>& grantedPCredits
@@ -621,17 +842,21 @@ namespace /*CHI::*/Xact {
             // event on retry xaction
             this->OnRetry(JointXactionRetryEvent<config, conn>(*this, retryXaction));
 
+            // event on TxnID allocation
+            this->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config, conn>(*this, retryXaction));
+
             // consume P-Credit
             pCreditList.pop_front();
 
             // register retried xaction
             txTransactions[key] = retryXaction;
-            xaction = retryXaction;
         }
         else
         {
             if (txTransactions.contains(key))
                 return XactDenial::DENIED_TXNID_IN_USE;
+
+            std::shared_ptr<Xaction<config, conn>> xaction;
 
             xaction = opcodeInfo.GetCompanion()(topo, firedReqFlit, nullptr);
 
@@ -644,6 +869,9 @@ namespace /*CHI::*/Xact {
             // event on Request xaction accepted
             this->OnAccepted(JointXactionAcceptedEvent<config, conn>(*this, xaction));
 
+            // event on TxnID allocation
+            this->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config, conn>(*this, xaction));
+
             txTransactions[key] = xaction;
         }
 
@@ -653,12 +881,14 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNFJoint<config, conn>::NextRXSNP(
-        uint64_t                        time,
-        const Topology&                 topo,
-        const Flits::SNP<config, conn>& snpFlit) noexcept
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::SNP<config, conn>&         snpFlit,
+        const Flits::REQ<config, conn>::srcid_t snpTgtId) noexcept
     {
         rxsnpid_t key;
         key.value   = 0;
+        key.id.tgt  = snpTgtId;
         key.id.src  = snpFlit.SrcID();
         key.id.txn  = snpFlit.TxnID();
 
@@ -677,7 +907,7 @@ namespace /*CHI::*/Xact {
         
         std::shared_ptr<Xaction<config, conn>> xaction =
             opcodeInfo.GetCompanion()(topo, firedSnpFlit, nullptr);
-        
+
         if (!xaction) // unsupported opcode transaction
             return XactDenial::DENIED_OPCODE;
         
@@ -685,7 +915,7 @@ namespace /*CHI::*/Xact {
             return xaction->GetFirstDenial();
 
         // event on Request xaction accepted
-        this->OnAccepted(JointXactionAcceptedEvent<config, conn>(*this, xaction));
+        this->OnAccepted(JointXactionAcceptedEvent<config, conn>(*this, xaction, snpTgtId));
 
         rxTransactions[key] = xaction;
 
@@ -709,6 +939,7 @@ namespace /*CHI::*/Xact {
         {
             txreqdbid_t key;
             key.value   = 0;
+            key.id.tgt  = rspFlit.SrcID();
             key.id.src  = rspFlit.TgtID();
             key.id.db   = rspFlit.TxnID();
 
@@ -730,6 +961,7 @@ namespace /*CHI::*/Xact {
         {
             rxsnpid_t key;
             key.value   = 0;
+            key.id.tgt  = rspFlit.SrcID();
             key.id.src  = rspFlit.TgtID();
             key.id.txn  = rspFlit.TxnID();
 
@@ -749,48 +981,57 @@ namespace /*CHI::*/Xact {
         else
             return XactDenial::DENIED_OPCODE;
 
-        // on completion
-        if (xaction->IsComplete(topo))
+        if (xaction->GetFirst().IsREQ())
         {
-            // event on completion
-            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
-
-            if (xaction->GetFirst().IsREQ())
+            // on DBID free
+            if (xaction->IsDBIDComplete(topo))
             {
-                // remove related TxnID mapping
-                txreqid_t key;
-                key.value   = 0;
-                key.id.src  = xaction->GetFirst().flit.req.SrcID();
-                key.id.txn  = xaction->GetFirst().flit.req.TxnID();
-
-                txTransactions.erase(key);
-
                 // remove related DBID mapping
                 const FiredResponseFlit<config, conn>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
                 {
+                    // event on DBID free
+                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+
                     txreqdbid_t keyDBID;
                     keyDBID.value   = 0;
                     if (xactionDBIDSource->IsRSP())
                     {
                         keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
                         keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
                     }
                     else
                     {
                         keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
-                        keyDBID.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                        keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
                     }
 
                     txDBIDTransactions.erase(keyDBID);
                 }
             }
-            else
+
+            // on completion
+            if (xaction->IsComplete(topo))
             {
+                // event on completion
+                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+            }
+        }
+        else // SNP
+        {
+            // on completion
+            if (xaction->IsComplete(topo))
+            {
+                // event on completion
+                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction, rspFlit.SrcID()));
+
                 rxsnpid_t key;
                 key.value   = 0;
+                key.id.tgt  = rspFlit.SrcID();
                 key.id.src  = xaction->GetFirst().flit.snp.SrcID();
                 key.id.txn  = xaction->GetFirst().flit.snp.TxnID();
 
@@ -857,6 +1098,7 @@ namespace /*CHI::*/Xact {
         {
             txreqdbid_t keyDBID;
             keyDBID.value   = 0;
+            keyDBID.id.tgt  = rspFlit.TgtID();
             keyDBID.id.src  = rspFlit.SrcID();
             keyDBID.id.db   = rspFlit.DBID();
 
@@ -869,25 +1111,25 @@ namespace /*CHI::*/Xact {
                 }
 
                 txDBIDTransactions[keyDBID] = xaction;
+
+                // event on DBID allocation
+                this->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config, conn>(*this, xaction));
             }
             else
             {
-                if (!txDBIDTransactions.contains(keyDBID))
-                {
-                    xaction->SetLastDenial(XactDenial::DENIED_DBID_NOT_EXIST);
-                    return XactDenial::DENIED_DBID_NOT_EXIST;
-                }
+                // nothing needed to be done here
+                // the consistency of DBID should be checked inside Xaction
             }
         }
 
-        // on completion or retry
-        if (xaction->IsComplete(topo))
+        if (xaction->GetFirst().IsREQ())
         {
-            // event on completion
-            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
-
-            if (xaction->GetFirst().IsREQ())
+            // on TxnID free
+            if (xaction->IsTxnIDComplete(topo))
             {
+                // event on TxnID free
+                this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config, conn>(*this, xaction));
+
                 // remove related TxnID mapping
                 txreqid_t key;
                 key.value   = 0;
@@ -895,41 +1137,68 @@ namespace /*CHI::*/Xact {
                 key.id.txn  = xaction->GetFirst().flit.req.TxnID();
 
                 txTransactions.erase(key);
+            }
 
-                if (!xaction->GotRetryAck())
+            // on DBID free
+            if (xaction->IsDBIDComplete(topo))
+            {
+                // remove related DBID mapping
+                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                    xaction->GetDBIDSource();
+
+                if (xactionDBIDSource)
                 {
-                    // remove related DBID mapping
-                    const FiredResponseFlit<config, conn>* xactionDBIDSource =
-                        xaction->GetDBIDSource();
+                    // event on DBID free
+                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
 
-                    if (xactionDBIDSource)
+                    txreqdbid_t keyDBID;
+                    keyDBID.value   = 0;
+                    if (xactionDBIDSource->IsRSP())
                     {
-                        txreqdbid_t keyDBID;
-                        keyDBID.value   = 0;
-                        if (xactionDBIDSource->IsRSP())
-                        {
-                            keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                            keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                        }
-                        else
-                        {
-                            keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
-                            keyDBID.id.src  = xactionDBIDSource->flit.dat.SrcID();
-                        }
-
-                        txDBIDTransactions.erase(keyDBID);
+                        keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                        keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
                     }
-                }
-                else
-                {
-                    // only on RXRSP, transactions might be completed by retry
-                    txRetriedTransactions.push_back(xaction);
+                    else
+                    {
+                        keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
+                        keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                        keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                    }
+
+                    txDBIDTransactions.erase(keyDBID);
                 }
             }
-            else
+
+            // on completion
+            if (xaction->IsComplete(topo))
             {
+                // event on completion
+                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+
+                if (xaction->GotRetryAck())
+                {
+                    // only on RXRSP, transactions might be completed by retry
+
+                    // record as retried
+                    rnsrc_t rnKey;
+                    rnKey.value     = 0;
+                    rnKey.id.src    = rspFlit.TgtID();
+
+                    txRetriedTransactions[rnKey].push_back(xaction);
+                }
+            }
+        }
+        else // SNP
+        {
+            if (xaction->IsComplete(topo))
+            {
+                // event on completion
+                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction, rspFlit.TgtID()));
+
                 rxsnpid_t key;
                 key.value   = 0;
+                key.id.tgt  = rspFlit.TgtID();
                 key.id.src  = xaction->GetFirst().flit.snp.SrcID();
                 key.id.txn  = xaction->GetFirst().flit.snp.TxnID();
 
@@ -956,6 +1225,7 @@ namespace /*CHI::*/Xact {
         {
             rxsnpid_t key;
             key.value   = 0;
+            key.id.tgt  = datFlit.SrcID();
             key.id.src  = datFlit.HomeNID();
             key.id.txn  = datFlit.DBID();
 
@@ -972,10 +1242,34 @@ namespace /*CHI::*/Xact {
             if (denial != XactDenial::ACCEPTED)
                 return denial;
         }
+        else if (firedDatFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespData
+              || firedDatFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl
+              || firedDatFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
+        {
+            rxsnpid_t key;
+            key.value   = 0;
+            key.id.tgt  = datFlit.SrcID();
+            key.id.src  = datFlit.TgtID();
+            key.id.txn  = datFlit.TxnID();
+
+            auto xactionIter = rxTransactions.find(key);
+            if (xactionIter == rxTransactions.end())
+                return XactDenial::DENIED_TXNID_NOT_EXIST;
+
+            xaction = xactionIter->second;
+
+            bool hasDBID, firstDBID;
+
+            XactDenialEnum denial = xaction->NextDAT(topo, firedDatFlit, hasDBID, firstDBID);
+
+            if (denial != XactDenial::ACCEPTED)
+                return denial;
+        }
         else
         {
             txreqdbid_t key;
             key.value   = 0;
+            key.id.tgt  = datFlit.SrcID();
             key.id.src  = datFlit.TgtID();
             key.id.db   = datFlit.TxnID();
 
@@ -993,48 +1287,55 @@ namespace /*CHI::*/Xact {
                 return denial;
         }
 
-        // on completion
-        if (xaction->IsComplete(topo))
+        if (xaction->GetFirst().IsREQ())
         {
-            // event on completion
-            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
-
-            if (xaction->GetFirst().IsREQ())
+            // on DBID free
+            if (xaction->IsDBIDComplete(topo))
             {
-                // remove related TxnID mapping
-                txreqid_t key;
-                key.value   = 0;
-                key.id.src  = xaction->GetFirst().flit.req.SrcID();
-                key.id.txn  = xaction->GetFirst().flit.req.TxnID();
-
-                txTransactions.erase(key);
-
                 // remove related DBID mapping
                 const FiredResponseFlit<config, conn>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
                 {
+                    // event on DBID free
+                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+
                     txreqdbid_t keyDBID;
                     keyDBID.value   = 0;
                     if (xactionDBIDSource->IsRSP())
                     {
                         keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
                         keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
                     }
                     else
                     {
                         keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
-                        keyDBID.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                        keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
                     }
 
                     txDBIDTransactions.erase(keyDBID);
                 }
             }
-            else
+
+            if (xaction->IsComplete(topo))
             {
+                // event on completion
+                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+            }
+        }
+        else // SNP
+        {
+            if (xaction->IsComplete(topo))
+            {
+                // event on completion
+                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction, datFlit.SrcID()));
+                    
                 rxsnpid_t key;
                 key.value   = 0;
+                key.id.tgt  = datFlit.SrcID();
                 key.id.src  = xaction->GetFirst().flit.snp.SrcID();
                 key.id.txn  = xaction->GetFirst().flit.snp.TxnID();
 
@@ -1079,7 +1380,8 @@ namespace /*CHI::*/Xact {
         {
             txreqdbid_t keyDBID;
             keyDBID.value   = 0;
-            keyDBID.id.src  = datFlit.SrcID();
+            keyDBID.id.tgt  = datFlit.TgtID();
+            keyDBID.id.src  = datFlit.HomeNID();
             keyDBID.id.db   = datFlit.DBID();
 
             if (firstDBID)
@@ -1091,59 +1393,86 @@ namespace /*CHI::*/Xact {
                 }
 
                 txDBIDTransactions[keyDBID] = xaction;
+
+                // on DBID allocation
+                this->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config, conn>(*this, xaction));
             }
             else
             {
-                if (!txDBIDTransactions.contains(keyDBID))
-                {
-                    xaction->SetLastDenial(XactDenial::DENIED_DBID_NOT_EXIST);
-                    return XactDenial::DENIED_DBID_NOT_EXIST;
-                }
+                // nothing needed to be done here
+                // the consistency of DBID should be checked inside Xaction
             }
         }
 
-        // on completion
-        if (xaction->IsComplete(topo))
+        if (xaction->GetFirst().IsREQ())
         {
-            // event on completion
-            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
-
-            if (xaction->GetFirst().IsREQ())
+            // on TxnID free
+            if (xaction->IsTxnIDComplete(topo))
             {
-                // remove related TxnID mapping
-                txreqid_t key;
-                key.value   = 0;
-                key.id.src  = xaction->GetFirst().flit.req.SrcID();
-                key.id.txn  = xaction->GetFirst().flit.req.TxnID();
+                // event on TxnID free
+                this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config, conn>(*this, xaction));
 
-                txTransactions.erase(key);
+                if (xaction->GetFirst().IsREQ())
+                {
+                    // remove related TxnID mapping
+                    txreqid_t key;
+                    key.value   = 0;
+                    key.id.src  = xaction->GetFirst().flit.req.SrcID();
+                    key.id.txn  = xaction->GetFirst().flit.req.TxnID();
 
+                    txTransactions.erase(key);
+                }
+            }
+
+            // on DBID free
+            if (xaction->IsDBIDComplete(topo))
+            {
                 // remove related DBID mapping
                 const FiredResponseFlit<config, conn>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
                 {
+                    // event on DBID free
+                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+
                     txreqdbid_t keyDBID;
                     keyDBID.value   = 0;
                     if (xactionDBIDSource->IsRSP())
                     {
                         keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
                         keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
                     }
                     else
                     {
                         keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
-                        keyDBID.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                        keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
                     }
 
                     txDBIDTransactions.erase(keyDBID);
                 }
             }
-            else
+
+            // on completion
+            if (xaction->IsComplete(topo))
             {
+                // event on completion
+                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+            }
+        }
+        else // SNP
+        {
+            // on completion
+            if (xaction->IsComplete(topo))
+            {
+                // event on completion
+                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction, datFlit.TgtID()));
+            
                 rxsnpid_t key;
                 key.value   = 0;
+                key.id.tgt  = datFlit.TgtID();
                 key.id.src  = xaction->GetFirst().flit.snp.SrcID();
                 key.id.txn  = xaction->GetFirst().flit.snp.TxnID();
 
