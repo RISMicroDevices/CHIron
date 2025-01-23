@@ -28,6 +28,8 @@ namespace CHI {
 
         enum class XactionType {
             AllocatingRead  = 0,
+            NonAllocationRead,
+            ImmediateWrite,
             CopyBackWrite,
             Dataless,
             HomeSnoop,
@@ -138,6 +140,8 @@ namespace CHI {
             virtual XactDenialEnum                  Resend(FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
             virtual bool                            RevertResent() noexcept;
 
+            virtual bool                            IsTxnIDComplete(const Topology& topo) const noexcept = 0;
+            virtual bool                            IsDBIDComplete(const Topology& topo) const noexcept = 0;
             virtual bool                            IsComplete(const Topology& topo) const noexcept = 0;
 
         protected:
@@ -163,10 +167,11 @@ namespace CHI {
                                   std::shared_ptr<Xaction<config, conn>>    retried = nullptr) noexcept;
 
         public:
-            bool                            IsResponseComplete(const Topology& topo) const noexcept;
-            bool                            IsDataComplete(const Topology& topo) const noexcept;
             bool                            IsAckComplete(const Topology& topo) const noexcept;
-
+            bool                            IsResponseComplete(const Topology& topo) const noexcept;
+            
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
         protected:
@@ -174,9 +179,48 @@ namespace CHI {
             virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
 
-        // TODO: XactionNonAllocatingRead
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        class XactionNonAllocatingRead : public Xaction<config, conn> {
+        public:
+            XactionNonAllocatingRead(const Topology&                        topo,
+                                     const FiredRequestFlit<config, conn>&  first,
+                                     std::shared_ptr<Xaction<config, conn>> retried) noexcept;
+        
+        public:
+            bool                            IsAckComplete(const Topology& topo) const noexcept;
+            bool                            IsResponseComplete(const Topology& topo) const noexcept;
 
-        // TODO: XactionImmediateWrite
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+
+        public:
+            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+        };
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        class XactionImmediateWrite : public Xaction<config, conn> {
+        public:
+            XactionImmediateWrite(const Topology&                           topo,
+                                  const FiredRequestFlit<config, conn>&     first,
+                                  std::shared_ptr<Xaction<config, conn>>    retried) noexcept;
+
+            bool                            IsDataComplete(const Topology& topo) const noexcept;
+            bool                            IsResponseComplete(const Topology& topo) const noexcept;
+            bool                            IsAckComplete(const Topology& topo) const noexcept;
+            bool                            IsTagOpComplete(const Topology& topo) const noexcept;
+
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+
+        public:
+            virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+        };
 
         // TODO: XactionWriteZero
 
@@ -189,10 +233,12 @@ namespace CHI {
                                  std::shared_ptr<Xaction<config, conn>> retried) noexcept;
 
         public:
-            bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsDataComplete(const Topology& topo) const noexcept;
+            bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsAckComplete(const Topology& topo) const noexcept;
 
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
         public:
@@ -222,6 +268,8 @@ namespace CHI {
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsAckComplete(const Topology& topo) const noexcept;
 
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
         public:
@@ -255,6 +303,8 @@ namespace CHI {
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsDataComplete(const Topology& topo) const noexcept;
 
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
         public:
@@ -272,6 +322,8 @@ namespace CHI {
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsDataComplete(const Topology& topo) const noexcept;
 
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
             bool                            IsDCT() const noexcept;
@@ -840,14 +892,14 @@ namespace /*CHI::*/Xact {
             if (opcodes.size() == 0)
             {
                 if (iter->HasDBID())
-                    return subsequence[index];
+                    return &(subsequence[index]);
             }
             else
             {
                 for (auto opcode : opcodes)
                     if (iter->opcode.rsp == opcode)
                         if (iter->HasDBID())
-                            return subsequence[index];
+                            return &(subsequence[index]);
             }
         }
 
@@ -1003,6 +1055,9 @@ namespace /*CHI::*/Xact {
         if (!rspFlit.IsFromHomeToRequester(topo) && !rspFlit.IsFromSubordinateToHome(topo))
             return XactDenial::DENIED_COMMUNICATION;
 
+        if (!this->subsequence.empty())
+            return XactDenial::DENIED_RETRY_ON_ACTIVE_PROGRESS;
+
         if (!this->first.flit.req.AllowRetry())
             return XactDenial::DENIED_RETRY_NO_ALLOWRETRY;
 
@@ -1149,43 +1204,13 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline bool XactionAllocatingRead<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
     {
-        size_t index = 0;
-        for (auto iter = this->subsequence.begin(); iter != this->subsequence.end(); iter++, index++)
-        {
-            if (this->subsequenceKeys[index].IsDenied())
-                continue;
-
-            if (!iter->IsToRequester(topo))
-                continue;
-
-            if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData)
-                return true;
-
-#ifdef CHI_ISSUE_EB_ENABLE
-            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::RespSepData)
-                return true;
-#endif
-
-#ifdef CHI_ISSUE_EB_ENABLE
-            // MakeReadUnique only
-            if (this->first.flit.req.Opcode() == Opcodes::REQ::MakeReadUnique)
-                if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
-                    return true;
-#endif
-        }
-
-        return false;
-    }
-
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionAllocatingRead<config, conn>::IsDataComplete(const Topology& topo) const noexcept
-    {
         std::bitset<4> completeDataIDMask =
             details::GetDataIDCompleteMask<config, conn>(this->first.flit.req.Size());
 
         std::bitset<4> collectedDataID;
 
+        bool gotResp = false;
+
         size_t index = 0;
         for (auto iter = this->subsequence.begin(); iter != this->subsequence.end(); iter++, index++)
         {
@@ -1195,25 +1220,35 @@ namespace /*CHI::*/Xact {
             if (!iter->IsToRequester(topo))
                 continue;
 
-            if (iter->IsDAT() && 
+            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::RespSepData)
+            {
+                gotResp = true;
+            }
+            else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData)
+            {
+                collectedDataID |= details::CollectDataID<config, conn>(
+                    this->first.flit.req.Size(), iter->flit.dat.DataID());
+                
+                gotResp = true;
+            }
 #ifdef CHI_ISSUE_EB_ENABLE
-                (iter->flit.dat.Opcode() == Opcodes::DAT::DataSepResp || 
-#endif
-                 iter->flit.dat.Opcode() == Opcodes::DAT::CompData))
+            else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::DataSepResp)
             {
                 collectedDataID |= details::CollectDataID<config, conn>(
                     this->first.flit.req.Size(), iter->flit.dat.DataID());
             }
-
+#endif
 #ifdef CHI_ISSUE_EB_ENABLE
             // MakeReadUnique only
-            if (this->first.flit.req.Opcode() == Opcodes::REQ::MakeReadUnique)
+            else if (this->first.flit.req.Opcode() == Opcodes::REQ::MakeReadUnique)
+            {
                 if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
                     return true;
+            }
 #endif
         }
 
-        return (completeDataIDMask & ~collectedDataID).none();
+        return gotResp && (completeDataIDMask & ~collectedDataID).none();
     }
 
     template<FlitConfigurationConcept       config,
@@ -1238,9 +1273,23 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionAllocatingRead<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsResponseComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionAllocatingRead<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsAckComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionAllocatingRead<config, conn>::IsComplete(const Topology& topo) const noexcept
     {
-        return this->GotRetryAck() || IsResponseComplete(topo) && IsDataComplete(topo) && IsAckComplete(topo);
+        return this->GotRetryAck() || IsResponseComplete(topo) && IsAckComplete(topo);
     }
 
     template<FlitConfigurationConcept       config,
@@ -1308,9 +1357,9 @@ namespace /*CHI::*/Xact {
             else
                 firstDBID = true;
 
-            // TODO: pass through Flit Field Checkers here
-
             hasDBID = true;
+
+            // TODO: pass through Flit Field Checkers here
 
             return XactDenial::ACCEPTED;
         }
@@ -1402,6 +1451,726 @@ namespace /*CHI::*/Xact {
             
             //
             return XactDenial::ACCEPTED;
+        }
+
+        return XactDenial::DENIED_OPCODE;
+    }
+}
+
+
+// Implementation of: class XactionNonAllocatingRead
+namespace /*CHI::*/Xact {
+    
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactionNonAllocatingRead<config, conn>::XactionNonAllocatingRead(
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   firstFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+        : Xaction<config, conn>(XactionType::NonAllocationRead, firstFlit, retried)
+    {
+        // *NOTICE: AllowRetry should be checked by external scoreboards.
+
+        this->firstDenial = XactDenial::ACCEPTED;
+
+        if (!this->first.IsREQ())
+        {
+            this->firstDenial = XactDenial::DENIED_CHANNEL;
+            return;
+        }
+
+        if (
+            this->first.flit.req.Opcode() != Opcodes::REQ::ReadNoSnp
+         && this->first.flit.req.Opcode() != Opcodes::REQ::ReadOnce
+         && this->first.flit.req.Opcode() != Opcodes::REQ::ReadOnceCleanInvalid
+         && this->first.flit.req.Opcode() != Opcodes::REQ::ReadOnceMakeInvalid 
+        ) [[unlikely]]
+        {
+            this->firstDenial = XactDenial::DENIED_OPCODE;
+            return;
+        }
+
+        if (!this->first.IsFromRequesterToHome(topo))
+        {
+            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
+            return;
+        }
+        
+        // TODO: go through Flit Field Checkers here
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionNonAllocatingRead<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
+    {
+        std::bitset<4> completeDataIDMask =
+            details::GetDataIDCompleteMask<config, conn>(this->first.flit.req.Size());
+
+        std::bitset<4> collectedDataID;
+
+        bool gotResp = false;
+        bool gotReceipt = this->first.flit.req.Order() == 0;
+
+        size_t index = 0;
+        for (auto iter = this->subsequence.begin(); iter != this->subsequence.end(); iter++, index++)
+        {
+            if (this->subsequenceKeys[index].IsDenied())
+                continue;
+
+            if (!iter->IsToRequester(topo))
+                continue;
+
+            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::RespSepData)
+            {
+                gotResp = true;
+            }
+            else if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::ReadReceipt)
+            {
+                gotReceipt = true;
+            }
+            else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData)
+            {
+                gotResp = true;
+
+                collectedDataID |= details::CollectDataID<config, conn>(
+                    this->first.flit.req.Size(), iter->flit.dat.DataID());
+            }
+#ifdef CHI_ISSUE_EB_ENABLE
+            else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::DataSepResp)
+            {
+                collectedDataID |= details::CollectDataID<config, conn>(
+                    this->first.flit.req.Size(), iter->flit.dat.DataID());
+            }
+#endif
+        }
+
+        return gotResp && gotReceipt && (completeDataIDMask & ~collectedDataID).none();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionNonAllocatingRead<config, conn>::IsAckComplete(const Topology& topo) const noexcept
+    {
+        if (!this->first.flit.req.ExpCompAck())
+            return true;
+            
+        size_t index = this->subsequence.size() - 1;
+        for (auto iter = this->subsequence.rbegin(); iter != this->subsequence.rend(); iter++, index--)
+        {
+            if (this->subsequenceKeys[index].IsDenied())
+                continue;
+
+            if (!iter->IsRSP() || !iter->IsToHome(topo))
+                continue;
+
+            if (iter->flit.rsp.Opcode() == Opcodes::RSP::CompAck)
+                return true;
+        }
+
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionNonAllocatingRead<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsResponseComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionNonAllocatingRead<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsAckComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionNonAllocatingRead<config, conn>::IsComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsResponseComplete(topo) && IsAckComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum XactionNonAllocatingRead<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    {
+        if (this->IsComplete(topo))
+            return XactDenial::DENIED_COMPLETED;
+
+        if (!rspFlit.IsRSP())
+            return XactDenial::DENIED_CHANNEL;
+
+        if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RetryAck)
+            return this->NextRetryAckNoRecord(topo, rspFlit);
+        else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::ReadReceipt)
+        {
+            if (!rspFlit.IsFromHomeToRequester(topo))
+                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+
+            if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
+                return XactDenial::DENIED_TGTID_MISMATCH;
+
+            if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
+                return XactDenial::DENIED_TXNID_MISMATCH;
+
+            if (this->HasRSP({ Opcodes::RSP::ReadReceipt }))
+                return XactDenial::DENIED_DUPLICATED_READRECEIPT;
+
+            return XactDenial::ACCEPTED;
+        }
+#ifdef CHI_ISSUE_EB_ENABLE
+        else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RespSepData)
+        {
+            if (!rspFlit.IsFromHomeToRequester(topo))
+                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+
+            if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
+                return XactDenial::DENIED_TGTID_MISMATCH;
+
+            if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
+                return XactDenial::DENIED_TXNID_MISMATCH;
+
+            if (this->HasRSP({ Opcodes::RSP::RespSepData }))
+                return XactDenial::DENIED_RESPSEP_AFTER_RESPSEP;
+
+            if (this->HasDAT({ Opcodes::DAT::CompData }))
+                return XactDenial::DENIED_RESPSEP_AFTER_COMPDATA;
+
+            auto optDBID = this->GetDBID();
+            if (optDBID)
+            {
+                if (rspFlit.flit.rsp.DBID() != *optDBID)
+                    return XactDenial::DENIED_DBID_MISMATCH;
+            }
+            else
+                firstDBID = true;
+
+            hasDBID = true;
+
+            // TODO: pass through Flit Field Checkers here
+
+            return XactDenial::ACCEPTED;
+        }
+#endif
+
+        return XactDenial::DENIED_OPCODE;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum XactionNonAllocatingRead<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
+    {
+        if (this->IsComplete(topo))
+            return XactDenial::DENIED_COMPLETED;
+
+        if (!datFlit.IsDAT())
+            return XactDenial::DENIED_CHANNEL;
+
+        if (
+            datFlit.flit.dat.Opcode() == Opcodes::DAT::CompData
+#ifdef CHI_ISSUE_EB_ENABLE
+         || datFlit.flit.dat.Opcode() == Opcodes::DAT::DataSepResp
+#endif
+        )
+        {
+            if (!datFlit.IsToRequester(topo))
+                return XactDenial::DENIED_DAT_NOT_TO_RN;
+
+            if (datFlit.flit.dat.TgtID() != this->first.flit.req.SrcID())
+                return XactDenial::DENIED_TGTID_MISMATCH;
+
+            if (datFlit.flit.dat.TxnID() != this->first.flit.req.TxnID())
+                return XactDenial::DENIED_TXNID_MISMATCH;
+
+            if (datFlit.flit.dat.Opcode() == Opcodes::DAT::CompData)
+            {
+                if (this->HasDAT({ Opcodes::DAT::DataSepResp }))
+                    return XactDenial::DENIED_COMPDATA_AFTER_DATASEP;
+
+                if (this->HasRSP({ Opcodes::RSP::RespSepData }))
+                    return XactDenial::DENIED_COMPDATA_AFTER_RESPSEP;
+
+                if (this->HasRSP({ Opcodes::RSP::Comp }))
+                    return XactDenial::DENIED_COMPDATA_AFTER_COMP;
+
+                // TODO: pass through Flit Field Checkers here
+            }
+#ifdef CHI_ISSUE_EB_ENABLE
+            else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::DataSepResp)
+            {
+                if (this->HasDAT({ Opcodes::DAT::CompData }))
+                    return XactDenial::DENIED_DATASEP_AFTER_COMPDATA;
+
+                if (this->HasRSP({ Opcodes::RSP::Comp }))
+                    return XactDenial::DENIED_DATASEP_AFTER_COMP;
+
+                // TODO: pass through Flit Field Checkers here
+            }
+#endif
+
+            if (!this->NextREQDataID(datFlit))
+                return XactDenial::DENIED_DUPLICATED_DATAID;
+
+            auto optDBID = this->GetDBID();
+            if (optDBID)
+            {
+                if (datFlit.flit.dat.DBID() != *optDBID)
+                    return XactDenial::DENIED_DBID_MISMATCH;
+            }
+            else
+                firstDBID = true;
+
+            hasDBID = true;
+
+            return XactDenial::ACCEPTED;
+        }
+
+        return XactDenial::DENIED_OPCODE;
+    }
+}
+
+
+// Implementation of: class XactionImmediateWrite
+namespace /*CHI::*/Xact {
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactionImmediateWrite<config, conn>::XactionImmediateWrite(
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   firstFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+        : Xaction<config, conn>(XactionType::ImmediateWrite, firstFlit, retried)
+    {
+        // *NOTICE: AllowRetry should be checked by external scoreboards.
+
+        this->firstDenial = XactDenial::ACCEPTED;
+
+        if (!this->first.IsREQ())
+        {
+            this->firstDenial = XactDenial::DENIED_CHANNEL;
+            return;
+        }
+
+        if (
+            this->first.flit.req.Opcode() != Opcodes::REQ::WriteNoSnpPtl
+         && this->first.flit.req.Opcode() != Opcodes::REQ::WriteNoSnpFull
+         && this->first.flit.req.Opcode() != Opcodes::REQ::WriteUniquePtl
+         && this->first.flit.req.Opcode() != Opcodes::REQ::WriteUniqueFull
+         && this->first.flit.req.Opcode() != Opcodes::REQ::WriteUniquePtlStash
+         && this->first.flit.req.Opcode() != Opcodes::REQ::WriteUniqueFullStash
+        ) [[unlikely]]
+        {
+            this->firstDenial = XactDenial::DENIED_OPCODE;
+            return;
+        }
+
+        if (!this->first.IsFromRequesterToHome(topo))
+        {
+            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
+            return;
+        }
+
+        // TODO: go through Flit Field Checkers here
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionImmediateWrite<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
+    {
+        bool gotDBID = false;
+        bool gotComp = false;
+
+        size_t index = 0;
+        for (auto iter = this->subsequence.begin(); iter != this->subsequence.end(); iter++, index++)
+        {
+            if (this->subsequenceKeys[index].IsDenied())
+                continue;
+
+            if (!iter->IsToRequester(topo) || !iter->IsRSP())
+                continue;
+
+            if (iter->flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
+            {
+                gotDBID = true;
+                gotComp = true;
+                break;
+            }
+            else if (
+                iter->flit.rsp.Opcode() == Opcodes::RSP::DBIDResp
+#ifdef CHI_ISSUE_EB_ENABLE
+             || iter->flit.rsp.Opcode() == Opcodes::RSP::DBIDRespOrd
+#endif
+            )
+            {
+                gotDBID = true;
+
+                if (gotComp)
+                    break;
+            }
+            else if (iter->flit.rsp.Opcode() == Opcodes::RSP::Comp)
+            {
+                gotComp = true;
+
+                if (gotDBID)
+                    break;
+            }
+        }
+
+        return gotDBID && gotComp;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionImmediateWrite<config, conn>::IsDataComplete(const Topology& topo) const noexcept
+    {
+        std::bitset<4> completeDataIDMask =
+            details::GetDataIDCompleteMask<config, conn>(this->first.flit.req.Size());
+        
+        std::bitset<4> collectedDataID;
+
+        size_t index = 0;
+        for (auto iter = this->subsequence.begin(); iter != this->subsequence.end(); iter++, index++)
+        {
+            if (this->subsequenceKeys[index].IsDenied())
+                continue;
+
+            if (!iter->IsFromRequester(topo) || !iter->IsDAT())
+                continue;
+
+            if (
+                iter->flit.dat.Opcode() == Opcodes::DAT::NonCopyBackWrData
+#ifdef CHI_ISSUE_EB_ENABLE
+             || iter->flit.dat.Opcode() == Opcodes::DAT::NCBWrDataCompAck
+#endif
+            )
+            {
+                collectedDataID |= details::CollectDataID<config, conn>(
+                    this->first.flit.req.Size(), iter->flit.dat.DataID());
+            }
+            else if (iter->flit.dat.Opcode() == Opcodes::DAT::WriteDataCancel)
+                return true;
+        }
+
+        return (completeDataIDMask & ~collectedDataID).none();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionImmediateWrite<config, conn>::IsAckComplete(const Topology& topo) const noexcept
+    {
+        if (!this->first.flit.req.ExpCompAck())
+            return true;
+
+        size_t index = this->subsequence.size() - 1;
+        for (auto iter = this->subsequence.rbegin(); iter != this->subsequence.rend(); iter++, index--)
+        {
+            if (this->subsequenceKeys[index].IsDenied())
+                continue;
+
+            if (!iter->IsToHome(topo))
+                continue;
+
+            if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::CompAck)
+                return true;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::NCBWrDataCompAck)
+                return true;
+#endif
+        }
+
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionImmediateWrite<config, conn>::IsTagOpComplete(const Topology& topo) const noexcept
+    {
+        if (this->first.flit.req.TagOp() != TagOp::MatchFetch)
+            return true;
+
+        size_t index = 0;
+        for (auto iter = this->subsequence.begin(); iter != this->subsequence.end(); iter++, index--)
+        {
+            if (this->subsequenceKeys[index].IsDenied())
+                continue;
+
+            if (!iter->IsToRequester(topo) || !iter->IsRSP())
+                continue;
+
+            if (iter->flit.rsp.Opcode() == Opcodes::RSP::TagMatch)
+                return true;
+        }
+
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionImmediateWrite<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsResponseComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionImmediateWrite<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsDataComplete(topo) && IsAckComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionImmediateWrite<config, conn>::IsComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsResponseComplete(topo) && IsDataComplete(topo) && IsAckComplete(topo) && IsTagOpComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum XactionImmediateWrite<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    {
+        if (this->IsComplete(topo))
+            return XactDenial::DENIED_COMPLETED;
+
+        if (!rspFlit.IsRSP())
+            return XactDenial::DENIED_CHANNEL;
+
+        if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RetryAck)
+            return this->NextRetryAckNoRecord(topo, rspFlit);
+        else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
+        {
+            if (!rspFlit.IsFromHomeToRequester(topo))
+                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+
+            if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
+                return XactDenial::DENIED_TGTID_MISMATCH;
+
+            if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
+                return XactDenial::DENIED_TXNID_MISMATCH;
+
+            if (this->HasRSP({ Opcodes::RSP::Comp }))
+                return XactDenial::DENIED_COMPDBIDRESP_AFTER_COMP;
+
+            if (this->HasRSP({ Opcodes::RSP::DBIDResp, Opcodes::RSP::DBIDRespOrd }))
+                return XactDenial::DENIED_COMPDBIDRESP_AFTER_DBIDRESP;
+
+            hasDBID = true;
+            firstDBID = true;
+
+            // TODO: pass through Flit Field Checkers here
+
+            return XactDenial::ACCEPTED;
+        }
+        else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
+        {
+            if (!rspFlit.IsFromHomeToRequester(topo))
+                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+
+            if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
+                return XactDenial::DENIED_TGTID_MISMATCH;
+
+            if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
+                return XactDenial::DENIED_TXNID_MISMATCH;
+
+            const FiredResponseFlit<config, conn>* optDBIDSource = this->GetDBIDSource();
+
+            if (optDBIDSource)
+            {
+                assert(optDBIDSource->IsRSP() &&
+                    "DBID never comes from DAT channel in Immediate Write transactions");
+
+                if (optDBIDSource->flit.rsp.Opcode() == Opcodes::RSP::Comp)
+                    return XactDenial::DENIED_COMP_AFTER_COMP;
+
+                if (optDBIDSource->flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
+                    return XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP;
+
+                if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
+                    return XactDenial::DENIED_DBID_MISMATCH;
+            }
+            else
+                firstDBID = true;
+
+            hasDBID = true;
+
+            // TODO: pass through Flit Field Checkers here
+
+            return XactDenial::ACCEPTED;
+        }
+        else if (
+            rspFlit.flit.rsp.Opcode() == Opcodes::RSP::DBIDResp
+#ifdef CHI_ISSUE_EB_ENABLE
+         || rspFlit.flit.rsp.Opcode() == Opcodes::RSP::DBIDRespOrd
+#endif
+        )
+        {
+            if (!rspFlit.IsToRequester(topo))
+                return XactDenial::DENIED_RSP_NOT_TO_RN;
+
+            if (rspFlit.IsFromSubordinate(topo))
+            {
+                if (this->first.flit.req.ExpCompAck())
+                    return XactDenial::DENIED_DWT_ON_EXPCOMPACK;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+                if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::DBIDRespOrd)
+                    return XactDenial::DENIED_DWT_WITH_DBIDRESPORD;
+#endif
+            }
+
+            if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
+                return XactDenial::DENIED_TGTID_MISMATCH;
+
+            if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
+                return XactDenial::DENIED_TXNID_MISMATCH;
+
+            const FiredResponseFlit<config, conn>* optDBIDSource = this->GetDBIDSource();
+
+            if (optDBIDSource)
+            {
+                assert(optDBIDSource->IsRSP() &&
+                    "DBID never comes from DAT channel in Immediate Write transactions");
+
+                if (
+                    optDBIDSource->flit.rsp.Opcode() == Opcodes::RSP::DBIDResp
+#ifdef CHI_ISSUE_EB_ENABLE
+                 || optDBIDSource->flit.rsp.Opcode() == Opcodes::RSP::DBIDRespOrd
+#endif
+                )
+                    return XactDenial::DENIED_DBIDRESP_AFTER_DBIDRESP;
+
+                if (optDBIDSource->flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
+                    return XactDenial::DENIED_DBIDRESP_AFTER_COMPDBIDRESP;
+                
+                if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
+                    return XactDenial::DENIED_DBID_MISMATCH;
+            }
+            else
+                firstDBID = true;
+
+            hasDBID = true;
+
+            // TODO: pass through Flit Field Checkers here
+
+            return XactDenial::ACCEPTED;
+        }
+        else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::TagMatch)
+        {
+            // TODO: MTE features currently not supported
+
+            return XactDenial::DENIED_UNSUPPORTED_FEATURE_OPCODE;
+        }
+        else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompAck)
+        {
+            if (!this->first.flit.req.ExpCompAck())
+                return XactDenial::DENIED_COMPACK_ON_NON_EXPCOMPACK;
+
+            if (!rspFlit.IsFromRequesterToHome(topo))
+                return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
+
+            const FiredResponseFlit<config, conn>* optDBIDSource = this->GetDBIDSource();
+
+            if (optDBIDSource)
+            {
+                assert(optDBIDSource->IsRSP() &&
+                    "DBID never comes from DAT channel in Immediate Write transactions");
+
+                if (rspFlit.flit.rsp.TgtID() != optDBIDSource->flit.rsp.SrcID())
+                    return XactDenial::DENIED_TGTID_MISMATCH;
+
+                if (rspFlit.flit.rsp.TxnID() != optDBIDSource->flit.rsp.DBID())
+                    return XactDenial::DENIED_TXNID_MISMATCH;
+            }
+            else
+                return XactDenial::DENIED_COMPACK_BEFORE_DBID;
+
+            // TODO: pass through Flit Field Checkers here
+
+            return XactDenial::ACCEPTED;
+        }
+
+        return XactDenial::DENIED_OPCODE;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum XactionImmediateWrite<config, conn>::NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
+    {
+        if (this->IsComplete(topo))
+            return XactDenial::DENIED_COMPLETED;
+
+        if (!datFlit.IsDAT())
+            return XactDenial::DENIED_CHANNEL;
+
+        if (
+            datFlit.flit.dat.Opcode() == Opcodes::DAT::NonCopyBackWrData
+#ifdef CHI_ISSUE_EB_ENABLE
+         || datFlit.flit.dat.Opcode() == Opcodes::DAT::NCBWrDataCompAck
+#endif
+         || datFlit.flit.dat.Opcode() == Opcodes::DAT::WriteDataCancel
+        )
+        {
+            const FiredResponseFlit<config, conn>* optDBIDSource 
+                = this->GetLastDBIDSourceRSP({ 
+                    Opcodes::RSP::DBIDResp, 
+                    Opcodes::RSP::DBIDRespOrd, 
+                    Opcodes::RSP::CompDBIDResp });
+
+            if (!optDBIDSource)
+                return XactDenial::DENIED_DATA_BEFORE_DBID;
+
+            if (datFlit.flit.dat.TgtID() != optDBIDSource->flit.rsp.SrcID())
+                return XactDenial::DENIED_TGTID_MISMATCH;
+
+            if (datFlit.flit.dat.TxnID() != optDBIDSource->flit.rsp.DBID())
+                return XactDenial::DENIED_TXNID_MISMATCH;
+
+            if (datFlit.flit.dat.Opcode() == Opcodes::DAT::NonCopyBackWrData)
+            {
+                if (this->HasDAT({ Opcodes::DAT::NCBWrDataCompAck }))
+                    return XactDenial::DENIED_NCBWRDATA_AFTER_NCBWRDATACOMPACK;
+
+                if (this->HasDAT({ Opcodes::DAT::WriteDataCancel }))
+                    return XactDenial::DENIED_NCBWRDATA_AFTER_WRITEDATACANCEL;
+
+                if (!this->NextREQDataID(datFlit))
+                    return XactDenial::DENIED_DUPLICATED_DATAID;
+
+                // TODO: pass through Flit Field Checkers here
+
+                return XactDenial::ACCEPTED;
+            }
+#ifdef CHI_ISSUE_EB_ENABLE
+            else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::NCBWrDataCompAck)
+            {
+                if (this->HasDAT({ Opcodes::DAT::NonCopyBackWrData }))
+                    return XactDenial::DENIED_NCBWRDATACOMPACK_AFTER_NCBWRDATA;
+
+                if (this->HasDAT({ Opcodes::DAT::WriteDataCancel }))
+                    return XactDenial::DENIED_NCBWRDATACOMPACK_AFTER_WRITEDATACANCEL;
+
+                if (!this->NextREQDataID(datFlit))
+                    return XactDenial::DENIED_DUPLICATED_DATAID;
+
+                // TODO: pass through Flit Field Checkers here
+
+                return XactDenial::ACCEPTED;
+            }
+#endif
+            else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::WriteDataCancel)
+            {
+                if (this->HasDAT({ Opcodes::DAT::NonCopyBackWrData }))
+                    return XactDenial::DENIED_WRITEDATACANCEL_AFTER_NCBWRDATA;
+
+                if (this->HasDAT({ Opcodes::DAT::NCBWrDataCompAck }))
+                    return XactDenial::DENIED_WRITEDATACANCEL_AFTER_NCBWRDATACOMPACK;
+
+                // TODO: pass through Flit Field Checkers here
+
+                return XactDenial::ACCEPTED;
+            }
         }
 
         return XactDenial::DENIED_OPCODE;
@@ -1550,6 +2319,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionCopyBackWrite<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsResponseComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionCopyBackWrite<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsDataComplete(topo) && IsAckComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionCopyBackWrite<config, conn>::IsComplete(const Topology& topo) const noexcept
     {
         return this->GotRetryAck() || IsResponseComplete(topo) && IsDataComplete(topo) && IsAckComplete(topo);
@@ -1627,14 +2410,13 @@ namespace /*CHI::*/Xact {
             if (!rspFlit.IsFromRequesterToHome(topo))
                 return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
-            if (!this->HasRSP({ Opcodes::RSP::Comp }))
-                return XactDenial::DENIED_COMPACK_BEFORE_COMP;
-
             if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
                 return XactDenial::DENIED_COMPACK_AFTER_DBIDRESP;
 
             auto optDBID = this->GetDBID();
-            assert(optDBID && "unable to get DBID after Comp");
+
+            if (!optDBID)
+                return XactDenial::DENIED_COMPACK_BEFORE_COMP;
 
             if (rspFlit.flit.rsp.TxnID() != *optDBID)
                 return XactDenial::DENIED_TXNID_MISMATCH;
@@ -1808,9 +2590,23 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionDataless<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsResponseComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionDataless<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsAckComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionDataless<config, conn>::IsComplete(const Topology& topo) const noexcept
     {
-        return IsResponseComplete(topo) && IsAckComplete(topo);
+        return this->GotRetryAck() || IsResponseComplete(topo) && IsAckComplete(topo);
     }
 
     template<FlitConfigurationConcept       config,
@@ -2094,6 +2890,20 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionHomeSnoop<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    {
+        return IsComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionHomeSnoop<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    {
+        return IsComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionHomeSnoop<config, conn>::IsComplete(const Topology& topo) const noexcept
     {
         return IsResponseComplete(topo) && IsDataComplete(topo);
@@ -2288,6 +3098,20 @@ namespace /*CHI::*/Xact {
 
         return ((completeDataIDMask & ~collectedSnpDataID).none() || !needCollectedSnpDataID)
             && ((completeDataIDMask & ~collectedFwdDataID).none() || !needCollectedFwdDataID);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionForwardSnoop<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    {
+        return IsComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionForwardSnoop<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    {
+        return IsComplete(topo);
     }
 
     template<FlitConfigurationConcept       config,

@@ -157,8 +157,23 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_RESPSEP_AFTER_RESPSEP        ("XACT_DENIED_RESPSEP_AFTER_RESPSEP",       0x000B0000 | 25);
             inline constexpr XactDenialEnumBack DENIED_COMPDBIDRESP_AFTER_COMPDBIDRESP  ("XACT_DENIED_COMPDBIDRESP_AFTER_COMPDBIDRESP", 0x000B0000 | 26);
             inline constexpr XactDenialEnumBack DENIED_COMPDBIDRESP_AFTER_COMP      ("XACT_DENIED_COMPDBIDRESP_AFTER_COMP",     0x000B0000 | 27);
+            inline constexpr XactDenialEnumBack DENIED_COMPDBIDRESP_AFTER_DBIDRESP  ("XACT_DENIED_COMPDBIDRESP_AFTER_DBIDRESP", 0x000B0000 | 28);
+            inline constexpr XactDenialEnumBack DENIED_DBIDRESP_AFTER_DBIDRESP      ("XACT_DENIED_DBIDRESP_AFTER_DBIDRESP",     0x000B0000 | 29);
+            inline constexpr XactDenialEnumBack DENIED_DBIDRESP_AFTER_COMPDBIDRESP  ("XACT_DENIED_DBIDRESP_AFTER_COMPDBIDRESP", 0x000B0000 | 30);
 
-            inline constexpr XactDenialEnumBack DENIED_DUPLICATED_DATAID            ("XACT_DENIED_DUPLICATED_DATAID",           0x000B0000 | 28);
+            inline constexpr XactDenialEnumBack DENIED_DUPLICATED_DATAID            ("XACT_DENIED_DUPLICATED_DATAID",           0x000B0000 | 31);
+
+            inline constexpr XactDenialEnumBack DENIED_COMPACK_ON_NON_EXPCOMPACK    ("XACT_DENIED_COMPACK_ON_NON_EXPCOMPACK",   0x000B0000 | 32);
+            
+            inline constexpr XactDenialEnumBack DENIED_DWT_ON_EXPCOMPACK            ("XACT_DENIED_DWT_ON_EXPCOMPACK",           0x000B0000 | 33);
+            inline constexpr XactDenialEnumBack DENIED_DWT_WITH_DBIDRESPORD         ("XACT_DENIED_DWT_WITH_DBIDRESPORD",        0x000B0000 | 34);
+
+            inline constexpr XactDenialEnumBack DENIED_NCBWRDATA_AFTER_WRITEDATACANCEL          ("XACT_DENIED_NCBWRDATA_AFTER_WRITEDATACANCEL",         0x000B0000 | 33);
+            inline constexpr XactDenialEnumBack DENIED_NCBWRDATA_AFTER_NCBWRDATACOMPACK         ("XACT_DENIED_NCBWRDATA_AFTER_NCBWRDATACOMPACK",        0x000B0000 | 34);
+            inline constexpr XactDenialEnumBack DENIED_WRITEDATACANCEL_AFTER_NCBWRDATA          ("XACT_DENIED_WRITEDATACANCEL_AFTER_NCBWRDATA",         0x000B0000 | 35);
+            inline constexpr XactDenialEnumBack DENIED_WRITEDATACANCEL_AFTER_NCBWRDATACOMPACK   ("XACT_DENIED_WRITEDATACANCEL_AFTER_NCBWRDATACOMPACK",  0x000B0000 | 36);
+            inline constexpr XactDenialEnumBack DENIED_NCBWRDATACOMPACK_AFTER_WRITEDATACANCEL   ("XACT_DENIED_NCBWRDATACOMPACK_AFTER_WRITEDATACANCEL",  0x000B0000 | 37);
+            inline constexpr XactDenialEnumBack DENIED_NCBWRDATACOMPACK_AFTER_NCBWRDATA         ("XACT_DENIED_NCBWRDATACOMPACK_AFTER_NCBWRDATA",        0x000B0000 | 38);
 
             inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_XACT_TYPE         ("XACT_DENIED_RETRY_DIFF_XACT_TYPE",        0x000C0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_RETRY_NO_ALLOWRETRY          ("XACT_DENIED_RETRY_NO_ALLOWRETRY",         0x000C0000 |  1);
@@ -211,8 +226,14 @@ namespace CHI {
 #endif
         //  inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_RSVDC             ("XACT_DENIED_RETRY_DIFF_RSVDC",            0x000C0000 | 64);
 
+            inline constexpr XactDenialEnumBack DENIED_RETRY_ON_ACTIVE_PROGRESS     ("XACT_DENIED_RETRY_ON_ACTIVE_PROGRESS",    0x000C0000 | 72);
+
             inline constexpr XactDenialEnumBack DENIED_DUPLICATED_SNPRESP           ("XACT_DENIED_DUPLICATED_SNPRESP",          0x000D0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_DUPLICATED_SNPRESPDATA       ("XACT_DENIED_DUPLICATED_SNPRESPDATA",      0x000D0000 |  1);
+            inline constexpr XactDenialEnumBack DENIED_DUPLICATED_READRECEIPT       ("XACT_DENIED_DUPLICATED_READRECEIPT",      0x000D0000 |  2);
+
+            inline constexpr XactDenialEnumBack DENIED_UNSUPPORTED_FEATURE          ("XACT_DENIED_UNSUPPORTED_FEATURE",         0xFFFF0000 |  0);
+            inline constexpr XactDenialEnumBack DENIED_UNSUPPORTED_FEATURE_OPCODE   ("XACT_DENIED_UNSUPPORTED_FEATURE_OPCODE",  0xFFFF0000 |  1);
         }
 
 
