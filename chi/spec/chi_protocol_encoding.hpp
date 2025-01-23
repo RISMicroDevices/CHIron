@@ -2240,6 +2240,27 @@ namespace CHI {
     };
 #endif
 
+
+    //
+#ifdef CHI_ISSUE_EB_ENABLE
+    namespace TagOp {
+
+        // TagOp type
+        using type = uint2_t;
+
+        // TagOp field encodings
+        constexpr type  Invalid         = 0b00;
+        constexpr type  Transfer        = 0b01;
+        constexpr type  Update          = 0b10;
+        constexpr type  MatchFetch      = 0b11;
+
+        //
+        static_assert(is_same_len_v<type, Flits::DAT<>::tagop_t>);
+        static_assert(is_same_len_v<type, Flits::RSP<>::tagop_t>);
+        static_assert(is_same_len_v<type, Flits::DAT<>::tagop_t>);
+    };
+#endif
+
 /*
 };
 */
