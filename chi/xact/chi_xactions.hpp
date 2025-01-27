@@ -1369,6 +1369,18 @@ namespace /*CHI::*/Xact {
             if (!rspFlit.IsFromRequesterToHome(topo))
                 return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
+            if (
+                !this->HasDAT({ Opcodes::DAT::CompData })
+#ifdef CHI_ISSUE_EB_ENABLE
+             && !this->HasRSP({ Opcodes::RSP::RespSepData })
+#endif
+            )
+#ifdef CHI_ISSUE_EB_ENABLE
+                return XactDenial::DENIED_COMPACK_BEFORE_COMPDATA_OR_RESPSEPDATA;
+#else
+                return XactDenial::DENIED_COMPACK_BEFORE_COMPDATA;
+#endif
+
             auto optDBID = this->GetDBID();
 
             if (!optDBID)
