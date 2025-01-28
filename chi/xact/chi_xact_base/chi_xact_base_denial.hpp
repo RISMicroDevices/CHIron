@@ -139,6 +139,8 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_DBIDRESP_AFTER_DBIDRESP      ("XACT_DENIED_DBIDRESP_AFTER_DBIDRESP",     0x000B0000 | 29);
             inline constexpr XactDenialEnumBack DENIED_DBIDRESP_AFTER_COMPDBIDRESP  ("XACT_DENIED_DBIDRESP_AFTER_COMPDBIDRESP", 0x000B0000 | 30);
 
+            inline constexpr XactDenialEnumBack DENIED_NCBWRDATACOMPACK_ON_NON_EXPCOMPACK       ("XACT_DENIED_NCBWRDATACOMPACK_ON_NON_EXPCOMPACK",      0x000B0000 | 31);
+
             inline constexpr XactDenialEnumBack DENIED_COMPACK_BEFORE_COMPDATA_OR_RESPSEPDATA   ("XACT_DENIED_COMPACK_BEFORE_COMPDATA_OR_RESPSEPDATA",  0x000B0000 | 32);
 
             inline constexpr XactDenialEnumBack DENIED_NCBWRDATA_AFTER_WRITEDATACANCEL          ("XACT_DENIED_NCBWRDATA_AFTER_WRITEDATACANCEL",         0x000B0000 | 33);
@@ -213,6 +215,18 @@ namespace CHI {
 
             inline constexpr XactDenialEnumBack DENIED_SNPRESPFWDED_INVALID_FWDSTATE_RESP           ("XACT_DENIED_SNPRESPFWDED_INVALID_FWDSTATE_RESP",          0x000B0000 | 90);
             inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAFWDED_INVALID_FWDSTATE_RESP       ("XACT_DENIED_SNPRESPDATAFWDED_INVALID_FWDSTATE_RESP",      0x000B0000 | 91);
+
+            inline constexpr XactDenialEnumBack DENIED_DMT_INCONSISTENT_SOURCE                      ("XACT_DENIED_DMT_INCONSISTENT_SOURCE",                     0x000B0000 | 92);
+            inline constexpr XactDenialEnumBack DENIED_DMT_INCONSISTENT_TARGET                      ("XACT_DENIED_DMT_INCONSISTENT_TARGET",                     0x000B0000 | 93);
+            inline constexpr XactDenialEnumBack DENIED_DCT_INCONSISTENT_SOURCE                      ("XACT_DENIED_DCT_INCONSISTENT_SOURCE",                     0x000B0000 | 94);
+            inline constexpr XactDenialEnumBack DENIED_DCT_INCONSISTENT_TARGET                      ("XACT_DENIED_DCT_INCONSISTENT_TARGET",                     0x000B0000 | 95);
+            inline constexpr XactDenialEnumBack DENIED_DWT_INCONSISTENT_SOURCE                      ("XACT_DENIED_DWT_INCONSISTENT_SOURCE",                     0x000B0000 | 96);
+            inline constexpr XactDenialEnumBack DENIED_DWT_INCONSISTENT_TARGET                      ("XACT_DENIED_DWT_INCONSISTENT_TARGET",                     0x000B0000 | 97);
+
+            inline constexpr XactDenialEnumBack DENIED_DWT_TGTID_MISMATCH                           ("XACT_DENIED_DWT_TGTID_MISMATCH",                          0x000B0000 | 98);
+            inline constexpr XactDenialEnumBack DENIED_DWT_TXNID_MISMATCH                           ("XACT_DENIED_DWT_TXNID_MISMATCH",                          0x000B0000 | 99);
+
+            inline constexpr XactDenialEnumBack DENIED_DWT_INOPERATIVENESS                          ("XACT_DENIED_DWT_INOPERATIVENESS",                         0x000B0000 | 100);
 
             inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_XACT_TYPE         ("XACT_DENIED_RETRY_DIFF_XACT_TYPE",        0x000C0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_RETRY_NO_ALLOWRETRY          ("XACT_DENIED_RETRY_NO_ALLOWRETRY",         0x000C0000 |  1);
