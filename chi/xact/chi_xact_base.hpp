@@ -161,12 +161,14 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_DBIDRESP_AFTER_DBIDRESP      ("XACT_DENIED_DBIDRESP_AFTER_DBIDRESP",     0x000B0000 | 29);
             inline constexpr XactDenialEnumBack DENIED_DBIDRESP_AFTER_COMPDBIDRESP  ("XACT_DENIED_DBIDRESP_AFTER_COMPDBIDRESP", 0x000B0000 | 30);
 
-            inline constexpr XactDenialEnumBack DENIED_DUPLICATED_DATAID            ("XACT_DENIED_DUPLICATED_DATAID",           0x000B0000 | 31);
+            inline constexpr XactDenialEnumBack DENIED_COMPACK_BEFORE_COMPDATA_OR_RESPSEPDATA   ("XACT_DENIED_COMPACK_BEFORE_COMPDATA_OR_RESPSEPDATA",  0x000B0000 | 32);
 
-            inline constexpr XactDenialEnumBack DENIED_COMPACK_ON_NON_EXPCOMPACK    ("XACT_DENIED_COMPACK_ON_NON_EXPCOMPACK",   0x000B0000 | 32);
+            inline constexpr XactDenialEnumBack DENIED_DUPLICATED_DATAID            ("XACT_DENIED_DUPLICATED_DATAID",           0x000B0000 | 48);
+
+            inline constexpr XactDenialEnumBack DENIED_COMPACK_ON_NON_EXPCOMPACK    ("XACT_DENIED_COMPACK_ON_NON_EXPCOMPACK",   0x000B0000 | 49);
             
-            inline constexpr XactDenialEnumBack DENIED_DWT_ON_EXPCOMPACK            ("XACT_DENIED_DWT_ON_EXPCOMPACK",           0x000B0000 | 33);
-            inline constexpr XactDenialEnumBack DENIED_DWT_WITH_DBIDRESPORD         ("XACT_DENIED_DWT_WITH_DBIDRESPORD",        0x000B0000 | 34);
+            inline constexpr XactDenialEnumBack DENIED_DWT_ON_EXPCOMPACK            ("XACT_DENIED_DWT_ON_EXPCOMPACK",           0x000B0000 | 50);
+            inline constexpr XactDenialEnumBack DENIED_DWT_WITH_DBIDRESPORD         ("XACT_DENIED_DWT_WITH_DBIDRESPORD",        0x000B0000 | 51);
 
             inline constexpr XactDenialEnumBack DENIED_NCBWRDATA_AFTER_WRITEDATACANCEL          ("XACT_DENIED_NCBWRDATA_AFTER_WRITEDATACANCEL",         0x000B0000 | 33);
             inline constexpr XactDenialEnumBack DENIED_NCBWRDATA_AFTER_NCBWRDATACOMPACK         ("XACT_DENIED_NCBWRDATA_AFTER_NCBWRDATACOMPACK",        0x000B0000 | 34);

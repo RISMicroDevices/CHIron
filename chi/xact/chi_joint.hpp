@@ -193,6 +193,17 @@ namespace CHI {
                 inline operator uint64_t() const noexcept { return value; }
             };
 
+            using txreqdbidovlp_t = union __txreqdbidovlp_t {
+                struct {
+                    Flits::RSP<config, conn>::dbid_t    db;     // same for DAT
+                    Flits::RSP<config, conn>::srcid_t   src;    // same for DAT
+                    Flits::RSP<config, conn>::tgtid_t   tgt;    // same for DAT
+                    Flits::RSP<config, conn>::txnid_t   txn;    // same for DAT
+                }           id;
+                uint64_t    value;
+                inline operator uint64_t() const noexcept { return value; }
+            };
+
             using rxsnpid_t = union __rxsnpid_t {
                 struct {
                     Flits::SNP<config, conn>::txnid_t   txn;
@@ -231,6 +242,8 @@ namespace CHI {
             std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        rxTransactions;
 
             std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        txDBIDTransactions;
+
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        txDBIDOverlappableTransactions;
 
             std::unordered_map<uint64_t, std::list<std::shared_ptr<Xaction<config, conn>>>>
                                                                                         txRetriedTransactions;
@@ -937,6 +950,11 @@ namespace /*CHI::*/Xact {
         // Otherwise, snoop RSPs use TxnID from SNPs (SnpResp, SnpRespFwded).
         if (firedRspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompAck)
         {
+            // DBID overlapping would never happen on this routine,
+            // since Comp was impossible to be re-ordered on interconnect
+            // on transactions with CompAck, on which the deallocation of DBIDs on HNs
+            // were determined by RNs.
+
             txreqdbid_t key;
             key.value   = 0;
             key.id.tgt  = rspFlit.SrcID();
@@ -994,6 +1012,9 @@ namespace /*CHI::*/Xact {
                 {
                     // event on DBID free
                     this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+                    
+                    // DBID overlapping would never happen on CompAck
+                    // see above for details
 
                     txreqdbid_t keyDBID;
                     keyDBID.value   = 0;
@@ -1011,6 +1032,34 @@ namespace /*CHI::*/Xact {
                     }
 
                     txDBIDTransactions.erase(keyDBID);
+                }
+            }
+            // consider DBID overlapping here
+            else if (xaction->IsDBIDOverlappable(topo))
+            {
+                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                    xaction->GetDBIDSource();
+
+                if (xactionDBIDSource)
+                {
+                    txreqdbidovlp_t keyDBIDOvlp;
+                    keyDBIDOvlp.value   = 0;
+                    if (xactionDBIDSource->IsRSP())
+                    {
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                    }
+                    else
+                    {
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.dat.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.dat.TxnID();
+                    }
+
+                    txDBIDOverlappableTransactions.erase(keyDBIDOvlp);
                 }
             }
 
@@ -1104,6 +1153,8 @@ namespace /*CHI::*/Xact {
 
             if (firstDBID)
             {
+                // first DBID always not overlappable
+
                 if (txDBIDTransactions.contains(keyDBID))
                 {
                     xaction->SetLastDenial(XactDenial::DENIED_DBID_IN_USE);
@@ -1151,22 +1202,106 @@ namespace /*CHI::*/Xact {
                     // event on DBID free
                     this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
 
-                    txreqdbid_t keyDBID;
-                    keyDBID.value   = 0;
+                    // check overlappable DBID mapping first
+                    txreqdbidovlp_t keyDBIDOvlp;
+                    keyDBIDOvlp.value   = 0;
                     if (xactionDBIDSource->IsRSP())
                     {
-                        keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                        keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                        keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
                     }
                     else
                     {
-                        keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
-                        keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
-                        keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.dat.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.dat.TxnID();
                     }
 
-                    txDBIDTransactions.erase(keyDBID);
+                    if (!txDBIDOverlappableTransactions.erase(keyDBIDOvlp))
+                    {
+                        // erase normal DBID mapping
+                        // only when overlappable DBID mapping absent
+
+                        txreqdbid_t keyDBID;
+                        keyDBID.value   = 0;
+                        if (xactionDBIDSource->IsRSP())
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        }
+                        else
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        }
+
+                        // check TxnID for overlappable DBID on DBID complete
+                        auto xactionDBIDIter = txDBIDTransactions.find(keyDBID);
+                        if (xactionDBIDIter != txDBIDTransactions.end())
+                        {
+                            auto xactionDBID = xactionDBIDIter->second;
+                            if (xactionDBID->GetFirst().flit.req.TxnID() == xaction->GetFirst().flit.req.TxnID())
+                                txDBIDTransactions.erase(xactionDBIDIter);
+                        }
+                    }
+                }
+            }
+            // on DBID overlap
+            else if (xaction->IsDBIDOverlappable(topo))
+            {
+                // move DBID mapping to overlappable if not moved yet
+                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                    xaction->GetDBIDSource();
+
+                if (xactionDBIDSource)
+                {
+                    // check overlappable DBID mapping
+                    txreqdbidovlp_t keyDBIDOvlp;
+                    keyDBIDOvlp.value   = 0;
+                    if (xactionDBIDSource->IsRSP())
+                    {
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                    }
+                    else
+                    {
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.dat.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.dat.TxnID();
+                    }
+
+                    // move on absent
+                    if (txDBIDOverlappableTransactions.find(keyDBIDOvlp) == txDBIDOverlappableTransactions.end())
+                    {
+                        // erase normal DBID mapping
+                        txreqdbid_t keyDBID;
+                        keyDBID.value   = 0;
+                        if (xactionDBIDSource->IsRSP())
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        }
+                        else
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        }
+
+                        txDBIDTransactions.erase(keyDBID);
+
+                        // set overlappable DBID mapping
+                        txDBIDOverlappableTransactions[keyDBIDOvlp] = xaction;
+                    }
                 }
             }
 
@@ -1301,22 +1436,106 @@ namespace /*CHI::*/Xact {
                     // event on DBID free
                     this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
 
-                    txreqdbid_t keyDBID;
-                    keyDBID.value   = 0;
+                    // check overlappable DBID mapping first
+                    txreqdbidovlp_t keyDBIDOvlp;
+                    keyDBIDOvlp.value   = 0;
                     if (xactionDBIDSource->IsRSP())
                     {
-                        keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                        keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                        keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
                     }
                     else
                     {
-                        keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
-                        keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
-                        keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.dat.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.dat.TxnID();
                     }
 
-                    txDBIDTransactions.erase(keyDBID);
+                    if (!txDBIDOverlappableTransactions.erase(keyDBIDOvlp))
+                    {
+                        // erase normal DBID mapping
+                        // only when overlappable DBID mapping absent
+
+                        txreqdbid_t keyDBID;
+                        keyDBID.value   = 0;
+                        if (xactionDBIDSource->IsRSP())
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        }
+                        else
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        }
+
+                        // check TxnID for overlappable DBID on DBID complete
+                        auto xactionDBIDIter = txDBIDTransactions.find(keyDBID);
+                        if (xactionDBIDIter != txDBIDTransactions.end())
+                        {
+                            auto xactionDBID = xactionDBIDIter->second;
+                            if (xactionDBID->GetFirst().flit.req.TxnID() == xaction->GetFirst().flit.req.TxnID())
+                                txDBIDTransactions.erase(xactionDBIDIter);
+                        }
+                    }
+                }
+            }
+            // on DBID overlap
+            else if (xaction->IsDBIDOverlappable(topo))
+            {
+                // move DBID mapping to overlappable if not moved yet
+                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                    xaction->GetDBIDSource();
+
+                if (xactionDBIDSource)
+                {
+                    // check overlappable DBID mapping
+                    txreqdbidovlp_t keyDBIDOvlp;
+                    keyDBIDOvlp.value   = 0;
+                    if (xactionDBIDSource->IsRSP())
+                    {
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                    }
+                    else
+                    {
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.dat.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.dat.TxnID();
+                    }
+
+                    // move on absent
+                    if (txDBIDOverlappableTransactions.find(keyDBIDOvlp) == txDBIDOverlappableTransactions.end())
+                    {
+                        // erase normal DBID mapping
+                        txreqdbid_t keyDBID;
+                        keyDBID.value   = 0;
+                        if (xactionDBIDSource->IsRSP())
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        }
+                        else
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        }
+
+                        txDBIDTransactions.erase(keyDBID);
+
+                        // set overlappable DBID mapping
+                        txDBIDOverlappableTransactions[keyDBIDOvlp] = xaction;
+                    }
                 }
             }
 
@@ -1386,6 +1605,8 @@ namespace /*CHI::*/Xact {
 
             if (firstDBID)
             {
+                // first DBID always not overlappable
+
                 if (txDBIDTransactions.contains(keyDBID))
                 {
                     xaction->SetLastDenial(XactDenial::DENIED_DBID_IN_USE);
@@ -1436,22 +1657,106 @@ namespace /*CHI::*/Xact {
                     // event on DBID free
                     this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
 
-                    txreqdbid_t keyDBID;
-                    keyDBID.value   = 0;
+                    // check overlappable DBID mapping first
+                    txreqdbidovlp_t keyDBIDOvlp;
+                    keyDBIDOvlp.value   = 0;
                     if (xactionDBIDSource->IsRSP())
                     {
-                        keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                        keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                        keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
                     }
                     else
                     {
-                        keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
-                        keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
-                        keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.dat.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.dat.TxnID();
                     }
 
-                    txDBIDTransactions.erase(keyDBID);
+                    if (!txDBIDOverlappableTransactions.erase(keyDBIDOvlp))
+                    {
+                        // erase normal DBID mapping
+                        // only when overlappable DBID mapping absent
+
+                        txreqdbid_t keyDBID;
+                        keyDBID.value   = 0;
+                        if (xactionDBIDSource->IsRSP())
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        }
+                        else
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        }
+
+                        // check TxnID for overlappable DBID on DBID complete
+                        auto xactionDBIDIter = txDBIDTransactions.find(keyDBID);
+                        if (xactionDBIDIter != txDBIDTransactions.end())
+                        {
+                            auto xactionDBID = xactionDBIDIter->second;
+                            if (xactionDBID->GetFirst().flit.req.TxnID() == xaction->GetFirst().flit.req.TxnID())
+                                txDBIDTransactions.erase(xactionDBIDIter);
+                        }
+                    }
+                }
+            }
+            // on DBID overlap
+            else if (xaction->IsDBIDOverlappable(topo))
+            {
+                // move DBID mapping to overlappable if not moved yet
+                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                    xaction->GetDBIDSource();
+
+                if (xactionDBIDSource)
+                {
+                    // check overlappable DBID mapping
+                    txreqdbidovlp_t keyDBIDOvlp;
+                    keyDBIDOvlp.value   = 0;
+                    if (xactionDBIDSource->IsRSP())
+                    {
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                    }
+                    else
+                    {
+                        keyDBIDOvlp.id.db   = xactionDBIDSource->flit.dat.DBID();
+                        keyDBIDOvlp.id.src  = xactionDBIDSource->flit.dat.SrcID();
+                        keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.dat.TxnID();
+                    }
+
+                    // move on absent
+                    if (txDBIDOverlappableTransactions.find(keyDBIDOvlp) == txDBIDOverlappableTransactions.end())
+                    {
+                        // erase normal DBID mapping
+                        txreqdbid_t keyDBID;
+                        keyDBID.value   = 0;
+                        if (xactionDBIDSource->IsRSP())
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                        }
+                        else
+                        {
+                            keyDBID.id.db   = xactionDBIDSource->flit.dat.DBID();
+                            keyDBID.id.src  = xactionDBIDSource->flit.dat.HomeNID();
+                            keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
+                        }
+
+                        txDBIDTransactions.erase(keyDBID);
+
+                        // set overlappable DBID mapping
+                        txDBIDOverlappableTransactions[keyDBIDOvlp] = xaction;
+                    }
                 }
             }
 

@@ -144,6 +144,10 @@ namespace CHI {
             virtual bool                            IsDBIDComplete(const Topology& topo) const noexcept = 0;
             virtual bool                            IsComplete(const Topology& topo) const noexcept = 0;
 
+            // *NOTICE: Responses with both valid TxnID and DBID like Comp could be out-of-order on interconnect
+            //          and came after DBID grant (e.g. DBIDResp, CompDBIDResp).
+            virtual bool                            IsDBIDOverlappable(const Topology& topo) const noexcept = 0;
+
         protected:
             virtual XactDenialEnum                  NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept = 0;
             virtual XactDenialEnum                  NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept = 0;
@@ -174,6 +178,8 @@ namespace CHI {
             virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
+            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
+
         protected:
             virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -194,6 +200,8 @@ namespace CHI {
             virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+
+            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
 
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -216,6 +224,8 @@ namespace CHI {
             virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+
+            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
 
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -240,6 +250,8 @@ namespace CHI {
             virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+
+            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
 
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -271,6 +283,8 @@ namespace CHI {
             virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+
+            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
 
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -307,6 +321,8 @@ namespace CHI {
             virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
+            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
+
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -325,6 +341,8 @@ namespace CHI {
             virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+
+            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
 
             bool                            IsDCT() const noexcept;
 
@@ -1294,6 +1312,13 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionAllocatingRead<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    {
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum XactionAllocatingRead<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
@@ -1601,6 +1626,13 @@ namespace /*CHI::*/Xact {
     inline bool XactionNonAllocatingRead<config, conn>::IsComplete(const Topology& topo) const noexcept
     {
         return this->GotRetryAck() || IsResponseComplete(topo) && IsAckComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionNonAllocatingRead<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    {
+        return IsAckComplete(topo);
     }
 
     template<FlitConfigurationConcept       config,
@@ -1937,6 +1969,13 @@ namespace /*CHI::*/Xact {
     inline bool XactionImmediateWrite<config, conn>::IsComplete(const Topology& topo) const noexcept
     {
         return this->GotRetryAck() || IsResponseComplete(topo) && IsDataComplete(topo) && IsAckComplete(topo) && IsTagOpComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionImmediateWrite<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    {
+        return IsDataComplete(topo) && IsAckComplete(topo);
     }
 
     template<FlitConfigurationConcept       config,
@@ -2352,6 +2391,13 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionCopyBackWrite<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    {
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum XactionCopyBackWrite<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
@@ -2619,6 +2665,13 @@ namespace /*CHI::*/Xact {
     inline bool XactionDataless<config, conn>::IsComplete(const Topology& topo) const noexcept
     {
         return this->GotRetryAck() || IsResponseComplete(topo) && IsAckComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionDataless<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    {
+        return IsAckComplete(topo);
     }
 
     template<FlitConfigurationConcept       config,
@@ -2923,6 +2976,13 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionHomeSnoop<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    {
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum XactionHomeSnoop<config, conn>::NextRSPNoRecord(const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(topo))
@@ -3131,6 +3191,13 @@ namespace /*CHI::*/Xact {
     inline bool XactionForwardSnoop<config, conn>::IsComplete(const Topology& topo) const noexcept
     {
         return IsResponseComplete(topo) && IsDataComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionForwardSnoop<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    {
+        return false;
     }
 
     template<FlitConfigurationConcept       config,
