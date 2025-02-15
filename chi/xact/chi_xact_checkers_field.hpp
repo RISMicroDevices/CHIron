@@ -1,11 +1,11 @@
 //#pragma once
 
-//#ifndef __CHI__CHI_XACT_CHECKERS
-//#define __CHI__CHI_XACT_CHECKERS
+//#ifndef __CHI__CHI_XACT_CHECKERS_FIELD
+//#define __CHI__CHI_XACT_CHECKERS_FIELD
 
 #include <climits>
-#ifndef CHI_XACT_CHECKERS__STANDALONE
-#   include "chi_xact_checkers_header.hpp"              // IWYU pragma: keep
+#ifndef CHI_XACT_CHECKERS_FIELD__STANDALONE
+#   include "chi_xact_checkers_field_header.hpp"              // IWYU pragma: keep
 
 #   include "../spec/chi_protocol_encoding_header.hpp"  // IWYU pragma: keep
 #   include "../spec/chi_protocol_encoding.hpp"         // IWYU pragma: keep
@@ -27,10 +27,10 @@
  && (!defined(CHI_ISSUE_EB_ENABLE) || !defined(__CHI__CHI_XACT_CHECKERS_EB))
 
 #ifdef CHI_ISSUE_B_ENABLE
-#   define __CHI__CHI_XACT_CHECKERS_B
+#   define __CHI__CHI_XACT_CHECKERS_FIELD_B
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
-#   define __CHI__CHI_XACT_CHECKERS_EB
+#   define __CHI__CHI_XACT_CHECKERS_FIELD_EB
 #endif
 
 

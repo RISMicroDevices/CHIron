@@ -1,6 +1,0 @@
-#pragma once
-
-#ifndef __CHI__CHI_XACT_CHECKERS_HEADER
-#define __CHI__CHI_XACT_CHECKERS_HEADER
-
-#endif // __CHI__CHI_XACT_CHECKERS_HEADER
