@@ -3,7 +3,6 @@
 //#ifndef __CHI__CHI_XACT_CHECKERS_FIELD
 //#define __CHI__CHI_XACT_CHECKERS_FIELD
 
-#include <climits>
 #ifndef CHI_XACT_CHECKERS_FIELD__STANDALONE
 #   include "chi_xact_checkers_field_header.hpp"              // IWYU pragma: keep
 
