@@ -216,7 +216,7 @@ namespace /*CHI::*/Xact {
         CHECK_REQ_EX(Allocate       , MemAttr::ExtractAllocate(reqFlit.MemAttr()) != 0  , MEMATTR_ALLOCATE  );
         CHECK_REQ_EX(Cacheable      , MemAttr::ExtractCacheable(reqFlit.MemAttr()) != 0 , MEMATTR_CACHEABLE );
         CHECK_REQ_EX(Device         , MemAttr::ExtractDevice(reqFlit.MemAttr()) != 0    , MEMATTR_DEVICE    );
-        CHECK_REQ_EX(EWA            , MemAttr::ExtractEWA(reqFlit.MemAttr) != 0         , MEMATTR_EWA       );
+        CHECK_REQ_EX(EWA            , MemAttr::ExtractEWA(reqFlit.MemAttr()) != 0       , MEMATTR_EWA       );
         CHECK_REQ   (SnpAttr        , SNPATTR       );
 #ifdef CHI_ISSUE_EB_ENABLE
         CHECK_REQ   (DoDWT          , DODWT         );

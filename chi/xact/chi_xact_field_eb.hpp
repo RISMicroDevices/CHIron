@@ -15,7 +15,10 @@
 #endif
 
 
-#ifdef CHI_ISSUE_EB_ENABLE
+#ifdef CHI_ISSUE_EB_ENABLE 
+
+#include "chi_xact_field.hpp"
+
 /*
 namespace CHI {
 */
@@ -504,12 +507,12 @@ namespace CHI {
             inline constexpr SnoopFieldMappingBack SnpCleanShared                   (Y , Y , Y , Y , Y , Y , I0, I0, I0, I0, I0, A1, I0, Y , D );
             inline constexpr SnoopFieldMappingBack SnpCleanInvalid                  (Y , Y , Y , Y , Y , Y , I0, I0, I0, I0, I0, A1, I0, Y , D );
             inline constexpr SnoopFieldMappingBack SnpMakeInvalid                   (Y , Y , Y , Y , Y , Y , I0, I0, I0, I0, I0, A1, I0, Y , D );
-            inline constexpr SnoopFieldMappingBack SnpSharedFwd                     (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , Y , I0, Y , D );
-            inline constexpr SnoopFieldMappingBack SnpCleanFwd                      (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , Y , I0, Y , D );
+            inline constexpr SnoopFieldMappingBack SnpSharedFwd                     (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , Y , Y , Y , D );
+            inline constexpr SnoopFieldMappingBack SnpCleanFwd                      (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , Y , Y , Y , D );
             inline constexpr SnoopFieldMappingBack SnpOnceFwd                       (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , Y , I0, Y , D );
-            inline constexpr SnoopFieldMappingBack SnpNotSharedDirtyFwd             (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , Y , I0, Y , D );
+            inline constexpr SnoopFieldMappingBack SnpNotSharedDirtyFwd             (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , Y , Y , Y , D );
             inline constexpr SnoopFieldMappingBack SnpUniqueFwd                     (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , A1, I0, Y , D );
-            inline constexpr SnoopFieldMappingBack SnpPreferUniqueFwd               (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , Y , I0, Y , D );
+            inline constexpr SnoopFieldMappingBack SnpPreferUniqueFwd               (Y , Y , Y , Y , Y , Y , Y , Y , S , S , S , Y , Y , Y , D );
             inline constexpr SnoopFieldMappingBack SnpUniqueStash                   (Y , Y , Y , Y , Y , Y , I0, S , Y , Y , S , A1, I0, Y , Y );
             inline constexpr SnoopFieldMappingBack SnpMakeInvalidStash              (Y , Y , Y , Y , Y , Y , I0, S , Y , Y , S , A1, I0, Y , Y );
             inline constexpr SnoopFieldMappingBack SnpStashUnique                   (Y , Y , Y , Y , Y , Y , I0, S , Y , Y , S , A1, I0, Y , Y );
