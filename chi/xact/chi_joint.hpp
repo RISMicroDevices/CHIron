@@ -158,13 +158,54 @@ namespace CHI {
             virtual void            Clear() noexcept = 0;
 
         public:
-            virtual XactDenialEnum  NextTXREQ(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::REQ<config, conn>& reqFlit) noexcept = 0;
-            virtual XactDenialEnum  NextRXSNP(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::SNP<config, conn>& snpFlit,
-                                                                                                               const Flits::REQ<config, conn>::srcid_t snpTgtId) noexcept = 0;
-            virtual XactDenialEnum  NextTXRSP(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::RSP<config, conn>& rspFlit) noexcept = 0;
-            virtual XactDenialEnum  NextRXRSP(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::RSP<config, conn>& rspFlit) noexcept = 0;
-            virtual XactDenialEnum  NextTXDAT(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::DAT<config, conn>& datFlit) noexcept = 0;
-            virtual XactDenialEnum  NextRXDAT(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::DAT<config, conn>& rspFlit) noexcept = 0;
+            virtual XactDenialEnum  NextTXREQ(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::REQ<config, conn>&         reqFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept = 0;
+            
+            virtual XactDenialEnum  NextRXSNP(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::SNP<config, conn>&         snpFlit,
+                const Flits::REQ<config, conn>::srcid_t snpTgtId,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept = 0;
+
+            virtual XactDenialEnum  NextTXRSP(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::RSP<config, conn>&         rspFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept = 0;
+
+            virtual XactDenialEnum  NextRXRSP(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::RSP<config, conn>&         rspFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept = 0;
+            
+            virtual XactDenialEnum  NextTXDAT(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::DAT<config, conn>&         datFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept = 0;
+
+            virtual XactDenialEnum  NextRXDAT(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::DAT<config, conn>&         rspFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept = 0;
         };
 
 
@@ -270,13 +311,54 @@ namespace CHI {
             virtual void            Clear() noexcept override;
 
         public:
-            virtual XactDenialEnum  NextTXREQ(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::REQ<config, conn>& reqFlit) noexcept override;
-            virtual XactDenialEnum  NextRXSNP(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::SNP<config, conn>& snpFlit,
-                                                                                         const Flits::REQ<config, conn>::srcid_t snpTgtId) noexcept override;
-            virtual XactDenialEnum  NextTXRSP(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::RSP<config, conn>& rspFlit) noexcept override;
-            virtual XactDenialEnum  NextRXRSP(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::RSP<config, conn>& rspFlit) noexcept override;
-            virtual XactDenialEnum  NextTXDAT(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::DAT<config, conn>& datFlit) noexcept override;
-            virtual XactDenialEnum  NextRXDAT(Global<config, conn>* glbl, uint64_t time, const Topology& topo, const Flits::DAT<config, conn>& datFlit) noexcept override;
+            virtual XactDenialEnum  NextTXREQ(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::REQ<config, conn>&         reqFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
+            
+            virtual XactDenialEnum  NextRXSNP(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::SNP<config, conn>&         snpFlit,
+                const Flits::REQ<config, conn>::srcid_t snpTgtId,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
+            
+            virtual XactDenialEnum  NextTXRSP(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::RSP<config, conn>&         rspFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
+            
+            virtual XactDenialEnum  NextRXRSP(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::RSP<config, conn>&         rspFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
+            
+            virtual XactDenialEnum  NextTXDAT(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::DAT<config, conn>&         datFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
+            
+            virtual XactDenialEnum  NextRXDAT(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::DAT<config, conn>&         datFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
         };
     }
 /*
@@ -766,10 +848,11 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNFJoint<config, conn>::NextTXREQ(
-        Global<config, conn>*           glbl,
-        uint64_t                        time,
-        const Topology&                 topo,
-        const Flits::REQ<config, conn>& reqFlit) noexcept
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::REQ<config, conn>&         reqFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
         txreqid_t key;
         key.value   = 0;
@@ -822,6 +905,9 @@ namespace /*CHI::*/Xact {
 
             if (!retryXaction) // unsupported opcode transaction
                 return XactDenial::DENIED_OPCODE;
+
+            if (theXaction)
+                *theXaction = retryXaction;
             
             if (retryXaction->GetFirstDenial() != XactDenial::ACCEPTED)
                 return retryXaction->GetFirstDenial();
@@ -884,6 +970,9 @@ namespace /*CHI::*/Xact {
             if (!xaction) // unsupported opcode transaction
                 return XactDenial::DENIED_OPCODE;
 
+            if (theXaction)
+                *theXaction = xaction;
+
             if (xaction->GetFirstDenial() != XactDenial::ACCEPTED)
                 return xaction->GetFirstDenial();
 
@@ -906,7 +995,8 @@ namespace /*CHI::*/Xact {
         uint64_t                                time,
         const Topology&                         topo,
         const Flits::SNP<config, conn>&         snpFlit,
-        const Flits::REQ<config, conn>::srcid_t snpTgtId) noexcept
+        const Flits::REQ<config, conn>::srcid_t snpTgtId,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
         rxsnpid_t key;
         key.value   = 0;
@@ -933,6 +1023,9 @@ namespace /*CHI::*/Xact {
         if (!xaction) // unsupported opcode transaction
             return XactDenial::DENIED_OPCODE;
         
+        if (theXaction)
+            *theXaction = xaction;
+        
         if (xaction->GetFirstDenial() != XactDenial::ACCEPTED)
             return xaction->GetFirstDenial();
 
@@ -947,10 +1040,11 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNFJoint<config, conn>::NextTXRSP(
-        Global<config, conn>*           glbl,
-        uint64_t                        time,
-        const Topology&                 topo,
-        const Flits::RSP<config, conn>& rspFlit) noexcept
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::RSP<config, conn>&         rspFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
         FiredResponseFlit<config, conn> firedRspFlit(XactScope::Requester, true, time, rspFlit);
 
@@ -977,6 +1071,9 @@ namespace /*CHI::*/Xact {
 
             xaction = xactionIter->second;
 
+            if (theXaction)
+                *theXaction = xaction;
+
             bool hasDBID, firstDBID;
 
             XactDenialEnum denial = xaction->NextRSP(glbl, topo, firedRspFlit, hasDBID, firstDBID);
@@ -998,6 +1095,9 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TXNID_NOT_EXIST;
 
             xaction = xactionIter->second;
+
+            if (theXaction)
+                *theXaction = xaction;
 
             bool hasDBID, firstDBID;
 
@@ -1104,10 +1204,11 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNFJoint<config, conn>::NextRXRSP(
-        Global<config, conn>*           glbl,
-        uint64_t                        time,
-        const Topology&                 topo,
-        const Flits::RSP<config, conn>& rspFlit) noexcept
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::RSP<config, conn>&         rspFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
         FiredResponseFlit<config, conn> firedRspFlit(XactScope::Requester, false, time, rspFlit);
 
@@ -1152,6 +1253,9 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_TXNID_NOT_EXIST;
 
         xaction = xactionIter->second;
+
+        if (theXaction)
+            *theXaction = xaction;
 
         bool hasDBID, firstDBID;
 
@@ -1364,10 +1468,11 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNFJoint<config, conn>::NextTXDAT(
-        Global<config, conn>*           glbl,
-        uint64_t                        time,
-        const Topology&                 topo,
-        const Flits::DAT<config, conn>& datFlit) noexcept
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::DAT<config, conn>&         datFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
         FiredResponseFlit<config, conn> firedDatFlit(XactScope::Requester, true, time, datFlit);
 
@@ -1387,6 +1492,9 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_DBID_NOT_EXIST;
 
             xaction = xactionIter->second;
+
+            if (theXaction)
+                *theXaction = xaction;
 
             bool hasDBID, firstDBID;
 
@@ -1411,6 +1519,9 @@ namespace /*CHI::*/Xact {
 
             xaction = xactionIter->second;
 
+            if (theXaction)
+                *theXaction = xaction;
+
             bool hasDBID, firstDBID;
 
             XactDenialEnum denial = xaction->NextDAT(glbl, topo, firedDatFlit, hasDBID, firstDBID);
@@ -1431,6 +1542,9 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TXNID_NOT_EXIST;
 
             xaction = xactionIter->second;
+
+            if (theXaction)
+                *theXaction = xaction;
 
             bool hasDBID, firstDBID;
 
@@ -1586,10 +1700,11 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNFJoint<config, conn>::NextRXDAT(
-        Global<config, conn>*           glbl,
-        uint64_t                        time,
-        const Topology&                 topo,
-        const Flits::DAT<config, conn>& datFlit) noexcept
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::DAT<config, conn>&         datFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
         FiredResponseFlit<config, conn> firedDatFlit(XactScope::Requester, false, time, datFlit);
 
@@ -1606,6 +1721,9 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_TXNID_NOT_EXIST;
 
         xaction = xactionIter->second;
+
+        if (theXaction)
+            *theXaction = xaction;
 
         bool hasDBID, firstDBID;
 
