@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <set>
 #include <chrono>
+#include <string>
 
 #include "../../../clog/clog_t/clog_t.hpp"
 #include "../../../clog/clog_t/clog_t_util.hpp"
@@ -85,6 +86,7 @@
     #include "../../../chi_eb/spec/chi_eb_protocol.hpp"         // IWYU pragma: keep
     #include "../../../chi_eb/util/chi_eb_util_flit.hpp"        // IWYU pragma: keep
     #include "../../../chi_eb/util/chi_eb_util_decoding.hpp"    // IWYU pragma: keep
+    #include "../../../chi_eb/xact/chi_eb_joint.hpp"            // IWYU pragma: keep
     #define CHI_ISSUE_EB_ENABLE
     using namespace CHI::Eb::Flits;
     using config = CHI::Eb::FlitConfiguration<
@@ -105,6 +107,14 @@
     using DecoderRSP_t = CHI::Eb::Opcodes::RSP::Decoder<RSP_t>;
     using DecoderDAT_t = CHI::Eb::Opcodes::DAT::Decoder<DAT_t>;
     using DecoderSNP_t = CHI::Eb::Opcodes::SNP::Decoder<SNP_t>;
+    using Topology_t = CHI::Eb::Xact::Topology;
+    using Xaction_t = CHI::Eb::Xact::Xaction<config>;
+    using RNJoint_t = CHI::Eb::Xact::RNFJoint<config>;
+    using NodeTypeEnum_t = CHI::Eb::Xact::NodeTypeEnum;
+    namespace NodeType_t = CHI::Eb::Xact::NodeType;
+    using XactDenialEnum_t = CHI::Eb::Xact::XactDenialEnum;
+    namespace XactDenial_t = CHI::Eb::Xact::XactDenial;
+    using XactGlobal_t = CHI::Eb::Xact::Global<config>;
 #endif
 
 
@@ -130,6 +140,9 @@ static void print_help() noexcept
     std::cout << "  -B, --clogB             specify input format as CLog.B" << std::endl;
     std::cout << "  -o, --output            specify output file" << std::endl;
     std::cout << "  -j, --json              output as json format" << std::endl;
+    std::cout << "  -X, --xact              enable transaction mode (Xaction)" << std::endl;
+    std::cout << "      --xact-addr <addr>  export transactions with address <addr>" << std::endl;
+    std::cout << "      --xact-in-flight    export transactions in flight" << std::endl;
     std::cout << std::endl;
 }
 
@@ -264,6 +277,12 @@ inline int clog2log(int argc, char* argv[])
     bool clogT = false;
     bool clogB = false;
 
+    bool xact = false;
+    bool xactAddr = false;
+    bool xactInFlight = false;
+
+    uint64_t xactAddrValue;
+
     // input parameters
     const struct option long_options[] = {
         { "help"            , 0, NULL, 'h' },
@@ -272,22 +291,36 @@ inline int clog2log(int argc, char* argv[])
         { "clogT"           , 0, NULL, 'T' },
         { "clogB"           , 0, NULL, 'B' },
         { "output"          , 1, NULL, 'o' },
-        { "json"            , 0, NULL, 'j' }
+        { "json"            , 0, NULL, 'j' },
+        { "xact"            , 0, NULL, 'X' },
+        { "xact-addr"       , 1, NULL, 0   },
+        { "xact-in-flight"  , 0, NULL, 0   },
+        { 0 , 0 , 0 , 0 }
     };
 
     int long_index = 0;
     int o;
-    while ((o = getopt_long(argc, argv, "hvi:TBo:j", long_options, &long_index)) != -1)
+    while ((o = getopt_long(argc, argv, "hvi:TBo:jX", long_options, &long_index)) != -1)
     {
         switch (o)
         {
             case 0:
                 switch (long_index)
                 {
+                    case 8:
+                        xactAddr = true;
+                        xactAddrValue = std::stoull(optarg, nullptr, 0);
+                        break;
+
+                    case 9:
+                        xactInFlight = true;
+                        break;
+
                     default:
                         print_help();
                         return 1;
                 }
+                break;
 
             case 'h':
                 print_help();
@@ -325,6 +358,10 @@ inline int clog2log(int argc, char* argv[])
 
             case 'j':
                 asJson = true;
+                break;
+
+            case 'X':
+                xact = true;
                 break;
 
             default:
@@ -383,6 +420,12 @@ inline int clog2log(int argc, char* argv[])
     DecoderRSP_t*   decoderRsp = new DecoderRSP_t;
     DecoderDAT_t*   decoderDat = new DecoderDAT_t;
     DecoderSNP_t*   decoderSnp = new DecoderSNP_t;
+
+    // (Xaction) Transaction Mode
+    RNJoint_t   joint;
+    Topology_t  topo;
+
+    XactGlobal_t xactGlbl;
 
     /* Parse CLog file */
     uint64_t                        recordCount = 0;
@@ -571,12 +614,38 @@ inline int clog2log(int argc, char* argv[])
         return true;
     };
 
+    reader.callbackOnTagCHITopologies = [&](std::shared_ptr<CLog::CLogB::TagCHITopologies>  tag, 
+                                            std::string&                                    errorMessage) -> bool {
+        for (auto node : tag->nodes)
+        {
+            NodeTypeEnum_t type;
+            switch (node.type)
+            {
+                case CLog::NodeType::RN_F: type = NodeType_t::RN_F; break;
+                case CLog::NodeType::RN_D: type = NodeType_t::RN_D; break;
+                case CLog::NodeType::RN_I: type = NodeType_t::RN_I; break;
+                case CLog::NodeType::HN_F: type = NodeType_t::HN_F; break;
+                case CLog::NodeType::HN_I: type = NodeType_t::HN_I; break;
+                case CLog::NodeType::SN_F: type = NodeType_t::SN_F; break;
+                case CLog::NodeType::SN_I: type = NodeType_t::SN_I; break;
+                case CLog::NodeType::MN  : type = NodeType_t::MN;   break;
+                default:    return false;
+            }
+
+            topo.SetNode(node.id, type);
+        }
+        return true;
+    };
+
     reader.callbackOnTagCHIRecords = [&](std::shared_ptr<CLog::CLogB::TagCHIRecords>    tag,
                                          std::string&                                   errorMessage) -> bool {
         uint64_t time = tag->head.timeBase;
         for (auto& record : (*tag).records)
         {
             time += record.timeShift;
+
+            std::shared_ptr<Xaction_t> xaction;
+            XactDenialEnum_t denial;
 
             ParseAndWriteTask task;
             task.time       = time;
@@ -606,6 +675,14 @@ inline int clog2log(int argc, char* argv[])
                         return false;
                     }
 
+                    if (xact && topo.IsRequester(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::TXREQ)
+                            denial = joint.NextTXREQ(&xactGlbl, time, topo, task.flit.req, &xaction);
+                        else
+                            return false;
+                    }
+
                     break;
 
                 //
@@ -627,6 +704,14 @@ inline int clog2log(int argc, char* argv[])
                     {
                         std::cerr << "%ERROR: unable to deserialize RSP flit" << std::endl;
                         return false;
+                    }
+
+                    if (xact && topo.IsRequester(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::TXRSP)
+                            denial = joint.NextTXRSP(&xactGlbl, time, topo, task.flit.rsp, &xaction);
+                        else
+                            denial = joint.NextRXRSP(&xactGlbl, time, topo, task.flit.rsp, &xaction);
                     }
 
                     break;
@@ -652,6 +737,14 @@ inline int clog2log(int argc, char* argv[])
                         return false;
                     }
 
+                    if (xact && topo.IsRequester(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::TXDAT)
+                            denial = joint.NextTXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
+                        else
+                            denial = joint.NextRXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
+                    }
+
                     break;
 
                 //
@@ -675,6 +768,14 @@ inline int clog2log(int argc, char* argv[])
                         return false;
                     }
 
+                    if (xact && topo.IsRequester(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::RXSNP)
+                            denial = joint.NextRXSNP(&xactGlbl, time, topo, task.flit.snp, record.nodeId, &xaction);
+                        else
+                            return false;
+                    }
+
                     break;
 
                 default:
@@ -685,7 +786,32 @@ inline int clog2log(int argc, char* argv[])
 
             recordCount++;
 
-            while (!queue->try_enqueue(task));
+            bool skip = false;
+            if (xact)
+            {
+                if (denial != XactDenial_t::ACCEPTED)
+                {
+                    std::cerr << "%WARN: xaction not accepted (" << denial->name << ")"
+                        << " at time " << time << std::endl;
+                }
+                else if (!xactInFlight)
+                {
+                    if (!xaction)
+                    {
+                        skip = true;
+                    }
+                    else if (xactAddr)
+                    {
+                        if (xaction->GetFirst().IsREQ())
+                            skip = (xaction->GetFirst().flit.req.Addr()) != xactAddrValue;
+                        else
+                            skip = (xaction->GetFirst().flit.snp.Addr() << 3) != xactAddrValue;
+                    }
+                }
+            }
+
+            if (!skip)
+                while (!queue->try_enqueue(task));
         }
         return true;
     };
