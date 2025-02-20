@@ -442,10 +442,27 @@ namespace CHI {
                 Flits::REQ<config, conn>    req;
                 Flits::SNP<config, conn>    snp;
             }               flit;
+            
+            // REQ: Request source Node ID
+            // SNP: Snoop target Node ID
+            Flits::REQ<config, conn>::srcid_t
+                            nodeId;
 
         public:
-            FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::REQ<config, conn>& reqFlit) noexcept;
-            FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::SNP<config, conn>& snpFlit) noexcept;
+            FiredRequestFlit(
+                XactScopeEnum                       scope,
+                bool                                isTX,
+                uint64_t                            time,
+                const Flits::REQ<config, conn>&     reqFlit
+            ) noexcept;
+            
+            FiredRequestFlit(
+                XactScopeEnum                       scope,
+                bool                                isTX,
+                uint64_t                            time,
+                const Flits::SNP<config, conn>&     snpFlit,
+                Flits::REQ<config, conn>::srcid_t   snpTgtId
+            ) noexcept;
 
         public:
             bool            IsREQ() const noexcept;
@@ -669,15 +686,17 @@ namespace /*CHI::*/Xact {
     inline FiredRequestFlit<config, conn>::FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::REQ<config, conn>& reqFlit) noexcept
         : FiredFlit<config, conn>   (scope, isTX, time)
         , isREQ                     (true)
+        , nodeId                    (reqFlit.SrcID())
     { 
         flit.req = reqFlit;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline FiredRequestFlit<config, conn>::FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::SNP<config, conn>& snpFlit) noexcept
+    inline FiredRequestFlit<config, conn>::FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::SNP<config, conn>& snpFlit, Flits::REQ<config, conn>::srcid_t snpTgtId) noexcept
         : FiredFlit<config, conn>   (scope, isTX, time)
         , isREQ                     (false)
+        , nodeId                    (snpTgtId)
     {
         flit.snp = snpFlit;
     }

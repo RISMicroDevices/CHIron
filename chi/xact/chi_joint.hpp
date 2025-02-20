@@ -310,6 +310,12 @@ namespace CHI {
         public:
             virtual void            Clear() noexcept override;
 
+            virtual void            GetInflight(
+                const Topology&                                         topo,
+                std::vector<std::shared_ptr<Xaction<config, conn>>>&    dstVector,
+                bool                                                    sortByTime = false
+            ) const noexcept;
+
         public:
             virtual XactDenialEnum  NextTXREQ(
                 Global<config, conn>*                   glbl,
@@ -644,7 +650,8 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructForwardSnoop(
-        Global<config, conn>*                   glbl,        const Topology&                         topo, 
+        Global<config, conn>*                   glbl,       
+        const Topology&                         topo, 
         const FiredRequestFlit<config, conn>&   reqFlit,
         std::shared_ptr<Xaction<config, conn>>  retried) noexcept
     {
@@ -847,6 +854,47 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline void RNFJoint<config, conn>::GetInflight(
+        const Topology&                                         topo,
+        std::vector<std::shared_ptr<Xaction<config, conn>>>&    dstVector,
+        bool                                                    sortByTime
+    ) const noexcept
+    {
+        for (auto& rxTransaction : rxTransactions)
+            dstVector.push_back(rxTransaction.second);
+
+        for (auto& txTransaction : txTransactions)
+            dstVector.push_back(txTransaction.second);
+
+        for (auto& txDBIDTransaction : txDBIDTransactions)
+        {
+            if (!txDBIDTransaction.second->IsTxnIDComplete(topo))
+                continue;
+            else
+                dstVector.push_back(txDBIDTransaction.second);
+        }
+
+        for (auto& txDBIDOverlappableTransaction : txDBIDOverlappableTransactions)
+        {
+            if (!txDBIDOverlappableTransaction.second->IsTxnIDComplete(topo))
+                continue;
+            else
+                dstVector.push_back(txDBIDOverlappableTransaction.second);
+        }
+
+        if (sortByTime)
+        {
+            std::sort(dstVector.begin(), dstVector.end(),
+                [] (std::shared_ptr<Xaction<config, conn>> a, std::shared_ptr<Xaction<config, conn>> b)
+                {
+                    return a->GetFirst().time < b->GetFirst().time;
+                }
+            );
+        }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNFJoint<config, conn>::NextTXREQ(
         Global<config, conn>*                   glbl,
         uint64_t                                time,
@@ -1009,7 +1057,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_TXNID_IN_USE;
 
         //
-        FiredRequestFlit<config, conn> firedSnpFlit(XactScope::Requester, false, time, snpFlit);
+        FiredRequestFlit<config, conn> firedSnpFlit(XactScope::Requester, false, time, snpFlit, snpTgtId);
 
         const Opcodes::OpcodeInfo<typename Flits::SNP<config>::opcode_t, GetXaction>& opcodeInfo =
             snpDecoder.DecodeRNF(snpFlit.Opcode());

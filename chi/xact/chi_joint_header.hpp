@@ -3,6 +3,7 @@
 #ifndef __CHI__CHI_XACT_JOINT_HEADER
 #define __CHI__CHI_XACT_JOINT_HEADER
 
+#include <algorithm>                        // IWYU pragma: export
 #include <unordered_map>                    // IWYU pragma: export
 #include <memory>                           // IWYU pragma: export
 #include <functional>                       // IWYU pragma: export
