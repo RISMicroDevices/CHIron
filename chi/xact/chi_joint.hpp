@@ -303,6 +303,7 @@ namespace CHI {
             static std::shared_ptr<Xaction<config, conn>>   ConstructDataless(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructHomeSnoop(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructForwardSnoop(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructAtomic(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
 
         public:
             RNFJoint() noexcept;
@@ -660,6 +661,17 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructAtomic(
+        Global<config, conn>*                   glbl,       
+        const Topology&                         topo, 
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionAtomic<config, conn>>(glbl, topo, reqFlit);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline RNFJoint<config, conn>::RNFJoint() noexcept
     {
         // TXREQ transactions
@@ -706,24 +718,24 @@ namespace /*CHI::*/Xact {
         SET_REQ_XACTION(ReadOnceMakeInvalid         , NonAllocatingRead );  // 0x25
         SET_REQ_XACTION(ReadNotSharedDirty          , AllocatingRead    );  // 0x26
         SET_REQ_XACTION(CleanSharedPersist          , Dataless          );  // 0x27
-        SET_REQ_XACTION(AtomicStore::ADD            , None              );  // 0x28
-        SET_REQ_XACTION(AtomicStore::CLR            , None              );  // 0x29
-        SET_REQ_XACTION(AtomicStore::EOR            , None              );  // 0x2A
-        SET_REQ_XACTION(AtomicStore::SET            , None              );  // 0x2B
-        SET_REQ_XACTION(AtomicStore::SMAX           , None              );  // 0x2C
-        SET_REQ_XACTION(AtomicStore::SMIN           , None              );  // 0x2D
-        SET_REQ_XACTION(AtomicStore::UMAX           , None              );  // 0x2E
-        SET_REQ_XACTION(AtomicStore::UMIN           , None              );  // 0x2F
-        SET_REQ_XACTION(AtomicLoad::ADD             , None              );  // 0x30
-        SET_REQ_XACTION(AtomicLoad::CLR             , None              );  // 0x31
-        SET_REQ_XACTION(AtomicLoad::EOR             , None              );  // 0x32
-        SET_REQ_XACTION(AtomicLoad::SET             , None              );  // 0x33
-        SET_REQ_XACTION(AtomicLoad::SMAX            , None              );  // 0x34
-        SET_REQ_XACTION(AtomicLoad::SMIN            , None              );  // 0x35
-        SET_REQ_XACTION(AtomicLoad::UMAX            , None              );  // 0x36
-        SET_REQ_XACTION(AtomicLoad::UMIN            , None              );  // 0x37
-        SET_REQ_XACTION(AtomicSwap                  , None              );  // 0x38
-        SET_REQ_XACTION(AtomicCompare               , None              );  // 0x39
+        SET_REQ_XACTION(AtomicStore::ADD            , Atomic            );  // 0x28
+        SET_REQ_XACTION(AtomicStore::CLR            , Atomic            );  // 0x29
+        SET_REQ_XACTION(AtomicStore::EOR            , Atomic            );  // 0x2A
+        SET_REQ_XACTION(AtomicStore::SET            , Atomic            );  // 0x2B
+        SET_REQ_XACTION(AtomicStore::SMAX           , Atomic            );  // 0x2C
+        SET_REQ_XACTION(AtomicStore::SMIN           , Atomic            );  // 0x2D
+        SET_REQ_XACTION(AtomicStore::UMAX           , Atomic            );  // 0x2E
+        SET_REQ_XACTION(AtomicStore::UMIN           , Atomic            );  // 0x2F
+        SET_REQ_XACTION(AtomicLoad::ADD             , Atomic            );  // 0x30
+        SET_REQ_XACTION(AtomicLoad::CLR             , Atomic            );  // 0x31
+        SET_REQ_XACTION(AtomicLoad::EOR             , Atomic            );  // 0x32
+        SET_REQ_XACTION(AtomicLoad::SET             , Atomic            );  // 0x33
+        SET_REQ_XACTION(AtomicLoad::SMAX            , Atomic            );  // 0x34
+        SET_REQ_XACTION(AtomicLoad::SMIN            , Atomic            );  // 0x35
+        SET_REQ_XACTION(AtomicLoad::UMAX            , Atomic            );  // 0x36
+        SET_REQ_XACTION(AtomicLoad::UMIN            , Atomic            );  // 0x37
+        SET_REQ_XACTION(AtomicSwap                  , Atomic            );  // 0x38
+        SET_REQ_XACTION(AtomicCompare               , Atomic            );  // 0x39
         SET_REQ_XACTION(PrefetchTgt                 , None              );  // 0x3A
                                                                             // 0x3B
                                                                             // 0x3C

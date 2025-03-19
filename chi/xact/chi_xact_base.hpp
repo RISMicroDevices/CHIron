@@ -107,11 +107,12 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_RSP_NOT_FROM_RN_TO_HN        ("XACT_DENIED_RSP_NOT_FROM_RN_TO_HN",       0x00020000 |  6);
             inline constexpr XactDenialEnumBack DENIED_RSP_NOT_TO_SN                ("XACT_DENIED_RSP_NOT_TO_SN",               0x00020000 |  7);
             inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_RN                ("XACT_DENIED_DAT_NOT_TO_RN",               0x00020000 |  8);
-            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_HN                ("XACT_DENIED_DAT_NOT_TO_HN",               0x00020000 |  9);
-            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_FROM_RN_TO_HN        ("XACT_DENIED_DAT_NOT_FROM_RN_TO_HN",       0x00020000 | 10);
-            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_SN                ("XACT_DENIED_DAT_NOT_TO_SN",               0x00020000 | 11);
-            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_TO_RN                ("XACT_DENIED_SNP_NOT_TO_RN",               0x00020000 | 12);
-            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_FROM_HN_TO_RN        ("XACT_DENIED_SNP_NOT_FROM_HN_TO_RN",       0x00020000 | 13);
+            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_FROM_HN_TO_RN        ("XACT_DENIED_DAT_NOT_FROM_HN_TO_RN",       0x00020000 |  9);
+            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_HN                ("XACT_DENIED_DAT_NOT_TO_HN",               0x00020000 | 10);
+            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_FROM_RN_TO_HN        ("XACT_DENIED_DAT_NOT_FROM_RN_TO_HN",       0x00020000 | 11);
+            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_SN                ("XACT_DENIED_DAT_NOT_TO_SN",               0x00020000 | 12);
+            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_TO_RN                ("XACT_DENIED_SNP_NOT_TO_RN",               0x00020000 | 13);
+            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_FROM_HN_TO_RN        ("XACT_DENIED_SNP_NOT_FROM_HN_TO_RN",       0x00020000 | 14);
 
             inline constexpr XactDenialEnumBack DENIED_TXNID_MISMATCH               ("XACT_DENIED_TXNID_MISMATCH",              0x00040000 |  1);
             inline constexpr XactDenialEnumBack DENIED_DBID_MISMATCH                ("XACT_DENIED_DBID_MISMATCH",               0x00040000 |  2);
@@ -138,7 +139,7 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_DATASEP_AFTER_COMP           ("XACT_DENIED_DATASEP_AFTER_COMP",          0x000B0000 |  8);
             inline constexpr XactDenialEnumBack DENIED_DATASEP_AFTER_COMPDATA       ("XACT_DENIED_DATASEP_AFTER_COMPDATA",      0x000B0000 |  9);
             
-            inline constexpr XactDenialEnumBack DENIED_DATA_BEFORE_DBID             ("XACT_DENIED_DATA_BEFORE_DBID",            0x000B0000 | 10);
+            inline constexpr XactDenialEnumBack DENIED_DATA_BEFORE_DBIDRESP         ("XACT_DENIED_DATA_BEFORE_DBIDRESP",        0x000B0000 | 10);
             inline constexpr XactDenialEnumBack DENIED_DATA_AFTER_COMP              ("XACT_DENIED_DATA_AFTER_COMP",             0x000B0000 | 11);
             inline constexpr XactDenialEnumBack DENIED_COMPACK_BEFORE_DBID          ("XACT_DENIED_COMPACK_BEFORE_DBID",         0x000B0000 | 12);
             inline constexpr XactDenialEnumBack DENIED_COMPACK_BEFORE_COMP          ("XACT_DENIED_COMPACK_BEFORE_COMP",         0x000B0000 | 13);
@@ -176,6 +177,9 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_WRITEDATACANCEL_AFTER_NCBWRDATACOMPACK   ("XACT_DENIED_WRITEDATACANCEL_AFTER_NCBWRDATACOMPACK",  0x000B0000 | 36);
             inline constexpr XactDenialEnumBack DENIED_NCBWRDATACOMPACK_AFTER_WRITEDATACANCEL   ("XACT_DENIED_NCBWRDATACOMPACK_AFTER_WRITEDATACANCEL",  0x000B0000 | 37);
             inline constexpr XactDenialEnumBack DENIED_NCBWRDATACOMPACK_AFTER_NCBWRDATA         ("XACT_DENIED_NCBWRDATACOMPACK_AFTER_NCBWRDATA",        0x000B0000 | 38);
+
+            inline constexpr XactDenialEnumBack DENIED_NCBWRDATA_AFTER_NCBWRDATA                ("XACT_DENIED_NCBWRDATA_AFTER_NCBWRDATA",               0x000B0000 | 39);
+            inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_COMPDATA                  ("XACT_DENIED_COMPDATA_AFTER_COMPDATA",                 0x000B0000 | 40);
 
             inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_XACT_TYPE         ("XACT_DENIED_RETRY_DIFF_XACT_TYPE",        0x000C0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_RETRY_NO_ALLOWRETRY          ("XACT_DENIED_RETRY_NO_ALLOWRETRY",         0x000C0000 |  1);

@@ -10,6 +10,7 @@
 #include <functional>                               // IWYU pragma: export
 #include <optional>                                 // IWYU pragma: export
 #include <cassert>                                  // IWYU pragma: export
+#include "../../common/utility.hpp"                 // IWYU pragma: export
 
 
 #endif // __CHI__CHI_XACT_XACTIONS_HEADER

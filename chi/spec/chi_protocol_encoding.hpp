@@ -145,6 +145,8 @@ namespace CHI {
                 constexpr type          UMAX                    = SubAtomicStore(110);
                 constexpr type          UMIN                    = SubAtomicStore(111);
 #               undef SubAtomicStore
+
+                inline constexpr bool Is(type val) { return (val & 0b111000) == 0b101000; }
             };
 
             namespace AtomicLoad {
@@ -159,6 +161,8 @@ namespace CHI {
                 constexpr type          UMAX                    = SubAtomicLoad(110);
                 constexpr type          UMIN                    = SubAtomicLoad(111);
 #               undef SubAtomicLoad
+
+                inline constexpr bool Is(type val) { return (val & 0b111000) == 0b110000; }
             };
 
             /*
