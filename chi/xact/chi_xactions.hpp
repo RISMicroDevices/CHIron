@@ -313,8 +313,6 @@ namespace CHI {
         public:
             virtual XactDenialEnum          NextRSPNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
-
-            // TODO
         };
 
         // TODO: XactionStash
@@ -2156,9 +2154,16 @@ namespace /*CHI::*/Xact {
                 if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
                     return XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP;
 
-                // TODO: Do not check DBID of Comp on DWT
-                if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
-                    return XactDenial::DENIED_DBID_MISMATCH;
+                if (
+                    true
+#ifdef CHI_ISSUE_EB_ENABLE
+                 && !this->first.flit.req.DoDWT() // Never check DBID of Comp on DWT
+#endif
+                )
+                {
+                    if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
+                        return XactDenial::DENIED_DBID_MISMATCH;
+                }
             }
             else
                 firstDBID = true;
