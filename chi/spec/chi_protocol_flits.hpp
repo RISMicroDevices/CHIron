@@ -11,10 +11,14 @@
 
 
 #if (!defined(CHI_ISSUE_B_ENABLE)  || !defined(__CHI__CHI_PROTOCOL_FLITS_B)) \
+ && (!defined(CHI_ISSUE_C_ENABLE)  || !defined(__CHI__CHI_PROTOCOL_FLITS_C)) \
  && (!defined(CHI_ISSUE_EB_ENABLE) || !defined(__CHI__CHI_PROTOCOL_FLITS_EB))
 
 #ifdef CHI_ISSUE_B_ENABLE
 #   define __CHI__CHI_PROTOCOL_FLITS_B
+#endif
+#ifdef CHI_ISSUE_C_ENABLE
+#   define __CHI__CHI_PROTOCOL_FLITS_C
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
 #   define __CHI__CHI_PROTOCOL_FLITS_EB
@@ -203,10 +207,11 @@ namespace CHI {
             /*
             TxnID: 
                 *  8 bits for CHI Issue B
+                *  8 bits for CHI Issue C
                 * 12 bits for CHI Issue E.b
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     TXNID_WIDTH = 8;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -243,6 +248,7 @@ namespace CHI {
             /*
             SLCRepHint:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 7 bits for CHI Issue E.b
             System Level Cache Replacement Hint. Forwards cache replacement hints 
             from the Requesters to the caches in the interconnect.
@@ -283,6 +289,7 @@ namespace CHI {
             /*
             Deep:
                 * N/A   for CHI Issue B
+                * N/A   for CHI Issue C
                 * 1 bit for CHI Issue E.b
             Deep persistence. Indicates that the Persist response must not be sent until all 
             earlier writes are written to the final destination.
@@ -299,11 +306,12 @@ namespace CHI {
             /*
             ReturnTxnID: 
                 *  8 bits for CHI Issue B
+                *  8 bits for CHI Issue C
                 * 12 bits for CHI Issue E.b
             Return Transaction ID. The unique transaction ID that conveys the value of 
             TxnID in the data response from the Slave.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     RETURNTXNID_WIDTH = 8;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -341,11 +349,12 @@ namespace CHI {
             /*
             Opcode:
                 * 6 bits for CHI Issue B
+                * 6 bits for CHI Issue C
                 * 7 bits for CHI Issue E.b
             Request opcode. Specifies the transaction type and is the primary field that 
             determines the transaction structure.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     OPCODE_WIDTH = 6;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -464,6 +473,7 @@ namespace CHI {
             /*
             DoDWT:
                 * N/A   for CHI Issue B
+                * N/A   for CHI Issue C
                 * 1 bit for CHI Issue E.b
             Do Direct Write Transfer. Supports Direct Write-data Transfer and the 
             handling of Combined Writes.
@@ -487,7 +497,7 @@ namespace CHI {
             static constexpr size_t     LPID_MSB   = SNPATTR_MSB + LPID_WIDTH;
             static constexpr FlitRange  LPID_RANGE = { LPID_LSB, LPID_MSB };
 
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             using lpid_t = uint_fit_t<LPID_WIDTH>;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -497,6 +507,7 @@ namespace CHI {
             /*
             PGroupID:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 8 bits for CHI Issue E.b
             Persistence Group ID. Indicates the set of CleanSharedPersistSep transactions 
             to which the request applies.
@@ -513,6 +524,7 @@ namespace CHI {
             /*
             StashGroupID:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 8 bits for CHI Issue E.b
             Stash Group ID. Indicates the set of StashOnceSep transactions to which the 
             request applies.
@@ -529,6 +541,7 @@ namespace CHI {
             /*
             TagGroupID:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 8 bits for CHI Issue E.b
             TagGroupID. Precise contents are IMPLEMENTATION DEFINED. Typically 
             expected to contain Exception level, TTBR value, and CPU identifier.
@@ -548,7 +561,7 @@ namespace CHI {
             access transaction.
             */
             static constexpr size_t     EXCL_WIDTH = 1;
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     EXCL_LSB   = LPID_MSB + 1;
             static constexpr size_t     EXCL_MSB   = LPID_MSB + EXCL_WIDTH;
 #endif
@@ -566,7 +579,7 @@ namespace CHI {
             Requester.
             */
             static constexpr size_t     SNOOPME_WIDTH = 1;
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     SNOOPME_LSB   = LPID_MSB + 1;
             static constexpr size_t     SNOOPME_MSB   = LPID_MSB + SNOOPME_WIDTH;
 #endif
@@ -593,6 +606,7 @@ namespace CHI {
             /*
             TagOp:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 2 bits for CHI Issue E.b
             Tag Operation. Indicates the operation to be performed on the tags present in 
             the corresponding DAT channel.
@@ -613,7 +627,7 @@ namespace CHI {
             Tag.
             */
             static constexpr size_t     TRACETAG_WIDTH = 1;
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     TRACETAG_LSB   = EXPCOMPACK_MSB + 1;
             static constexpr size_t     TRACETAG_MSB   = EXPCOMPACK_MSB + TRACETAG_WIDTH;
 #endif
@@ -628,6 +642,7 @@ namespace CHI {
             /*
             MPAM:
                 * N/A         for CHI Issue B
+                * N/A         for CHI Issue C
                 * <mpamWidth> for CHI Issue E.b
             Memory System Performance Resource Partitioning and Monitoring. 
             Efficiently utilizes the memory resources among users and monitors their use.
@@ -648,7 +663,7 @@ namespace CHI {
             User-defined.
             */
             static constexpr size_t     RSVDC_WIDTH = config::reqRsvdcWidth;
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     RSVDC_LSB   = TRACETAG_MSB + 1;
             static constexpr size_t     RSVDC_MSB   = TRACETAG_MSB + RSVDC_WIDTH;
 #endif
@@ -664,6 +679,14 @@ namespace CHI {
 
         public:
 #ifdef CHI_ISSUE_B_ENABLE
+            static constexpr size_t     WIDTH = QOS_WIDTH       + TGTID_WIDTH       + SRCID_WIDTH       + TXNID_WIDTH
+                                              + RETURNNID_WIDTH + STASHNIDVALID_WIDTH                   + RETURNTXNID_WIDTH
+                                              + OPCODE_WIDTH    + SSIZE_WIDTH       + ADDR_WIDTH        + NS_WIDTH
+                                              + LIKELYSHARED_WIDTH                  + ALLOWRETRY_WIDTH  + ORDER_WIDTH
+                                              + PCRDTYPE_WIDTH  + MEMATTR_WIDTH     + SNPATTR_WIDTH     + LPID_WIDTH
+                                              + EXCL_WIDTH      + EXPCOMPACK_WIDTH  + TRACETAG_WIDTH    + RSVDC_WIDTH;
+#endif
+#ifdef CHI_ISSUE_C_ENABLE
             static constexpr size_t     WIDTH = QOS_WIDTH       + TGTID_WIDTH       + SRCID_WIDTH       + TXNID_WIDTH
                                               + RETURNNID_WIDTH + STASHNIDVALID_WIDTH                   + RETURNTXNID_WIDTH
                                               + OPCODE_WIDTH    + SSIZE_WIDTH       + ADDR_WIDTH        + NS_WIDTH
@@ -1132,10 +1155,11 @@ namespace CHI {
             /*
             TxnID: 
                 *  8 bits for CHI Issue B
+                *  8 bits for CHI Issue C
                 * 12 bits for CHI Issue E.b
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     TXNID_WIDTH = 8;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1162,6 +1186,7 @@ namespace CHI {
             /*
             Opcode:
                 * 3 bits for CHI Issue B
+                * 4 bits for CHI Issue C
                 * 4 bits for CHI Issue E.b
             Data opcode. Indicates, for example, if the data packet is related to a Read 
             transaction, a Write transaction, or a Snoop transaction. 
@@ -1169,7 +1194,7 @@ namespace CHI {
 #ifdef CHI_ISSUE_B_ENABLE
             static constexpr size_t     OPCODE_WIDTH = 3;
 #endif
-#ifdef CHI_ISSUE_EB_ENABLE
+#if defined(CHI_ISSUE_C_ENABLE) || defined(CHI_ISSUE_EB_ENABLE)
             static constexpr size_t     OPCODE_WIDTH = 4;
 #endif
             static constexpr size_t     OPCODE_LSB   = HOMENID_MSB + 1;
@@ -1211,7 +1236,7 @@ namespace CHI {
             static constexpr size_t     FWDSTATE_MSB   = RESP_MSB + FWDSTATE_WIDTH;
             static constexpr FlitRange  FWDSTATE_RANGE = { FWDSTATE_LSB, FWDSTATE_MSB };
 
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             using fwdstate_t = uint_strict_t<FWDSTATE_WIDTH>;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1228,7 +1253,7 @@ namespace CHI {
             static constexpr size_t     DATAPULL_MSB   = RESP_MSB + DATAPULL_WIDTH;
             static constexpr FlitRange  DATAPULL_RANGE = { DATAPULL_LSB, DATAPULL_MSB };
             
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             using datapull_t = uint_strict_t<DATAPULL_WIDTH>;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1238,11 +1263,12 @@ namespace CHI {
             /*
             DataSource:
                 * 3 bits for CHI Issue B
+                * 3 bits for CHI Issue C
                 * 4 bits for CHI Issue E.b
             Data Source. The value indicates the source of the data in a read Data 
             response.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     DATASOURCE_WIDTH = 3;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1257,6 +1283,7 @@ namespace CHI {
             /*
             CBusy:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 3 bits for CHI Issue E.b
             Completer Busy. Indicates the current level of activity at the Completer.
             */
@@ -1272,11 +1299,12 @@ namespace CHI {
             /*
             DBID:
                 *  8 bits for CHI Issue B
+                *  8 bits for CHI Issue C
                 * 12 bits for CHI Issue E.b
             Data Buffer ID. The ID provided to be used as the TxnID in the response to 
             this message.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     DBID_WIDTH = 8;
             static constexpr size_t     DBID_LSB   = DATASOURCE_MSB + 1;
             static constexpr size_t     DBID_MSB   = DATASOURCE_MSB + DBID_WIDTH;
@@ -1316,6 +1344,7 @@ namespace CHI {
             /*
             TagOp:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 2 bits for CHI Issue E.b
             Tag Operation.
             */
@@ -1331,6 +1360,7 @@ namespace CHI {
             /*
             Tag:
                 * N/A             for CHI Issue B
+                * N/A             for CHI Issue C
                 * <tagWidth> bits for CHI Issue E.b
             Memory Tag. Provides sets of 4-bit tags, each associated with an aligned 
             16-byte of data. 
@@ -1347,6 +1377,7 @@ namespace CHI {
             /*
             TU:
                 * N/A                   for CHI Issue B
+                * N/A                   for CHI Issue C
                 * <tagUpdateWidth> bits for CHI Issue E.b
             Tag Update. Indicates which of the Allocation Tags must be updated.
             */
@@ -1365,7 +1396,7 @@ namespace CHI {
             performance measurement of systems.
             */
             static constexpr size_t     TRACETAG_WIDTH = 1;
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     TRACETAG_LSB   = DATAID_MSB + 1;
             static constexpr size_t     TRACETAG_MSB   = DATAID_MSB + TRACETAG_WIDTH;
 #endif
@@ -1441,6 +1472,13 @@ namespace CHI {
 
         public:
 #ifdef CHI_ISSUE_B_ENABLE
+            static constexpr size_t     WIDTH = QOS_WIDTH       + TGTID_WIDTH       + SRCID_WIDTH       + TXNID_WIDTH
+                                              + HOMENID_WIDTH   + OPCODE_WIDTH      + RESPERR_WIDTH     + RESP_WIDTH
+                                              + DATASOURCE_WIDTH                    + DBID_WIDTH        + CCID_WIDTH
+                                              + DATAID_WIDTH    + TRACETAG_WIDTH    + RSVDC_WIDTH       + BE_WIDTH
+                                              + DATA_WIDTH      + DATACHECK_WIDTH   + POISON_WIDTH;
+#endif
+#ifdef CHI_ISSUE_C_ENABLE
             static constexpr size_t     WIDTH = QOS_WIDTH       + TGTID_WIDTH       + SRCID_WIDTH       + TXNID_WIDTH
                                               + HOMENID_WIDTH   + OPCODE_WIDTH      + RESPERR_WIDTH     + RESP_WIDTH
                                               + DATASOURCE_WIDTH                    + DBID_WIDTH        + CCID_WIDTH
@@ -1767,10 +1805,11 @@ namespace CHI {
             /*
             TxnID: 
                 *  8 bits for CHI Issue B
+                *  8 bits for CHI Issue C
                 * 12 bits for CHI Issue E.b
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     TXNID_WIDTH = 8;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1785,10 +1824,11 @@ namespace CHI {
             /*
             Opcode:
                 * 4 bits for CHI Issue B
+                * 4 bits for CHI Issue C
                 * 5 bits for CHI Issue E.b
             Response opcode. Specifies the response type.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     OPCODE_WIDTH = 4;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1850,6 +1890,7 @@ namespace CHI {
             /*
             CBusy:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 3 bits for CHI Issue E.b
             Completer Busy. Indicates the current level of activity at the Completer.
             */
@@ -1865,11 +1906,12 @@ namespace CHI {
             /*
             DBID:
                 *  8 bits for CHI Issue B
+                *  8 bits for CHI Issue C
                 * 12 bits for CHI Issue E.b
             Data Buffer ID. The ID provided to be used as the TxnID in the response to 
             this message.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     DBID_WIDTH = 8;
             static constexpr size_t     DBID_LSB   = FWDSTATE_MSB + 1;
             static constexpr size_t     DBID_MSB   = FWDSTATE_MSB + DBID_WIDTH;
@@ -1881,7 +1923,7 @@ namespace CHI {
 #endif
             static constexpr FlitRange  DBID_RANGE = { DBID_LSB, DBID_MSB };
 
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             using dbid_t = uint_fit_t<DBID_WIDTH>;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1891,6 +1933,7 @@ namespace CHI {
             /*
             PGroupID:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 8 bits for CHI Issue E.b
             Persistence Group ID. Indicates the set of CleanSharedPersistSep transactions 
             to which the request applies.
@@ -1907,6 +1950,7 @@ namespace CHI {
             /*
             StashGroupID:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 8 bits for CHI Issue E.b
             Stash Group ID. Indicates the set of StashOnceSep transactions to which the 
             request applies.
@@ -1923,6 +1967,7 @@ namespace CHI {
             /*
             TagGroupID:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 8 bits for CHI Issue E.b
             TagGroupID. Precise contents are IMPLEMENTATION DEFINED. Typically 
             expected to contain Exception level, TTBR value, and CPU identifier.
@@ -1950,6 +1995,7 @@ namespace CHI {
             /*
             TagOp:
                 * N/A    for CHI Issue B
+                * N/A    for CHI Issue C
                 * 2 bits for CHI Issue E.b
             Tag Operation.
             */
@@ -1968,7 +2014,7 @@ namespace CHI {
             performance measurement of systems.
             */
             static constexpr size_t     TRACETAG_WIDTH = 1;
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     TRACETAG_LSB   = PCRDTYPE_MSB + 1;
             static constexpr size_t     TRACETAG_MSB   = PCRDTYPE_MSB + TRACETAG_WIDTH;
 #endif
@@ -1982,6 +2028,11 @@ namespace CHI {
 
         public:
 #ifdef CHI_ISSUE_B_ENABLE
+            static constexpr size_t     WIDTH = QOS_WIDTH       + TGTID_WIDTH       + SRCID_WIDTH       + TXNID_WIDTH
+                                              + OPCODE_WIDTH    + RESPERR_WIDTH     + RESP_WIDTH        + FWDSTATE_WIDTH
+                                              + DBID_WIDTH      + PCRDTYPE_WIDTH    + TRACETAG_WIDTH;
+#endif
+#ifdef CHI_ISSUE_C_ENABLE
             static constexpr size_t     WIDTH = QOS_WIDTH       + TGTID_WIDTH       + SRCID_WIDTH       + TXNID_WIDTH
                                               + OPCODE_WIDTH    + RESPERR_WIDTH     + RESP_WIDTH        + FWDSTATE_WIDTH
                                               + DBID_WIDTH      + PCRDTYPE_WIDTH    + TRACETAG_WIDTH;
@@ -2236,10 +2287,11 @@ namespace CHI {
             /*
             TxnID: 
                 *  8 bits for CHI Issue B
+                *  8 bits for CHI Issue C
                 * 12 bits for CHI Issue E.b
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     TXNID_WIDTH = 8;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -2265,11 +2317,12 @@ namespace CHI {
             /*
             FwdTxnID:
                 *  8 bits for CHI Issue B
+                *  8 bits for CHI Issue C
                 * 12 bits for CHI Issue E.b
             Forward Transaction ID. The transaction ID used in the Request by the original 
             Requester.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     FWDTXNID_WIDTH = 8;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -2356,7 +2409,7 @@ namespace CHI {
             static constexpr size_t     DONOTGOTOSD_MSB   = NS_MSB + DONOTGOTOSD_WIDTH;
             static constexpr FlitRange  DONOTGOTOSD_RANGE = { DONOTGOTOSD_LSB, DONOTGOTOSD_MSB };
 
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             using donotgotosd_t = uint_strict_t<DONOTGOTOSD_WIDTH>;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -2366,11 +2419,12 @@ namespace CHI {
             /*
             DoNotDataPull:
                 * 1 bit for CHI Issue B
+                * 1 bit for CHI Issue C
                 * N/A   for CHI Issue E.b
             Do Not Data Pull. Instructs the Snoopee that it is not permitted to use the Data Pull 
             feature associated with Stash requests.
             */
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             static constexpr size_t     DONOTDATAPULL_WIDTH = 1;
             static constexpr size_t     DONOTDATAPULL_LSB   = NS_MSB + 1;
             static constexpr size_t     DONOTDATAPULL_MSB   = NS_MSB + DONOTDATAPULL_WIDTH;
@@ -2426,6 +2480,11 @@ namespace CHI {
                                               + FWDTXNID_WIDTH  + OPCODE_WIDTH      + ADDR_WIDTH        + NS_WIDTH
                                               + DONOTGOTOSD_WIDTH                   + RETTOSRC_WIDTH    + TRACETAG_WIDTH;
 #endif
+#ifdef CHI_ISSUE_C_ENABLE
+            static constexpr size_t     WIDTH = QOS_WIDTH       + SRCID_WIDTH       + TXNID_WIDTH       + FWDNID_WIDTH
+                                              + FWDTXNID_WIDTH  + OPCODE_WIDTH      + ADDR_WIDTH        + NS_WIDTH
+                                              + DONOTGOTOSD_WIDTH                   + RETTOSRC_WIDTH    + TRACETAG_WIDTH;
+#endif
 #ifdef CHI_ISSUE_EB_ENABLE
             static constexpr size_t     WIDTH = QOS_WIDTH       + SRCID_WIDTH       + TXNID_WIDTH       + FWDNID_WIDTH
                                               + FWDTXNID_WIDTH  + OPCODE_WIDTH      + ADDR_WIDTH        + NS_WIDTH
@@ -2454,7 +2513,7 @@ namespace CHI {
             as_pointer_if_t<conn::connectedIO, ns_t>                _NS;
             union {
             as_pointer_if_t<conn::connectedIO, donotgotosd_t>       _DoNotGoToSD;
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             as_pointer_if_t<conn::connectedIO, donotdatapull_t>     _DoNotDataPull;
 #endif
             };
@@ -2478,7 +2537,7 @@ namespace CHI {
             inline constexpr        addr_t&             Addr            ()          noexcept { return CHI::decay<addr_t>(_Addr); }
             inline constexpr        ns_t&               NS              ()          noexcept { return CHI::decay<ns_t>(_NS); }
             inline constexpr        donotgotosd_t&      DoNotGoToSD     ()          noexcept { return CHI::decay<donotgotosd_t>(_DoNotGoToSD); }
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             inline constexpr        donotdatapull_t&    DoNotDataPull   ()          noexcept { return CHI::decay<donotdatapull_t>(_DoNotDataPull); }
 #endif
             inline constexpr        rettosrc_t&         RetToSrc        ()          noexcept { return CHI::decay<rettosrc_t>(_RetToSrc); }
@@ -2501,7 +2560,7 @@ namespace CHI {
             inline constexpr const  addr_t&             Addr            () const    noexcept { return CHI::decay<addr_t>(_Addr); }
             inline constexpr const  ns_t&               NS              () const    noexcept { return CHI::decay<ns_t>(_NS); }
             inline constexpr const  donotgotosd_t&      DoNotGoToSD     () const    noexcept { return CHI::decay<donotgotosd_t>(_DoNotGoToSD); }
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             inline constexpr const  donotdatapull_t&    DoNotDataPull   () const    noexcept { return CHI::decay<donotdatapull_t>(_DoNotDataPull); }
 #endif
             inline constexpr const  rettosrc_t&         RetToSrc        () const    noexcept { return CHI::decay<rettosrc_t>(_RetToSrc); }
@@ -2587,7 +2646,7 @@ namespace CHI {
             { T::DONOTGOTOSD_LSB        } -> std::convertible_to<size_t>;
             { T::DONOTGOTOSD_MSB        } -> std::convertible_to<size_t>;
 
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
             // DoNotDataPull
             typename T::donotdatapull_t;
             { T::DONOTDATAPULL_WIDTH    } -> std::convertible_to<size_t>;
