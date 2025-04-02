@@ -35,12 +35,38 @@ import "DPI-C" function void CLogB_CloseFile (
     input   chandle             handle
 );
 
+import "DPI-C" function void CLogB_ShareHandle (
+    input   string              id,
+    input   chandle             handle
+);
+
+import "DPI-C" function int CLogB_UnshareHandle (
+    input   string              id
+);
+
+import "DPI-C" function chandle CLogB_GetSharedHandle (
+    input   string              id
+);
+
 
 /*
 * CLog.B parameters write operations.
 */
 import "DPI-C" function void CLogB_WriteParameters (
     input   chandle             handle,
+    input   int                 issue,
+    input   int                 nodeIdWidth,
+    input   int                 addrWidth,
+    input   int                 reqRsvdcWidth,
+    input   int                 datRsvdcWidth,
+    input   int                 dataWidth,
+    input   int                 dataCheckPresent,
+    input   int                 poisonPresent,
+    input   int                 mpamPresent
+);
+
+import "DPI-C" function void CLogB_SharedWriteParameters (
+    input   string              id,
     input   int                 issue,
     input   int                 nodeIdWidth,
     input   int                 addrWidth,
@@ -66,6 +92,16 @@ import "DPI-C" function void CLogB_WriteTopoEnd (
     input   chandle             handle
 );
 
+import "DPI-C" function void CLogB_SharedWriteTopo (
+    input   string              id,
+    input   int                 nodeId,
+    input   int                 nodeType
+);
+
+import "DPI-C" function void CLogB_SharedWriteTopoEnd (
+    input   string              id
+);
+
 
 /*
 * CLog.B log record write operations.
@@ -73,6 +109,15 @@ import "DPI-C" function void CLogB_WriteTopoEnd (
 import "DPI-C" function void CLogB_WriteRecord (
     input   chandle             handle,
     input   longint             cycletime,
+    input   int                 nodeId,
+    input   int                 channel,
+    input   bit [511:0]         flit,
+    input   int                 flitLength
+);
+
+import "DPI-C" function void CLogB_SharedWriteRecord (
+    input   string              id,
+    input   longint             cycleTime,
     input   int                 nodeId,
     input   int                 channel,
     input   bit [511:0]         flit,

@@ -7,6 +7,7 @@
 #include <fstream>
 #include <thread>
 #include <cstring>
+#include <unordered_map>
 
 #include "../../common/concurrentqueue.hpp"
 
@@ -34,6 +35,8 @@ struct CLogBHandle {
     CLog::CLogB::TagCHIRecords*             records;
     uint64_t                                lastRecordTime;
 };
+
+std::unordered_map<std::string, CLogBHandle*> SHARED_HANDLES;
 
 
 /*
@@ -66,7 +69,6 @@ extern "C" void* CLogB_OpenFile(
     handle->ofpath  = path;
     handle->queue   = new moodycamel::ConcurrentQueue<CLog::CLogB::TagCHIRecords*>;
     handle->stop    = false;
-    handle->records = nullptr;
 
     std::atomic_thread_fence(std::memory_order_seq_cst);
 
@@ -83,6 +85,8 @@ extern "C" void* CLogB_OpenFile(
                 return;
         }
     });
+
+    handle->records = nullptr;
 
     return handle;
 }
@@ -113,6 +117,30 @@ extern "C" void CLogB_CloseFile(
     if (chandle->records)
         delete chandle->records;
     delete chandle;
+}
+
+extern "C" void CLogB_ShareHandle(
+    const char*         id,
+    void*               handle)
+{
+    SHARED_HANDLES[std::string(id)] = (CLogBHandle*) handle;
+}
+
+extern "C" int CLogB_UnshareHandle(
+    const char*         id)
+{
+    return SHARED_HANDLES.erase(std::string(id));
+}
+
+extern "C" void* CLogB_GetSharedHandle(
+    const char*         id)
+{
+    auto iter = SHARED_HANDLES.find(std::string(id));
+
+    if (iter == SHARED_HANDLES.end())
+        return nullptr;
+
+    return iter->second;
 }
 
 
@@ -152,6 +180,37 @@ extern "C" void CLogB_WriteParameters(
     CLog::CLogB::Writer().Next(*chandle->ofs, &tag);
 }
 
+extern "C" void CLogB_SharedWriteParameters(
+    const char*         id,
+    uint32_t            issue,
+    uint32_t            nodeIdWidth,
+    uint32_t            addrWidth,
+    uint32_t            reqRsvdcWidth,
+    uint32_t            datRsvdcWidth,
+    uint32_t            dataWidth,
+    uint32_t            dataCheckPresent,
+    uint32_t            poisonPresent,
+    uint32_t            mpamPresent)
+{
+    auto iter = SHARED_HANDLES.find(std::string(id));
+
+    if (iter == SHARED_HANDLES.end())
+        return;
+
+    CLogB_WriteParameters(
+        iter->second,
+        issue,
+        nodeIdWidth,
+        addrWidth,
+        reqRsvdcWidth,
+        datRsvdcWidth,
+        dataWidth,
+        dataCheckPresent,
+        poisonPresent,
+        mpamPresent
+    );
+}
+
 
 /*
 * CLog.B topologies write operations implementations.
@@ -178,6 +237,36 @@ extern "C" void CLogB_WriteTopoEnd(
     tag.nodes = chandle->topos;
 
     CLog::CLogB::Writer().Next(*chandle->ofs, &tag);
+}
+
+extern "C" void CLogB_SharedWriteTopo(
+    const char*         id,
+    uint32_t            nodeId,
+    uint32_t            nodeType)
+{
+    auto iter = SHARED_HANDLES.find(std::string(id));
+
+    if (iter == SHARED_HANDLES.end())
+        return;
+
+    CLogB_WriteTopo(
+        iter->second,
+        nodeId,
+        nodeType
+    );
+}
+    
+extern "C" void CLogB_SharedWriteTopoEnd(
+    const char*         id)
+{
+    auto iter = SHARED_HANDLES.find(std::string(id));
+
+    if (iter == SHARED_HANDLES.end())
+        return;
+
+    CLogB_WriteTopoEnd(
+        iter->second
+    );
 }
 
 
@@ -238,4 +327,27 @@ extern "C" void CLogB_WriteRecord(
     });
 
     chandle->lastRecordTime = time;
+}
+
+extern "C" void CLogB_SharedWriteRecord(
+    const char*         id,
+    uint64_t            time,
+    uint32_t            nodeId,
+    uint32_t            channel,
+    const uint32_t*     flit,
+    uint32_t            flitLength)
+{
+    auto iter = SHARED_HANDLES.find(std::string(id));
+
+    if (iter == SHARED_HANDLES.end())
+        return;
+
+    CLogB_WriteRecord(
+        iter->second,
+        time,
+        nodeId,
+        channel,
+        flit,
+        flitLength
+    );
 }

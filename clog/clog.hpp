@@ -6,7 +6,12 @@
 #include <cstdint>                          // IWYU pragma: keep
 #include <string>
 
-#include "../chi/basic/chi_parameters.hpp"
+//#define CLOG_STANDALONE
+
+#ifndef CLOG_STANDALONE
+#   include "../chi/basic/chi_parameters.hpp"
+#endif
+
 
 namespace CLog {
 
@@ -125,8 +130,10 @@ namespace CLog {
 
     inline bool Parameters::SetNodeIdWidth(size_t nodeIdWidth) noexcept
     {
+#ifndef CLOG_STANDALONE
         if (!CHI::CheckNodeIdWidth(nodeIdWidth))
             return false;
+#endif
 
         this->nodeIdWidth = nodeIdWidth;
 
@@ -135,8 +142,10 @@ namespace CLog {
 
     inline bool Parameters::SetReqAddrWidth(size_t reqAddrWidth) noexcept
     {
+#ifndef CLOG_STANDALONE
         if (!CHI::CheckReqAddrWidth(reqAddrWidth))
             return false;
+#endif
 
         this->reqAddrWidth = reqAddrWidth;
 
@@ -145,8 +154,10 @@ namespace CLog {
 
     inline bool Parameters::SetReqRSVDCWidth(size_t reqRsvdcWidth) noexcept
     {
+#ifndef CLOG_STANDALONE
         if (!CHI::CheckRSVDCWidth(reqRsvdcWidth))
             return false;
+#endif
 
         this->reqRsvdcWidth = reqRsvdcWidth;
 
@@ -155,8 +166,10 @@ namespace CLog {
 
     inline bool Parameters::SetDatRSVDCWidth(size_t datRsvdcWidth) noexcept
     {
+#ifndef CLOG_STANDALONE
         if (!CHI::CheckRSVDCWidth(datRsvdcWidth))
             return false;
+#endif
 
         this->datRsvdcWidth = datRsvdcWidth;
 
@@ -165,8 +178,10 @@ namespace CLog {
 
     inline bool Parameters::SetDataWidth(size_t dataWidth) noexcept
     {
+#ifndef CLOG_STANDALONE
         if (!CHI::CheckDataWidth(dataWidth))
             return false;
+#endif
 
         this->dataWidth = dataWidth;
 
