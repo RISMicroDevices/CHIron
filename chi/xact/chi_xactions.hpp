@@ -159,7 +159,7 @@ namespace CHI {
             virtual XactDenialEnum                  NextRSP(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
             virtual XactDenialEnum                  NextDAT(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
 
-            virtual XactDenialEnum                  Resend(FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
+            virtual XactDenialEnum                  Resend(Global<config, conn>* glbl, FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
             virtual bool                            RevertResent() noexcept;
 
             virtual bool                            IsTxnIDComplete(const Topology& topo) const noexcept = 0;
@@ -177,7 +177,7 @@ namespace CHI {
         protected:
             virtual XactDenialEnum                  NextRetryAckNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit) noexcept;
         
-            virtual XactDenialEnum                  ResendNoRecord(FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
+            virtual XactDenialEnum                  ResendNoRecord(Global<config, conn>* glbl, FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
         
             virtual bool                            NextDataID(Flits::REQ<config, conn>::ssize_t, const FiredResponseFlit<config, conn>& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) noexcept;
             virtual bool                            NextREQDataID(const FiredResponseFlit<config, conn>& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> = {}) noexcept;
@@ -1085,9 +1085,9 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::Resend(FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
+    inline XactDenialEnum Xaction<config, conn>::Resend(Global<config, conn>* glbl, FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
     {
-        XactDenialEnum denial = ResendNoRecord(pCrdFlit, xaction);
+        XactDenialEnum denial = ResendNoRecord(glbl, pCrdFlit, xaction);
 
         resent = true;
         resentXaction = xaction;
@@ -1148,13 +1148,10 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::ResendNoRecord(FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
+    inline XactDenialEnum Xaction<config, conn>::ResendNoRecord(Global<config, conn>* glbl, FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
     {
-        // *TODO: Do not check XactionType right now for KunminghuV2 workaround.
-        /*
         if (xaction->GetType() != type)
             return XactDenial::DENIED_RETRY_DIFF_XACT_TYPE;
-        */
 
         if (!pCrdFlit.IsRSP())
             return XactDenial::DENIED_CHANNEL;
@@ -1169,7 +1166,201 @@ namespace /*CHI::*/Xact {
         if (pCrdFlit.flit.rsp.PCrdType() != retryAck->flit.rsp.PCrdType())
             return XactDenial::DENIED_PCRD_TYPE_MISMATCH;
 
-        // TODO: check Fields Difference of retried request
+        // Check Fields Difference of retried request
+        if (glbl)
+        {
+            RequestFieldMapping fields 
+                = glbl->reqFieldMappingChecker.table.Get(this->first.flit.req.Opcode());
+
+            if (fields)
+            {
+                Flits::REQ<config, conn> origin = this->first.flit.req;
+                Flits::REQ<config, conn> retry = xaction->GetFirst().flit.req;
+                    
+                // QoS
+                /* Permitted to be different */
+                
+                // TgtID
+                /* Permitted to be different */
+
+                // SrcID
+                if (FieldTrait::IsApplicable(fields->SrcID))
+                    if (origin.SrcID() != retry.SrcID())
+                        return XactDenial::DENIED_RETRY_DIFF_SRCID;
+
+                // TxnID
+                /* Permitted to be different */
+
+                // ReturnNID
+                if (FieldTrait::IsApplicable(fields->ReturnNID))
+                    if (origin.ReturnNID() != retry.ReturnNID())
+                        return XactDenial::DENIED_RETRY_DIFF_RETURNNID;
+
+                // StashNID
+                if (FieldTrait::IsApplicable(fields->StashNID))
+                    if (origin.StashNID() != retry.StashNID())
+                        return XactDenial::DENIED_RETRY_DIFF_STASHNID;
+                
+#ifdef CHI_ISSUE_EB_ENABLE
+                // SLCRepHint
+                /* Permitted to be different */
+#endif
+
+                // StashNIDValid
+                if (FieldTrait::IsApplicable(fields->StashNIDValid))
+                    if (origin.StashNIDValid() != retry.StashNIDValid())
+                        return XactDenial::DENIED_RETRY_DIFF_STASHNIDVALID;
+
+                // Endian
+                if (FieldTrait::IsApplicable(fields->Endian))
+                    if (origin.Endian() != retry.Endian())
+                        return XactDenial::DENIED_RETRY_DIFF_ENDIAN;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+                // Deep
+                if (FieldTrait::IsApplicable(fields->Deep))
+                    if (origin.Deep() != retry.Deep())
+                        return XactDenial::DENIED_RETRY_DIFF_DEEP;
+#endif
+
+                // ReturnTxnID
+                /* Permitted to be different */
+
+                // StashLPIDValid
+                if (FieldTrait::IsApplicable(fields->StashLPIDValid))
+                    if (origin.StashLPIDValid() != retry.StashLPIDValid())
+                        return XactDenial::DENIED_RETRY_DIFF_STASHLPIDVALID;
+
+                // StashLPID
+                if (FieldTrait::IsApplicable(fields->StashLPID))
+                    if (origin.StashLPID() != retry.StashLPID())
+                        return XactDenial::DENIED_RETRY_DIFF_STASHLPID;
+
+                // Opcode
+                if (FieldTrait::IsApplicable(fields->Opcode)) [[likely]]
+                    if (origin.Opcode() != retry.Opcode())
+                        return XactDenial::DENIED_RETRY_DIFF_OPCODE;
+
+                // Size
+                if (FieldTrait::IsApplicable(fields->Size))
+                    if (origin.Size() != retry.Size())
+                        return XactDenial::DENIED_RETRY_DIFF_SIZE;
+
+                // Addr
+                if (FieldTrait::IsApplicable(fields->Addr))
+                    if (origin.Addr() != retry.Addr())
+                        return XactDenial::DENIED_RETRY_DIFF_ADDR;
+
+                // NS
+                if (FieldTrait::IsApplicable(fields->NS))
+                    if (origin.NS() != retry.NS())
+                        return XactDenial::DENIED_RETRY_DIFF_NS;
+
+                // LikelyShared
+                if (FieldTrait::IsApplicable(fields->LikelyShared))
+                    if (origin.LikelyShared() != retry.LikelyShared())
+                        return XactDenial::DENIED_RETRY_DIFF_LIKELYSHARED;
+
+                // AllowRetry
+                /* Not checked */
+
+                // Order
+                if (FieldTrait::IsApplicable(fields->Order))
+                    if (origin.Order() != retry.Order())
+                        return XactDenial::DENIED_RETRY_DIFF_ORDER;
+
+                // PCrdType
+                /* Not checked */
+
+                // MemAttr
+                if (FieldTrait::IsApplicable(fields->Allocate))
+                    if (MemAttr::ExtractAllocate(origin.MemAttr()) != MemAttr::ExtractAllocate(retry.MemAttr()))
+                        return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
+
+                if (FieldTrait::IsApplicable(fields->Cacheable))
+                    if (MemAttr::ExtractCacheable(origin.MemAttr()) != MemAttr::ExtractCacheable(retry.MemAttr()))
+                        return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
+
+                if (FieldTrait::IsApplicable(fields->Device))
+                    if (MemAttr::ExtractDevice(origin.MemAttr()) != MemAttr::ExtractDevice(retry.MemAttr()))
+                        return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
+                
+                if (FieldTrait::IsApplicable(fields->EWA))
+                    if (MemAttr::ExtractEWA(origin.MemAttr()) != MemAttr::ExtractEWA(origin.MemAttr()))
+                        return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
+
+                // SnpAttr
+                if (FieldTrait::IsApplicable(fields->SnpAttr))
+                    if (origin.SnpAttr() != retry.SnpAttr())
+                        return XactDenial::DENIED_RETRY_DIFF_SNPATTR;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+                // DoDWT
+                if (FieldTrait::IsApplicable(fields->DoDWT))
+                    if (origin.DoDWT() != retry.DoDWT())
+                        return XactDenial::DENIED_RETRY_DIFF_DODWT;
+#endif
+
+                // LPID
+                if (FieldTrait::IsApplicable(fields->LPID))
+                    if (origin.LPID() != retry.LPID())
+                        return XactDenial::DENIED_RETRY_DIFF_LPID;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+                // PGroupID
+                if (FieldTrait::IsApplicable(fields->PGroupID))
+                    if (origin.PGroupID() != retry.PGroupID())
+                        return XactDenial::DENIED_RETRY_DIFF_PGROUPID;
+#endif
+                
+#ifdef CHI_ISSUE_EB_ENABLE
+                // StashGroupID
+                if (FieldTrait::IsApplicable(fields->StashGroupID))
+                    if (origin.StashGroupID() != retry.StashGroupID())
+                        return XactDenial::DENIED_RETRY_DIFF_STASHGROUPID;
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+                // TagGroupID
+                if (FieldTrait::IsApplicable(fields->TagGroupID))
+                    if (origin.TagGroupID() != retry.TagGroupID())
+                        return XactDenial::DENIED_RETRY_DIFF_TAGGROUPID;
+#endif
+
+                // Excl
+                if (FieldTrait::IsApplicable(fields->Excl))
+                    if (origin.Excl() != retry.Excl())
+                        return XactDenial::DENIED_RETRY_DIFF_EXCL;
+
+                // SnoopMe
+                if (FieldTrait::IsApplicable(fields->SnoopMe))
+                    if (origin.SnoopMe() != retry.SnoopMe())
+                        return XactDenial::DENIED_RETRY_DIFF_SNOOPME;
+
+                // ExpCompAck
+                if (FieldTrait::IsApplicable(fields->ExpCompAck))
+                    if (origin.ExpCompAck() != retry.ExpCompAck())
+                        return XactDenial::DENIED_RETRY_DIFF_EXPCOMPACK;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+                // TagOp
+                if (FieldTrait::IsApplicable(fields->TagOp))
+                    if (origin.TagOp() != retry.TagOp())
+                        return XactDenial::DENIED_RETRY_DIFF_TAGOP;
+#endif
+
+                // TraceTag
+                /* Permitted to be different */
+
+                // MPAM
+                if (FieldTrait::IsApplicable(fields->MPAM))
+                    if (origin.MPAM() != retry.MPAM())
+                        return XactDenial::DENIED_RETRY_DIFF_MPAM;
+
+                // RSVDC
+                /* Permitted to be different */
+            }
+        }
 
         return XactDenial::ACCEPTED;
     }

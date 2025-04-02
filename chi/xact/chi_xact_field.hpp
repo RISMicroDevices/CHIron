@@ -15,6 +15,18 @@ namespace Xact {
         S,                  // Assigned to another shared field.
         D                   // Inapplicable. Must be default value of MPAM field.
     };
+
+    namespace FieldTrait {
+
+        inline constexpr bool IsApplicable(FieldConvention convention) noexcept
+        {
+            return !(
+                convention == FieldConvention::I0
+             || convention == FieldConvention::X
+             || convention == FieldConvention::D
+            );
+        }
+    };
 }
 /*
 }

@@ -45,7 +45,7 @@ namespace CHI {
         template<REQFlitConfigurationConcept    config,
                  CHI::IOLevelConnectionConcept  conn        = CHI::Connection<>>
         class RequestFieldMappingChecker {
-        private:
+        public:
             RequestFieldMappingTable    table;
 
         public:
@@ -55,7 +55,7 @@ namespace CHI {
         template<RSPFlitConfigurationConcept    config,
                  CHI::IOLevelConnectionConcept  conn        = CHI::Connection<>>
         class ResponseFieldMappingChecker {
-        private:
+        public:
             ResponseFieldMappingTable   table;
 
         public:
@@ -65,7 +65,7 @@ namespace CHI {
         template<DATFlitConfigurationConcept    config,
                  CHI::IOLevelConnectionConcept  conn        = CHI::Connection<>>
         class DataFieldMappingChecker {
-        private:
+        public:
             DataFieldMappingTable       table;
 
         public:
@@ -75,7 +75,7 @@ namespace CHI {
         template<SNPFlitConfigurationConcept    config,
                  CHI::IOLevelConnectionConcept  conn        = CHI::Connection<>>
         class SnoopFieldMappingChecker {
-        private:
+        public:
             SnoopFieldMappingTable      table;
 
         public:
