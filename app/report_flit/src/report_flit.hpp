@@ -37,7 +37,7 @@
 #endif
 
 #ifdef CHI_ISSUE_B_ENABLE
-    #include "../../../chi_b/spec/chi_b_protocol.hpp"          // IWYU pragma: keep
+    #include "../../../chi_b/spec/chi_b_protocol_flits.hpp"          // IWYU pragma: keep
     #define CHI_ISSUE_B_ENABLE
     using namespace CHI::B::Flits;
     using config = CHI::B::FlitConfiguration<
@@ -51,8 +51,23 @@
     >;
 #endif
 
+#ifdef CHI_ISSUE_C_ENABLE
+    #include "../../../chi_c/spec/chi_c_protocol_flits.hpp"          // IWYU pragma: keep
+    #define CHI_ISSUE_C_ENABLE
+    using namespace CHI::C::Flits;
+    using config = CHI::C::FlitConfiguration<
+        _NODEID_WIDTH,
+        _REQ_ADDR_WIDTH,
+        _REQ_RSVDC_WIDTH,
+        _DAT_RSVDC_WIDTH,
+        _DATA_WIDTH,
+        _DATACHECK_PRESENT,
+        _POISON_PRESENT
+    >;
+#endif
+
 #ifdef CHI_ISSUE_EB_ENABLE
-    #include "../../../chi_eb/spec/chi_eb_protocol.hpp"        // IWYU pragma: keep
+    #include "../../../chi_eb/spec/chi_eb_protocol_flits.hpp"        // IWYU pragma: keep
     #define CHI_ISSUE_EB_ENABLE
     using namespace CHI::Eb::Flits;
     using config = CHI::Eb::FlitConfiguration<
@@ -91,6 +106,9 @@ inline int report_flit_main()
     std::cout << "========================================================" << std::endl;
 #ifdef CHI_ISSUE_B_ENABLE
     std::cout << "report_flit (Issue B)" << std::endl;
+#endif
+#ifdef CHI_ISSUE_C_ENABLE
+    std::cout << "report_flit (Issue C)" << std::endl;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
     std::cout << "report_flit (Issue E.b)" << std::endl;
@@ -219,7 +237,7 @@ inline int report_flit_main()
     std::cout << "CHI SNP::Addr             Width: " << INFO_FORMAT(SNP, ADDR)              << std::endl;
     std::cout << "CHI SNP::NS               Width: " << INFO_FORMAT(SNP, NS)                << std::endl;
     std::cout << "CHI SNP::DoNotGoToSD      Width: " << INFO_FORMAT(SNP, DONOTGOTOSD)       << std::endl;
-#ifdef CHI_ISSUE_B_ENABLE
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
     std::cout << "      -> DoNotDataPull    Width: " << INFO_FORMAT(SNP, DONOTDATAPULL)     << std::endl;
 #endif
     std::cout << "CHI SNP::RetToSrc         Width: " << INFO_FORMAT(SNP, RETTOSRC)          << std::endl;

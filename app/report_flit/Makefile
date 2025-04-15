@@ -13,6 +13,10 @@ ifeq ($(ISSUE), B)
 main := $(SRC_DIR)/report_flit_b.cpp
 endif
 
+ifeq ($(ISSUE), C)
+main := $(SRC_DIR)/report_flit_c.cpp
+endif
+
 ifeq ($(ISSUE), E.b)
 main := $(SRC_DIR)/report_flit_eb.cpp
 endif
