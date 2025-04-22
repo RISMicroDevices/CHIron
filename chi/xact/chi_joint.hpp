@@ -164,7 +164,24 @@ namespace CHI {
                 const Topology&                         topo,
                 const Flits::REQ<config, conn>&         reqFlit,
                 std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
-            ) noexcept = 0;
+            ) noexcept;
+
+            virtual XactDenialEnum  NextRXREQ(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::REQ<config, conn>&         reqFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept;
+
+            virtual XactDenialEnum  NextTXSNP(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::SNP<config, conn>&         snpFlit,
+                const Flits::REQ<config, conn>::srcid_t snpTgtId,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept;
             
             virtual XactDenialEnum  NextRXSNP(
                 Global<config, conn>*                   glbl,
@@ -173,7 +190,7 @@ namespace CHI {
                 const Flits::SNP<config, conn>&         snpFlit,
                 const Flits::REQ<config, conn>::srcid_t snpTgtId,
                 std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
-            ) noexcept = 0;
+            ) noexcept;
 
             virtual XactDenialEnum  NextTXRSP(
                 Global<config, conn>*                   glbl,
@@ -181,7 +198,7 @@ namespace CHI {
                 const Topology&                         topo,
                 const Flits::RSP<config, conn>&         rspFlit,
                 std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
-            ) noexcept = 0;
+            ) noexcept;
 
             virtual XactDenialEnum  NextRXRSP(
                 Global<config, conn>*                   glbl,
@@ -189,7 +206,7 @@ namespace CHI {
                 const Topology&                         topo,
                 const Flits::RSP<config, conn>&         rspFlit,
                 std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
-            ) noexcept = 0;
+            ) noexcept;
             
             virtual XactDenialEnum  NextTXDAT(
                 Global<config, conn>*                   glbl,
@@ -197,7 +214,7 @@ namespace CHI {
                 const Topology&                         topo,
                 const Flits::DAT<config, conn>&         datFlit,
                 std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
-            ) noexcept = 0;
+            ) noexcept;
 
             virtual XactDenialEnum  NextRXDAT(
                 Global<config, conn>*                   glbl,
@@ -205,7 +222,7 @@ namespace CHI {
                 const Topology&                         topo,
                 const Flits::DAT<config, conn>&         rspFlit,
                 std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
-            ) noexcept = 0;
+            ) noexcept;
         };
 
 
@@ -265,7 +282,7 @@ namespace CHI {
 
             using rnsrc_t = union __rnsrc_t {
                 struct {
-                    Flits::RSP<config, conn>::srcid_t   src;
+                    Flits::REQ<config, conn>::srcid_t   src;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -359,6 +376,134 @@ namespace CHI {
                 std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
             ) noexcept override;
             
+            virtual XactDenialEnum  NextRXDAT(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::DAT<config, conn>&         datFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
+        };
+
+
+        // SN-F Joint
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        class SNFJoint : public Joint<config, conn> {
+        public:
+            using rxreqid_t = union __rxreqid_t {
+                struct {
+                    Flits::REQ<config, conn>::txnid_t   txn;
+                    Flits::REQ<config, conn>::srcid_t   src;
+                }           id;
+                uint64_t    value;
+                inline operator uint64_t() const noexcept { return value; }
+            };
+
+            using rxreqdbid_t = union __rxreqdbid_t {
+                struct {
+                    Flits::RSP<config, conn>::dbid_t    db;
+                    Flits::RSP<config, conn>::srcid_t   src;
+                    Flits::RSP<config, conn>::tgtid_t   tgt;
+                }           id; 
+                uint64_t    value;
+                inline operator uint64_t() const noexcept { return value; }
+            };
+
+            using rxreqdbidovlp_t = union __rxreqdbidovlp_t {
+                struct {
+                    Flits::RSP<config, conn>::dbid_t    db;
+                    Flits::RSP<config, conn>::srcid_t   src;
+                    Flits::RSP<config, conn>::tgtid_t   tgt;
+                    Flits::RSP<config, conn>::txnid_t   txn;
+                }           id;
+                uint64_t    value;
+                inline operator uint64_t() const noexcept { return value; }
+            };
+
+            using pcrd_t = union __pcrd_t {
+                struct {
+                    Flits::RSP<config, conn>::tgtid_t   tgt;
+                    Flits::RSP<config, conn>::srcid_t   src;
+                }           id;
+                uint64_t    value;
+                inline operator uint64_t() const noexcept { return value; }
+            };
+
+            using hnsrc_t = union __hnsrc_t {
+                struct {
+                    Flits::REQ<config, conn>::srcid_t   src;
+                }           id;
+                uint64_t    value;
+                inline operator uint64_t() const noexcept { return value; }
+            };
+
+        private:
+            using GetXaction = std::function<std::shared_ptr<Xaction<config, conn>>(
+                Global<config, conn>*,
+                const Topology&,
+                const FiredRequestFlit<config, conn>&,
+                std::shared_ptr<Xaction<config, conn>>)>;
+
+        private:
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        rxTransactions;
+
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        rxDBIDTransactions;
+
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        rxDBIDOverlappableTransactions;
+
+            std::unordered_map<uint64_t, std::list<std::shared_ptr<Xaction<config, conn>>>>
+                                                                                        rxRetriedTransactions;
+
+            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config, conn>>>    grantedPCredits[1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH];
+
+            Opcodes::REQ::Decoder<Flits::REQ<config>, GetXaction>                       reqDecoder;
+
+        protected:
+            static std::shared_ptr<Xaction<config, conn>>   ConstructNone(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeRead(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeWrite(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeWriteZero(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeDataless(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeAtomic(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+
+        public:
+            SNFJoint() noexcept;
+
+        public:
+            virtual void            Clear() noexcept override;
+
+            virtual void            GetInflight(
+                const Topology&                                         topo,
+                std::vector<std::shared_ptr<Xaction<config, conn>>>&    dstVector,
+                bool                                                    sortByTime = false
+            ) const noexcept;
+
+        public:
+            virtual XactDenialEnum  NextRXREQ(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::REQ<config, conn>&         reqFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
+
+            virtual XactDenialEnum  NextTXRSP(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::RSP<config, conn>&         rspFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
+
+            virtual XactDenialEnum  NextTXDAT(
+                Global<config, conn>*                   glbl,
+                uint64_t                                time,
+                const Topology&                         topo,
+                const Flits::DAT<config, conn>&         datFlit,
+                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+            ) noexcept override;
+
             virtual XactDenialEnum  NextRXDAT(
                 Global<config, conn>*                   glbl,
                 uint64_t                                time,
@@ -562,6 +707,104 @@ namespace /*CHI::*/Xact {
         , OnDBIDFree            (0)
         , OnComplete            (0)
     { }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum Joint<config, conn>::NextTXREQ(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::REQ<config, conn>&         reqFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        return XactDenial::DENIED_CHANNEL;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum Joint<config, conn>::NextRXREQ(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::REQ<config, conn>&         reqFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        return XactDenial::DENIED_CHANNEL;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum Joint<config, conn>::NextTXSNP(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::SNP<config, conn>&         snpFlit,
+        const Flits::REQ<config, conn>::srcid_t snpTgtId,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        return XactDenial::DENIED_CHANNEL;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum Joint<config, conn>::NextRXSNP(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::SNP<config, conn>&         snpFlit,
+        const Flits::REQ<config, conn>::srcid_t snpTgtId,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        return XactDenial::DENIED_CHANNEL;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum Joint<config, conn>::NextTXRSP(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::RSP<config, conn>&         reqFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        return XactDenial::DENIED_CHANNEL;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum Joint<config, conn>::NextRXRSP(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::RSP<config, conn>&         reqFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        return XactDenial::DENIED_CHANNEL;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum Joint<config, conn>::NextTXDAT(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::DAT<config, conn>&         reqFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        return XactDenial::DENIED_CHANNEL;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum Joint<config, conn>::NextRXDAT(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::DAT<config, conn>&         reqFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        return XactDenial::DENIED_CHANNEL;
+    }
 }
 
 
@@ -858,6 +1101,8 @@ namespace /*CHI::*/Xact {
 
         txDBIDTransactions.clear();
 
+        txDBIDOverlappableTransactions.clear();
+
         txRetriedTransactions.clear();
 
         for (int i = 0; i < (1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH); i++)
@@ -1081,7 +1326,7 @@ namespace /*CHI::*/Xact {
             opcodeInfo.GetCompanion()(glbl, topo, firedSnpFlit, nullptr);
 
         if (!xaction) // unsupported opcode transaction
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_XACTION_NOT_SUPPORTED;
         
         if (theXaction)
             *theXaction = xaction;
@@ -1299,7 +1544,7 @@ namespace /*CHI::*/Xact {
         }
 
         std::shared_ptr<Xaction<config, conn>> xaction;
-        
+
         // RSPs to requester do not apply TxnID with DBID,
         // but may pass new DBID to requester.
 
@@ -1421,7 +1666,7 @@ namespace /*CHI::*/Xact {
                             keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
                         }
 
-                        // check TxnID for overlappable DBID on DBID complete
+                        // check TxnID for non-overlappable DBID on DBID complete
                         auto xactionDBIDIter = txDBIDTransactions.find(keyDBID);
                         if (xactionDBIDIter != txDBIDTransactions.end())
                         {
@@ -1541,7 +1786,7 @@ namespace /*CHI::*/Xact {
         // DCT or Write
         if (firedDatFlit.IsToRequester(topo))
         {
-            rxsnpid_t key;
+            txreqid_t key;
             key.value   = 0;
             key.id.tgt  = datFlit.SrcID();
             key.id.src  = datFlit.HomeNID();
@@ -1616,6 +1861,9 @@ namespace /*CHI::*/Xact {
 
         if (xaction->GetFirst().IsREQ())
         {
+            // *NOTICE: TxnID not deallocating on TXDAT,
+            //          since TXDAT depends on DBID response
+
             // on DBID free
             if (xaction->IsDBIDComplete(topo))
             {
@@ -1666,7 +1914,7 @@ namespace /*CHI::*/Xact {
                             keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
                         }
 
-                        // check TxnID for overlappable DBID on DBID complete
+                        // check TxnID for non-overlappable DBID on DBID complete
                         auto xactionDBIDIter = txDBIDTransactions.find(keyDBID);
                         if (xactionDBIDIter != txDBIDTransactions.end())
                         {
@@ -1892,7 +2140,7 @@ namespace /*CHI::*/Xact {
                             keyDBID.id.tgt  = xactionDBIDSource->flit.dat.TgtID();
                         }
 
-                        // check TxnID for overlappable DBID on DBID complete
+                        // check TxnID for nno-overlappable DBID on DBID complete
                         auto xactionDBIDIter = txDBIDTransactions.find(keyDBID);
                         if (xactionDBIDIter != txDBIDTransactions.end())
                         {
@@ -1980,6 +2228,840 @@ namespace /*CHI::*/Xact {
 
                 rxTransactions.erase(key);
             }
+        }
+
+        return XactDenial::ACCEPTED;
+    }
+}
+
+
+// Implementation of: class SNFJoint
+namespace /*CHI::*/Xact {
+    /*
+    ...
+    */
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructNone(
+        Global<config, conn>*                   glbl,
+        const Topology&                         topo, 
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retired) noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeRead(
+        Global<config, conn>*                   glbl,
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionHomeRead<config, conn>>(glbl, topo, reqFlit, retried);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeWrite(
+        Global<config, conn>*                   glbl,
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionHomeWrite<config, conn>>(glbl, topo, reqFlit, retried);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeWriteZero(
+        Global<config, conn>*                   glbl,
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionHomeWriteZero<config, conn>>(glbl, topo, reqFlit, retried);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeDataless(
+        Global<config, conn>*                   glbl,
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionHomeDataless<config, conn>>(glbl, topo, reqFlit, retried);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeAtomic(
+        Global<config, conn>*                   glbl,
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionHomeAtomic<config, conn>>(glbl, topo, reqFlit, retried);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline SNFJoint<config, conn>::SNFJoint() noexcept
+    {
+        // TXREQ transactions
+        #define SET_REQ_XACTION(opcode, type) \
+            reqDecoder[Opcodes::REQ::opcode].SetCompanion(&SNFJoint<config, conn>::Construct##type)
+
+            SET_REQ_XACTION(ReqLCrdReturn               , None              );  // 0x00
+            SET_REQ_XACTION(ReadShared                  , None              );  // 0x01
+            SET_REQ_XACTION(ReadClean                   , None              );  // 0x02
+            SET_REQ_XACTION(ReadOnce                    , None              );  // 0x03
+            SET_REQ_XACTION(ReadNoSnp                   , HomeRead          );  // 0x04
+            SET_REQ_XACTION(PCrdReturn                  , None              );  // 0x05
+                                                                                // 0x06
+            SET_REQ_XACTION(ReadUnique                  , None              );  // 0x07
+            SET_REQ_XACTION(CleanShared                 , HomeDataless      );  // 0x08
+            SET_REQ_XACTION(CleanInvalid                , HomeDataless      );  // 0x09
+            SET_REQ_XACTION(MakeInvalid                 , HomeDataless      );  // 0x0A
+            SET_REQ_XACTION(CleanUnique                 , None              );  // 0x0B
+            SET_REQ_XACTION(MakeUnique                  , None              );  // 0x0C
+            SET_REQ_XACTION(Evict                       , None              );  // 0x0D
+                                                                                // 0x0E
+                                                                                // 0x0F
+                                                                                // 0x10
+            SET_REQ_XACTION(ReadNoSnpSep                , HomeRead          );  // 0x11
+                                                                                // 0x12
+            SET_REQ_XACTION(CleanSharedPersistSep       , HomeDataless      );  // 0x13
+            SET_REQ_XACTION(DVMOp                       , None              );  // 0x14
+            SET_REQ_XACTION(WriteEvictFull              , None              );  // 0x15
+                                                                                // 0x16
+            SET_REQ_XACTION(WriteCleanFull              , None              );  // 0x17
+            SET_REQ_XACTION(WriteUniquePtl              , None              );  // 0x18
+            SET_REQ_XACTION(WriteUniqueFull             , None              );  // 0x19
+            SET_REQ_XACTION(WriteBackPtl                , None              );  // 0x1A
+            SET_REQ_XACTION(WriteBackFull               , None              );  // 0x1B
+            SET_REQ_XACTION(WriteNoSnpPtl               , HomeWrite         );  // 0x1C
+            SET_REQ_XACTION(WriteNoSnpFull              , HomeWrite         );  // 0x1D
+                                                                                // 0x1E
+                                                                                // 0x1F
+            SET_REQ_XACTION(WriteUniqueFullStash        , None              );  // 0x20
+            SET_REQ_XACTION(WriteUniquePtlStash         , None              );  // 0x21
+            SET_REQ_XACTION(StashOnceShared             , None              );  // 0x22
+            SET_REQ_XACTION(StashOnceUnique             , None              );  // 0x23
+            SET_REQ_XACTION(ReadOnceCleanInvalid        , None              );  // 0x24
+            SET_REQ_XACTION(ReadOnceMakeInvalid         , None              );  // 0x25
+            SET_REQ_XACTION(ReadNotSharedDirty          , None              );  // 0x26
+            SET_REQ_XACTION(CleanSharedPersist          , HomeDataless      );  // 0x27
+            SET_REQ_XACTION(AtomicStore::ADD            , HomeAtomic        );  // 0x28
+            SET_REQ_XACTION(AtomicStore::CLR            , HomeAtomic        );  // 0x29
+            SET_REQ_XACTION(AtomicStore::EOR            , HomeAtomic        );  // 0x2A
+            SET_REQ_XACTION(AtomicStore::SET            , HomeAtomic        );  // 0x2B
+            SET_REQ_XACTION(AtomicStore::SMAX           , HomeAtomic        );  // 0x2C
+            SET_REQ_XACTION(AtomicStore::SMIN           , HomeAtomic        );  // 0x2D
+            SET_REQ_XACTION(AtomicStore::UMAX           , HomeAtomic        );  // 0x2E
+            SET_REQ_XACTION(AtomicStore::UMIN           , HomeAtomic        );  // 0x2F
+            SET_REQ_XACTION(AtomicLoad::ADD             , HomeAtomic        );  // 0x30
+            SET_REQ_XACTION(AtomicLoad::CLR             , HomeAtomic        );  // 0x31
+            SET_REQ_XACTION(AtomicLoad::EOR             , HomeAtomic        );  // 0x32
+            SET_REQ_XACTION(AtomicLoad::SET             , HomeAtomic        );  // 0x33
+            SET_REQ_XACTION(AtomicLoad::SMAX            , HomeAtomic        );  // 0x34
+            SET_REQ_XACTION(AtomicLoad::SMIN            , HomeAtomic        );  // 0x35
+            SET_REQ_XACTION(AtomicLoad::UMAX            , HomeAtomic        );  // 0x36
+            SET_REQ_XACTION(AtomicLoad::UMIN            , HomeAtomic        );  // 0x37
+            SET_REQ_XACTION(AtomicSwap                  , HomeAtomic        );  // 0x38
+            SET_REQ_XACTION(AtomicCompare               , HomeAtomic        );  // 0x39
+            SET_REQ_XACTION(PrefetchTgt                 , None              );  // 0x3A
+                                                                                // 0x3B
+                                                                                // 0x3C
+                                                                                // 0x3D
+                                                                                // 0x3E
+                                                                                // 0x3F
+                                                                                // 0x40
+            SET_REQ_XACTION(MakeReadUnique              , None              );  // 0x41
+            SET_REQ_XACTION(WriteEvictOrEvict           , None              );  // 0x42
+            SET_REQ_XACTION(WriteUniqueZero             , None              );  // 0x43
+            SET_REQ_XACTION(WriteNoSnpZero              , HomeWriteZero     );  // 0x44
+                                                                                // 0x45
+                                                                                // 0x46
+            SET_REQ_XACTION(StashOnceSepShared          , None              );  // 0x47
+            SET_REQ_XACTION(StashOnceSepUnique          , None              );  // 0x48
+                                                                                // 0x49
+                                                                                // 0x4A
+                                                                                // 0x4B
+            SET_REQ_XACTION(ReadPreferUnique            , None              );  // 0x4C
+                                                                                // 0x4D
+                                                                                // 0x4E
+                                                                                // 0x4F
+            SET_REQ_XACTION(WriteNoSnpFullCleanSh       , None              );  // 0x50
+            SET_REQ_XACTION(WriteNoSnpFullCleanInv      , None              );  // 0x51
+            SET_REQ_XACTION(WriteNoSnpFullCleanShPerSep , None              );  // 0x52
+                                                                                // 0x53
+            SET_REQ_XACTION(WriteUniqueFullCleanSh      , None              );  // 0x54
+                                                                                // 0x55
+            SET_REQ_XACTION(WriteUniqueFullCleanShPerSep, None              );  // 0x56
+                                                                                // 0x57
+            SET_REQ_XACTION(WriteBackFullCleanSh        , None              );  // 0x58
+            SET_REQ_XACTION(WriteBackFullCleanInv       , None              );  // 0x59
+            SET_REQ_XACTION(WriteBackFullCleanShPerSep  , None              );  // 0x5A
+                                                                                // 0x5B
+            SET_REQ_XACTION(WriteCleanFullCleanSh       , None              );  // 0x5C
+                                                                                // 0x5D
+            SET_REQ_XACTION(WriteCleanFullCleanShPerSep , None              );  // 0x5E
+                                                                                // 0x5F
+            SET_REQ_XACTION(WriteNoSnpPtlCleanSh        , None              );  // 0x60
+            SET_REQ_XACTION(WriteNoSnpPtlCleanInv       , None              );  // 0x61
+            SET_REQ_XACTION(WriteNoSnpPtlCleanShPerSep  , None              );  // 0x62
+                                                                                // 0x63
+            SET_REQ_XACTION(WriteUniquePtlCleanSh       , None              );  // 0x64
+                                                                                // 0x65
+            SET_REQ_XACTION(WriteUniquePtlCleanShPerSep , None              );  // 0x66
+                                                                                // 0x67
+                                                                                // 0x68
+                                                                                // 0x69
+                                                                                // 0x6A
+                                                                                // 0x6B
+                                                                                // 0x6C
+                                                                                // 0x6D
+                                                                                // 0x6E
+                                                                                // 0x6F
+                                                                                // 0x70
+                                                                                // 0x71
+                                                                                // 0x72
+                                                                                // 0x73
+                                                                                // 0x74
+                                                                                // 0x75
+                                                                                // 0x76
+                                                                                // 0x77
+                                                                                // 0x78
+                                                                                // 0x79
+                                                                                // 0x7A
+                                                                                // 0x7B
+                                                                                // 0x7C
+                                                                                // 0x7D
+                                                                                // 0x7E
+                                                                                // 0x7F
+        
+        #undef SET_REQ_XACTION
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline void SNFJoint<config, conn>::Clear() noexcept
+    {
+        rxTransactions.clear();
+        
+        rxDBIDTransactions.clear();
+
+        rxDBIDOverlappableTransactions.clear();
+
+        rxRetriedTransactions.clear();
+
+        for (int i = 0; i < (1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH); i++)
+            grantedPCredits[i].clear();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline void SNFJoint<config, conn>::GetInflight(
+        const Topology&                                         topo,
+        std::vector<std::shared_ptr<Xaction<config, conn>>>&    dstVector,
+        bool                                                    sortByTime
+    ) const noexcept
+    {
+        for (auto& rxTransaction : rxTransactions)
+            dstVector.push_back(rxTransaction.second);
+
+        for (auto& rxDBIDTransaction : rxDBIDTransactions)
+        {
+            if (!rxDBIDTransaction.second->IsTxnIDComplete(topo))
+                continue;
+            else
+                dstVector.push_back(rxDBIDTransaction.second);
+        }
+
+        for (auto& rxDBIDOverlappableTransaction : rxDBIDOverlappableTransactions)
+        {
+            if (!rxDBIDOverlappableTransaction.second->IsTxnIDComplete(topo))
+                continue;
+            else
+                dstVector.push_back(rxDBIDOverlappableTransaction.second);
+        }
+
+        if (sortByTime)
+        {
+            std::sort(dstVector.begin(), dstVector.end(),
+                [] (std::shared_ptr<Xaction<config, conn>> a, std::shared_ptr<Xaction<config, conn>> b)
+                {
+                    return a->GetFirst().time < b->GetFirst().time;
+                }
+            );
+        }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum SNFJoint<config, conn>::NextRXREQ(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::REQ<config, conn>&         reqFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        rxreqid_t key;
+        key.value   = 0;
+        key.id.src  = reqFlit.SrcID();
+        key.id.txn  = reqFlit.TxnID();
+
+        bool retry = false;
+
+        //
+        FiredRequestFlit<config, conn> firedReqFlit(XactScope::Subordinate, false, time, reqFlit);
+
+        const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, GetXaction>& opcodeInfo =
+            reqDecoder.DecodeSNF(reqFlit.Opcode());
+
+        if (!opcodeInfo.IsValid()) // unknown opcode
+            return XactDenial::DENIED_OPCODE;
+
+        //
+        if (reqFlit.AllowRetry() == 0)
+        {
+            if (rxTransactions.contains(key))
+                return XactDenial::DENIED_TXNID_IN_USE;
+        
+            // iterate and compare retry transactions
+
+            // TODO: retry query
+
+            return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+        }
+        else
+        {
+            if (rxTransactions.contains(key))
+                return XactDenial::DENIED_TXNID_IN_USE;
+
+            std::shared_ptr<Xaction<config, conn>> xaction;
+
+            xaction = opcodeInfo.GetCompanion()(glbl, topo, firedReqFlit, nullptr);
+
+            if (!xaction) // unsupported opcode transactions
+                return XactDenial::DENIED_OPCODE;
+
+            if (theXaction)
+                *theXaction = xaction;
+
+            if (xaction->GetFirstDenial() != XactDenial::ACCEPTED)
+                return xaction->GetFirstDenial();
+
+            // event on Request xaction acccepted
+            this->OnAccepted(JointXactionAcceptedEvent<config, conn>(*this, xaction));
+
+            // event on TxnID allocation
+            this->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config, conn>(*this, xaction));
+
+            rxTransactions[key] = xaction;
+        }
+
+        return XactDenial::ACCEPTED;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum SNFJoint<config, conn>::NextTXRSP(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::RSP<config, conn>&         rspFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        FiredResponseFlit<config, conn> firedRspFlit(XactScope::Subordinate, true, time, rspFlit);
+
+        // P-Credit Grant
+        if (rspFlit.Opcode() == Opcodes::RSP::PCrdGrant)
+        {
+            pcrd_t pCrdKey;
+            pCrdKey.value   = 0;
+            pCrdKey.id.src  = rspFlit.SrcID();
+            pCrdKey.id.tgt  = rspFlit.TgtID();
+
+            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config, conn>>>& grantedPCredits
+                = this->grantedPCredits[rspFlit.PCrdType()];
+
+            auto iterPCreditList = grantedPCredits.try_emplace(pCrdKey).first;
+
+            iterPCreditList->second.push_back(firedRspFlit);
+
+            //
+            if (glbl)
+            {
+                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit);
+                if (denial != XactDenial::ACCEPTED)
+                    return denial;
+            }
+
+            return XactDenial::ACCEPTED;
+        }
+
+        std::shared_ptr<Xaction<config, conn>> xaction;
+
+        // RSPs to requester do not apply TxnID with DBID,
+        // but may pass new DBID to requester.
+
+        rxreqid_t key;
+        key.value   = 0;
+        key.id.src  = rspFlit.TgtID();
+        key.id.txn  = rspFlit.TxnID();
+
+        auto xactionIter = rxTransactions.find(key);
+        if (xactionIter == rxTransactions.end())
+            return XactDenial::DENIED_TXNID_NOT_EXIST;
+
+        xaction = xactionIter->second;
+
+        if (theXaction)
+            *theXaction = xaction;
+
+        bool hasDBID, firstDBID;
+
+        XactDenialEnum denial = xaction->NextRSP(glbl, topo, firedRspFlit, hasDBID, firstDBID);
+
+        if (denial != XactDenial::ACCEPTED)
+            return denial;
+
+        if (hasDBID)
+        {
+            // on DWT, the DBID was allocated to RN
+
+            rxreqdbid_t keyDBID;
+            keyDBID.value   = 0;
+            keyDBID.id.tgt  = rspFlit.TgtID();
+            keyDBID.id.src  = rspFlit.SrcID();
+            keyDBID.id.db   = rspFlit.DBID();
+
+            if (firstDBID)
+            {
+                // first DBID always not overlappable
+
+                if (rxDBIDTransactions.contains(keyDBID))
+                {
+                    xaction->SetLastDenial(XactDenial::DENIED_DBID_IN_USE);
+                    return XactDenial::DENIED_DBID_IN_USE;
+                }
+
+                rxDBIDTransactions[keyDBID] = xaction;
+
+                // event on DBID allocation
+                this->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config, conn>(*this, xaction));
+            }
+            else
+            {
+                // nothing needed to be done here
+                // the consistency of DBID should be checked inside Xaction
+            }
+        }
+
+        assert(xaction->GetFirst().IsREQ() && "no SNP for SN-F");
+
+        // on TxnID free
+        if (xaction->IsTxnIDComplete(topo))
+        {
+            // event on TxnID free
+            this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config, conn>(*this, xaction));
+
+            // remove related TxnID mapping
+            rxreqid_t key;
+            key.value   = 0;
+            key.id.src  = xaction->GetFirst().flit.req.SrcID();
+            key.id.txn  = xaction->GetFirst().flit.req.TxnID();
+
+            rxTransactions.erase(key);
+        }
+
+        // on DBID free
+        if (xaction->IsDBIDComplete(topo))
+        {
+            // remove related DBID mapping
+            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                xaction->GetDBIDSource();
+
+            if (xactionDBIDSource)
+            {
+                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+
+                // event on DBID free
+                this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+
+                // check overlappable DBID mapping first
+                rxreqdbidovlp_t keyDBIDOvlp;
+                keyDBIDOvlp.value   = 0;
+                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+
+                if (!rxDBIDOverlappableTransactions.erase(keyDBIDOvlp))
+                {
+                    // erase normal DBID mapping
+                    // only when overlappable DBID mapping absent
+
+                    rxreqdbid_t keyDBID;
+                    keyDBID.value   = 0;
+                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+
+                    // check TxnID for non-overlappable DBID on DBID complete
+                    auto xactionDBIDIter = rxDBIDTransactions.find(keyDBID);
+                    if (xactionDBIDIter != rxDBIDTransactions.end())
+                    {
+                        auto xactionDBID = xactionDBIDIter->second;
+                        if (xactionDBID->GetFirst().flit.req.TxnID() == xaction->GetFirst().flit.req.TxnID())
+                            rxDBIDTransactions.erase(xactionDBIDIter);
+                    }
+                }
+            }
+        }
+        // on DBID overlap
+        else if (xaction->IsDBIDOverlappable(topo))
+        {
+            // move DBID mapping to overlappable if not moved yet
+            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                xaction->GetDBIDSource();
+
+            if (xactionDBIDSource)
+            {
+                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+
+                // check overlappable DBID mapping
+                rxreqdbidovlp_t keyDBIDOvlp;
+                keyDBIDOvlp.value   = 0;
+                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+
+                // move on absent
+                if (rxDBIDOverlappableTransactions.find(keyDBIDOvlp) == rxDBIDOverlappableTransactions.end())
+                {
+                    // erase normal DBID mapping
+                    rxreqdbid_t keyDBID;
+                    keyDBID.value   = 0;
+                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+
+                    rxDBIDTransactions.erase(keyDBID);
+
+                    // set overlappable DBID mapping
+                    rxDBIDOverlappableTransactions[keyDBIDOvlp] = xaction;
+                }
+            }
+        }
+
+        // on completion
+        if (xaction->IsComplete(topo))
+        {
+            // event on completion
+            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+
+            if (xaction->GotRetryAck())
+            {
+                // only on TXRSP, transactions might be completed by retry
+
+                // record as retried
+                hnsrc_t hnKey;
+                hnKey.value     = 0;
+                hnKey.id.src    = rspFlit.TgtID();
+
+                rxRetriedTransactions[hnKey].push_back(xaction);
+            }
+        }
+
+        return XactDenial::ACCEPTED;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum SNFJoint<config, conn>::NextTXDAT(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::DAT<config, conn>&         datFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        FiredResponseFlit<config, conn> firedDatFlit(XactScope::Subordinate, true, time, datFlit);
+
+        std::shared_ptr<Xaction<config, conn>> xaction;
+
+        // DMT or Home Read
+        rxreqid_t key;
+        if (firedDatFlit.IsToRequester(topo))
+        {
+            // DMT
+            key.id.src  = datFlit.HomeNID();
+            key.id.txn  = datFlit.DBID();
+        }
+        else
+        {
+            // Home Read
+            key.id.src  = datFlit.TgtID();
+            key.id.txn  = datFlit.TxnID();
+        }
+
+        auto xactionIter = rxTransactions.find(key);
+        if (xactionIter == rxTransactions.end())
+            return XactDenial::DENIED_TXNID_NOT_EXIST;
+
+        xaction = xactionIter->second;
+
+        if (theXaction)
+            *theXaction = xaction;
+
+        bool hasDBID, firstDBID;
+
+        XactDenialEnum denial = xaction->NextDAT(glbl, topo, firedDatFlit, hasDBID, firstDBID);
+
+        if (denial != XactDenial::ACCEPTED)
+            return denial;
+
+        assert(!hasDBID && !firstDBID && "TXDAT never generates DBID on SN-F");
+
+        assert(xaction->GetFirst().IsREQ() && "no SNP for SN-F");
+
+        // on TxnID free
+        if (xaction->IsTxnIDComplete(topo))
+        {
+            // event on TxnID free
+            this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config, conn>(*this, xaction));
+
+            // remove related TxnID mapping
+            rxreqid_t key;
+            key.value   = 0;
+            key.id.src  = xaction->GetFirst().flit.req.SrcID();
+            key.id.txn  = xaction->GetFirst().flit.req.TxnID();
+
+            rxTransactions.erase(key);
+        }
+
+        // on DBID free
+        if (xaction->IsDBIDComplete(topo))
+        {
+            // remove related DBID mapping
+            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                xaction->GetDBIDSource();
+
+            if (xactionDBIDSource)
+            {
+                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+
+                // event on DBID free
+                this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+
+                // check overlappable DBID mapping first
+                rxreqdbidovlp_t keyDBIDOvlp;
+                keyDBIDOvlp.value   = 0;
+                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+
+                if (!rxDBIDOverlappableTransactions.erase(keyDBIDOvlp))
+                {
+                    // erase normal DBID mapping
+                    // only when overlappable DBID mapping absent
+
+                    rxreqdbid_t keyDBID;
+                    keyDBID.value   = 0;
+                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+
+                    // check TxnID for non-overlappable DBID on DBID complete
+                    auto xactionDBIDIter = rxDBIDTransactions.find(keyDBID);
+                    if (xactionDBIDIter != rxDBIDTransactions.end())
+                    {
+                        auto xactionDBID = xactionDBIDIter->second;
+                        if (xactionDBID->GetFirst().flit.req.TxnID() == xaction->GetFirst().flit.req.TxnID())
+                            rxDBIDTransactions.erase(xactionDBIDIter);
+                    }
+                }
+            }
+        }
+        // on DBID overlap
+        else if (xaction->IsDBIDOverlappable(topo))
+        {
+            // move DBID mapping to overlappable if not moved yet
+            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                xaction->GetDBIDSource();
+
+            if (xactionDBIDSource)
+            {
+                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+
+                // check overlappable DBID mapping
+                rxreqdbidovlp_t keyDBIDOvlp;
+                keyDBIDOvlp.value   = 0;
+                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+
+                // move on absent
+                if (rxDBIDOverlappableTransactions.find(keyDBIDOvlp) == rxDBIDOverlappableTransactions.end())
+                {
+                    // erase normal DBID mapping
+                    rxreqdbid_t keyDBID;
+                    keyDBID.value   = 0;
+                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+
+                    rxDBIDTransactions.erase(keyDBID);
+
+                    // set overlappable DBID mapping
+                    rxDBIDOverlappableTransactions[keyDBIDOvlp] = xaction;
+                }
+            }
+        }
+
+        if (xaction->IsComplete(topo))
+        {
+            // event on completion
+            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+        }
+
+        return XactDenial::ACCEPTED;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum SNFJoint<config, conn>::NextRXDAT(
+        Global<config, conn>*                   glbl,
+        uint64_t                                time,
+        const Topology&                         topo,
+        const Flits::DAT<config, conn>&         datFlit,
+        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    {
+        FiredResponseFlit<config, conn> firedDatFlit(XactScope::Subordinate, false, time, datFlit);
+
+        std::shared_ptr<Xaction<config, conn>> xaction;
+
+        // DWT or Write
+        rxreqdbid_t key;
+        key.value   = 0;
+        key.id.tgt  = datFlit.SrcID();
+        key.id.src  = datFlit.TgtID();
+        key.id.db   = datFlit.TxnID();
+
+        auto xactionIter = rxDBIDTransactions.find(key);
+        if (xactionIter == rxDBIDTransactions.end())
+            return XactDenial::DENIED_TXNID_NOT_EXIST;
+
+        xaction = xactionIter->second;
+
+        if (theXaction)
+            *theXaction = xaction;
+
+        bool hasDBID, firstDBID;
+
+        XactDenialEnum denial = xaction->NextDAT(glbl, topo, firedDatFlit, hasDBID, firstDBID);
+
+        if (denial != XactDenial::ACCEPTED)
+            return denial;
+
+        assert(xaction->GetFirst().IsREQ() && "no SNP on SN-F");
+
+        // *NOTICE: TxnID not deallocating on RXDAT,
+        //          since RXDAT depends on DBID response
+        
+        // on DBID free
+        if (xaction->IsDBIDComplete(topo))
+        {
+            // remove related DBID mapping
+            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                xaction->GetDBIDSource();
+
+            if (xactionDBIDSource)
+            {
+                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+
+                // event on DBID free
+                this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+
+                // check overlappable DBID mapping first
+                rxreqdbidovlp_t keyDBIDOvlp;
+                keyDBIDOvlp.value   = 0;
+                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+
+                if (!rxDBIDOverlappableTransactions.erase(keyDBIDOvlp))
+                {
+                    // erase normal DBID mapping
+                    // only when overlappable DBID mapping absent
+
+                    rxreqdbid_t keyDBID;
+                    keyDBID.value   = 0;
+                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+
+                    // check TxnID for non-overlappable DBID on DBID complete
+                    auto xactionDBIDIter = rxDBIDTransactions.find(keyDBID);
+                    if (xactionDBIDIter != rxDBIDTransactions.end())
+                    {
+                        auto xactionDBID = xactionDBIDIter->second;
+                        if (xactionDBID->GetFirst().flit.req.TxnID() == xaction->GetFirst().flit.req.TxnID())
+                            rxTransactions.erase(xactionDBIDIter);
+                    }
+                }
+            }
+        }
+        // on DBID overlap
+        else if (xaction->IsDBIDOverlappable(topo))
+        {
+            // move DBID mapping to overlappable if not moved yet
+            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                xaction->GetDBIDSource();
+
+            if (xactionDBIDSource)
+            {
+                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+
+                // check overlappable DBID maping
+                rxreqdbidovlp_t keyDBIDOvlp;
+                keyDBIDOvlp.value   = 0;
+                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+
+                // move on absent
+                if (rxDBIDOverlappableTransactions.find(keyDBIDOvlp) == rxDBIDOverlappableTransactions.end())
+                {
+                    // erase normal DBID maping
+                    rxreqdbid_t keyDBID;
+                    keyDBID.value   = 0;
+                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
+                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
+                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
+
+                    rxDBIDTransactions.erase(keyDBID);
+
+                    // set overlappable DBID mapping
+                    rxDBIDOverlappableTransactions[keyDBIDOvlp] = xaction;
+                }
+            }
+        }
+
+        if (xaction->IsComplete(topo))
+        {
+            // event on completion
+            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
         }
 
         return XactDenial::ACCEPTED;
