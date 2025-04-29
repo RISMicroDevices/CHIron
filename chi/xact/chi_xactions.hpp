@@ -389,8 +389,8 @@ namespace CHI {
             bool                            IsCompResponseComplete(const Topology& topo) const noexcept;
             bool                            IsDataComplete(const Topology& topo) const noexcept;
 
-            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept;
-            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept;
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
             virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
             virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
@@ -412,9 +412,9 @@ namespace CHI {
         public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
 
-            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept;
-            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept;
-            virtual bool                    IsComplete(const Topology& topo) const noexcept;
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
             virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
 
@@ -438,9 +438,9 @@ namespace CHI {
             bool                            IsCompResponseComplete(const Topology& topo) const noexcept;
             bool                            IsPersistResponseComplete(const Topology& topo) const noexcept;
         
-            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept;
-            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept;
-            virtual bool                    IsComplete(const Topology& topo) const noexcept;
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsComplete(const Topology& topo) const noexcept override;
 
             virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
 
@@ -473,10 +473,6 @@ namespace CHI {
             virtual XactDenialEnum          NextRSPNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
-
-        
-
-        // TODO: XactionHomeAtomic
 
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
@@ -3406,7 +3402,7 @@ namespace /*CHI::*/Xact {
             if (datFlit.flit.dat.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_TXNID_MISMATCH;
 
-            if (this->HasRSP({ Opcodes::DAT::CompData }))
+            if (this->HasDAT({ Opcodes::DAT::CompData }))
                 return XactDenial::DENIED_COMPDATA_AFTER_COMPDATA;
 
             auto optDBID = this->GetDBID();
@@ -3874,7 +3870,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flitr.req);
+            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -5257,7 +5253,7 @@ namespace /*CHI::*/Xact {
             if (datFlit.flit.dat.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_TXNID_MISMATCH;
 
-            if (this->HasRSP({ Opcodes::DAT::CompData }))
+            if (this->HasDAT({ Opcodes::DAT::CompData }))
                 return XactDenial::DENIED_COMPDATA_AFTER_COMPDATA;
 
             auto optDBID = this->GetDBID();
