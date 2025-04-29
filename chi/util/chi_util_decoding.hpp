@@ -1258,6 +1258,7 @@ namespace CHI {
             OPCODE_MASK_SET(SNF, WriteNoSnpPtl);
 #ifdef CHI_ISSUE_EB_ENABLE
             OPCODE_MASK_SET(SNF, WriteNoSnpZero);
+            OPCODE_MASK_SET(SNF, ReadNoSnpSep);
 #endif
             //----------------------------------------------------------------
             OPCODE_MASK_SET(SNF, CleanShared);
