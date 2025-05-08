@@ -37,15 +37,34 @@ namespace CHI {
                  CHI::IOLevelConnectionConcept      conn>
         inline bool DeserializeRSP(RSP<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
 
-        template<RSPFlitConfigurationConcept        config, 
+        template<SNPFlitConfigurationConcept        config, 
                  CHI::IOLevelConnectionConcept      conn>
         inline bool DeserializeSNP(SNP<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
 
-        template<RSPFlitConfigurationConcept        config, 
+        template<DATFlitConfigurationConcept        config, 
                  CHI::IOLevelConnectionConcept      conn>
         inline bool DeserializeDAT(DAT<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
         //
 
+        /*
+        Use Flit Serializers to encode the flits from C++ Flit objects to FLIT bundles.
+        */
+        template<REQFlitConfigurationConcept        config,
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool SerializeREQ(const REQ<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+
+        template<RSPFlitConfigurationConcept        config,
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool SerializeRSP(const RSP<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+        
+        template<SNPFlitConfigurationConcept        config,
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool SerializeSNP(const SNP<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+
+        template<DATFlitConfigurationConcept        config,
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool SerializeDAT(const DAT<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+        //
 
         //
         /*
@@ -365,7 +384,7 @@ namespace CHI {
                 uint32_t*   flitBits;
 
             public:
-                FlitWalker(uint32_t* flitBits)
+                inline FlitWalker(uint32_t* flitBits) noexcept
                     : index     (0)
                     , offset    (0)
                     , flitBits  (flitBits)
@@ -392,6 +411,47 @@ namespace CHI {
                 }
 
                 inline void Finish(size_t width)
+                {
+                    assert(index * 32 + offset == width);
+                }
+            };
+            
+            /*
+            Flit appender.
+            */
+            class FlitAppender {
+            public:
+                size_t index;
+                size_t offset;
+                
+            public:
+                uint32_t*   flitBits;
+
+            public:
+                inline FlitAppender(uint32_t* flitBits) noexcept
+                    : index     (0)
+                    , offset    (0)
+                    , flitBits  (flitBits)
+                {
+                    flitBits[0] = 0;
+                }
+
+                inline void Append32(uint32_t value, size_t width) noexcept
+                {
+                    flitBits[index] |= (value & (0xFFFFFFFFU >> (32 - width))) << offset;
+
+                    if (offset + width >= 32)
+                    {
+                        size_t rem = offset + width - 32;
+
+                        flitBits[++index] = (value >> (32 - offset)) & (0xFFFFFFFFU >> (32 - rem));
+
+                        ++index;
+                        offset = rem;
+                    }
+                }
+
+                inline void Finish(size_t width) noexcept
                 {
                     assert(index * 32 + offset == width);
                 }
@@ -673,6 +733,286 @@ namespace CHI {
 
             //
             walker.Finish(DAT_t::WIDTH);
+
+            return true;
+        }
+
+
+        // Flit serializer implementations.
+        /*
+        REQ flit serializer.
+        */
+        template<REQFlitConfigurationConcept    config, 
+                 CHI::IOLevelConnectionConcept  conn>
+        inline bool SerializeREQ(const REQ<config, conn> &flit, uint32_t* flitBits, size_t bitLength) noexcept
+        {
+            using REQ_t = REQ<config, conn>;
+
+            if (bitLength != REQ_t::WIDTH)
+                return false;
+
+            details::FlitAppender appender(flitBits);
+
+            appender.Append32(flit.QoS()            , REQ_t::QOS_WIDTH);
+            appender.Append32(flit.TgtID()          , REQ_t::TGTID_WIDTH);
+            appender.Append32(flit.SrcID()          , REQ_t::SRCID_WIDTH);
+            appender.Append32(flit.TxnID()          , REQ_t::TXNID_WIDTH);
+            appender.Append32(flit.ReturnNID()      , REQ_t::RETURNNID_WIDTH);
+        //                    flit.StashNID()
+#ifdef CHI_ISSUE_EB_ENABLE
+        //                    flit.SLCRepHint()
+#endif
+            appender.Append32(flit.StashNIDValid()  , REQ_t::STASHNIDVALID_WIDTH);
+        //                    flit.Endian()
+#ifdef CHI_ISSUE_EB_ENABLE
+        //                    flit.Deep()
+#endif
+            appender.Append32(flit.ReturnTxnID()    , REQ_t::RETURNTXNID_WIDTH);
+        //                    flit.StashLPID()
+        //                    flit.StashLPIDValid()
+            appender.Append32(flit.Opcode()         , REQ_t::OPCODE_WIDTH);
+            appender.Append32(flit.Size()           , REQ_t::SSIZE_WIDTH);
+            appender.Append32(flit.Addr()           , 32);
+            appender.Append32(flit.Addr() >> 32     , REQ_t::ADDR_WIDTH - 32);
+            appender.Append32(flit.NS()             , REQ_t::NS_WIDTH);
+            appender.Append32(flit.LikelyShared()   , REQ_t::LIKELYSHARED_WIDTH);
+            appender.Append32(flit.AllowRetry()     , REQ_t::ALLOWRETRY_WIDTH);
+            appender.Append32(flit.Order()          , REQ_t::ORDER_WIDTH);
+            appender.Append32(flit.PCrdType()       , REQ_t::PCRDTYPE_WIDTH);
+            appender.Append32(flit.MemAttr()        , REQ_t::MEMATTR_WIDTH);
+            appender.Append32(flit.SnpAttr()        , REQ_t::SNPATTR_WIDTH);
+#ifdef CHI_ISSUE_EB_ENABLE
+        //                    flit.DoDWT()
+#endif
+#ifdef CHI_ISSUE_B_ENABLE
+            appender.Append32(flit.LPID()           , REQ_t::LPID_WIDTH);
+#endif
+        //                    flit.PGroupID()
+        //                    flit.StashGroupID()
+#ifdef CHI_ISSUE_EB_ENABLE
+            appender.Append32(flit.TagGroupID()     , REQ_t::TAGGROUPID_WIDTH);
+#endif
+            appender.Append32(flit.Excl()           , REQ_t::EXCL_WIDTH);
+        //                    flit.SnoopMe()
+            appender.Append32(flit.ExpCompAck()     , REQ_t::EXPCOMPACK_WIDTH);
+#ifdef CHI_ISSUE_EB_ENABLE
+            appender.Append32(flit.TagOp()          , REQ_t::TAGOP_WIDTH);
+#endif
+            appender.Append32(flit.TraceTag()       , REQ_t::TRACETAG_WIDTH);
+#ifdef CHI_ISSUE_EB_ENABLE
+            if constexpr (REQ_t::hasMPAM)
+            {
+                appender.Append32(flit.MPAM(), REQ_t::MPAM_WIDTH);
+            }
+#endif
+
+            if constexpr (REQ_t::hasRSVDC)
+            {
+                appender.Append32(flit.RSVDC(), REQ_t::RSVDC_WIDTH);
+            }
+
+            //
+            appender.Finish(REQ_t::WIDTH);
+
+            return true;
+        }
+
+        /*
+        RSP flit serializer.
+        */
+        template<RSPFlitConfigurationConcept    config, 
+                 CHI::IOLevelConnectionConcept  conn>
+        inline bool SerializeRSP(const RSP<config, conn> &flit, uint32_t *flitBits, size_t bitLength) noexcept
+        {
+            using RSP_t = RSP<config, conn>;
+
+            if (bitLength != RSP_t::WIDTH)
+                return false;
+
+            details::FlitAppender appender(flitBits);
+
+            appender.Append32(flit.QoS()        , RSP_t::QOS_WIDTH);
+            appender.Append32(flit.TgtID()      , RSP_t::TGTID_WIDTH);
+            appender.Append32(flit.SrcID()      , RSP_t::SRCID_WIDTH);
+            appender.Append32(flit.TxnID()      , RSP_t::TXNID_WIDTH);
+            appender.Append32(flit.Opcode()     , RSP_t::OPCODE_WIDTH);
+            appender.Append32(flit.RespErr()    , RSP_t::RESPERR_WIDTH);
+            appender.Append32(flit.Resp()       , RSP_t::RESP_WIDTH);
+            appender.Append32(flit.FwdState()   , RSP_t::FWDSTATE_WIDTH);
+        //                    flit.DataPull()
+#ifdef CHI_ISSUE_EB_ENABLE
+            appender.Append32(flit.CBusy()      , RSP_t::CBUSY_WIDTH);
+#endif
+            appender.Append32(flit.DBID()       , RSP_t::DBID_WIDTH);
+#ifdef CHI_ISSUE_EB_ENABLE
+        //                    flit.PGroupID()
+        //                    flit.StashGroupID()
+        //                    flit.TagGroupID()
+#endif
+            appender.Append32(flit.PCrdType()   , RSP_t::PCRDTYPE_WIDTH);
+#ifdef CHI_ISSUE_EB_ENABLE
+            appender.Append32(flit.TagOp()      , RSP_t::TAGOP_WIDTH);
+#endif
+            appender.Append32(flit.TraceTag()   , RSP_t::TRACETAG_WIDTH);
+
+            //
+            appender.Finish(RSP_t::WIDTH);
+
+            return true;
+        }
+
+        /*
+        SNP flit serializer.
+        */
+        template<SNPFlitConfigurationConcept    config, 
+                 CHI::IOLevelConnectionConcept  conn>
+        inline bool SerializeSNP(const SNP<config, conn> &flit, uint32_t *flitBits, size_t bitLength) noexcept
+        {
+            using SNP_t = SNP<config, conn>;
+
+            if (bitLength != SNP_t::WIDTH)
+                return false;
+
+            details::FlitAppender appender(flitBits);
+
+            appender.Append32(flit.QoS()        , SNP_t::QOS_WIDTH);
+            appender.Append32(flit.SrcID()      , SNP_t::SRCID_WIDTH);
+            appender.Append32(flit.TxnID()      , SNP_t::TXNID_WIDTH);
+            appender.Append32(flit.FwdNID()     , SNP_t::FWDNID_WIDTH);
+            appender.Append32(flit.FwdTxnID()   , SNP_t::FWDTXNID_WIDTH);
+        //                    flit.StashLPID()
+        //                    flit.StashLPIDValid()
+        //                    flit.VMIDExt()
+            appender.Append32(flit.Opcode()     , SNP_t::OPCODE_WIDTH);
+            appender.Append32(flit.Addr()       , 32);
+            appender.Append32(flit.Addr() >> 32 , SNP_t::ADDR_WIDTH - 32);
+            appender.Append32(flit.NS()         , SNP_t::NS_WIDTH);
+            appender.Append32(flit.DoNotGoToSD(), SNP_t::DONOTGOTOSD_WIDTH);
+#ifdef CHI_ISSUE_B_ENABLE
+        //                    flit.DoNotDataPull()
+#endif
+            appender.Append32(flit.RetToSrc()   , SNP_t::RETTOSRC_WIDTH);
+            appender.Append32(flit.TraceTag()   , SNP_t::TRACETAG_WIDTH);
+
+#ifdef CHI_ISSUE_EB_ENABLE
+            if constexpr (SNP_t::hasMPAM)
+            {
+                appender.Append32(flit.MPAM(), SNP_t::MPAM_WIDTH);
+            }
+#endif
+
+            //
+            appender.Finish(SNP_t::WIDTH);
+
+            return true;
+        }
+
+        /*
+        DAT flit serializer.
+        */
+        template<DATFlitConfigurationConcept    config, 
+                 CHI::IOLevelConnectionConcept  conn>
+        inline bool SerializeDAT(const DAT<config, conn> &flit, uint32_t *flitBits, size_t bitLength) noexcept
+        {
+            using DAT_t = DAT<config, conn>;
+
+            if (bitLength != DAT_t::WIDTH)
+                return false;
+
+            details::FlitAppender appender(flitBits);
+
+            appender.Append32(flit.QoS()        , DAT_t::QOS_WIDTH);
+            appender.Append32(flit.TgtID()      , DAT_t::TGTID_WIDTH);
+            appender.Append32(flit.SrcID()      , DAT_t::SRCID_WIDTH);
+            appender.Append32(flit.TxnID()      , DAT_t::TXNID_WIDTH);
+            appender.Append32(flit.HomeNID()    , DAT_t::HOMENID_WIDTH);
+            appender.Append32(flit.Opcode()     , DAT_t::OPCODE_WIDTH);
+            appender.Append32(flit.RespErr()    , DAT_t::RESPERR_WIDTH);
+            appender.Append32(flit.Resp()       , DAT_t::RESP_WIDTH);
+        //                    flit.FwdState()
+        //                    flit.DataPull()
+            appender.Append32(flit.DataSource() , DAT_t::DATASOURCE_WIDTH);
+#ifdef CHI_ISSUE_EB_ENABLE
+            appender.Append32(flit.CBusy()      , DAT_t::CBUSY_WIDTH);
+#endif
+            appender.Append32(flit.DBID()       , DAT_t::DBID_WIDTH);
+            appender.Append32(flit.CCID()       , DAT_t::CCID_WIDTH);
+            appender.Append32(flit.DataID()     , DAT_t::DATAID_WIDTH);
+#ifdef CHI_ISSUE_EB_ENABLE
+            appender.Append32(flit.TagOp()      , DAT_t::TAGOP_WIDTH);
+            appender.Append32(flit.Tag()        , DAT_t::TAG_WIDTH);
+            appender.Append32(flit.TU()         , DAT_t::TU_WIDTH);
+#endif
+            appender.Append32(flit.TraceTag()   , DAT_t::TRACETAG_WIDTH);
+
+            if constexpr (DAT_t::hasRSVDC)
+            {
+                appender.Append32(flit.RSVDC(), DAT_t::RSVDC_WIDTH);
+            }
+
+            if constexpr (DAT_t::BE_WIDTH == 64)
+            {
+                appender.Append32(flit.BE()         , 32);
+                appender.Append32(flit.BE() >> 32   , 32);
+            }
+            else
+            {
+                appender.Append32(flit.BE(), DAT_t::BE_WIDTH);
+            }
+
+            if constexpr (DAT_t::DATA_WIDTH >= 128)
+            {
+                appender.Append32(flit.Data()[0]        , 32);
+                appender.Append32(flit.Data()[0] >> 32  , 32);
+
+                appender.Append32(flit.Data()[1]        , 32);
+                appender.Append32(flit.Data()[1] >> 32  , 32);
+            }
+
+            if constexpr (DAT_t::DATA_WIDTH >= 256)
+            {
+                appender.Append32(flit.Data()[2]        , 32);
+                appender.Append32(flit.Data()[2] >> 32  , 32);
+
+                appender.Append32(flit.Data()[3]        , 32);
+                appender.Append32(flit.Data()[3] >> 32  , 32);
+            }
+
+            if constexpr (DAT_t::DATA_WIDTH >= 512)
+            {
+                appender.Append32(flit.Data()[4]        , 32);
+                appender.Append32(flit.Data()[4] >> 32  , 32);
+
+                appender.Append32(flit.Data()[5]        , 32);
+                appender.Append32(flit.Data()[5] >> 32  , 32);
+
+                appender.Append32(flit.Data()[6]        , 32);
+                appender.Append32(flit.Data()[6] >> 32  , 32);
+
+                appender.Append32(flit.Data()[7]        , 32);
+                appender.Append32(flit.Data()[7] >> 32  , 32);
+            }
+
+            if constexpr (DAT_t::hasDataCheck)
+            {
+                if constexpr (DAT_t::DATACHECK_WIDTH == 64)
+                {
+                    appender.Append32(flit.DataCheck()      , 32);
+                    appender.Append32(flit.DataCheck() >> 32, 32);
+                }
+                else
+                {
+                    appender.Append32(flit.DataCheck(), DAT_t::DATACHECK_WIDTH);
+                }
+            }
+
+            if constexpr (DAT_t::hasPoison)
+            {
+                appender.Append32(flit.Poison(), DAT_t::POISON_WIDTH);
+            }
+
+            //
+            appender.Finish(DAT_t::WIDTH);
 
             return true;
         }
