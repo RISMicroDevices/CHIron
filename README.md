@@ -18,7 +18,7 @@
 ## Documentations
 
 **Sorry, no public documentation available for now :(**   
-But we are currently working on this part in near future!  
+But we are going to work on this part in near future!  
 
 -----------------------
 
