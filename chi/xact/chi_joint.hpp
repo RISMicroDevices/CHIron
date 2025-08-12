@@ -910,7 +910,7 @@ namespace /*CHI::*/Xact {
         const FiredRequestFlit<config, conn>&   reqFlit,
         std::shared_ptr<Xaction<config, conn>>  retried) noexcept
     {
-        return std::make_shared<XactionAtomic<config, conn>>(glbl, topo, reqFlit);
+        return std::make_shared<XactionAtomic<config, conn>>(glbl, topo, reqFlit, retried);
     }
 
     template<FlitConfigurationConcept       config,
@@ -1238,7 +1238,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_NO_MATCHING_PCREDIT;
 
             XactDenialEnum denial =
-                firstXaction->Resend(pCreditList.front(), retryXaction);
+                firstXaction->Resend(glbl, pCreditList.front(), retryXaction);
             
             if (denial != XactDenial::ACCEPTED)
                 return denial;
@@ -1786,7 +1786,7 @@ namespace /*CHI::*/Xact {
         // DCT or Write
         if (firedDatFlit.IsToRequester(topo))
         {
-            txreqid_t key;
+            rxsnpid_t key;
             key.value   = 0;
             key.id.tgt  = datFlit.SrcID();
             key.id.src  = datFlit.HomeNID();
