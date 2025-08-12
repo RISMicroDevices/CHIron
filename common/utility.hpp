@@ -9,7 +9,11 @@
 #define __CHILOG_COMMON__UTILITY
 
 #include <sstream>
+#include <cstdint>
 #include <iomanip>
+#include <any>
+#include <optional>
+#include <unordered_map>
 
 
 /*
@@ -216,6 +220,57 @@ namespace Gravity {
         { return oss.str(); }
     };
 
+/*
+}
+*/
+
+
+/*
+* Object Type & Companion Utility
+*/
+/*
+namespace Gravity {
+*/
+    template<class _TCompanion>
+    class CompanionTypeBack {
+    public:
+        using type = _TCompanion;
+
+    public:
+        inline operator const CompanionTypeBack<_TCompanion>*() const noexcept
+        { return this; }
+    };
+
+    template<class _T>
+    using CompanionType = const CompanionTypeBack<_T>*;
+
+    class Companion {
+    private:
+        std::unordered_map<uintptr_t, std::any> _map;
+
+    public:
+        template<class _T>
+        inline void Set(CompanionType<_T> type, const _T& value) noexcept
+        {
+            _map[uintptr_t(type)] = std::make_any<_T>(value);
+        }
+
+        template<class _T>
+        inline std::optional<_T> Get(CompanionType<_T> type) const noexcept
+        {
+            auto iter = _map.find(uintptr_t(type));
+            if (iter != _map.end())
+                return { std::any_cast<_T>(iter->second) };
+            else
+                return std::nullopt;
+        }
+
+        template<class _T>
+        inline bool Has(CompanionType<_T> type) const noexcept
+        {
+            return _map.find(static_cast<uintptr_t>(type)) != _map.end();
+        }
+    };
 /*
 }
 */

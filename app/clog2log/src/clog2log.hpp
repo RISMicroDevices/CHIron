@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #ifndef CLOG2LOG__STANDALONE
 #   define CHI_ISSUE_EB_ENABLE
 #endif
@@ -110,6 +111,7 @@
     using Topology_t = CHI::Eb::Xact::Topology;
     using Xaction_t = CHI::Eb::Xact::Xaction<config>;
     using RNJoint_t = CHI::Eb::Xact::RNFJoint<config>;
+    using SNJoint_t = CHI::Eb::Xact::SNFJoint<config>;
     using NodeTypeEnum_t = CHI::Eb::Xact::NodeTypeEnum;
     namespace NodeType_t = CHI::Eb::Xact::NodeType;
     using XactDenialEnum_t = CHI::Eb::Xact::XactDenialEnum;
