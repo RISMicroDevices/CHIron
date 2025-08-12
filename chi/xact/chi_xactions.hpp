@@ -112,6 +112,9 @@ namespace CHI {
             std::shared_ptr<Xaction<config, conn>>          retriedXaction;
 
         public:
+            Companion                                       companion;
+
+        public:
             Xaction(XactionType                             type, 
                     const FiredRequestFlit<config, conn>&   first) noexcept;
 
