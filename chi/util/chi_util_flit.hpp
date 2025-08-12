@@ -551,7 +551,7 @@ namespace CHI {
         //  flit.DoDWT()
 #endif
 #ifdef CHI_ISSUE_B_ENABLE
-            flit.LPID()             = walker.Walk(REQ_t::LPID_WIDTH);
+            flit.LPID()             = walker.Walk32(REQ_t::LPID_WIDTH);
 #endif
         //  flit.PGroupID()
         //  flit.StashGroupID()
