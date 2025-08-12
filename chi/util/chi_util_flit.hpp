@@ -359,6 +359,52 @@ namespace CHI {
         public:
             bool    Eval(const Parameters& params) noexcept;
         };
+
+        //
+        /*
+        Use Flit De-Serializers to decode the flits from FLIT bundles to C++ Flit objects
+        with dynamic flit measure.
+        *NOTICE: The flit template must be wide enough to hold the measured flit.
+        */
+        template<REQFlitConfigurationConcept        config, 
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool DeserializeREQ(const REQMeasure& measure, REQ<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+        
+        template<RSPFlitConfigurationConcept        config, 
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool DeserializeRSP(const RSPMeasure& measure, RSP<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+        
+        template<SNPFlitConfigurationConcept        config, 
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool DeserializeSNP(const SNPMeasure& measure, SNP<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+        
+        template<DATFlitConfigurationConcept        config, 
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool DeserializeDAT(const DATMeasure& measure, DAT<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+        //
+
+        //
+        /*
+        Use Flit Serializers to encode the flits from C++ Flit objects to FLIT bundles.
+        *NOTICE: The flit in template objects would be cropped or zero-extended silently
+                 if mismatched with the measured flit.
+        */
+        template<REQFlitConfigurationConcept        config,
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool SerializeREQ(const REQMeasure& measure, const REQ<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+
+        template<RSPFlitConfigurationConcept        config,
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool SerializeRSP(const RSPMeasure& measure, const RSP<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+        
+        template<SNPFlitConfigurationConcept        config,
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool SerializeSNP(const SNPMeasure& measure, const SNP<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+
+        template<DATFlitConfigurationConcept        config,
+                 CHI::IOLevelConnectionConcept      conn>
+        inline bool SerializeDAT(const DATMeasure& measure, const DAT<config, conn>& flit, uint32_t* flitBits, size_t bitLength) noexcept;
+        //
     }
 /*
 }
