@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #ifndef CLOG2LOG__STANDALONE
 #   define CHI_ISSUE_EB_ENABLE
 #endif
@@ -16,6 +15,7 @@
 #include <stdexcept>
 #include <set>
 #include <chrono>
+#include <cstdint>
 #include <string>
 
 #include "../../../clog/clog_t/clog_t.hpp"
@@ -265,6 +265,9 @@ inline void print_field_hex_data<std::monostate>(
     std::ostream&, bool, const std::set<std::string>&, const std::set<std::string>&, const char*, std::monostate, size_t)
 { }
 
+
+const CompanionTypeBack<uint64_t> XACTION_ORDINAL;
+
 inline int clog2log(int argc, char* argv[])
 {
     //
@@ -405,6 +408,12 @@ inline int clog2log(int argc, char* argv[])
             DAT_t   dat;
             SNP_t   snp;
         }               flit;
+
+        bool            messageLine = false;
+        std::string     message;
+
+        std::optional<uint64_t>
+                        xactOrdinal;
     };
 
     moodycamel::ConcurrentQueue<ParseAndWriteTask>* queue
@@ -425,9 +434,23 @@ inline int clog2log(int argc, char* argv[])
 
     // (Xaction) Transaction Mode
     RNJoint_t   joint;
+    SNJoint_t   jointSN;
     Topology_t  topo;
 
     XactGlobal_t xactGlbl;
+    uint64_t xactOrdinal = 0;
+
+    // TODO
+    topo.SetNode(12, NodeType_t::RN_F);
+    topo.SetNode(32, NodeType_t::RN_F);
+    topo.SetNode(44, NodeType_t::RN_F);
+    topo.SetNode(64, NodeType_t::RN_F);
+    topo.SetNode(8 , NodeType_t::HN_F);
+    topo.SetNode(36, NodeType_t::HN_F);
+    topo.SetNode(40, NodeType_t::HN_F);
+    topo.SetNode(68, NodeType_t::HN_F);
+    topo.SetNode(4 , NodeType_t::SN_F);
+    topo.SetNode(72, NodeType_t::SN_F);
 
     /* Parse CLog file */
     uint64_t                        recordCount = 0;
@@ -654,6 +677,10 @@ inline int clog2log(int argc, char* argv[])
             task.nodeId     = record.nodeId;
             task.channel    = record.channel;
 
+            task.xactOrdinal = std::nullopt;
+
+            denial = XactDenial_t::DENIED_UNSUPPORTED_FEATURE;
+
             switch (record.channel)
             {
                 //
@@ -683,6 +710,32 @@ inline int clog2log(int argc, char* argv[])
                             denial = joint.NextTXREQ(&xactGlbl, time, topo, task.flit.req, &xaction);
                         else
                             return false;
+                    }
+
+                    if (xact && topo.IsSubordinate(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::RXREQ)
+                            denial = jointSN.NextRXREQ(&xactGlbl, time, topo, task.flit.req, &xaction);
+                        else
+                            return false;
+                    }
+
+                    if (xaction)
+                    {
+                        if (xaction->IsSecondTry())
+                        {
+                            task.xactOrdinal = xaction->GetFirstTry()->companion.Get(&XACTION_ORDINAL);
+
+                            if (task.xactOrdinal)
+                                xaction->companion.Set(&XACTION_ORDINAL, *task.xactOrdinal);
+                        }
+                        else
+                        {
+                            xaction->companion.Set(&XACTION_ORDINAL, xactOrdinal);
+                            task.xactOrdinal = { xactOrdinal };
+
+                            xactOrdinal++;
+                        }
                     }
 
                     break;
@@ -716,6 +769,17 @@ inline int clog2log(int argc, char* argv[])
                             denial = joint.NextRXRSP(&xactGlbl, time, topo, task.flit.rsp, &xaction);
                     }
 
+                    if (xact && topo.IsSubordinate(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::TXRSP)
+                            denial = jointSN.NextTXRSP(&xactGlbl, time, topo, task.flit.rsp, &xaction);
+                        else
+                            return false;
+                    }
+
+                    if (xaction)
+                        task.xactOrdinal = xaction->companion.Get(&XACTION_ORDINAL);
+
                     break;
 
                 //
@@ -746,6 +810,17 @@ inline int clog2log(int argc, char* argv[])
                         else
                             denial = joint.NextRXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
                     }
+
+                    if (xact && topo.IsSubordinate(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::TXDAT)
+                            denial = jointSN.NextTXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
+                        else
+                            denial = jointSN.NextRXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
+                    }
+
+                    if (xaction)
+                        task.xactOrdinal = xaction->companion.Get(&XACTION_ORDINAL);
 
                     break;
 
@@ -778,6 +853,14 @@ inline int clog2log(int argc, char* argv[])
                             return false;
                     }
 
+                    if (xaction)
+                    {
+                        xaction->companion.Set(&XACTION_ORDINAL, xactOrdinal);
+                        task.xactOrdinal = { xactOrdinal };
+
+                        xactOrdinal++;
+                    }
+
                     break;
 
                 default:
@@ -796,7 +879,9 @@ inline int clog2log(int argc, char* argv[])
                     std::cerr << "%WARN: xaction not accepted (" << denial->name << ")"
                         << " at time " << time << std::endl;
                 }
-                else if (!xactInFlight)
+                else if (xactInFlight)
+                    skip = true;
+                else
                 {
                     if (!xaction)
                     {
@@ -855,6 +940,12 @@ inline int clog2log(int argc, char* argv[])
         {
             if (queue->try_dequeue(task))
             {
+                if (task.messageLine)
+                {
+                    ofs << task.message << "\n";
+                    continue;
+                }
+
                 if (asJson)
                 {
                     if (first)
@@ -876,7 +967,12 @@ inline int clog2log(int argc, char* argv[])
                     ofs << "\"at\":\"";
                 }
                 else
-                    ofs << "[" << task.time << "] (" << task.nodeId << ") <";
+                {
+                    ofs << "[" << task.time << "] ";
+                    if (task.xactOrdinal)
+                        ofs << "[#" << StringAppender().Hex().Append(*task.xactOrdinal).ToString() << "] ";
+                    ofs << "(" << task.nodeId << ") <";
+                };
 
                 switch (task.channel)
                 {
@@ -1260,6 +1356,73 @@ inline int clog2log(int argc, char* argv[])
             {
                 dotCount = 0;
                 std::cout << std::endl;
+            }
+        }
+    }
+
+    if (xact && xactInFlight)
+    {
+        std::vector<std::shared_ptr<Xaction_t>> inflightXactions;
+        joint.GetInflight(topo, inflightXactions, true);
+
+        for (auto inflightXaction : inflightXactions)
+        {
+            ParseAndWriteTask task;
+
+            if (xactAddr)
+            {
+                if (inflightXaction->GetFirst().IsREQ())
+                {
+                    if (inflightXaction->GetFirst().flit.req.Addr() != xactAddrValue)
+                        continue;
+                }
+                else if ((inflightXaction->GetFirst().flit.snp.Addr() << 3) != xactAddrValue)
+                    continue;
+            }
+
+            //
+            task.messageLine = true;
+            task.message = "";
+
+            while (!queue->try_enqueue(task));
+
+            task.messageLine = false;
+
+            // first
+            auto first = inflightXaction->GetFirst();
+
+            task.time   = first.time;
+            task.nodeId = first.nodeId;
+            if (first.IsREQ())
+            {
+                task.channel    = CLog::Channel::TXREQ;
+                task.flit.req   = first.flit.req;
+            }
+            else
+            {
+                task.channel    = CLog::Channel::RXSNP;
+                task.flit.snp   = first.flit.snp;
+            }
+
+            while (!queue->try_enqueue(task));
+
+            // subsequent
+            for (auto subsequent : inflightXaction->GetSubsequence())
+            {
+                task.time = subsequent.time;
+                task.nodeId = first.nodeId;
+                if (subsequent.IsRSP())
+                {
+                    task.channel    = subsequent.IsTX() ? CLog::Channel::TXRSP : CLog::Channel::RXRSP;
+                    task.flit.rsp   = subsequent.flit.rsp;
+                }
+                else
+                {
+                    task.channel    = subsequent.IsTX() ? CLog::Channel::TXDAT : CLog::Channel::RXDAT;
+                    task.flit.dat   = subsequent.flit.dat;
+                }
+
+                while (!queue->try_enqueue(task));
             }
         }
     }
