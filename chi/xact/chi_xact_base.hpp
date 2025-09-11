@@ -97,7 +97,12 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_DBID_NOT_EXIST               ("XACT_DENIED_DBID_NOT_EXIST",              0x00000000 |  8);
 
             inline constexpr XactDenialEnumBack DENIED_OPCODE                       ("XACT_DENIED_OPCODE",                      0x00010000 |  0);
-            inline constexpr XactDenialEnumBack DENIED_XACTION_NOT_SUPPORTED        ("XACT_DENIED_XACTION_NOT_SUPPORTED",       0x00010000 |  1);
+            inline constexpr XactDenialEnumBack DENIED_REQ_OPCODE                   ("XACT_DENIED_REQ_OPCODE",                  0x00010000 |  1);
+            inline constexpr XactDenialEnumBack DENIED_RSP_OPCODE                   ("XACT_DENIED_RSP_OPCODE",                  0x00010000 |  2);
+            inline constexpr XactDenialEnumBack DENIED_DAT_OPCODE                   ("XACT_DENIED_DAT_OPCODE",                  0x00010000 |  3);
+            inline constexpr XactDenialEnumBack DENIED_SNP_OPCODE                   ("XACT_DENIED_SNP_OPCODE",                  0x00010000 |  4);
+            inline constexpr XactDenialEnumBack DENIED_OPCODE_NOT_SUPPORTED         ("XACT_DENIED_OPCODE_NOT_SUPPORTED",        0x00010000 | 16);
+            inline constexpr XactDenialEnumBack DENIED_XACTION_NOT_SUPPORTED        ("XACT_DENIED_XACTION_NOT_SUPPORTED",       0x00010000 | 17);
 
             inline constexpr XactDenialEnumBack DENIED_REQ_NOT_TO_HN                ("XACT_DENIED_REQ_NOT_TO_HN",               0x00020000 |  0);
             inline constexpr XactDenialEnumBack DENIED_REQ_NOT_FROM_RN_TO_HN        ("XACT_DENIED_REQ_NOT_FROM_RN_TO_HN",       0x00020000 |  1);
@@ -356,8 +361,12 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_STATE_COMPDATA               ("XACT_DENIED_STATE_COMPDATA",              0x00200000 |  2);
             inline constexpr XactDenialEnumBack DENIED_STATE_DATASEPRESP            ("XACT_DENIED_STATE_DATASEPRESP",           0x00200000 |  3);
             inline constexpr XactDenialEnumBack DENIED_STATE_COPYBACKWRDATA         ("XACT_DENIED_STATE_COPYBACKWRDATA",        0x00200000 |  4);
-            inline constexpr XactDenialEnumBack DENIED_STATE_SNPRESP                ("XACT_DENIED_STATE_SNPRESP",               0x00200000 |  5);
-            inline constexpr XactDenialEnumBack DENIED_STATE_SNPRESPDATA            ("XACT_DENIED_STATE_SNPRESPDATA",           0x00200000 |  6);
+            inline constexpr XactDenialEnumBack DENIED_STATE_RESP_SNPRESP           ("XACT_DENIED_STATE_RESP_SNPRESP",          0x00200000 |  5);
+            inline constexpr XactDenialEnumBack DENIED_STATE_RESP_SNPRESPDATA       ("XACT_DENIED_STATE_RESP_SNPRESPDATA",      0x00200000 |  6);
+            inline constexpr XactDenialEnumBack DENIED_STATE_RESP_SNPRESPFWDED      ("XACT_DENIED_STATE_RESP_SNPRESPFWDED",     0x00200000 |  7);
+            inline constexpr XactDenialEnumBack DENIED_STATE_RESP_SNPRESPDATAFWDED  ("XACT_DENIED_STATE_RESP_SNPRESPDATAFWDED", 0x00200000 |  8);
+            inline constexpr XactDenialEnumBack DENIED_STATE_FWD_SNPRESPFWDED       ("XACT_DENIED_STATE_FWD_SNPRESPFWDED",      0x00200000 |  9);
+            inline constexpr XactDenialEnumBack DENIED_STATE_FWD_SNPRESPDATAFWDED   ("XACT_DENIED_STATE_FWD_SNPRESPDATAFWDED",  0x00200000 | 10);
 
             inline constexpr XactDenialEnumBack DENIED_UNSUPPORTED_FEATURE          ("XACT_DENIED_UNSUPPORTED_FEATURE",         0xFFFF0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_UNSUPPORTED_FEATURE_OPCODE   ("XACT_DENIED_UNSUPPORTED_FEATURE_OPCODE",  0xFFFF0000 |  1);
