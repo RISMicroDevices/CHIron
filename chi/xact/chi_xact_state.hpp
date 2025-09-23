@@ -697,10 +697,13 @@ namespace /*CHI::*/Xact {
                 const CacheStateTransitions::Intermediates::TablesSnpX* tables
                     = static_cast<CacheStateTransitions::Intermediates::TablesSnpX*>(trans->tables);
 
-                if (flit.Opcode() == Opcodes::DAT::SnpRespData
-                 || flit.Opcode() == Opcodes::DAT::SnpRespDataPtl) // TODO: SnpRespDataPtl
+                if (flit.Opcode() == Opcodes::DAT::SnpRespData)
                 {
                     g0 = &tables->GSnpRespData(retToSrc);
+                }
+                else if (flit.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+                {
+                    g0 = &tables->GSnpRespDataPtl(retToSrc);
                 }
                 else
                     return XactDenial::DENIED_DAT_OPCODE;
@@ -710,10 +713,13 @@ namespace /*CHI::*/Xact {
                 const CacheStateTransitions::Intermediates::TablesSnpXFwd* tables
                     = static_cast<CacheStateTransitions::Intermediates::TablesSnpXFwd*>(trans->tables);
 
-                if (flit.Opcode() == Opcodes::DAT::SnpRespData
-                 || flit.Opcode() == Opcodes::DAT::SnpRespDataPtl) // TODO: SnpRespDataPtl
+                if (flit.Opcode() == Opcodes::DAT::SnpRespData)
                 {
                     g0 = &tables->GSnpRespData(retToSrc);
+                }
+                else if (flit.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+                {
+                    g0 = &tables->GSnpRespDataPtl(retToSrc);
                 }
                 else if (flit.Opcode() == Opcodes::DAT::SnpRespDataFwded)
                 {
@@ -731,11 +737,15 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_SNP_OPCODE;
 
             //
-            CacheResp resp = fwded ? CacheResp::FromSnpRespDataFwded(flit.Resp())
-                                   : CacheResp::FromSnpRespData(flit.Resp()); // TODO: SnpRespDataPtl
+            CacheResp resp = fwded ? CacheResp::FromSnpRespDataFwded(flit.Resp()) : (
+                flit.Opcode() == Opcodes::DAT::SnpRespDataPtl ? CacheResp::FromSnpRespDataPtl(flit.Resp())
+                                                              : CacheResp::FromSnpRespData(flit.Resp())
+            );
 
-            CacheState nextState = fwded ? CacheState::FromSnpRespDataFwded(flit.Resp())
-                                         : CacheState::FromSnpRespData(flit.Resp()); // TODO: SnpRespDataPtl
+            CacheState nextState = fwded ? CacheState::FromSnpRespDataFwded(flit.Resp()) : (
+                flit.Opcode() == Opcodes::DAT::SnpRespDataPtl ? CacheState::FromSnpRespDataPtl(flit.Resp())
+                                                              : CacheState::FromSnpRespData(flit.Resp())
+            );
 
             //
             std::pair<CacheState, bool> prevState = EvaluateWithSeer(addr);
@@ -749,7 +759,7 @@ namespace /*CHI::*/Xact {
                 if (!xs)
                 {
                     return fwded ? XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED
-                                 : XactDenial::DENIED_STATE_RESP_SNPRESPDATA; // TODO: SnpRespDataPtl
+                                 : XactDenial::DENIED_STATE_RESP_SNPRESPDATA;
                 }
             }
             else if (g1)
