@@ -5,8 +5,9 @@
 
 #include <concepts>                             // IWYU pragma: export
 #include <cstddef>                              // IWYU pragma: export
-#include <variant>                              // IWYU pragma: export
 #include <utility>                              // IWYU pragma: export
+#include <variant>                              // IWYU pragma: export
+#include <concepts>                             // IWYU pragma: export
 
 #include "../../common/utility.hpp"             // IWYU pragma: export
 #include "../../common/nonstdint.hpp"           // IWYU pragma: export

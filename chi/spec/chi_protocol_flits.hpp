@@ -6,7 +6,6 @@
 #ifndef CHI_PROTOCOL_FLITS__STANDALONE
 #   define CHI_ISSUE_EB_ENABLE
 #   include "chi_protocol_flits_header.hpp"
-#   include <concepts>                                  // IWYU pragma: keep
 #endif
 
 
