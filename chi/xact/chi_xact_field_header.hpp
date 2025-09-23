@@ -7,7 +7,5 @@
 #include <cstring>                                  // IWYU pragma: export
 #include <cstdint>                                  // IWYU pragma: export
 
-#include "../spec/chi_protocol_encoding_header.hpp" // IWYU pragma: export
-#include "../spec/chi_protocol_encoding.hpp"        // IWYU pragma: export
 
 #endif // __CHI__CHI_XACT_FIELD_HEADER

@@ -4,7 +4,9 @@
 //#define __CHI__CHI_XACT_FIELD
 
 #ifndef CHI_XACT_FIELD__STANDALONE
-#   include "chi_xact_field_header.hpp"             // IWYU pragma: keep
+#   include "chi_xact_field_header.hpp"                 // IWYU pragma: keep
+#   include "../spec/chi_protocol_encoding_header.hpp"  // IWYU pragma: keep
+#   include "../spec/chi_protocol_encoding.hpp"         // IWYU pragma: keep
 #endif
 
 
