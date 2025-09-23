@@ -720,6 +720,14 @@ inline int clog2log(int argc, char* argv[])
                             return false;
                     }
 
+                    if (xact && topo.IsHome(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::RXREQ)
+                            denial = joint.NextTXREQ(&xactGlbl, time, topo, task.flit.req, &xaction);
+                        else
+                            denial = jointSN.NextRXREQ(&xactGlbl, time, topo, task.flit.req, &xaction);
+                    }
+
                     if (xaction)
                     {
                         if (xaction->IsSecondTry())
@@ -777,6 +785,28 @@ inline int clog2log(int argc, char* argv[])
                             return false;
                     }
 
+                    if (xact && topo.IsHome(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::RXRSP)
+                        {
+                            if (topo.IsRequester(task.flit.rsp.SrcID()))
+                                denial = joint.NextTXRSP(&xactGlbl, time, topo, task.flit.rsp, &xaction);
+                            else if (topo.IsRequester(task.flit.rsp.SrcID()))
+                                denial = jointSN.NextTXRSP(&xactGlbl, time, topo, task.flit.rsp, &xaction);
+                            else
+                                return false;
+                        }
+                        else
+                        {
+                            if (topo.IsRequester(task.flit.rsp.TgtID()))
+                                denial = joint.NextRXRSP(&xactGlbl, time, topo, task.flit.rsp, &xaction);
+                            else if (topo.IsSubordinate(task.flit.rsp.TgtID()))
+                                denial = jointSN.NextRXRSP(&xactGlbl, time, topo, task.flit.rsp, &xaction);
+                            else
+                                return false;
+                        }
+                    }
+
                     if (xaction)
                         task.xactOrdinal = xaction->companion.Get(&XACTION_ORDINAL);
 
@@ -819,6 +849,28 @@ inline int clog2log(int argc, char* argv[])
                             denial = jointSN.NextRXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
                     }
 
+                    if (xact && topo.IsHome(record.nodeId))
+                    {
+                        if (record.channel == CLog::Channel::RXDAT)
+                        {
+                            if (topo.IsRequester(task.flit.dat.SrcID()))
+                                denial = joint.NextTXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
+                            else if (topo.IsSubordinate(task.flit.dat.SrcID()))
+                                denial = jointSN.NextTXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
+                            else
+                                return false;
+                        }
+                        else
+                        {
+                            if (topo.IsRequester(task.flit.dat.TgtID()))
+                                denial = joint.NextRXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
+                            else if (topo.IsSubordinate(task.flit.dat.TgtID()))
+                                denial = jointSN.NextRXDAT(&xactGlbl, time, topo, task.flit.dat, &xaction);
+                            else
+                                return false;
+                        }
+                    }
+
                     if (xaction)
                         task.xactOrdinal = xaction->companion.Get(&XACTION_ORDINAL);
 
@@ -851,6 +903,12 @@ inline int clog2log(int argc, char* argv[])
                             denial = joint.NextRXSNP(&xactGlbl, time, topo, task.flit.snp, record.nodeId, &xaction);
                         else
                             return false;
+                    }
+
+                    if (xact && topo.IsHome(record.nodeId))
+                    {
+                        std::cerr << "%ERROR: xaction on channel TXSNP from HN currently not supported" << std::endl;
+                        return false;
                     }
 
                     if (xaction)
