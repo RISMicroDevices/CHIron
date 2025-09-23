@@ -941,7 +941,6 @@ namespace BullsEye {
 
         constexpr operator      _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>() const noexcept;
         constexpr operator      _Tuv() const noexcept;
-        explicit constexpr operator bool() const noexcept;
     };
 
 
@@ -1058,7 +1057,6 @@ namespace BullsEye {
 
         constexpr operator      _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>() const noexcept;
         constexpr operator      _Tsv() const noexcept;
-        explicit constexpr operator bool() const noexcept;
     };
 
     
@@ -1693,15 +1691,6 @@ namespace BullsEye {
         else
             return (val >> _Llsh) & MASK;
     }
-
-    template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
-    inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator bool() const noexcept
-    {
-        if constexpr (_Llsh == 0)
-            return (val & MASK) != 0;
-        else
-            return ((val >> _Llsh) & MASK) != 0;
-    }
     /*
 }
 */
@@ -2316,15 +2305,6 @@ namespace BullsEye {
             return ((val << SIGN_SHIFT) >> SIGN_SHIFT) & MASK;
         else
             return (((val << SIGN_SHIFT) >> SIGN_SHIFT) >> _Llsh) & MASK;
-    }
-
-    template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
-    inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator bool() const noexcept
-    {
-        if constexpr (_Llsh == 0)
-            return (val & MASK) != 0;
-        else
-            return ((val >> _Llsh) & MASK) != 0;
     }
     /*
 }
