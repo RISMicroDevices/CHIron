@@ -2185,9 +2185,9 @@ namespace CHI {
         //------------------------------------------------------
         constexpr type  SnpRespData_I_PD_Fwded_SC       = 0b100;    // DAT Opcode = 0x6, FwdState = 0b001
         //------------------------------------------------------
-        constexpr type  SnpRespData_I_SC_PD_Fwded_I     = 0b101;    // DAT Opcode = 0x6, FwdState = 0b000
+        constexpr type  SnpRespData_SC_PD_Fwded_I       = 0b101;    // DAT Opcode = 0x6, FwdState = 0b000
         //------------------------------------------------------
-        constexpr type  SnpRespData_I_SC_PD_Fwded_SC    = 0b101;    // DAT Opcode = 0x6, FwdState = 0b001
+        constexpr type  SnpRespData_SC_PD_Fwded_SC      = 0b101;    // DAT Opcode = 0x6, FwdState = 0b001
         //======================================================
 
         //
