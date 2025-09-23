@@ -3,12 +3,9 @@
 //#ifndef __CHI__CHI_XACT_STATE
 //#define __CHI__CHI_XACT_STATE
 
-#include "chi_xact_field_header.hpp"
-#include "chi_xact_state/cst_base.hpp"
-#include "chi_xact_state/cst_consteval_intermediates.hpp"
-#include "chi_xact_state/includes.hpp"          // IWYU pragma: keep
-#include "chi_xact_state/base.hpp"              // IWYU pragma: keep
-#include "chi_xact_state/cst.hpp"               // IWYU pragma: keep
+#include "chi_xact_state/includes.hpp"                      // IWYU pragma: keep
+#include "chi_xact_state/base.hpp"                          // IWYU pragma: keep
+#include "chi_xact_state/cst.hpp"                           // IWYU pragma: keep
 
 
 #if (!defined(CHI_ISSUE_B_ENABLE)  || !defined(__CHI__CHI_XACT_STATE_B)) \
