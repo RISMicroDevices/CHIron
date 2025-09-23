@@ -1056,17 +1056,24 @@ namespace /*CHI::*/Xact {
                 // RXDAT Opcodes under MakeReadUnique Transactions:
                 //  CompData, DataSepResp
 
+                const CacheStateTransitions::Intermediates::TablesMakeReadUnique* tables = nullptr;
+
+                if (xaction.GetFirst().flit.req.Excl())
+                    tables = &CacheStateTransitions::Intermediates::MakeReadUnique_Excl;
+                else
+                    tables = &CacheStateTransitions::Intermediates::MakeReadUnique;
+
                 const CacheStateTransitions::Intermediates::details::TableG0* g0 = nullptr;
                 CacheResp resp;
 
                 if (flit.Opcode() == Opcodes::DAT::CompData)
                 {
-                    g0 = &static_cast<CacheStateTransitions::Intermediates::TablesMakeReadUnique*>(trans->tables)->GCompData();
+                    g0 = &tables->GCompData();
                     resp = CacheResp::FromCompData(flit.Resp());
                 }
                 else if (flit.Opcode() == Opcodes::DAT::DataSepResp)
                 {
-                    g0 = &static_cast<CacheStateTransitions::Intermediates::TablesMakeReadUnique*>(trans->tables)->GDataSepResp();
+                    g0 = &tables->GDataSepResp();
                     resp = CacheResp::FromDataSepResp(flit.Resp());
                 }
                 else
