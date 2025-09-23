@@ -15,6 +15,13 @@
     - Possible to be kernel or UVMs, but no longer stuck on UVM platforms  
     - **Freedom to use in open-source projects**  
 
+## Known Issues
+
+- **MTE not supported**, and not on the near-future roadmap
+- **Xaction (Transaction Modeling) now only supports Issue E**
+- **Exclusive Monitor tracking not supported**
+- **SnpPreferUnique & SnpPreferUniqueFwd under exclusive sequence not fully supported**
+
 ## Documentations
 
 **Sorry, no public documentation available for now :(**   
@@ -23,3 +30,4 @@ But we are going to work on this part in near future!
 -----------------------
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/RISMicroDevices/CHIron) for project preview.  
+
