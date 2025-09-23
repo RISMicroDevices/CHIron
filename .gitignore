@@ -4,4 +4,7 @@ out
 *.run
 *.log
 *.out
-.vscode
+.idea*
+.vs*
+*.slnx*
+*.vcxproj*
