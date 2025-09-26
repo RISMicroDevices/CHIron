@@ -18,9 +18,15 @@
 ## Known Issues
 
 - **MTE not supported**, and not on the near-future roadmap
+- **DVM not supported**, and not on the near-future roadmap
 - **Xaction (Transaction Modeling) now only supports Issue E**
 - **Exclusive Monitor tracking not supported**
 - **SnpPreferUnique & SnpPreferUniqueFwd under exclusive sequence not fully supported**
+
+## [Errata](ERRATA.md)
+
+- Some differences from AMBA CHI Specification for specific issues were made to keep up with the essential engineering philosophy of AMBA CHI, by our understandings.  
+- These differences was stated in the [Errata](ERRATA.md). You can revert these changes if needed, and only when you completely understand what you are doing.
 
 ## Documentations
 
