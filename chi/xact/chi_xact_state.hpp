@@ -750,6 +750,8 @@ namespace /*CHI::*/Xact {
 
                     nextState = CacheStates::I;
                 }
+                else if (flit.Opcode() == Opcodes::DAT::WriteDataCancel)
+                    return XactDenial::ACCEPTED;
                 else
                     return XactDenial::DENIED_DAT_OPCODE;
             }
