@@ -95,6 +95,7 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_TXNID_NOT_EXIST              ("XACT_DENIED_TXNID_NOT_EXIST",             0x00000000 |  6);
             inline constexpr XactDenialEnumBack DENIED_DBID_IN_USE                  ("XACT_DENIED_DBID_IN_USE",                 0x00000000 |  7);
             inline constexpr XactDenialEnumBack DENIED_DBID_NOT_EXIST               ("XACT_DENIED_DBID_NOT_EXIST",              0x00000000 |  8);
+            inline constexpr XactDenialEnumBack DENIED_NESTING_SNP                  ("XACT_DENIED_NESTING_SNP",                 0x00000000 |  9);
 
             inline constexpr XactDenialEnumBack DENIED_OPCODE                       ("XACT_DENIED_OPCODE",                      0x00010000 |  0);
             inline constexpr XactDenialEnumBack DENIED_REQ_OPCODE                   ("XACT_DENIED_REQ_OPCODE",                  0x00010000 |  1);
@@ -368,6 +369,7 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_STATE_FWD_SNPRESPFWDED       ("XACT_DENIED_STATE_FWD_SNPRESPFWDED",      0x00200000 |  9);
             inline constexpr XactDenialEnumBack DENIED_STATE_FWD_SNPRESPDATAFWDED   ("XACT_DENIED_STATE_FWD_SNPRESPDATAFWDED",  0x00200000 | 10);
             inline constexpr XactDenialEnumBack DENIED_STATE_NONCOPYBACKWRDATA      ("XACT_DENIED_STATE_NONCOPYBACKWRDATA",     0x00200000 | 11);
+            inline constexpr XactDenialEnumBack DENIED_STATE_NESTED_TRANSFER        ("XACT_DENIED_STATE_NESTED_TRANSFER",       0x00200000 | 12);
 
             inline constexpr XactDenialEnumBack DENIED_UNSUPPORTED_FEATURE          ("XACT_DENIED_UNSUPPORTED_FEATURE",         0xFFFF0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_UNSUPPORTED_FEATURE_OPCODE   ("XACT_DENIED_UNSUPPORTED_FEATURE_OPCODE",  0xFFFF0000 |  1);
