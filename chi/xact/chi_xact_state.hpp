@@ -72,6 +72,12 @@ namespace CHI {
                         stateMap;
 
         private:
+            bool        enableSilentEviction;
+            bool        enableSilentSharing;
+            bool        enableSilentStore;
+            bool        enableSilentInvalidation;
+
+        private:
             bool        seerEnabled;
             void*       seerConfusion;  // TODO
 
@@ -86,14 +92,24 @@ namespace CHI {
             std::pair<CacheState, bool> EvaluateWithSeer(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
 
         public:
-            static CacheState   EvaluateSilently(CacheState state) noexcept;
+            CacheState  EvaluateSilently(CacheState state) const noexcept;
 
         public:
             RNCacheStateMap() noexcept;
 
         public:
-            CacheState      Excavate(Flits::REQ<config, conn>::addr_t addr) const noexcept;
-            CacheState      Evaluate(Flits::REQ<config, conn>::addr_t addr) const noexcept;
+            void            SetSilentEviction(bool enableSilentEviction) noexcept;
+            void            SetSilentSharing(bool enableSilentSharing) noexcept;
+            void            SetSilentStore(bool enableSilentStore) noexcept;
+            void            SetSilentInvalidation(bool enableSilentInvalidation) noexcept;
+
+            bool            HasSilentEviction() const noexcept;
+            bool            HasSilentSharing() const noexcept;
+            bool            HasSilentStore() const noexcept;
+            bool            HasSilentInvalidation() const noexcept;
+
+            void            Set(Flits::REQ<config, conn>::addr_t::value_type addr, CacheState state) noexcept;
+            CacheState      Get(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
 
         public:
             CacheState      Excavate(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
@@ -127,6 +143,16 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline RNCacheStateMap<config, conn>::RNCacheStateMap() noexcept
+        : reqDecoder                ()
+        , snpDecoder                ()
+        , stateMap                  ()
+        , enableSilentEviction      (true)
+        , enableSilentSharing       (true)
+        , enableSilentStore         (true)
+        , enableSilentInvalidation  (true)
+        , seerEnabled               (false)
+        , seerConfusion             (nullptr)
+        , seerAccessedMap           ()
     {
         // REQ transitions
         #define SET_REQ(type, opcode) \
@@ -306,31 +332,43 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline CacheState RNCacheStateMap<config, conn>::EvaluateSilently(CacheState state) noexcept
+    inline CacheState RNCacheStateMap<config, conn>::EvaluateSilently(CacheState state) const noexcept
     {
         // silent transitions
 
         /* Cache eviction */
-        if (state.UC || state.UCE || state.SC)
-            state.I = true;
+        if (enableSilentEviction)
+        {
+            if (state.UC || state.UCE || state.SC)
+                state.I = true;
+        }
 
         /* Local sharing */
-        if (state.UC)
-            state.SC = true;
+        if (enableSilentSharing)
+        {
+            if (state.UC)
+                state.SC = true;
 
-        if (state.UD)
-            state.SD = true;
+            if (state.UD)
+                state.SD = true;
+        }
 
         /* Store */
-        if (state.UC || state.UCE || state.UDP)
-            state.UD = true;
+        if (enableSilentStore)
+        {
+            if (state.UC || state.UCE || state.UDP)
+                state.UD = true;
 
-        if (state.UCE)
-            state.UDP = true;
+            if (state.UCE)
+                state.UDP = true;
+        }
         
         /* Cache Invalidate */
-        if (state.UD || state.UDP)
-            state.I = true;
+        if (enableSilentInvalidation)
+        {
+            if (state.UD || state.UDP)
+                state.I = true;
+        }
         //
 
         return state;
@@ -375,7 +413,78 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline CacheState RNCacheStateMap<config, conn>::Excavate(Flits::REQ<config, conn>::addr_t addr) const noexcept
+    inline void RNCacheStateMap<config, conn>::SetSilentEviction(bool enableSilentEviction) noexcept
+    {
+        this->enableSilentEviction = enableSilentEviction;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline void RNCacheStateMap<config, conn>::SetSilentSharing(bool enableSilentSharing) noexcept
+    {
+        this->enableSilentSharing = enableSilentSharing;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline void RNCacheStateMap<config, conn>::SetSilentStore(bool enableSilentStore) noexcept
+    {
+        this->enableSilentStore = enableSilentStore;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline void RNCacheStateMap<config, conn>::SetSilentInvalidation(bool enableSilentInvalidation) noexcept
+    {
+        this->enableSilentInvalidation = enableSilentInvalidation;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool RNCacheStateMap<config, conn>::HasSilentEviction() const noexcept
+    {
+        return this->enableSilentEviction;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool RNCacheStateMap<config, conn>::HasSilentSharing() const noexcept
+    {
+        return this->enableSilentSharing;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool RNCacheStateMap<config, conn>::HasSilentStore() const noexcept
+    {
+        return this->enableSilentStore;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool RNCacheStateMap<config, conn>::HasSilentInvalidation() const noexcept
+    {
+        return this->enableSilentInvalidation;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline void RNCacheStateMap<config, conn>::Set(Flits::REQ<config, conn>::addr_t::value_type addr, CacheState state) noexcept
+    {
+        stateMap[addr] = state;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline CacheState RNCacheStateMap<config, conn>::Get(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
+    {
+        auto iter = stateMap.find(addr);
+        return iter != stateMap.end() ? iter->second : CacheStates::None;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline CacheState RNCacheStateMap<config, conn>::Excavate(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
     {
         return ExcavateWithSeer(addr).first;
     }
