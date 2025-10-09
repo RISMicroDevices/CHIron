@@ -1,6 +1,5 @@
 #pragma once
 
-#include "cst_base.hpp"
 #include "cst_xact_read.hpp"
 #include "cst_xact_dataless.hpp"
 #include "cst_xact_write.hpp"
