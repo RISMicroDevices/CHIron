@@ -178,10 +178,10 @@ namespace CHI {
                 , noChange              (noChange)
             { }
 
-            inline constexpr CacheStateTransition RetToSrc(RetToSrc retToSrc) const noexcept
+            inline constexpr CacheStateTransition WithRetToSrc(RetToSrc retToSrc) const noexcept
             { return { type, initialExpectedState, initialPermittedState, finalState, respComp, respCompData, respDataSepResp, respCopyBackWrData, respSnpResp, respSnpRespData, respSnpRespDataPtl, retToSrc, dataPull, noChange }; }
 
-            inline constexpr CacheStateTransition DataPull(bool dataPull = true) const noexcept
+            inline constexpr CacheStateTransition WithDataPull(bool dataPull = true) const noexcept
             { return { type, initialExpectedState, initialPermittedState, finalState, respComp, respCompData, respDataSepResp, respCopyBackWrData, respSnpResp, respSnpRespData, respSnpRespDataPtl, retToSrc, dataPull, noChange }; }
 
             inline constexpr CacheStateTransition NoChange(bool noChange = true) const noexcept

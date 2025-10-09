@@ -74,100 +74,100 @@ namespace CHI {
                 //                      |               | I         | -         | X         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpOnce_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpOnce_UC_to_UC = {
                     CacheStateTransition(UC, UC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(UC)
                             .SnpRespData(UC)
                 };
                 constexpr CacheStateTransition SnpOnce_UC_to_SC = {
                     CacheStateTransition(UC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(SC)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpOnce_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpOnce_UCE_to_UCE ={
                     CacheStateTransition(UCE, UCE).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpOnce_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpOnce_UD_to_UD = {
                     CacheStateTransition(UD, UD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(UD)
                 };
                 constexpr CacheStateTransition SnpOnce_UD_to_SD = {
                     CacheStateTransition(UD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpOnce_UD_to_SC = {
                     CacheStateTransition(UD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpOnce_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpOnce_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpOnce_UDP_to_UDP = {
                     CacheStateTransition(UDP, UDP).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(UD)
                 };
                 constexpr CacheStateTransition SnpOnce_SC_to_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpOnce_SC_to_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpOnce_SC_to_I_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpOnce_SC_to_I_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpOnce_SD_to_SD = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpOnce_SD_to_SC = {
                     CacheStateTransition(SD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpOnce_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -237,79 +237,79 @@ namespace CHI {
                 //                      |               | I         | -         | X         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpClean_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpClean_UC_to_SC = {
                     CacheStateTransition(UC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(SC)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpClean_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpClean_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpClean_UD_to_SD = {
                     CacheStateTransition(UD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpClean_UD_to_SC = {
                     CacheStateTransition(UD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpClean_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpClean_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpClean_SC_to_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpClean_SC_to_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpClean_SC_to_I_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpClean_SC_to_I_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpClean_SD_to_SD = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpClean_SD_to_SC = {
                     CacheStateTransition(SD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpClean_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -375,79 +375,79 @@ namespace CHI {
                 //                      |               | I         | -         | X         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpShared_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpShared_UC_to_SC = {
                     CacheStateTransition(UC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(SC)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpShared_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpShared_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpShared_UD_to_SD = {
                     CacheStateTransition(UD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpShared_UD_to_SC = {
                     CacheStateTransition(UD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpShared_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpShared_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpShared_SC_to_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpShared_SC_to_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpShared_SC_to_I_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpShared_SC_to_I_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpShared_SD_to_SD = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpShared_SD_to_SC = {
                     CacheStateTransition(SD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpShared_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -513,79 +513,79 @@ namespace CHI {
                 //                      |               | I         | -         | X         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpNotSharedDirty_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_UC_to_SC = {
                     CacheStateTransition(UC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(SC)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_UD_to_SD = {
                     CacheStateTransition(UD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_UD_to_SC = {
                     CacheStateTransition(UD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_SC_to_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_SC_to_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_SC_to_I_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_SC_to_I_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_SD_to_SD = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_SD_to_SC = {
                     CacheStateTransition(SD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirty_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -651,79 +651,79 @@ namespace CHI {
                 //                      |               | I         | -         | X         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_UC_to_SC = {
                     CacheStateTransition(UC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(SC)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_UD_to_SD = {
                     CacheStateTransition(UD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_UD_to_SC = {
                     CacheStateTransition(UD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_SC_to_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_SC_to_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(SC)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_SC_to_I_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_SC_to_I_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_SD_to_SD = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SD)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_SD_to_SC = {
                     CacheStateTransition(SD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_NoExcl_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -773,43 +773,43 @@ namespace CHI {
                 //                      | SD            | I         | -         | X         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpUnique_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpUnique_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpUnique_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpUnique_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpUnique_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpUnique_SC_to_I_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpUnique_SC_to_I_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpUnique_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -852,43 +852,43 @@ namespace CHI {
                 //                      | SD            | I         | -         | X         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpPreferUnique_InExcl_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_InExcl_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_InExcl_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_InExcl_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_InExcl_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_InExcl_SC_to_I_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_InExcl_SC_to_I_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpPreferUnique_InExcl_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -939,67 +939,67 @@ namespace CHI {
                 //                      |               | I         | -         | 0         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpCleanShared_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanShared_UC_to_UC = {
                     CacheStateTransition(UC, UC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpCleanShared_UC_to_SC = {
                     CacheStateTransition(UC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpCleanShared_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanShared_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanShared_UD_to_UC = {
                     CacheStateTransition(UD, UC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespData(UC_PD)
                 };
                 constexpr CacheStateTransition SnpCleanShared_UD_to_SC = {
                     CacheStateTransition(UD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpCleanShared_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpCleanShared_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpCleanShared_SC_to_SC = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpCleanShared_SC_to_I = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanShared_SD_to_SC = {
                     CacheStateTransition(SD, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespData(SC_PD)
                 };
                 constexpr CacheStateTransition SnpCleanShared_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -1043,37 +1043,37 @@ namespace CHI {
                 //                      | SD            | I         | -         | 0         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpCleanInvalid_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanInvalid_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanInvalid_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanInvalid_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpCleanInvalid_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpCleanInvalid_SC_to_I = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanInvalid_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -1111,37 +1111,37 @@ namespace CHI {
                 //                      | SD            | I         | -         | 0         | SnpResp_I
                 constexpr CacheStateTransition SnpMakeInvalid_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpMakeInvalid_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpMakeInvalid_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpMakeInvalid_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpMakeInvalid_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpMakeInvalid_SC_to_I = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpMakeInvalid_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 //
@@ -1179,37 +1179,37 @@ namespace CHI {
                 //                      | SD            | SD        | -         | 0         | SnpResp_SD
                 constexpr CacheStateTransition SnpQuery_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpQuery_UC_to_UC = {
                     CacheStateTransition(UC, UC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpQuery_UCE_to_UC = {
                     CacheStateTransition(UCE, UCE).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpQuery_UD_to_UD = {
                     CacheStateTransition(UD, UD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UD)
                 };
                 constexpr CacheStateTransition SnpQuery_UDP_to_UD = {
                     CacheStateTransition(UDP, UDP).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UD)
                 };
                 constexpr CacheStateTransition SnpQuery_SC_to_SC = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpQuery_SD_to_SD = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SD)
                 };
                 //
@@ -1251,46 +1251,46 @@ namespace CHI {
                 //                      | SD            | I         | -         | 0         | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpUniqueStash_I_to_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpUniqueStash_UC_to_I = {
                     CacheStateTransition(UC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpRespData(I)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpUniqueStash_UCE_to_I = {
                     CacheStateTransition(UCE, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpUniqueStash_UD_to_I = {
                     CacheStateTransition(UD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpUniqueStash_UDP_to_I = {
                     CacheStateTransition(UDP, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpUniqueStash_SC_to_I = {
                     CacheStateTransition(SC, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(I)
                             .SnpRespData(I)
                 };
                 constexpr CacheStateTransition SnpUniqueStash_SD_to_I = {
                     CacheStateTransition(SD, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpRespData(I_PD)
                 };
                 //
@@ -1316,8 +1316,8 @@ namespace CHI {
                 // SnpMakeInvalidStash  | Any           | I         | -         | 0         | SnpResp_I
                 constexpr CacheStateTransition SnpMakeInvalidStash_Any_to_I = {
                     CacheStateTransition(CacheStates::All, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(I)
                 };
                 //
@@ -1369,91 +1369,91 @@ namespace CHI {
                 //                      |               |           |           |           | SnpResp_I
                 constexpr CacheStateTransition SnpStashUnique_I_to_I_as_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashUnique_I_to_I_as_I_Read = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashUnique_UC_to_UC_as_UC = {
                     CacheStateTransition(UC, UC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpStashUnique_UC_to_UC_as_I = {
                     CacheStateTransition(UC, UC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashUnique_UCE_to_UCE_as_UC = {
                     CacheStateTransition(UCE, UCE).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpStashUnique_UCE_to_UCE_as_UC_Read = {
                     CacheStateTransition(UCE, UCE).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpStashUnique_UCE_to_UCE_as_I = {
                     CacheStateTransition(UCE, UCE).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashUnique_UD_to_UD_as_UD = {
                     CacheStateTransition(UD, UD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UD)
                 };
                 constexpr CacheStateTransition SnpStashUnique_UD_to_UD_as_I = {
                     CacheStateTransition(UD, UD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashUnique_UDP_to_UDP_as_UD = {
                     CacheStateTransition(UDP, UDP).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UD)
                 };
                 constexpr CacheStateTransition SnpStashUnique_UDP_to_UDP_as_I = {
                     CacheStateTransition(UDP, UDP).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashUnique_SC_to_SC_as_SC = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpStashUnique_SC_to_SC_as_SC_Read = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpStashUnique_SC_to_SC_as_I = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashUnique_SD_to_SD_as_SD = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SD)
                 };
                 constexpr CacheStateTransition SnpStashUnique_SD_to_SD_as_SD_Read = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(SD)
                 };
                 constexpr CacheStateTransition SnpStashUnique_SD_to_SD_as_I = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 //
@@ -1517,79 +1517,79 @@ namespace CHI {
                 //                      |               |           |           |           | SnpResp_I
                 constexpr CacheStateTransition SnpStashShared_I_to_I_as_I = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashShared_I_to_I_as_I_Read = {
                     CacheStateTransition(I, I).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashShared_UC_to_UC_as_UC = {
                     CacheStateTransition(UC, UC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpStashShared_UC_to_UC_as_I = {
                     CacheStateTransition(UC, UC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashShared_UCE_to_UCE_as_UC = {
                     CacheStateTransition(UCE, UCE).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpStashShared_UCE_to_UCE_as_UC_Read = {
                     CacheStateTransition(UCE, UCE).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
-                        .DataPull()
+                        .WithRetToSrc(RetToSrcs::A0)
+                        .WithDataPull()
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpStashShared_UCE_to_UCE_as_I = {
                     CacheStateTransition(UCE, UCE).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashShared_UD_to_UD_as_UD = {
                     CacheStateTransition(UD, UD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UD)
                 };
                 constexpr CacheStateTransition SnpStashShared_UD_to_UD_as_I = {
                     CacheStateTransition(UD, UD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashShared_UDP_to_UDP_as_UD = {
                     CacheStateTransition(UDP, UDP).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UD)
                 };
                 constexpr CacheStateTransition SnpStashShared_UDP_to_UDP_as_I = {
                     CacheStateTransition(UDP, UDP).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashShared_SC_to_SC_as_SC = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpStashShared_SC_to_SC_as_I = {
                     CacheStateTransition(SC, SC).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpStashShared_SD_to_SD_as_SD = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SD)
                 };
                 constexpr CacheStateTransition SnpStashShared_SD_to_SD_as_I = {
                     CacheStateTransition(SD, SD).TypeSnoop()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 //
@@ -1660,97 +1660,97 @@ namespace CHI {
                 //                      |               | I         | -         | 0         | CompData_I        | SnpRespData_I_PD_Fwded_I
                 constexpr CacheStateTransition SnpOnceFwd_I_to_I_as_I = {
                     CacheStateTransition(I, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UC_to_UC_as_UC_Fwded_I = {
                     CacheStateTransition(UC, UC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(UC, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UC_to_SC_as_SC_Fwded_I = {
                     CacheStateTransition(UC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UC_to_I_as_I_Fwded_I = {
                     CacheStateTransition(UC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UCE_to_UCE_as_UC = {
                     CacheStateTransition(UCE, UCE).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(UC)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UCE_to_I_as_I = {
                     CacheStateTransition(UCE, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UD_to_UD_as_UD_Fwded_I = {
                     CacheStateTransition(UD, UD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(UD, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UD_to_SD_as_SD_Fwded_I = {
                     CacheStateTransition(UD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UD_to_SC_as_SC_PD_Fwded_I = {
                     CacheStateTransition(UD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespDataFwded(SC_PD, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UD_to_I_as_I_PD_Fwded_I = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespDataFwded(I_PD, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UDP_to_UDP_as_UD = {
                     CacheStateTransition(UDP, UDP).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespDataPtl(UD)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_UDP_to_I_as_I_PD = {
                     CacheStateTransition(UDP, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_SC_to_SC_as_SC = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(SC)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_SC_to_SC_as_SC_Fwded_I = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_SC_to_I_as_I = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_SC_to_I_as_I_Fwded_I = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_SD_to_SD_as_SD_Fwded_I = {
                     CacheStateTransition(SD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_SD_to_SC_as_SC_PD_Fwded_I = {
                     CacheStateTransition(SD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespDataFwded(SC_PD, I)
                 };
                 constexpr CacheStateTransition SnpOnceFwd_SD_to_I_as_I_PD_Fwded_I = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespDataFwded(I_PD, I)
                 };
                 //
@@ -1825,97 +1825,97 @@ namespace CHI {
                 //                      |               | I         | -         | X         | CompData_SC       | SnpRespData_I_PD_Fwded_SC
                 constexpr CacheStateTransition SnpCleanFwd_I_to_I_as_I = {
                     CacheStateTransition(I, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UC_to_SC_as_SC_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UC_to_SC_as_SC_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UC_to_I_as_I_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UC_to_I_as_I_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UCE_to_I_as_I = {
                     CacheStateTransition(UCE, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UD_to_SD_as_SD_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UD_to_SD_as_SD_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UD_to_SC_as_SC_PD_Fwded_SC = {
                     CacheStateTransition(UD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(SC_PD, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UD_to_I_as_I_PD_Fwded_SC = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(I_PD, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_UDP_to_I_as_I_PD = {
                     CacheStateTransition(UDP, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_SC_to_SC_as_SC_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_SC_to_SC_as_SC_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_SC_to_I_as_I_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_SC_to_I_as_I_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_SD_to_SD_as_SD_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_SD_to_SD_as_SD_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_SD_to_SC_as_SC_PD_Fwded_SC = {
                     CacheStateTransition(SD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(SC_PD, SC)
                 };
                 constexpr CacheStateTransition SnpCleanFwd_SD_to_I_as_I_PD_Fwded_SC = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(I_PD, SC)
                 };
                 //
@@ -1990,97 +1990,97 @@ namespace CHI {
                 //                      |               | I         | -         | X         | CompData_SC       | SnpRespData_I_PD_Fwded_SC
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_I_to_I_as_I = {
                     CacheStateTransition(I, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UC_to_SC_as_SC_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UC_to_SC_as_SC_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UC_to_I_as_I_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UC_to_I_as_I_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UCE_to_I_as_I = {
                     CacheStateTransition(UCE, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UD_to_SD_as_SD_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UD_to_SD_as_SD_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UD_to_SC_as_SC_PD_Fwded_SC = {
                     CacheStateTransition(UD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(SC_PD, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UD_to_I_as_I_PD_Fwded_SC = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(I_PD, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_UDP_to_I_as_I_PD = {
                     CacheStateTransition(UDP, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_SC_to_SC_as_SC_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_SC_to_SC_as_SC_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_SC_to_I_as_I_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_SC_to_I_as_I_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_SD_to_SD_as_SD_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_SD_to_SD_as_SD_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_SD_to_SC_as_SC_PD_Fwded_SC = {
                     CacheStateTransition(SD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(SC_PD, SC)
                 };
                 constexpr CacheStateTransition SnpNotSharedDirtyFwd_SD_to_I_as_I_PD_Fwded_SC = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(I_PD, SC)
                 };
                 //
@@ -2171,137 +2171,137 @@ namespace CHI {
                 //                      |               |           |           | X         | CompData_SC       | SnpRespData_I_PD_Fwded_SC
                 constexpr CacheStateTransition SnpSharedFwd_I_to_I_as_I = {
                     CacheStateTransition(I, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UC_to_SC_as_SC_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UC_to_SC_as_SC_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UC_to_I_as_I_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UC_to_I_as_I_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UCE_to_I_as_I = {
                     CacheStateTransition(UCE, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UD_to_SD_as_SD_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UD_to_SD_as_SD_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UD_to_SC_as_SC_Fwded_SD_PD_RetToSrc_0 = {
                     CacheStateTransition(UD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SD_PD)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UD_to_SC_as_SC_Fwded_SD_PD_RetToSrc_1 = {
                     CacheStateTransition(UD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SD_PD)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UD_to_SC_as_SC_PD_Fwded_SC = {
                     CacheStateTransition(UD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(SC_PD, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UD_to_I_as_I_Fwded_SD_PD_RetToSrc_0 = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, SD_PD)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UD_to_I_as_I_Fwded_SD_PD_RetToSrc_1 = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(I, SD_PD)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UD_to_I_as_I_PD_Fwded_SC = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(I_PD, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_UDP_to_I_as_I_PD = {
                     CacheStateTransition(UDP, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SC_to_SC_as_SC_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SC_to_SC_as_SC_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SC_to_I_as_I_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SC_to_I_as_I_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(I, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SD_to_SD_as_SD_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SD_to_SD_as_SD_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SD_to_SC_as_SC_Fwded_SD_PD_RetToSrc_0 = {
                     CacheStateTransition(SD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SD_PD)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SD_to_SC_as_SC_Fwded_SD_PD_RetToSrc_1 = {
                     CacheStateTransition(SD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SD_PD)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SD_to_SC_as_SC_PD_Fwded_SC = {
                     CacheStateTransition(SD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(SC_PD, SC)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SD_to_I_as_I_Fwded_SD_PD_RetToSrc_0 = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, SD_PD)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SD_to_I_as_I_Fwded_SD_PD_RetToSrc_1 = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(I, SD_PD)
                 };
                 constexpr CacheStateTransition SnpSharedFwd_SD_to_I_as_I_PD_Fwded_SC = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(I_PD, SC)
                 };
                 //
@@ -2364,47 +2364,47 @@ namespace CHI {
                 //                      |               |           |           |           | -                 | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpUniqueFwd_I_to_I_as_I = {
                     CacheStateTransition(I, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpUniqueFwd_UC_to_I_as_I_Fwded_UC = {
                     CacheStateTransition(UC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, UC)
                 };
                 constexpr CacheStateTransition SnpUniqueFwd_UCE_to_I_as_I = {
                     CacheStateTransition(UCE, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpUniqueFwd_UD_to_I_as_I_Fwded_UD_PD = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, UD_PD)
                 };
                 constexpr CacheStateTransition SnpUniqueFwd_UD_to_I_as_I_PD = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpUniqueFwd_UDP_to_I_as_I_PD = {
                     CacheStateTransition(UDP, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpUniqueFwd_SC_to_I_as_I_Fwded_UC = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, UC)
                 };
                 constexpr CacheStateTransition SnpUniqueFwd_SD_to_I_as_I_Fwded_UD_PD = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(I, UD_PD)
                 };
                 constexpr CacheStateTransition SnpUniqueFwd_SD_to_I_as_I_PD = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespData(I_PD)
                 };
                 //
@@ -2457,67 +2457,67 @@ namespace CHI {
                 //                      |               | SC        | -         | X         | CompData_SC       | SnpRespData_SC_PD_Fwded_SC
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_I_to_I_as_I = {
                     CacheStateTransition(I, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_UC_to_SC_as_SC_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_UC_to_SC_as_SC_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_UCE_to_I_as_I = {
                     CacheStateTransition(UCE, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_UD_to_SD_as_SD_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(UD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_UD_to_SD_as_SD_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(UD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_UD_to_SC_as_SC_PD_Fwded_SC = {
                     CacheStateTransition(UD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(SC_PD, SC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_UDP_to_I_as_I_PD = {
                     CacheStateTransition(UDP, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_SC_to_SC_as_SC_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_SC_to_SC_as_SC_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SC, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SC, SC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_SD_to_SD_as_SD_Fwded_SC_RetToSrc_0 = {
                     CacheStateTransition(SD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A0)
+                        .WithRetToSrc(RetToSrcs::A0)
                             .SnpRespFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_SD_to_SD_as_SD_Fwded_SC_RetToSrc_1 = {
                     CacheStateTransition(SD, SD).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::A1)
+                        .WithRetToSrc(RetToSrcs::A1)
                             .SnpRespDataFwded(SD, SC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_InExcl_SD_to_SC_as_SC_PD_Fwded_SC = {
                     CacheStateTransition(SD, SC).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataFwded(SC_PD, SC)
                 };
                 //
@@ -2566,47 +2566,47 @@ namespace CHI {
                 //                      |               |           |           |           | -                 | SnpRespData_I_PD
                 constexpr CacheStateTransition SnpPreferUniqueFwd_NoExcl_I_to_I_as_I = {
                     CacheStateTransition(I, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_NoExcl_UC_to_I_as_I_Fwded_UC = {
                     CacheStateTransition(UC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespFwded(I, UC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_NoExcl_UCE_to_I_as_I = {
                     CacheStateTransition(UCE, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpResp(I)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_NoExcl_UD_to_I_as_I_Fwded_UD_PD = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespFwded(I, UD_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_NoExcl_UD_to_I_as_I_PD = {
                     CacheStateTransition(UD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_NoExcl_UDP_to_I_as_I_PD = {
                     CacheStateTransition(UDP, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespDataPtl(I_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_NoExcl_SC_to_I_as_I_Fwded_UC = {
                     CacheStateTransition(SC, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespFwded(I, UC)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_NoExcl_SD_to_I_as_I_Fwded_UD_PD = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespFwded(I, UD_PD)
                 };
                 constexpr CacheStateTransition SnpPreferUniqueFwd_NoExcl_SD_to_I_as_I_PD = {
                     CacheStateTransition(SD, I).TypeSnoopForward()
-                        .RetToSrc(RetToSrcs::X)
+                        .WithRetToSrc(RetToSrcs::X)
                             .SnpRespData(I_PD)
                 };
                 //
