@@ -182,7 +182,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_REQ_FIELD_##denial;
 
         #define CHECK_REQ_IF(field, denial) \
-            if constexpr (reqFlit.has##field) \
+            if constexpr (Flits::REQ<config, conn>::has##field) \
                 if (!details::Check(mapping->field, reqFlit.field())) \
                     return XactDenial::DENIED_REQ_FIELD_##denial;
         
@@ -270,7 +270,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_RSP_FIELD_##denial;
 
         #define CHECK_RSP_IF(field, denial) \
-            if constexpr (rsqFlit.has##field) \
+            if constexpr (Flits::RSP<config, conn>::has##field) \
                 if (!details::Check(mapping->field, rspFlit.field())) \
                     return XactDenial::DENIED_RSP_FIELD_##denial;
         
@@ -335,7 +335,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_DAT_FIELD_##denial;
 
         #define CHECK_DAT_IF(field, denial) \
-            if constexpr (datFlit.has##field) \
+            if constexpr (Flits::DAT<config, conn>::has##field) \
                 if (!details::Check(mapping->field, datFlit.field())) \
                     return XactDenial::DENIED_DAT_FIELD_##denial;
         
@@ -361,7 +361,7 @@ namespace /*CHI::*/Xact {
         CHECK_DAT   (DBID           , DBID          );
         CHECK_DAT   (CCID           , CCID          );
         CHECK_DAT   (DataID         , DATAID        );
-        CHECK_DAT   (RSVDC          , RSVDC         );
+        CHECK_DAT_IF(RSVDC          , RSVDC         );
         CHECK_DAT   (BE             , BE            );
         CHECK_DAT_DS(Data           , DATA          );
         CHECK_DAT   (HomeNID        , HOMENID       );
@@ -400,7 +400,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_SNP_FIELD_##denial;
         
         #define CHECK_SNP_IF(field, denial) \
-            if constexpr (snpFlit.has##field) \
+            if constexpr (Flits::SNP<config, conn>::has##field) \
                 if (!details::Check(mapping->field, snpFlit.field())) \
                     return XactDenial::DENIED_SNP_FIELD_##denial;
         
