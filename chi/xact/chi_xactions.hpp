@@ -3344,7 +3344,7 @@ namespace /*CHI::*/Xact {
                 
                 if (optDBIDSource->IsRSP())
                 {
-                    assert(rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp &&
+                    assert(optDBIDSource->flit.rsp.Opcode() == Opcodes::RSP::Comp &&
                         "DBID source on RXRSP must be Comp in Atomic transactions");
 
                     if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
@@ -3352,7 +3352,7 @@ namespace /*CHI::*/Xact {
                 }
                 else
                 {
-                    assert(rspFlit.flit.dat.Opcode() == Opcodes::DAT::CompData &&
+                    assert(optDBIDSource->flit.dat.Opcode() == Opcodes::DAT::CompData &&
                         "DBID source on RXDAT must be CompData in Atomic transactions");
 
                     if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.dat.DBID())
