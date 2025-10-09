@@ -157,6 +157,8 @@ namespace CHI {
         public:
             virtual void            Clear() noexcept = 0;
 
+            void                    ClearListeners() noexcept;
+
         public:
             virtual XactDenialEnum  NextTXREQ(
                 Global<config, conn>*                   glbl,
@@ -324,6 +326,13 @@ namespace CHI {
 
         public:
             RNFJoint() noexcept;
+
+        public:
+            RNFJoint(const RNFJoint<config, conn>& obj) noexcept;
+            RNFJoint<config, conn>& operator=(const RNFJoint<config, conn>& obj) noexcept;
+
+        public:
+            void                    Fork() noexcept;
 
         public:
             virtual void            Clear() noexcept override;
@@ -710,6 +719,19 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline void Joint<config, conn>::ClearListeners() noexcept
+    {
+        OnAccepted.UnregisterAll();
+        OnRetry.UnregisterAll();
+        OnTxnIDAllocation.UnregisterAll();
+        OnTxnIDFree.UnregisterAll();
+        OnDBIDAllocation.UnregisterAll();
+        OnDBIDFree.UnregisterAll();
+        OnComplete.UnregisterAll();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum Joint<config, conn>::NextTXREQ(
         Global<config, conn>*                   glbl,
         uint64_t                                time,
@@ -1090,6 +1112,67 @@ namespace /*CHI::*/Xact {
                                                                             // 0x1F
 
         #undef SET_SNP_XACTION
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline RNFJoint<config, conn>::RNFJoint(const RNFJoint<config, conn>& obj) noexcept
+        : Joint<config, conn>               (obj)
+        , txTransactions                    (obj.txTransactions)
+        , rxTransactions                    (obj.rxTransactions)
+        , txDBIDTransactions                (obj.txDBIDTransactions)
+        , txDBIDOverlappableTransactions    (obj.txDBIDOverlappableTransactions)
+        , txRetriedTransactions             (obj.txRetriedTransactions)
+        , grantedPCredits                   (/*obj.grantedPCredits*/)
+        , reqDecoder                        (obj.reqDecoder)
+        , snpDecoder                        (obj.snpDecoder)
+    {
+        std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH),
+            grantedPCredits);
+
+        Fork();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline RNFJoint<config, conn>& RNFJoint<config, conn>::operator=(const RNFJoint<config, conn>& obj) noexcept
+    {
+        *(Joint<config, conn>*)(this) = obj;
+
+        txTransactions                  = obj.txTransactions;
+        rxTransactions                  = obj.rxTransactions;
+        txDBIDTransactions              = obj.txDBIDTransactions;
+        txDBIDOverlappableTransactions  = obj.txDBIDOverlappableTransactions;
+        txRetriedTransactions           = obj.txRetriedTransactions;
+    //  grantedPCredits                 = obj.grantedPCredits;
+        reqDecoder                      = obj.reqDecoder;
+        snpDecoder                      = obj.snpDecoder;
+
+        std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH),
+            grantedPCredits);
+
+        Fork();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline void RNFJoint<config, conn>::Fork() noexcept
+    {
+        for (auto& p : txTransactions)
+            p.second = p.second->Clone();
+
+        for (auto& p : rxTransactions)
+            p.second = p.second->Clone();
+
+        for (auto& p : txDBIDTransactions)
+            p.second = p.second->Clone();
+
+        for (auto& p : txDBIDOverlappableTransactions)
+            p.second = p.second->Clone();
+
+        for (auto& p : txRetriedTransactions)
+            for (auto& p1 : p.second)
+                p1 = p1->Clone();
     }
 
     template<FlitConfigurationConcept       config,
