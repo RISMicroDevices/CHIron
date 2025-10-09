@@ -28,7 +28,9 @@ namespace CHI {
 
             struct RNCohTrans {
                 CacheState                      initial;
-                CacheStateTransitions::Intermediates::Tables*
+                CacheStateTransitions::Intermediates::details::TableG2
+                    nested;
+                const CacheStateTransitions::Intermediates::Tables*
                     tables;
                 CacheStateTransition::Type      type;
             };
@@ -1171,11 +1173,58 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNCacheStateMap<config, conn>::NextRXSNP(
-        Flits::REQ<config, conn>::addr_t    addr,
-        const Xaction<config, conn>&        xaction,
-        const Flits::SNP<config, conn>&     flit) noexcept
+        Flits::REQ<config, conn>::addr_t::value_type    addr,
+        const Xaction<config, conn>&                    xaction,
+        const Flits::SNP<config, conn>&                 flit) noexcept
     {
         return XactDenial::ACCEPTED;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum RNCacheStateMap<config, conn>::Transfer(
+        Flits::REQ<config, conn>::addr_t::value_type    addr,
+        CacheState                                      state,
+        const Xaction<config, conn>*                    nestingXaction) noexcept
+    {
+        if (!nestingXaction)
+        {
+            Set(addr, state);
+            return XactDenial::ACCEPTED;
+        }
+        else
+        {
+            // Decode transition set from TXREQ/RXSNP opcode
+            const details::RNCohTrans* trans;
+
+            if (nestingXaction->GetFirst().IsREQ())
+            {
+                // Decode REQ opcode
+                const Opcodes::OpcodeInfo<typename Flits::REQ<config, conn>::opcode_t, const details::RNCohTrans*>& opcodeInfo
+                    = reqDecoder.Decode(nestingXaction->GetFirst().flit.req.Opcode());
+
+                if (!opcodeInfo.IsValid()) // unknown opcode
+                    return XactDenial::DENIED_REQ_OPCODE;
+
+                trans = opcodeInfo.GetCompanion();
+                
+                //
+                std::pair<CacheState, bool> prevState = EvaluateWithSeer(addr);
+
+                CacheState xi
+                    = CacheStateTransitions::Intermediates::details::ProductG2(prevState.first, trans->nested, state);
+                
+                if (!xi)
+                    return XactDenial::DENIED_STATE_NESTED_TRANSFER;
+
+                //
+                Set(addr, xi);
+
+                return XactDenial::ACCEPTED;
+            }
+            else
+                return XactDenial::DENIED_NESTING_SNP;
+        }
     }
 }
 
