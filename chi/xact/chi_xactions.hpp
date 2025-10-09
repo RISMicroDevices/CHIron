@@ -125,6 +125,10 @@ namespace CHI {
             XactionType                             GetType() const noexcept;
 
         public:
+            virtual std::shared_ptr<Xaction<config, conn>>          Clone() const noexcept = 0;
+            template<class T> std::shared_ptr<T>                    Clone() const noexcept;
+
+        public:
             const FiredRequestFlit<config, conn>&   GetFirst() const noexcept;
             XactDenialEnum                          GetFirstDenial() const noexcept;
             const std::vector<FiredResponseFlit<config, conn>>&   
@@ -202,6 +206,10 @@ namespace CHI {
                                   std::shared_ptr<Xaction<config, conn>>    retried = nullptr) noexcept;
 
         public:
+            virtual std::shared_ptr<Xaction<config, conn>>          Clone() const noexcept override;
+            std::shared_ptr<XactionAllocatingRead<config, conn>>    CloneAsIs() const noexcept;
+
+        public:
             bool                            IsAckComplete(const Topology& topo) const noexcept;
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
             
@@ -224,6 +232,10 @@ namespace CHI {
                                      const Topology&                        topo,
                                      const FiredRequestFlit<config, conn>&  first,
                                      std::shared_ptr<Xaction<config, conn>> retried) noexcept;
+
+        public:
+            virtual std::shared_ptr<Xaction<config, conn>>          Clone() const noexcept override;
+            std::shared_ptr<XactionNonAllocatingRead<config, conn>> CloneAsIs() const noexcept;
         
         public:
             bool                            IsAckComplete(const Topology& topo) const noexcept;
@@ -249,6 +261,11 @@ namespace CHI {
                                   const FiredRequestFlit<config, conn>&     first,
                                   std::shared_ptr<Xaction<config, conn>>    retried) noexcept;
 
+        public:
+            virtual std::shared_ptr<Xaction<config, conn>>          Clone() const noexcept override;
+            std::shared_ptr<XactionImmediateWrite<config, conn>>    CloneAsIs() const noexcept;
+
+        public:
             bool                            IsDataComplete(const Topology& topo) const noexcept;
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsAckComplete(const Topology& topo) const noexcept;
@@ -275,6 +292,10 @@ namespace CHI {
                                  const Topology&                        topo,
                                  const FiredRequestFlit<config, conn>&  first,
                                  std::shared_ptr<Xaction<config, conn>> retried) noexcept;
+
+        public:
+            virtual std::shared_ptr<Xaction<config, conn>>      Clone() const noexcept override;
+            std::shared_ptr<XactionCopyBackWrite<config, conn>> CloneAsIs() const noexcept;
 
         public:
             bool                            IsDataComplete(const Topology& topo) const noexcept;
@@ -308,6 +329,10 @@ namespace CHI {
                           std::shared_ptr<Xaction<config, conn>>    retried) noexcept;
 
         public:
+            virtual std::shared_ptr<Xaction<config, conn>>  Clone() const noexcept override;
+            std::shared_ptr<XactionAtomic<config, conn>>    CloneAsIs() const noexcept;
+
+        public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsRNDataComplete(const Topology& topo) const noexcept;
             bool                            IsHNDataComplete(const Topology& topo) const noexcept;
@@ -333,6 +358,10 @@ namespace CHI {
                             const Topology&                         topo,
                             const FiredRequestFlit<config, conn>&   first,
                             std::shared_ptr<Xaction<config, conn>>  retried) noexcept;
+
+        public:
+            virtual std::shared_ptr<Xaction<config, conn>>  Clone() const noexcept override;
+            std::shared_ptr<XactionDataless<config, conn>>  CloneAsIs() const noexcept;
 
         public:
             bool                            IsCompResponseComplete(const Topology& topo) const noexcept;
@@ -364,6 +393,10 @@ namespace CHI {
                             std::shared_ptr<Xaction<config, conn>>  retried) noexcept;
 
         public:
+            virtual std::shared_ptr<Xaction<config, conn>>  Clone() const noexcept override;
+            std::shared_ptr<XactionHomeRead<config, conn>>  CloneAsIs() const noexcept;
+
+        public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsDataComplete(const Topology& topo) const noexcept;
 
@@ -386,6 +419,10 @@ namespace CHI {
                              const Topology&                        topo, 
                              const FiredRequestFlit<config, conn>&  first,
                              std::shared_ptr<Xaction<config, conn>> retried) noexcept;
+
+        public:
+            virtual std::shared_ptr<Xaction<config, conn>>  Clone() const noexcept override;
+            std::shared_ptr<XactionHomeWrite<config, conn>> CloneAsIs() const noexcept;
 
         public:
             bool                            IsDBIDResponseComplete(const Topology& topo) const noexcept;
@@ -413,6 +450,10 @@ namespace CHI {
                                  std::shared_ptr<Xaction<config, conn>> retried) noexcept;
 
         public:
+            virtual std::shared_ptr<Xaction<config, conn>>      Clone() const noexcept override;
+            std::shared_ptr<XactionHomeWriteZero<config, conn>> CloneAsIs() const noexcept;
+
+        public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
 
             virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
@@ -436,6 +477,10 @@ namespace CHI {
                                 const Topology&                         topo,
                                 const FiredRequestFlit<config, conn>&   first,
                                 std::shared_ptr<Xaction<config, conn>>  retried) noexcept;
+
+        public:
+            virtual std::shared_ptr<Xaction<config, conn>>      Clone() const noexcept override;
+            std::shared_ptr<XactionHomeDataless<config, conn>>  CloneAsIs() const noexcept;
 
         public:
             bool                            IsCompResponseComplete(const Topology& topo) const noexcept;
@@ -462,6 +507,10 @@ namespace CHI {
                               std::shared_ptr<Xaction<config, conn>>  retried) noexcept;
 
         public:
+            virtual std::shared_ptr<Xaction<config, conn>>      Clone() const noexcept override;
+            std::shared_ptr<XactionHomeAtomic<config, conn>>    CloneAsIs() const noexcept;
+
+        public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsHNDataComplete(const Topology& topo) const noexcept;
             bool                            IsSNDataComplete(const Topology& topo) const noexcept;
@@ -484,6 +533,10 @@ namespace CHI {
             XactionHomeSnoop(Global<config, conn>* glbl, const Topology& topo, const FiredRequestFlit<config, conn>& first) noexcept;
 
         public:
+            virtual std::shared_ptr<Xaction<config, conn>>  Clone() const noexcept override;
+            std::shared_ptr<XactionHomeSnoop<config, conn>> CloneAsIs() const noexcept;
+
+        public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
             bool                            IsDataComplete(const Topology& topo) const noexcept;
 
@@ -503,6 +556,10 @@ namespace CHI {
         class XactionForwardSnoop : public Xaction<config, conn> {
         public:
             XactionForwardSnoop(Global<config, conn>* glbl, const Topology& topo, const FiredRequestFlit<config, conn>& first) noexcept;
+
+        public:
+            virtual std::shared_ptr<Xaction<config, conn>>      Clone() const noexcept override;
+            std::shared_ptr<XactionForwardSnoop<config, conn>>  CloneAsIs() const noexcept;
 
         public:
             bool                            IsResponseComplete(const Topology& topo) const noexcept;
@@ -794,6 +851,14 @@ namespace /*CHI::*/Xact {
     inline XactionType Xaction<config, conn>::GetType() const noexcept
     {
         return type;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    template<class T>
+    inline std::shared_ptr<T> Xaction<config, conn>::Clone() const noexcept
+    {
+        return std::make_shared<T>(*static_cast<T*>(this));
     }
 
     template<FlitConfigurationConcept       config,
@@ -1595,6 +1660,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionAllocatingRead<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionAllocatingRead<config, conn>> XactionAllocatingRead<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionAllocatingRead<config, conn>>(*this);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionAllocatingRead<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
     {
         std::bitset<4> completeDataIDMask =
@@ -1935,6 +2014,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionNonAllocatingRead<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionNonAllocatingRead<config, conn>> XactionNonAllocatingRead<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionNonAllocatingRead<config, conn>>(*this);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionNonAllocatingRead<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
     {
         std::bitset<4> completeDataIDMask =
@@ -2237,6 +2330,20 @@ namespace /*CHI::*/Xact {
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionImmediateWrite<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionImmediateWrite<config, conn>> XactionImmediateWrite<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionImmediateWrite<config, conn>>(*this);
     }
 
     template<FlitConfigurationConcept       config,
@@ -2748,6 +2855,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionCopyBackWrite<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionCopyBackWrite<config, conn>> XactionCopyBackWrite<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionCopyBackWrite<config, conn>>(*this);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionCopyBackWrite<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
     {
         size_t index = 0;
@@ -3075,6 +3196,20 @@ namespace /*CHI::*/Xact {
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionAtomic<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionAtomic<config, conn>> XactionAtomic<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionAtomic<config, conn>>(*this);
     }
 
     template<FlitConfigurationConcept       config,
@@ -3492,6 +3627,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionDataless<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionDataless<config, conn>> XactionDataless<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionDataless<config, conn>>(*this);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionDataless<config, conn>::IsCompResponseComplete(const Topology& topo) const noexcept
     {
         if (
@@ -3881,6 +4030,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionHomeRead<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionHomeRead<config, conn>> XactionHomeRead<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionHomeRead<config, conn>>(*this);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionHomeRead<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
     {
         if (this->first.flit.req.Order() != 0)
@@ -4105,6 +4268,20 @@ namespace /*CHI::*/Xact {
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionHomeWrite<config, conn>::Clone() const noexcept
+    {
+        return static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionHomeWrite<config, conn>> XactionHomeWrite<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionHomeWrite<config, conn>>(*this);
     }
 
     template<FlitConfigurationConcept       config,
@@ -4468,6 +4645,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionHomeWriteZero<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionHomeWriteZero<config, conn>> XactionHomeWriteZero<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionHomeWriteZero<config, conn>>(*this);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionHomeWriteZero<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
     {
         bool gotDBID = false;
@@ -4652,6 +4843,20 @@ namespace /*CHI::*/Xact {
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionHomeDataless<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionHomeDataless<config, conn>> XactionHomeDataless<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionHomeDataless<config, conn>>(*this);
     }
 
     template<FlitConfigurationConcept       config,
@@ -4933,6 +5138,20 @@ namespace /*CHI::*/Xact {
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionHomeAtomic<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionHomeAtomic<config, conn>> XactionHomeAtomic<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionHomeAtomic<config, conn>>(*this);
     }
 
     template<FlitConfigurationConcept       config,
@@ -5340,6 +5559,20 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionHomeSnoop<config, conn>::Clone() const noexcept
+    {
+        return static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionHomeSnoop<config, conn>> XactionHomeSnoop<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionHomeSnoop<config, conn>>(*this);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline bool XactionHomeSnoop<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
     {
         size_t index = 0;
@@ -5550,6 +5783,20 @@ namespace /*CHI::*/Xact {
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionForwardSnoop<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionForwardSnoop<config, conn>> XactionForwardSnoop<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionForwardSnoop<config, conn>>(*this);
     }
 
     template<FlitConfigurationConcept       config,
