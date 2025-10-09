@@ -66,22 +66,22 @@ namespace CHI {
                         snpDecoder;
 
         private:
-            std::unordered_map<typename Flits::REQ<config, conn>::addr_t, CacheState>
+            std::unordered_map<typename Flits::REQ<config, conn>::addr_t::value_type, CacheState>
                         stateMap;
 
         private:
             bool        seerEnabled;
             void*       seerConfusion;  // TODO
 
-            std::unordered_map<typename Flits::REQ<config, conn>::addr_t, std::bitset<SIZE_CACHE_MAP_SPAN>>
+            std::unordered_map<typename Flits::REQ<config, conn>::addr_t::value_type, std::bitset<SIZE_CACHE_MAP_SPAN>>
                         seerAccessedMap;
 
         protected:
-            bool        IsAccessed(Flits::REQ<config, conn>::addr_t addr) const noexcept;
-            void        SetAccessed(Flits::REQ<config, conn>::addr_t addr) noexcept;
+            bool        IsAccessed(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
+            void        SetAccessed(Flits::REQ<config, conn>::addr_t::value_type addr) noexcept;
 
-            std::pair<CacheState, bool> ExcavateWithSeer(Flits::REQ<config, conn>::addr_t addr) const noexcept;
-            std::pair<CacheState, bool> EvaluateWithSeer(Flits::REQ<config, conn>::addr_t addr) const noexcept;
+            std::pair<CacheState, bool> ExcavateWithSeer(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
+            std::pair<CacheState, bool> EvaluateWithSeer(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
 
         public:
             static CacheState   EvaluateSilently(CacheState state) noexcept;
@@ -94,12 +94,19 @@ namespace CHI {
             CacheState      Evaluate(Flits::REQ<config, conn>::addr_t addr) const noexcept;
 
         public:
-            XactDenialEnum  NextTXREQ(Flits::REQ<config, conn>::addr_t addr, const Flits::REQ<config, conn>& flit) noexcept;
-            XactDenialEnum  NextTXRSP(Flits::REQ<config, conn>::addr_t addr, const Xaction<config, conn>& xaction, const Flits::RSP<config, conn>& flit) noexcept;
-            XactDenialEnum  NextTXDAT(Flits::REQ<config, conn>::addr_t addr, const Xaction<config, conn>& xaction, const Flits::DAT<config, conn>& flit) noexcept;
-            XactDenialEnum  NextRXRSP(Flits::REQ<config, conn>::addr_t addr, const Xaction<config, conn>& xaction, const Flits::RSP<config, conn>& flit) noexcept;
-            XactDenialEnum  NextRXDAT(Flits::REQ<config, conn>::addr_t addr, const Xaction<config, conn>& xaction, const Flits::DAT<config, conn>& flit) noexcept;
-            XactDenialEnum  NextRXSNP(Flits::REQ<config, conn>::addr_t addr, const Xaction<config, conn>& xaction, const Flits::SNP<config, conn>& flit) noexcept;
+            CacheState      Excavate(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
+            CacheState      Evaluate(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
+
+        public:
+            XactDenialEnum  NextTXREQ(Flits::REQ<config, conn>::addr_t::value_type addr, const Flits::REQ<config, conn>& flit) noexcept;
+            XactDenialEnum  NextTXRSP(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::RSP<config, conn>& flit) noexcept;
+            XactDenialEnum  NextTXDAT(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::DAT<config, conn>& flit) noexcept;
+            XactDenialEnum  NextRXRSP(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::RSP<config, conn>& flit) noexcept;
+            XactDenialEnum  NextRXDAT(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::DAT<config, conn>& flit) noexcept;
+            XactDenialEnum  NextRXSNP(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::SNP<config, conn>& flit) noexcept;
+
+        public:
+            XactDenialEnum  Transfer(Flits::REQ<config, conn>::addr_t::value_type addr, CacheState state, const Xaction<config, conn>* nestingXaction = nullptr) noexcept;
         };
     }
 /*
@@ -261,7 +268,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool RNCacheStateMap<config, conn>::IsAccessed(Flits::REQ<config, conn>::addr_t addr) const noexcept
+    inline bool RNCacheStateMap<config, conn>::IsAccessed(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
     {
         if (!seerEnabled)
             return false;
@@ -276,7 +283,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline void RNCacheStateMap<config, conn>::SetAccessed(Flits::REQ<config, conn>::addr_t addr) noexcept
+    inline void RNCacheStateMap<config, conn>::SetAccessed(Flits::REQ<config, conn>::addr_t::value_type addr) noexcept
     {
         if (!seerEnabled)
             return;
@@ -329,7 +336,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline std::pair<CacheState, bool> RNCacheStateMap<config, conn>::ExcavateWithSeer(Flits::REQ<config, conn>::addr_t addr) const noexcept
+    inline std::pair<CacheState, bool> RNCacheStateMap<config, conn>::ExcavateWithSeer(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
     {
         auto iter = stateMap.find(addr);
 
@@ -358,7 +365,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline std::pair<CacheState, bool> RNCacheStateMap<config, conn>::EvaluateWithSeer(Flits::REQ<config, conn>::addr_t addr) const noexcept
+    inline std::pair<CacheState, bool> RNCacheStateMap<config, conn>::EvaluateWithSeer(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
     {
         auto excavated = ExcavateWithSeer(addr);
         return { EvaluateSilently(excavated.first), excavated.second };
@@ -373,7 +380,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline CacheState RNCacheStateMap<config, conn>::Evaluate(Flits::REQ<config, conn>::addr_t addr) const noexcept
+    inline CacheState RNCacheStateMap<config, conn>::Evaluate(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
     {
         return EvaluateWithSeer(addr).first;
     }
@@ -381,8 +388,8 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNCacheStateMap<config, conn>::NextTXREQ(
-        Flits::REQ<config, conn>::addr_t    addr,
-        const Flits::REQ<config, conn>&     flit) noexcept
+        Flits::REQ<config, conn>::addr_t::value_type    addr,
+        const Flits::REQ<config, conn>&                 flit) noexcept
     {
         // Decode REQ opcode
         const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans&>& opcodeInfo = 
@@ -420,9 +427,9 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNCacheStateMap<config, conn>::NextTXRSP(
-        Flits::REQ<config, conn>::addr_t    addr,
-        const Xaction<config, conn>&        xaction,
-        const Flits::RSP<config, conn>&     flit) noexcept
+        Flits::REQ<config, conn>::addr_t::value_type    addr,
+        const Xaction<config, conn>&                    xaction,
+        const Flits::RSP<config, conn>&                 flit) noexcept
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
@@ -564,9 +571,9 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNCacheStateMap<config, conn>::NextTXDAT(
-        Flits::REQ<config, conn>::addr_t    addr,
-        const Xaction<config, conn>&        xaction,
-        const Flits::DAT<config, conn>&     flit) noexcept
+        Flits::REQ<config, conn>::addr_t::value_type    addr,
+        const Xaction<config, conn>&                    xaction,
+        const Flits::DAT<config, conn>&                 flit) noexcept
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
@@ -791,9 +798,9 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNCacheStateMap<config, conn>::NextRXRSP(
-        Flits::REQ<config, conn>::addr_t    addr,
-        const Xaction<config, conn>&        xaction,
-        const Flits::RSP<config, conn>&     flit) noexcept
+        Flits::REQ<config, conn>::addr_t::value_type    addr,
+        const Xaction<config, conn>&                    xaction,
+        const Flits::RSP<config, conn>&                 flit) noexcept
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
@@ -998,9 +1005,9 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNCacheStateMap<config, conn>::NextRXDAT(
-        Flits::REQ<config, conn>::addr_t    addr,
-        const Xaction<config, conn>&        xaction,
-        const Flits::DAT<config, conn>&     flit) noexcept
+        Flits::REQ<config, conn>::addr_t::value_type    addr,
+        const Xaction<config, conn>&                    xaction,
+        const Flits::DAT<config, conn>&                 flit) noexcept
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
