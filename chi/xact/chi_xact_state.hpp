@@ -59,10 +59,10 @@ namespace CHI {
             static constexpr size_t SIZE_CACHE_MAP_SPAN         = (1UL << ADDR_OFFSET_CACHE_MAP_SPAN);
 
         private:
-            Opcodes::REQ::Decoder<Flits::REQ<config>, const details::RNCohTrans&>
+            Opcodes::REQ::Decoder<Flits::REQ<config>, const details::RNCohTrans*>
                         reqDecoder;
 
-            Opcodes::SNP::Decoder<Flits::SNP<config>, const details::RNCohTrans&>
+            Opcodes::SNP::Decoder<Flits::SNP<config>, const details::RNCohTrans*>
                         snpDecoder;
 
         private:
@@ -128,10 +128,10 @@ namespace /*CHI::*/Xact {
     {
         // REQ transitions
         #define SET_REQ(type, opcode) \
-            reqDecoder[Opcodes::REQ::opcode].SetCompanion({ CacheStateTransitions::Initials::opcode, &CacheStateTransitions::Intermediates::opcode, CacheStateTransition::Type::type })
+            { static const details::RNCohTrans _##opcode { CacheStateTransitions::Initials::opcode, CacheStateTransitions::Intermediates::Nested::opcode, &CacheStateTransitions::Intermediates::opcode, CacheStateTransition::Type::type }; reqDecoder[Opcodes::REQ::opcode].SetCompanion(&_##opcode); }
 
         #define SET_REQ_EX(type, opcode, name) \
-            reqDecoder[Opcodes::REQ::opcode].SetCompanion({ CacheStateTransitions::Initials::name, &CacheStateTransitions::Intermediates::name, CacheStateTransition::Type::type })
+            { static const details::RNCohTrans _##name { CacheStateTransitions::Initials::name, CacheStateTransitions::Intermediates::Nested::name, &CacheStateTransitions::Intermediates::name, CacheStateTransition::Type::type }; reqDecoder[Opcodes::REQ::opcode].SetCompanion(&_##name); }
 
     //  SET_REQ(General         , ReqLCrdReturn                   );  // 0x00
         SET_REQ(Read            , ReadShared                      );  // 0x01
@@ -392,19 +392,19 @@ namespace /*CHI::*/Xact {
         const Flits::REQ<config, conn>&                 flit) noexcept
     {
         // Decode REQ opcode
-        const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans&>& opcodeInfo = 
+        const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans*>& opcodeInfo = 
             reqDecoder.Decode(flit.Opcode());
 
         if (!opcodeInfo.IsValid()) // unknown opcode
             return XactDenial::DENIED_OPCODE;
 
         //
-        const details::RNCohTrans& trans = opcodeInfo.GetCompanion();
+        const details::RNCohTrans* trans = opcodeInfo.GetCompanion();
 
         const std::pair<CacheState, bool> initialState = EvaluateWithSeer(addr);
 
         // Initial state check
-        CacheState actualInitialState = trans.initial & initialState.first;
+        CacheState actualInitialState = trans->initial & initialState.first;
 
         if (!actualInitialState)
             return XactDenial::DENIED_STATE_INITIAL;
@@ -456,7 +456,7 @@ namespace /*CHI::*/Xact {
         else
         {
             // Decode SNP opcode
-            const Opcodes::OpcodeInfo<typename Flits::SNP<config>::opcode_t, const details::RNCohTrans&>& opcodeInfo
+            const Opcodes::OpcodeInfo<typename Flits::SNP<config>::opcode_t, const details::RNCohTrans*>& opcodeInfo
                 = snpDecoder.Decode(xaction.GetFirst().flit.snp.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
@@ -464,7 +464,7 @@ namespace /*CHI::*/Xact {
 
             bool retToSrc = xaction.GetFirst().flit.snp.RetToSrc();
 
-            trans = &opcodeInfo.GetCompanion();
+            trans = opcodeInfo.GetCompanion();
 
             const CacheStateTransitions::Intermediates::details::TableG0* g0 = nullptr;
             const CacheStateTransitions::Intermediates::details::TableG1* g1 = nullptr;
@@ -474,7 +474,7 @@ namespace /*CHI::*/Xact {
             if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::SnpX)
             {
                 const CacheStateTransitions::Intermediates::TablesSnpX* tables 
-                    = static_cast<CacheStateTransitions::Intermediates::TablesSnpX*>(trans->tables);
+                    = static_cast<const CacheStateTransitions::Intermediates::TablesSnpX*>(trans->tables);
 
                 if (flit.Opcode() == Opcodes::RSP::SnpResp)
                 {
@@ -489,7 +489,7 @@ namespace /*CHI::*/Xact {
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::SnpXFwd)
             {
                 const CacheStateTransitions::Intermediates::TablesSnpXFwd* tables 
-                    = static_cast<CacheStateTransitions::Intermediates::TablesSnpXFwd*>(trans->tables);
+                    = static_cast<const CacheStateTransitions::Intermediates::TablesSnpXFwd*>(trans->tables);
 
                 if (flit.Opcode() == Opcodes::RSP::SnpResp)
                 {
@@ -581,13 +581,13 @@ namespace /*CHI::*/Xact {
         if (xaction.GetFirst().IsREQ())
         {
             // Decode REQ opcode
-            const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans&>& opcodeInfo
+            const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans*>& opcodeInfo
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
                 return XactDenial::DENIED_REQ_OPCODE;
 
-            trans = &opcodeInfo.GetCompanion();
+            trans = opcodeInfo.GetCompanion();
 
             //
             CacheState nextState;
@@ -607,7 +607,7 @@ namespace /*CHI::*/Xact {
                 if (flit.Opcode() == Opcodes::DAT::CopyBackWrData)
                 {
                     const CacheStateTransitions::Intermediates::details::TableG0* g0 
-                        = &static_cast<CacheStateTransitions::Intermediates::TablesWrite*>(trans->tables)->GCopyBackWrData();
+                        = &static_cast<const CacheStateTransitions::Intermediates::TablesWrite*>(trans->tables)->GCopyBackWrData();
 
                     prevState = EvaluateWithSeer(addr);
 
@@ -680,7 +680,7 @@ namespace /*CHI::*/Xact {
         else
         {
             // Decode SNP opcode
-            const Opcodes::OpcodeInfo<typename Flits::SNP<config>::opcode_t, const details::RNCohTrans&>& opcodeInfo
+            const Opcodes::OpcodeInfo<typename Flits::SNP<config>::opcode_t, const details::RNCohTrans*>& opcodeInfo
                 = snpDecoder.Decode(xaction.GetFirst().flit.snp.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
@@ -688,7 +688,7 @@ namespace /*CHI::*/Xact {
 
             bool retToSrc = xaction.GetFirst().flit.snp.RetToSrc();
 
-            trans = &opcodeInfo.GetCompanion();
+            trans = opcodeInfo.GetCompanion();
 
             const CacheStateTransitions::Intermediates::details::TableG0* g0 = nullptr;
             const CacheStateTransitions::Intermediates::details::TableG1* g1 = nullptr;
@@ -698,7 +698,7 @@ namespace /*CHI::*/Xact {
             if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::SnpX)
             {
                 const CacheStateTransitions::Intermediates::TablesSnpX* tables
-                    = static_cast<CacheStateTransitions::Intermediates::TablesSnpX*>(trans->tables);
+                    = static_cast<const CacheStateTransitions::Intermediates::TablesSnpX*>(trans->tables);
 
                 if (flit.Opcode() == Opcodes::DAT::SnpRespData)
                 {
@@ -714,7 +714,7 @@ namespace /*CHI::*/Xact {
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::SnpXFwd)
             {
                 const CacheStateTransitions::Intermediates::TablesSnpXFwd* tables
-                    = static_cast<CacheStateTransitions::Intermediates::TablesSnpXFwd*>(trans->tables);
+                    = static_cast<const CacheStateTransitions::Intermediates::TablesSnpXFwd*>(trans->tables);
 
                 if (flit.Opcode() == Opcodes::DAT::SnpRespData)
                 {
@@ -808,13 +808,13 @@ namespace /*CHI::*/Xact {
         if (xaction.GetFirst().IsREQ())
         {
             // Decode REQ opcode
-            const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans&>& opcodeInfo
+            const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans*>& opcodeInfo
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
             
             if (!opcodeInfo.IsValid()) // unknown opcode
                 return XactDenial::DENIED_REQ_OPCODE;
 
-            trans = &opcodeInfo.GetCompanion();
+            trans = opcodeInfo.GetCompanion();
 
             //
             CacheState nextState;
@@ -847,7 +847,7 @@ namespace /*CHI::*/Xact {
                 if (flit.Opcode() == Opcodes::RSP::Comp)
                 {
                     const CacheStateTransitions::Intermediates::details::TableG0* g0
-                        = &static_cast<CacheStateTransitions::Intermediates::TablesMakeReadUnique*>(trans->tables)->GComp();
+                        = &static_cast<const CacheStateTransitions::Intermediates::TablesMakeReadUnique*>(trans->tables)->GComp();
 
                     prevState = EvaluateWithSeer(addr);
 
@@ -880,7 +880,7 @@ namespace /*CHI::*/Xact {
                  || flit.Opcode() == Opcodes::RSP::CompPersist)
                 {
                     const CacheStateTransitions::Intermediates::details::TableG0* g0
-                        = &static_cast<CacheStateTransitions::Intermediates::TablesDataless*>(trans->tables)->GComp();
+                        = &static_cast<const CacheStateTransitions::Intermediates::TablesDataless*>(trans->tables)->GComp();
 
                     prevState = EvaluateWithSeer(addr);
 
@@ -959,7 +959,7 @@ namespace /*CHI::*/Xact {
                  || flit.Opcode() == Opcodes::RSP::CompDBIDResp)
                 {
                     const CacheStateTransitions::Intermediates::details::TableG0* g0
-                        = &static_cast<CacheStateTransitions::Intermediates::TablesAtomic*>(trans->tables)->GComp();
+                        = &static_cast<const CacheStateTransitions::Intermediates::TablesAtomic*>(trans->tables)->GComp();
                 
                     prevState = EvaluateWithSeer(addr);
 
@@ -1015,13 +1015,13 @@ namespace /*CHI::*/Xact {
         if (xaction.GetFirst().IsREQ())
         {
             // Decode REQ opcode
-            const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans&>& opcodeInfo
+            const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans*>& opcodeInfo
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
             
             if (!opcodeInfo.IsValid()) // unknown opcode
                 return XactDenial::DENIED_REQ_OPCODE;
 
-            trans = &opcodeInfo.GetCompanion();
+            trans = opcodeInfo.GetCompanion();
 
             //
             CacheState nextState;
@@ -1040,12 +1040,12 @@ namespace /*CHI::*/Xact {
 
                 if (flit.Opcode() == Opcodes::DAT::CompData)
                 {
-                    g0 = &static_cast<CacheStateTransitions::Intermediates::TablesRead*>(trans->tables)->GCompData();
+                    g0 = &static_cast<const CacheStateTransitions::Intermediates::TablesRead*>(trans->tables)->GCompData();
                     resp = CacheResp::FromCompData(flit.Resp());
                 }
                 else if (flit.Opcode() == Opcodes::DAT::DataSepResp)
                 {
-                    g0 = &static_cast<CacheStateTransitions::Intermediates::TablesRead*>(trans->tables)->GDataSepResp();
+                    g0 = &static_cast<const CacheStateTransitions::Intermediates::TablesRead*>(trans->tables)->GDataSepResp();
                     resp = CacheResp::FromDataSepResp(flit.Resp());
                 }
                 else
@@ -1125,7 +1125,7 @@ namespace /*CHI::*/Xact {
                 if (flit.Opcode() == Opcodes::DAT::CompData)
                 {
                     const CacheStateTransitions::Intermediates::details::TableG0* g0
-                        = &static_cast<CacheStateTransitions::Intermediates::TablesAtomic*>(trans->tables)->GCompData();
+                        = &static_cast<const CacheStateTransitions::Intermediates::TablesAtomic*>(trans->tables)->GCompData();
                     
                     prevState = EvaluateWithSeer(addr);
 
