@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cst_base.hpp"
 #include "cst_xact_read.hpp"
 #include "cst_xact_dataless.hpp"
 #include "cst_xact_write.hpp"
@@ -152,9 +153,23 @@ namespace CHI {
                         }) {}
                     };
 
+                    struct TableG2Element {
+
+                        union {
+                            std::array<CacheState, 7>   states;
+                            uint64_t                    i64;
+                        };
+                        
+                        inline constexpr TableG2Element() noexcept : states({
+                            CacheStates::None, CacheStates::None, CacheStates::None, CacheStates::None,
+                            CacheStates::None, CacheStates::None, CacheStates::None
+                        }) {}
+                    };
+
                     // !NOTICE: Never use TableG for initial state checks.
                     /*
                     * P  = Initial states
+                    * Pi = Intermediate states
                     *
                     * Xr = Response state
                     * Xf = Forward state
@@ -162,16 +177,24 @@ namespace CHI {
                     * x  = Final checker, fail on empty (might indicate any type of states, but for proving and detection)
                     * xs = Final state, fail on empty
                     * xf = Final forwarded state, fail on empty
+                    * xi = Final intermediate state, fall-through on non-V, fail on empty
                     *
                     * Table G0 usage:
                     *   1. P * G0(Xr) = xs
-
+                    *
                     * Table G1 usage:
                     *   1. P * G1(Xr) = xf
                     *   2. P * G1(Xr) * Xf = xf
+                    *
+                    * Table G2 usage:
+                    *   1. P * G2(Pi) = xi
                     */
                     using TableG0 = std::array<TableG0Element, 14>;
                     using TableG1 = std::array<TableG1Element, 14>;
+                    using TableG2 = struct _TableG2 {
+                        bool                            V   = false;
+                        std::array<TableG2Element, 7>   E   = {};
+                    };
 
                     template<size_t N, std::array<CacheStateTransition, N> Ts, CacheResp R, CacheState S>
                     inline consteval TableG0Element GetTableG0CompElement(TableG0Element E = TableG0Element()) noexcept
@@ -218,7 +241,7 @@ namespace CHI {
                     template<size_t N, std::array<CacheStateTransition, N> Ts, CacheResp R>
                     inline consteval TableG0Element GetTableG0CompDataElement() noexcept
                     {
-                        return GetTableG0CompElement<N, Ts, R, _NextState<CacheStates::None>()>();
+                        return GetTableG0CompDataElement<N, Ts, R, _NextState<CacheStates::None>()>();
                     }
 
                     template<size_t N, std::array<CacheStateTransition, N> Ts, CacheResp R, CacheState S>
@@ -477,6 +500,54 @@ namespace CHI {
                         return GetTableG1SnpRespDataFwdedElement<N, Ts, R, _NextState<CacheStates::None>()>(retToSrc);
                     }
 
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, CacheState Si, CacheState S>
+                    inline consteval TableG2Element GetTableG2MakeReadUniqueElement(TableG2Element E = TableG2Element()) noexcept
+                    {
+                        if constexpr (S)
+                        {
+                            CacheState state = CacheStates::None;
+                            for (CacheStateTransition T : Ts)
+                                if ((T.initialExpectedState & S) && (T.initialPermittedState & Si))
+                                    state = state | Si;
+
+                            E.states[GetStateTableIndex(S)] = state;
+
+                            return GetTableG2MakeReadUniqueElement<N, Ts, Si, _NextState<S>()>(E);
+                        }
+                        else
+                            return E;
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, CacheState Si>
+                    inline consteval TableG2Element GetTableG2MakeReadUniqueElement() noexcept
+                    {
+                        return GetTableG2MakeReadUniqueElement<N, Ts, Si, _NextState<CacheStates::None>()>();
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, CacheState Si, CacheState S>
+                    inline consteval TableG2Element GetTableG2WriteElement(TableG2Element E = TableG2Element()) noexcept
+                    {
+                        if constexpr (S)
+                        {
+                            CacheState state = CacheStates::None;
+                            for (CacheStateTransition T : Ts)
+                                if ((T.initialExpectedState & S) && (T.initialPermittedState & Si))
+                                    state = state | Si;
+
+                            E.states[GetStateTableIndex(S)] = state;
+
+                            return GetTableG2WriteElement<N, Ts, Si, _NextState<S>()>(E);
+                        }
+                        else
+                            return E;
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, CacheState Si>
+                    inline consteval TableG2Element GetTableG2WriteElement() noexcept
+                    {
+                        return GetTableG2WriteElement<N, Ts, Si, _NextState<CacheStates::None>()>();
+                    }
+
                     template<
                         size_t N,
                         std::array<CacheStateTransition, N> Ts,
@@ -698,6 +769,42 @@ namespace CHI {
                             return A;
                     }
 
+                    template<
+                        size_t N,
+                        std::array<CacheStateTransition, N> Ts,
+                        CacheState Si,
+                        TableG2 A = TableG2()>
+                    inline consteval TableG2 GetTableG2MakeReadUnique() noexcept
+                    {
+                        if constexpr (Si)
+                        {
+                            constexpr auto nextA = CopyOnWrite<GetStateTableIndex(Si)>(A.E,
+                                GetTableG2MakeReadUniqueElement<N, Ts, Si>());
+
+                            return GetTableG2MakeReadUnique<N, Ts, _NextState<Si>(), TableG2(true, nextA)>();
+                        }
+                        else
+                            return A;
+                    }
+
+                    template<
+                        size_t N,
+                        std::array<CacheStateTransition, N> Ts,
+                        CacheState Si,
+                        TableG2 A = TableG2()>
+                    inline consteval TableG2 GetTableG2Write() noexcept
+                    {
+                        if constexpr (Si)
+                        {
+                            constexpr auto nextA = CopyOnWrite<GetStateTableIndex(Si)>(A.E,
+                                GetTableG2WriteElement<N, Ts, Si>());
+
+                            return GetTableG2Write<N, Ts, _NextState<Si>(), TableG2(true, nextA)>();
+                        }
+                        else
+                            return A;
+                    }
+
                     //
                     template<size_t N, std::array<CacheStateTransition, N> Ts>
                     inline consteval TableG0 GetTableG0Comp() noexcept
@@ -770,6 +877,18 @@ namespace CHI {
                     {
                         return GetTableG1SnpRespDataFwded<N, Ts, retToSrc, _NextResp<CacheResps::None>()>();
                     }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts>
+                    inline consteval TableG2 GetTableG2MakeReadUnique() noexcept
+                    {
+                        return GetTableG2MakeReadUnique<N, Ts, _NextState<CacheStates::None>()>();
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts>
+                    inline consteval TableG2 GetTableG2Write() noexcept
+                    {
+                        return GetTableG2Write<N, Ts, _NextState<CacheStates::None>()>();
+                    }
                     /**/
 
                     //
@@ -804,6 +923,19 @@ namespace CHI {
                             );
                     }
 
+                    inline constexpr uint64_t GetStateFactorForG2(CacheState x)
+                    {
+                        return (
+                            ((((1ULL & ~x.UC        ) - 1) & 0xFFULL) << (GetStateTableIndex(CacheStates::UC    ) * 8))
+                          | ((((1ULL & ~x.UCE       ) - 1) & 0xFFULL) << (GetStateTableIndex(CacheStates::UCE   ) * 8))
+                          | ((((1ULL & ~x.UD        ) - 1) & 0xFFULL) << (GetStateTableIndex(CacheStates::UD    ) * 8))
+                          | ((((1ULL & ~x.UDP       ) - 1) & 0xFFULL) << (GetStateTableIndex(CacheStates::UDP   ) * 8))
+                          | ((((1ULL & ~x.SC        ) - 1) & 0xFFULL) << (GetStateTableIndex(CacheStates::SC    ) * 8))
+                          | ((((1ULL & ~x.SD        ) - 1) & 0xFFULL) << (GetStateTableIndex(CacheStates::SD    ) * 8))
+                          | ((((1ULL & ~x.I         ) - 1) & 0xFFULL) << (GetStateTableIndex(CacheStates::I     ) * 8))
+                        );
+                    }
+
                     inline constexpr CacheState GetStateFromG0Element(TableG0Element e)
                     {
                         return std::reduce(e.states.begin(), e.states.end(), CacheStates::None, std::bit_or<>());
@@ -827,6 +959,18 @@ namespace CHI {
                         e.i64_0 = ei0;
                         e.i64_1 = ei1;
                         return GetRespFromG1Element(e);
+                    }
+
+                    inline constexpr CacheState GetStateFromG2Element(TableG0Element e)
+                    {
+                        return std::reduce(e.states.begin(), e.states.end(), CacheStates::None, std::bit_or<>());
+                    }
+
+                    inline constexpr CacheState GetStateFromG2Element(uint64_t ei)
+                    {
+                        TableG0Element e;
+                        e.i64 = ei;
+                        return GetStateFromG2Element(e);
                     }
 
                     inline constexpr CacheState ProductG0(const CacheState P, const TableG0& G0, const CacheResp Xr) noexcept
@@ -882,6 +1026,21 @@ namespace CHI {
                                 px.second & rx_1
                             );
                         }
+                    }
+
+                    inline constexpr CacheState ProductG2(const CacheState P, const TableG2& G2, const CacheState Pi) noexcept
+                    {
+                        if (G2.V)
+                        {
+                            assert(std::popcount(Pi.i8) == 1);
+
+                            auto px = details::GetStateFactorForG2(P);
+                            auto rx = G2.E[details::GetStateTableIndex(Pi)].i64;
+
+                            return GetStateFromG2Element(px & rx);
+                        }
+                        else
+                            return Pi;
                     }
                 }
 
@@ -1248,6 +1407,67 @@ namespace CHI {
                 #undef _Tables_Atomic
                 #undef _Tables_SnpX
                 #undef _Tables_SnpXFwd
+
+
+                namespace Nested {
+
+                    #define _TableG2_General(opcode)        { false, {} }
+                    #define _TableG2_MakeReadUnique(opcode) details::GetTableG2MakeReadUnique<Transitions::opcode.size(), Transitions::opcode>()
+                    #define _TableG2_Write(opcode)          details::GetTableG2Write<Transitions::opcode.size(), Transitions::opcode>()
+                    
+                    // Nested transitions tables for Read request transactions
+                    constexpr details::TableG2 ReadNoSnp                        = _TableG2_General(ReadNoSnp);
+                    constexpr details::TableG2 ReadOnce                         = _TableG2_General(ReadOnce);
+                    constexpr details::TableG2 ReadOnceCleanInvalid             = _TableG2_General(ReadOnceCleanInvalid);
+                    constexpr details::TableG2 ReadOnceMakeInvalid              = _TableG2_General(ReadOnceMakeInvalid);
+                    constexpr details::TableG2 ReadClean_Transfer               = _TableG2_General(ReadClean_Transfer);
+                    constexpr details::TableG2 ReadClean                        = _TableG2_General(ReadClean);
+                    constexpr details::TableG2 ReadNotSharedDirty               = _TableG2_General(ReadNotSharedDirty);
+                    constexpr details::TableG2 ReadShared                       = _TableG2_General(ReadShared);
+                    constexpr details::TableG2 ReadUnique                       = _TableG2_General(ReadUnique);
+                    constexpr details::TableG2 ReadPreferUnique                 = _TableG2_General(ReadPreferUnique);
+                    constexpr details::TableG2 MakeReadUnique                   = _TableG2_MakeReadUnique(MakeReadUnique);
+                    constexpr details::TableG2 MakeReadUnique_Excl              = _TableG2_MakeReadUnique(MakeReadUnique_Excl);
+
+                    // Nested transitions tables for Dataless request transactions
+                    constexpr details::TableG2 CleanUnique                      = _TableG2_General(CleanUnique);
+                    constexpr details::TableG2 MakeUnique                       = _TableG2_General(MakeUnique);
+                    constexpr details::TableG2 Evict                            = _TableG2_General(Evict);
+                    constexpr details::TableG2 StashOnceUnique                  = _TableG2_General(StashOnceUnique);
+                    constexpr details::TableG2 StashOnceSepUnique               = _TableG2_General(StashOnceSepUnique);
+                    constexpr details::TableG2 StashOnceShared                  = _TableG2_General(StashOnceShared);
+                    constexpr details::TableG2 StashOnceSepShared               = _TableG2_General(StashOnceSepShared);
+                    constexpr details::TableG2 CleanShared                      = _TableG2_General(CleanShared);
+                    constexpr details::TableG2 CleanSharedPersist               = _TableG2_General(CleanSharedPersist);
+                    constexpr details::TableG2 CleanSharedPersistSep            = _TableG2_General(CleanSharedPersistSep);
+                    constexpr details::TableG2 CleanInvalid                     = _TableG2_General(CleanInvalid);
+                    constexpr details::TableG2 MakeInvalid                      = _TableG2_General(MakeInvalid);
+
+                    // Nested transitions tables for Write request transactions
+                    constexpr details::TableG2 WriteNoSnpPtl                    = _TableG2_Write(WriteNoSnpPtl);
+                    constexpr details::TableG2 WriteNoSnpFull                   = _TableG2_Write(WriteNoSnpFull);
+                    constexpr details::TableG2 WriteNoSnpZero                   = _TableG2_Write(WriteNoSnpZero);
+                    constexpr details::TableG2 WriteUniquePtl                   = _TableG2_Write(WriteUniquePtl);
+                    constexpr details::TableG2 WriteUniquePtlStash              = _TableG2_Write(WriteUniquePtlStash);
+                    constexpr details::TableG2 WriteUniqueZero                  = _TableG2_Write(WriteUniqueZero);
+                    constexpr details::TableG2 WriteUniqueFull                  = _TableG2_Write(WriteUniqueFull);
+                    constexpr details::TableG2 WriteUniqueFullStash             = _TableG2_Write(WriteUniqueFullStash);
+                    constexpr details::TableG2 WriteBackFull                    = _TableG2_Write(WriteBackFull);
+                    constexpr details::TableG2 WriteBackPtl                     = _TableG2_Write(WriteBackPtl);
+                    constexpr details::TableG2 WriteCleanFull                   = _TableG2_Write(WriteCleanFull);
+                    constexpr details::TableG2 WriteEvictFull                   = _TableG2_Write(WriteEvictFull);
+                    constexpr details::TableG2 WriteEvictOrEvict                = _TableG2_Write(WriteEvictOrEvict);
+
+                    // Nested transitions tables for Atomic request transactions
+                    constexpr details::TableG2 AtomicStore                      = _TableG2_General(AtomicStore);
+                    constexpr details::TableG2 AtomicLoad                       = _TableG2_General(AtomicLoad);
+                    constexpr details::TableG2 AtomicSwap                       = _TableG2_General(AtomicSwap);
+                    constexpr details::TableG2 AtomicCompare                    = _TableG2_General(AtomicCompare);
+
+                    #undef _TableG2_General
+                    #undef _TableG2_MakeReadUnique
+                    #undef _TableG2_Write
+                };
             }
 		}
 	}
