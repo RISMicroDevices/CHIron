@@ -22,6 +22,7 @@
 - **Xaction (Transaction Modeling) now only supports Issue E**
 - **Exclusive Monitor tracking not supported**
 - **SnpPreferUnique & SnpPreferUniqueFwd under exclusive sequence not fully supported**
+- **WriteDataCancel** needs more detailed modeling and checkers
 
 ## [Errata](ERRATA.md)
 
