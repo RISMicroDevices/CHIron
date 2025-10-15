@@ -117,11 +117,11 @@ namespace CHI {
 
         public:
             XactDenialEnum  NextTXREQ(Flits::REQ<config, conn>::addr_t::value_type addr, const Flits::REQ<config, conn>& flit) noexcept;
+            XactDenialEnum  NextRXSNP(Flits::REQ<config, conn>::addr_t::value_type addr, const Flits::SNP<config, conn>& flit) noexcept;
             XactDenialEnum  NextTXRSP(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::RSP<config, conn>& flit) noexcept;
             XactDenialEnum  NextTXDAT(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::DAT<config, conn>& flit) noexcept;
             XactDenialEnum  NextRXRSP(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::RSP<config, conn>& flit) noexcept;
             XactDenialEnum  NextRXDAT(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::DAT<config, conn>& flit) noexcept;
-            XactDenialEnum  NextRXSNP(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::SNP<config, conn>& flit) noexcept;
 
         public:
             XactDenialEnum  Transfer(Flits::REQ<config, conn>::addr_t::value_type addr, CacheState state, const Xaction<config, conn>* nestingXaction = nullptr) noexcept;
@@ -1307,7 +1307,6 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum RNCacheStateMap<config, conn>::NextRXSNP(
         Flits::REQ<config, conn>::addr_t::value_type    addr,
-        const Xaction<config, conn>&                    xaction,
         const Flits::SNP<config, conn>&                 flit) noexcept
     {
         return XactDenial::ACCEPTED;
