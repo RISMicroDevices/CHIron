@@ -512,6 +512,10 @@ namespace /*CHI::*/Xact {
         //
         const details::RNCohTrans* trans = opcodeInfo.GetCompanion();
 
+        if (!trans)
+                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+
+        //
         const std::pair<CacheState, bool> initialState = EvaluateWithSeer(addr);
 
         // Initial state check
@@ -562,6 +566,9 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_REQ_OPCODE;
 
             trans = &opcodeInfo.GetCompanion();
+
+            if (!trans)
+                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
             */
         }
         else
@@ -576,6 +583,9 @@ namespace /*CHI::*/Xact {
             bool retToSrc = xaction.GetFirst().flit.snp.RetToSrc();
 
             trans = opcodeInfo.GetCompanion();
+
+            if (!trans)
+                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
 
             const CacheStateTransitions::Intermediates::details::TableG0* g0 = nullptr;
             const CacheStateTransitions::Intermediates::details::TableG1* g1 = nullptr;
@@ -700,6 +710,9 @@ namespace /*CHI::*/Xact {
 
             trans = opcodeInfo.GetCompanion();
 
+            if (!trans)
+                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+
             //
             CacheState nextState;
 
@@ -813,6 +826,9 @@ namespace /*CHI::*/Xact {
             bool retToSrc = xaction.GetFirst().flit.snp.RetToSrc();
 
             trans = opcodeInfo.GetCompanion();
+
+            if (!trans)
+                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
 
             const CacheStateTransitions::Intermediates::details::TableG0* g0 = nullptr;
             const CacheStateTransitions::Intermediates::details::TableG1* g1 = nullptr;
@@ -939,6 +955,9 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_REQ_OPCODE;
 
             trans = opcodeInfo.GetCompanion();
+
+            if (!trans)
+                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
 
             //
             CacheState nextState;
@@ -1147,6 +1166,9 @@ namespace /*CHI::*/Xact {
 
             trans = opcodeInfo.GetCompanion();
 
+            if (!trans)
+                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+
             //
             CacheState nextState;
 
@@ -1339,6 +1361,9 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_REQ_OPCODE;
 
                 trans = opcodeInfo.GetCompanion();
+
+                if (!trans)
+                    return XactDenial::DENIED_UNSUPPORTED_FEATURE;
                 
                 //
                 std::pair<CacheState, bool> prevState = EvaluateWithSeer(addr);
