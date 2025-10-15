@@ -706,6 +706,17 @@ namespace /*CHI::*/Xact {
             //
             std::pair<CacheState, bool> prevState; // lazy evaluation
 
+            // check for multi-data-beat repeat
+            const FiredResponseFlit<config, conn>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
+            
+            if (firstDAT && firstDAT->flit.dat.DataID() != flit.DataID())
+            {
+                if (firstDAT->flit.dat.Resp() != flit.Resp())
+                    return XactDenial::DENIED_STATE_MISMATCHED_REPEAT;
+
+                return XactDenial::ACCEPTED;
+            }
+
             // TXDAT Opcodes with state transitions or checks under REQ subsequence:
             //  CopyBackWriteData, NonCopyBackWriteData*, NCBWrDataCompAck*
             //
@@ -1141,6 +1152,17 @@ namespace /*CHI::*/Xact {
 
             //
             std::pair<CacheState, bool> prevState; // lazy evaluation
+
+            // check for multi-data-beat repeat
+            const FiredResponseFlit<config, conn>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
+            
+            if (firstDAT && firstDAT->flit.dat.DataID() != flit.DataID())
+            {
+                if (firstDAT->flit.dat.Resp() != flit.Resp())
+                    return XactDenial::DENIED_STATE_MISMATCHED_REPEAT;
+
+                return XactDenial::ACCEPTED;
+            }
 
             //
             if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::Read)
