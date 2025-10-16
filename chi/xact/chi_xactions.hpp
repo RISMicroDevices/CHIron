@@ -1002,11 +1002,11 @@ namespace /*CHI::*/Xact {
                 continue;
 
             if (opcodes.size() == 0)
-                return subsequence[index];
+                return &(subsequence[index]);
 
             for (auto opcode : opcodes)
                 if (iter->opcode.rsp == opcode)
-                    return subsequence[index];
+                    return &(subsequence[index]);
         }
 
         return nullptr;
@@ -1027,11 +1027,11 @@ namespace /*CHI::*/Xact {
                 continue;
 
             if (opcodes.size() == 0)
-                return subsequence[index];
+                return &(subsequence[index]);
 
             for (auto opcode : opcodes)
                 if (iter->opcode.dat == opcode)
-                    return subsequence[index];
+                    return &(subsequence[index]);
         }
 
         return nullptr;
@@ -1077,11 +1077,11 @@ namespace /*CHI::*/Xact {
                 continue;
 
             if (opcodes.size() == 0)
-                return subsequence[index];
+                return &(subsequence[index]);
 
             for (auto opcode : opcodes)
                 if (iter->opcode.dat == opcode)
-                    return subsequence[index];
+                    return &(subsequence[index]);
         }
 
         return nullptr;
