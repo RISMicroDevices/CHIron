@@ -106,6 +106,34 @@ namespace CHI {
                 constexpr CacheState AtomicSwap                     = _MR_General(AtomicSwap);
                 constexpr CacheState AtomicCompare                  = _MR_General(AtomicCompare);
 
+                // Initial states for Snoop transactions
+                // (Reserved for structural modification, all snoops should accept all initial states)
+                constexpr CacheState SnpOnce                        = _MR_General(SnpOnce);
+                constexpr CacheState SnpClean                       = _MR_General(SnpClean);
+                constexpr CacheState SnpShared                      = _MR_General(SnpShared);
+                constexpr CacheState SnpNotSharedDirty              = _MR_General(SnpNotSharedDirty);
+                constexpr CacheState SnpPreferUnique_NoExcl         = _MR_General(SnpPreferUnique_NoExcl);
+                constexpr CacheState SnpUnique                      = _MR_General(SnpUnique);
+                constexpr CacheState SnpPreferUnique_InExcl         = _MR_General(SnpPreferUnique_InExcl);
+                constexpr CacheState SnpCleanShared                 = _MR_General(SnpCleanShared);
+                constexpr CacheState SnpCleanInvalid                = _MR_General(SnpCleanInvalid);
+                constexpr CacheState SnpMakeInvalid                 = _MR_General(SnpMakeInvalid);
+                constexpr CacheState SnpQuery                       = _MR_General(SnpQuery);
+                constexpr CacheState SnpUniqueStash                 = _MR_General(SnpUniqueStash);
+                constexpr CacheState SnpMakeInvalidStash            = _MR_General(SnpMakeInvalidStash);
+                constexpr CacheState SnpStashUnique                 = _MR_General(SnpStashUnique);
+                constexpr CacheState SnpStashShared                 = _MR_General(SnpStashShared);
+
+                // Initial states for Snoop Forward transactions
+                // (Reserved for structural modification, all snoops should accept all initial states)
+                constexpr CacheState SnpOnceFwd                     = _MR_General(SnpOnceFwd);
+                constexpr CacheState SnpCleanFwd                    = _MR_General(SnpCleanFwd);
+                constexpr CacheState SnpNotSharedDirtyFwd           = _MR_General(SnpNotSharedDirtyFwd);
+                constexpr CacheState SnpSharedFwd                   = _MR_General(SnpSharedFwd);
+                constexpr CacheState SnpUniqueFwd                   = _MR_General(SnpUniqueFwd);
+                constexpr CacheState SnpPreferUniqueFwd_NoExcl      = _MR_General(SnpPreferUniqueFwd_NoExcl);
+                constexpr CacheState SnpPreferUniqueFwd_InExcl      = _MR_General(SnpPreferUniqueFwd_InExcl);
+
                 #undef _MR_General
                 #undef _MR_MakeReadUnique
                 #undef _MR_Write

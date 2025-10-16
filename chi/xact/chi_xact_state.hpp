@@ -155,11 +155,25 @@ namespace /*CHI::*/Xact {
         , seerAccessedMap           ()
     {
         // REQ transitions
-        #define SET_REQ(type, opcode) \
-            { static const details::RNCohTrans _##opcode { CacheStateTransitions::Initials::opcode, CacheStateTransitions::Intermediates::Nested::opcode, &CacheStateTransitions::Intermediates::opcode, CacheStateTransition::Type::type }; reqDecoder[Opcodes::REQ::opcode].SetCompanion(&_##opcode); }
+        #define SET_REQ(type, opcode)  { \
+            static const details::RNCohTrans _##opcode { \
+                CacheStateTransitions::Initials::opcode, \
+                CacheStateTransitions::Intermediates::Nested::opcode, \
+                &CacheStateTransitions::Intermediates::opcode, \
+                CacheStateTransition::Type::type \
+            }; \
+            reqDecoder[Opcodes::REQ::opcode].SetCompanion(&_##opcode); \
+        }
 
-        #define SET_REQ_EX(type, opcode, name) \
-            { static const details::RNCohTrans _##name { CacheStateTransitions::Initials::name, CacheStateTransitions::Intermediates::Nested::name, &CacheStateTransitions::Intermediates::name, CacheStateTransition::Type::type }; reqDecoder[Opcodes::REQ::opcode].SetCompanion(&_##name); }
+        #define SET_REQ_EX(type, opcode, name) { \
+            static const details::RNCohTrans _##name { \
+                CacheStateTransitions::Initials::name, \
+                CacheStateTransitions::Intermediates::Nested::name, \
+                &CacheStateTransitions::Intermediates::name, \
+                CacheStateTransition::Type::type \
+            }; \
+            reqDecoder[Opcodes::REQ::opcode].SetCompanion(&_##name); \
+        }
 
     //  SET_REQ(General         , ReqLCrdReturn                   );  // 0x00
         SET_REQ(Read            , ReadShared                      );  // 0x01
@@ -290,6 +304,63 @@ namespace /*CHI::*/Xact {
                                                                       // 0x7E
                                                                       // 0x7F
 
+        
+        // SNP transitions
+        #define SET_SNP(type, opcode)  { \
+            static const details::RNCohTrans _##opcode { \
+                CacheStateTransitions::Initials::opcode, \
+                CacheStateTransitions::Intermediates::details::TableG2(), \
+                &CacheStateTransitions::Intermediates::opcode, \
+                CacheStateTransition::Type::type \
+            }; \
+            snpDecoder[Opcodes::SNP::opcode].SetCompanion(&_##opcode); \
+        }
+
+        #define SET_SNP_EX(type, opcode, name) { \
+            static const details::RNCohTrans _##name { \
+                CacheStateTransitions::Initials::name, \
+                CacheStateTransitions::Intermediates::details::TableG2(), \
+                &CacheStateTransitions::Intermediates::name, \
+                CacheStateTransition::Type::type \
+            }; \
+            snpDecoder[Opcodes::SNP::opcode].SetCompanion(&_##name); \
+        }
+
+    //  SET_SNP(General     , SnpLCrdReturn         );  // 0x00
+        SET_SNP(Snoop       , SnpShared             );  // 0x01
+        SET_SNP(Snoop       , SnpClean              );  // 0x02
+        SET_SNP(Snoop       , SnpOnce               );  // 0x03
+        SET_SNP(Snoop       , SnpNotSharedDirty     );  // 0x04
+        SET_SNP(Snoop       , SnpUniqueStash        );  // 0x05
+        SET_SNP(Snoop       , SnpMakeInvalidStash   );  // 0x06
+        SET_SNP(Snoop       , SnpUnique             );  // 0x07
+        SET_SNP(Snoop       , SnpCleanShared        );  // 0x08
+        SET_SNP(Snoop       , SnpCleanInvalid       );  // 0x09
+        SET_SNP(Snoop       , SnpMakeInvalid        );  // 0x0A
+        SET_SNP(Snoop       , SnpStashUnique        );  // 0x0B
+        SET_SNP(Snoop       , SnpStashShared        );  // 0x0C
+    //                        SnpDVMOp                  // 0x0D
+                                                        // 0x0E
+                                                        // 0x0F
+        SET_SNP(Snoop       , SnpQuery              );  // 0x10
+        SET_SNP(SnoopForward, SnpSharedFwd          );  // 0x11
+        SET_SNP(SnoopForward, SnpCleanFwd           );  // 0x12
+        SET_SNP(SnoopForward, SnpOnceFwd            );  // 0x13
+        SET_SNP(SnoopForward, SnpNotSharedDirtyFwd  );  // 0x14
+        SET_SNP_EX(SnoopForward, SnpPreferUnique   , SnpPreferUnique_NoExcl   ); // 0x15
+        SET_SNP_EX(SnoopForward, SnpPreferUniqueFwd, SnpPreferUniqueFwd_NoExcl); // 0x16
+        SET_SNP(SnoopForward, SnpUniqueFwd          );  // 0x17
+                                                        // 0x18
+                                                        // 0x19
+                                                        // 0x1A
+                                                        // 0x1B
+                                                        // 0x1C
+                                                        // 0x1D
+                                                        // 0x1E
+                                                        // 0x1F
+
+        #undef SET_SNP
+        #undef SET_SNP_EX
         #undef SET_REQ
         #undef SET_REQ_EX
     }
@@ -830,6 +901,18 @@ namespace /*CHI::*/Xact {
             if (!trans)
                 return XactDenial::DENIED_UNSUPPORTED_FEATURE;
 
+            // check for multi-data-beat repeat
+            const FiredResponseFlit<config, conn>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
+            
+            if (firstDAT && firstDAT->flit.dat.DataID() != flit.DataID())
+            {
+                if (firstDAT->flit.dat.Resp() != flit.Resp())
+                    return XactDenial::DENIED_STATE_MISMATCHED_REPEAT;
+
+                return XactDenial::ACCEPTED;
+            }
+
+            //
             const CacheStateTransitions::Intermediates::details::TableG0* g0 = nullptr;
             const CacheStateTransitions::Intermediates::details::TableG1* g1 = nullptr;
 
