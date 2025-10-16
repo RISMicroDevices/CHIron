@@ -44,6 +44,9 @@ namespace CHI {
             CacheState(uint8_t i8) noexcept;
             constexpr explicit CacheState(const CacheResp resp) noexcept;
             constexpr operator bool() const noexcept;
+            constexpr bool operator==(const CacheState obj) const noexcept;
+            constexpr bool operator!=(const CacheState obj) const noexcept;
+            constexpr CacheState operator^(const CacheState obj) const noexcept;
             constexpr CacheState operator&(const CacheState obj) const noexcept;
             constexpr CacheState operator|(const CacheState obj) const noexcept;
             constexpr CacheResp  operator|(const CacheResp obj) const noexcept;
@@ -94,6 +97,9 @@ namespace CHI {
             CacheResp(uint16_t i16) noexcept;
             constexpr CacheResp(const CacheState state) noexcept;
             constexpr operator bool() const noexcept;
+            constexpr bool operator==(const CacheResp obj) const noexcept;
+            constexpr bool operator!=(const CacheResp obj) const noexcept;
+            constexpr CacheResp operator^(const CacheResp obj) const noexcept;
             constexpr CacheResp operator&(const CacheResp obj) const noexcept;
             constexpr CacheResp operator|(const CacheResp obj) const noexcept;
             constexpr CacheResp operator~() const noexcept;
@@ -160,6 +166,31 @@ namespace /*CHI::*/Xact {
     inline constexpr CacheState::operator bool() const noexcept
     {
         return UC    || UCE    || UD    || UDP    || SC    || SD    || I;
+    }
+
+    inline constexpr bool CacheState::operator==(const CacheState obj) const noexcept
+    {
+        return i8 == obj.i8;
+    }
+
+    inline constexpr bool CacheState::operator!=(const CacheState obj) const noexcept
+    {
+        return i8 != obj.i8;
+    }
+
+    inline constexpr CacheState CacheState::operator^(const CacheState obj) const noexcept
+    {
+        CacheState r { false, false, false, false, false, false, false };
+        //
+        r.UC        = UC        != obj.UC;
+        r.UCE       = UCE       != obj.UCE;
+        r.UD        = UD        != obj.UD;
+        r.UDP       = UDP       != obj.UDP;
+        r.SC        = SC        != obj.SC;
+        r.SD        = SD        != obj.SD;
+        r.I         = I         != obj.I;
+        //
+        return r;
     }
 
     inline constexpr CacheState CacheState::operator&(const CacheState obj) const noexcept
@@ -288,6 +319,39 @@ namespace /*CHI::*/Xact {
     {
         return UC    || UCE    || UD    || UDP    || SC    || SD    || I    ||
                UC_PD || UCE_PD || UD_PD || UDP_PD || SC_PD || SD_PD || I_PD;
+    }
+
+    inline constexpr bool CacheResp::operator==(const CacheResp obj) const noexcept
+    {
+        return i16 == obj.i16;
+    }
+
+    inline constexpr bool CacheResp::operator!=(const CacheResp obj) const noexcept
+    {
+        return i16 != obj.i16;
+    }
+
+    inline constexpr CacheResp CacheResp::operator^(const CacheResp obj) const noexcept
+    {
+        CacheResp r { false, false, false, false, false, false, false, false, false, false, false, false, false, false };
+        //
+        r.UC        = UC        != obj.UC;
+        r.UCE       = UCE       != obj.UCE;
+        r.UD        = UD        != obj.UD;
+        r.UDP       = UDP       != obj.UDP;
+        r.SC        = SC        != obj.SC;
+        r.SD        = SD        != obj.SD;
+        r.I         = I         != obj.I;
+        //
+        r.UC_PD     = UC_PD     != obj.UC_PD;
+        r.UCE_PD    = UCE_PD    != obj.UCE_PD;
+        r.UD_PD     = UD_PD     != obj.UD_PD;
+        r.UDP_PD    = UDP_PD    != obj.UDP_PD;
+        r.SC_PD     = SC_PD     != obj.SC_PD;
+        r.SD_PD     = SD_PD     != obj.SD_PD;
+        r.I_PD      = I_PD      != obj.I_PD;
+        //
+        return r;
     }
 
     inline constexpr CacheResp CacheResp::operator&(const CacheResp obj) const noexcept
