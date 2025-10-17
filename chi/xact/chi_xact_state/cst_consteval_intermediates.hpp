@@ -434,12 +434,12 @@ namespace CHI {
                         {
                             CacheState state = CacheStates::None;
                             for (CacheStateTransition T : Ts)
-                                if ((T.initialExpectedState & S) && (T.respSnpRespData & R) && (T.retToSrc & retToSrc))
+                                if ((T.initialExpectedState & S) && (T.respSnpRespDataPtl & R) && (T.retToSrc & retToSrc))
                                     state = state | T.finalState;
 
                             E.states[GetStateTableIndex(S)] = state;
 
-                            return GetTableG0SnpRespDataElement<N, Ts, R, _NextState<S>()>(retToSrc, E);
+                            return GetTableG0SnpRespDataPtlElement<N, Ts, R, _NextState<S>()>(retToSrc, E);
                         }
                         else
                             return E;
