@@ -844,6 +844,8 @@ namespace BullsEye {
     private:
         _Tuv    val;
 
+        static constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> make_raw(_Tsv val) noexcept;
+
     public:
         using value_type = _Tuv;
 
@@ -939,6 +941,8 @@ namespace BullsEye {
         constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>  to_unsigned() const noexcept;
         constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>   to_signed() const noexcept;
 
+        constexpr _Tuv          decay() const noexcept;
+
         constexpr operator      _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>() const noexcept;
         constexpr operator      _Tuv() const noexcept;
     };
@@ -959,6 +963,8 @@ namespace BullsEye {
 
     private:
         _Tsv    val;
+
+        static constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> make_raw(_Tsv val) noexcept;
 
     public:
         using value_type = _Tsv;
@@ -1055,6 +1061,8 @@ namespace BullsEye {
         constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>  to_unsigned() const noexcept;
         constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>   to_signed() const noexcept;
 
+        constexpr _Tsv          decay() const noexcept;
+
         constexpr operator      _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>() const noexcept;
         constexpr operator      _Tsv() const noexcept;
     };
@@ -1108,8 +1116,27 @@ namespace BullsEye {
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>
         ::_truncated_uint_base(_Tuv val) noexcept
-        : val(val)
-    { }
+    { 
+        if constexpr (!_R)
+            if constexpr (_Llsh == 0)
+                this->val = val;
+            else
+                this->val = val << _Llsh;
+        else;
+
+        if constexpr (_Llsh == 0)
+            this->val = val & MASK;
+        else
+            this->val = (val & MASK) << _Llsh;
+    }
+
+    template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
+    constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(_Tsv val) noexcept
+    {
+        _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> v;
+        v.val = val;
+        return v;
+    }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     template<class _Tother>
@@ -1170,11 +1197,11 @@ namespace BullsEye {
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (~val & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (~val & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1184,17 +1211,17 @@ namespace BullsEye {
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator<<(int n) const noexcept
     {
         if constexpr (!_R)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val << n
             );
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (((val /*& MASK*/) << n) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (((val & (MASK << _Llsh)) << n) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1204,17 +1231,17 @@ namespace BullsEye {
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator>>(int n) const noexcept
     {
         if constexpr (!_R)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val >> n
             );
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val & MASK) >> n) | (val & ~MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (((val & (MASK << _Llsh)) >> n) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1226,22 +1253,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val & static_cast<_Tuv>(other)
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val & (static_cast<_Tuv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (val & static_cast<_Tuv>(other)) | (val & ~MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (val & (static_cast<_Tuv>(other) << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1253,22 +1280,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val | static_cast<_Tuv>(other)
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val | (static_cast<_Tuv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val | (static_cast<_Tuv>(other) & MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val | ((static_cast<_Tuv>(other) & MASK) << _Llsh)
             );
     }
@@ -1280,22 +1307,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val ^ static_cast<_Tuv>(other)
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val ^ (static_cast<_Tuv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val ^ (static_cast<_Tuv>(other) & MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val ^ ((static_cast<_Tuv>(other) & MASK) << _Llsh)
             );
     }
@@ -1307,22 +1334,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val + static_cast<_Tuv>(other)
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val + (static_cast<_Tuv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val + static_cast<_Tuv>(other)) & MASK) | (val & ~MASK)  
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val + (static_cast<_Tuv>(other) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1334,22 +1361,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val - static_cast<_Tuv>(other)
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val - (static_cast<_Tuv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val - static_cast<_Tuv>(other)) & MASK) | (val & ~MASK)  
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val - (static_cast<_Tuv>(other) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1361,22 +1388,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val * static_cast<_Tuv>(other)
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (val & (MASK << _Llsh)) * static_cast<_Tuv>(other)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val * static_cast<_Tuv>(other)) & MASK) | (val & ~MASK)  
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (((val & (MASK << _Llsh)) * static_cast<_Tuv>(other)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1387,22 +1414,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (val & MASK) / static_cast<_Tuv>(other)
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (((val & (MASK << _Llsh)) >> _Llsh) / static_cast<_Tuv>(other)) << _Llsh
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val & MASK) / static_cast<_Tuv>(other)) | (val & ~MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((((val & (MASK << _Llsh)) >> _Llsh) / static_cast<_Tuv>(other)) << _Llsh) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1414,22 +1441,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (val & MASK) % static_cast<_Tuv>(other)
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (((val & (MASK << _Llsh)) >> _Llsh) % static_cast<_Tuv>(other)) << _Llsh
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val & MASK) % static_cast<_Tuv>(other)) | (val & ~MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((((val & (MASK << _Llsh)) >> _Llsh) % static_cast<_Tuv>(other)) << _Llsh) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1440,22 +1467,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     ++val
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val += (decltype(val)(1) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((val + decltype(val)(1)) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((val + (decltype(val)(1) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1466,22 +1493,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     --val
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val -= (decltype(val)(1) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((val - decltype(val)(1)) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((val - (decltype(val)(1) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1491,14 +1518,14 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val++
                 );
             else
             {
                 decltype(val) old_val = val;
                 val = val + (decltype(val)(1) << _Llsh);
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     old_val
                 );
             }
@@ -1509,7 +1536,7 @@ namespace BullsEye {
         {
             decltype(val) old_val = val;
             val = ((val + decltype(val)(1)) & MASK) | (val & ~MASK);
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 old_val
             );
         }
@@ -1517,7 +1544,7 @@ namespace BullsEye {
         {
             decltype(val) old_val = val;
             val = ((val + (decltype(val)(1) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh));
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 old_val
             );
         }
@@ -1528,14 +1555,14 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val--
                 );
             else
             {
                 decltype(val) old_val = val;
                 val = val - (decltype(val)(1) << _Llsh);
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     old_val
                 );
             }
@@ -1546,7 +1573,7 @@ namespace BullsEye {
         {
             decltype(val) old_val = val;
             val = ((val - decltype(val)(1)) & MASK) | (val & ~MASK);
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 old_val
             );
         }
@@ -1554,7 +1581,7 @@ namespace BullsEye {
         {
             decltype(val) old_val = val;
             val = ((val - (decltype(val)(1) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh));
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 old_val
             );
         }
@@ -1567,22 +1594,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val = static_cast<_Tuv>(other)
                 );
             else
-                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val = static_cast<_Tuv>(other) << _Llsh
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = (static_cast<_Tuv>(other) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((static_cast<_Tuv>(other) & MASK) << _Llsh) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1592,7 +1619,7 @@ namespace BullsEye {
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator+=(const _Tother& other) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this + other).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this + other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -1600,7 +1627,7 @@ namespace BullsEye {
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator-=(const _Tother& other) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this - other).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this - other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -1608,7 +1635,7 @@ namespace BullsEye {
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator*=(const _Tother& other) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this * other).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this * other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -1616,7 +1643,7 @@ namespace BullsEye {
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator/=(const _Tother& other) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this / other).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this / other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -1624,7 +1651,7 @@ namespace BullsEye {
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator%=(const _Tother& other) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this % other).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this % other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -1632,7 +1659,7 @@ namespace BullsEye {
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator&=(const _Tother& other) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this & other).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this & other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -1640,7 +1667,7 @@ namespace BullsEye {
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator|=(const _Tother& other) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this | other).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this | other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -1648,21 +1675,21 @@ namespace BullsEye {
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator^=(const _Tother& other) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this ^ other).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this ^ other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator<<=(int n) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this << n).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this << n).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator>>=(int n) noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this >> n).val);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this >> n).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -1675,6 +1702,12 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::to_signed() const noexcept
     {
         return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(*this);
+    }
+
+    template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
+    constexpr _Tuv _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::decay() const noexcept
+    {
+        return static_cast<_Tuv>(*this);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -1713,8 +1746,27 @@ namespace BullsEye {
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>
         ::_truncated_int_base(_Tsv val) noexcept
-        : val(val)
-    { }
+    {
+        if constexpr (!_R)
+            if constexpr (_Llsh == 0)
+                this->val = val;
+            else
+                this->val = val << _Llsh;
+        else;
+
+        if constexpr (_Llsh == 0)
+            this->val = val & MASK;
+        else
+            this->val = (val & MASK) << _Llsh;
+    }
+
+    template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
+    constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(_Tsv val) noexcept
+    {
+        _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> v;
+        v.val = val;
+        return v;
+    }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     template<class _Tother>
@@ -1769,17 +1821,17 @@ namespace BullsEye {
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator~() const noexcept
     {
         if constexpr (!_R)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ~val
             );
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (~val & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (~val & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1789,17 +1841,17 @@ namespace BullsEye {
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator<<(int n) const noexcept
     {
         if constexpr (!_R)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val << n
             );
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (((val /*& MASK*/) << n) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (((val & (MASK << _Llsh)) << n) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1810,22 +1862,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     ((val << SIGN_SHIFT) >> SIGN_SHIFT) >> n
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     ((val << SIGN_SHIFT) >> SIGN_SHIFT) >> n
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((((val << SIGN_SHIFT) >> SIGN_SHIFT) >> n) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (((val << SIGN_SHIFT) >> SIGN_SHIFT) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1837,22 +1889,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val & static_cast<_Tsv>(other)
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val & (static_cast<_Tsv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (val & static_cast<_Tsv>(other)) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (val & (static_cast<_Tsv>(other) << _Llsh)) | (val & ~(MASK << _Llsh))
             );
 
@@ -1866,22 +1918,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val | static_cast<_Tsv>(other)
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val | (static_cast<_Tsv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val | (static_cast<_Tsv>(other) & MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val | ((static_cast<_Tsv>(other) & MASK) << _Llsh)
             );
     }
@@ -1893,22 +1945,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val ^ static_cast<_Tsv>(other)
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val ^ (static_cast<_Tsv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val ^ (static_cast<_Tsv>(other) & MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val ^ ((static_cast<_Tsv>(other) & MASK) << _Llsh)
             );
     }
@@ -1920,22 +1972,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val + static_cast<_Tsv>(other)
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val + (static_cast<_Tsv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val + static_cast<_Tsv>(other)) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val + (static_cast<_Tsv>(other) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1947,22 +1999,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val - static_cast<_Tsv>(other)
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val - (static_cast<_Tsv>(other) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val - static_cast<_Tsv>(other)) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val - (static_cast<_Tsv>(other) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -1974,22 +2026,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val * static_cast<_Tsv>(other)
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (val & (MASK << _Llsh)) * static_cast<_Tsv>(other)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val * static_cast<_Tsv>(other)) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 (((val & (MASK << _Llsh)) * static_cast<_Tsv>(other)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -2001,22 +2053,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (val & MASK) / static_cast<_Tsv>(other)
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (((val & (MASK << _Llsh)) >> _Llsh) / static_cast<_Tsv>(other)) << _Llsh
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val & MASK) / static_cast<_Tsv>(other)) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((((val & (MASK << _Llsh)) >> _Llsh) / static_cast<_Tsv>(other)) << _Llsh) | (val & ~(MASK << _Llsh))
             );
     }
@@ -2028,22 +2080,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (val & MASK) % static_cast<_Tsv>(other)
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     (((val & (MASK << _Llsh)) >> _Llsh) % static_cast<_Tsv>(other)) << _Llsh
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((val & MASK) % static_cast<_Tsv>(other)) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 ((((val & (MASK << _Llsh)) >> _Llsh) % static_cast<_Tsv>(other)) << _Llsh) | (val & ~(MASK << _Llsh))
             );
     }
@@ -2054,22 +2106,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     ++val
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val += (decltype(val)(1) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((val + decltype(val)(1)) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((val + (decltype(val)(1) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -2080,22 +2132,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     --val
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val -= (decltype(val)(1) << _Llsh)
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((val - decltype(val)(1)) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((val - (decltype(val)(1) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh))
             );
     }
@@ -2106,14 +2158,14 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val++
                 );
             else
             {
                 decltype(val) old_val = val;
                 val = val + (decltype(val)(1) << _Llsh);
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     old_val
                 );
             }
@@ -2124,7 +2176,7 @@ namespace BullsEye {
         {
             decltype(val) old_val = val;
             val = ((val + decltype(val)(1)) & MASK) | (val & ~MASK);
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 old_val
             );
         }
@@ -2132,7 +2184,7 @@ namespace BullsEye {
         {
             decltype(val) old_val = val;
             val = ((val + (decltype(val)(1) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh));
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 old_val
             );
         }
@@ -2144,14 +2196,14 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val--
                 );
             else
             {
                 decltype(val) old_val = val;
                 val = val - (decltype(val)(1) << _Llsh);
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     old_val
                 );
             }
@@ -2162,7 +2214,7 @@ namespace BullsEye {
         {
             decltype(val) old_val = val;
             val = ((val - decltype(val)(1)) & MASK) | (val & ~MASK);
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 old_val
             );
         }
@@ -2170,7 +2222,7 @@ namespace BullsEye {
         {
             decltype(val) old_val = val;
             val = ((val - (decltype(val)(1) << _Llsh)) & (MASK << _Llsh)) | (val & ~(MASK << _Llsh));
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 old_val
             );
         }
@@ -2182,22 +2234,22 @@ namespace BullsEye {
     {
         if constexpr (!_R)
             if constexpr (_Llsh == 0)
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val = static_cast<_Tsv>(other)
                 );
             else
-                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+                return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                     val = static_cast<_Tsv>(other) << _Llsh
                 );
         else;
 
         // strict-reduced operation
         if constexpr (_Llsh == 0)
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = (static_cast<_Tsv>(other) & MASK) | (val & ~MASK)
             );
         else
-            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(
+            return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(
                 val = ((static_cast<_Tsv>(other) & MASK) << _Llsh) | (val & ~(MASK << _Llsh))
             );
     }
@@ -2207,7 +2259,7 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator+=(const _Tother& other) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this + other).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this + other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -2215,7 +2267,7 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator-=(const _Tother& other) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this - other).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this - other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -2223,7 +2275,7 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator*=(const _Tother& other) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this * other).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this * other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -2231,7 +2283,7 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator/=(const _Tother& other) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this / other).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this / other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -2239,7 +2291,7 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator%=(const _Tother& other) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this % other).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this % other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -2247,7 +2299,7 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator&=(const _Tother& other) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this & other).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this & other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -2255,7 +2307,7 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator|=(const _Tother& other) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this | other).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this | other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
@@ -2263,33 +2315,39 @@ namespace BullsEye {
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator^=(const _Tother& other) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this ^ other).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this ^ other).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator<<=(int n) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this << n).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this << n).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> 
         _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::operator>>=(int n) noexcept
     {
-        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>(this->val = (*this >> n).val);
+        return _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(this->val = (*this >> n).val);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     inline constexpr _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R> _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::to_unsigned() const noexcept
     {
-        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>(*this);
+        return _truncated_uint_base<_Tsv, _Tuv, _L, _Llsh, _R>::make_raw(*this);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
     inline constexpr _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R> _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::to_signed() const noexcept
     {
         return *this;
+    }
+
+    template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
+    constexpr _Tsv _truncated_int_base<_Tsv, _Tuv, _L, _Llsh, _R>::decay() const noexcept
+    {
+        return static_cast<_Tsv>(*this);
     }
 
     template<class _Tsv, class _Tuv, unsigned _L, unsigned _Llsh, bool _R>
