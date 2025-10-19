@@ -909,6 +909,10 @@ namespace /*CHI::*/Xact {
                 if (firstDAT->flit.dat.Resp() != flit.Resp())
                     return XactDenial::DENIED_STATE_MISMATCHED_REPEAT;
 
+                if (flit.Opcode() == Opcodes::DAT::SnpRespDataFwded)
+                    if (firstDAT->flit.dat.FwdState() != flit.FwdState())
+                        return XactDenial::DENIED_STATE_FWD_MISMATCHED_REPEAT;
+
                 return XactDenial::ACCEPTED;
             }
 
