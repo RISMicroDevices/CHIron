@@ -1164,12 +1164,19 @@ namespace /*CHI::*/Xact {
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::Write)
             {
                 // RXRSP Opcodes under CopyBack Write Transactions:
-                //  Comp*, CompDBIDResp*
+                //  Comp, CompDBIDResp*
                 //
                 // * no state-related transitions
+                //
+                if (flit.Opcode() == Opcodes::RSP::Comp)
+                {
+                    // NOTICE: Prior to Issue G, Comp response was only possible for WriteEvictOrEvict
+                    if (opcodeInfo.GetOpcode() != Opcodes::REQ::WriteEvictOrEvict)
+                        return XactDenial::DENIED_RSP_OPCODE;
 
-                if (flit.Opcode() == Opcodes::RSP::Comp
-                 || flit.Opcode() == Opcodes::RSP::CompDBIDResp)
+                    nextState = CacheStates::I;
+                }
+                else if (flit.Opcode() == Opcodes::RSP::CompDBIDResp)
                 {
                     return XactDenial::ACCEPTED;
                 }
