@@ -371,6 +371,8 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_STATE_NONCOPYBACKWRDATA      ("XACT_DENIED_STATE_NONCOPYBACKWRDATA",     0x00200000 | 11);
             inline constexpr XactDenialEnumBack DENIED_STATE_NESTED_TRANSFER        ("XACT_DENIED_STATE_NESTED_TRANSFER",       0x00200000 | 12);
             inline constexpr XactDenialEnumBack DENIED_STATE_MISMATCHED_REPEAT      ("XACT_DENIED_STATE_MISMATCHED_REPEAT",     0x00200000 | 13);
+            inline constexpr XactDenialEnumBack DENIED_STATE_FWD_COMPDATA           ("XACT_DENIED_STATE_FWD_COMPDATA",          0x00200000 | 14);
+            inline constexpr XactDenialEnumBack DENIED_STATE_FWD_MISMATCHED_REPEAT  ("XACT_DENIED_STATE_FWD_MISMATCHED_REPEAT", 0x00200000 | 15);
 
             inline constexpr XactDenialEnumBack DENIED_UNSUPPORTED_FEATURE          ("XACT_DENIED_UNSUPPORTED_FEATURE",         0xFFFF0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_UNSUPPORTED_FEATURE_OPCODE   ("XACT_DENIED_UNSUPPORTED_FEATURE_OPCODE",  0xFFFF0000 |  1);
