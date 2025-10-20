@@ -33,13 +33,15 @@ namespace CHI {
                     bool    SC      : 1;
                     bool    SD      : 1;
                     bool    I       : 1;
+
+                    bool    _Padding0   : 1;
                 };
 
                 uint8_t i8;
             };
 
         public:
-            inline constexpr CacheState() noexcept : UC(false), UCE(false), UD(false), UDP(false), SC(false), SD(false), I(false) {}
+            inline constexpr CacheState() noexcept : UC(false), UCE(false), UD(false), UDP(false), SC(false), SD(false), I(false), _Padding0(false) {}
             constexpr CacheState(bool UC, bool UCE, bool UD, bool UDP, bool SC, bool SD, bool I) noexcept;
             CacheState(uint8_t i8) noexcept;
             constexpr explicit CacheState(const CacheResp resp) noexcept;
@@ -86,13 +88,17 @@ namespace CHI {
                     bool    SC_PD   : 1;
                     bool    SD_PD   : 1;
                     bool    I_PD    : 1;
+
+                    //
+                    bool    _Padding0   : 1;
+                    bool    _Padding1   : 1;
                 };
 
                 uint16_t i16;
             };
 
         public:
-            inline constexpr CacheResp() noexcept : UC(false), UCE(false), UD(false), UDP(false), SC(false), SD(false), I(false), UC_PD(false), UCE_PD(false), UD_PD(false), UDP_PD(false), SC_PD(false), SD_PD(false), I_PD(false) {}
+            inline constexpr CacheResp() noexcept : UC(false), UCE(false), UD(false), UDP(false), SC(false), SD(false), I(false), UC_PD(false), UCE_PD(false), UD_PD(false), UDP_PD(false), SC_PD(false), SD_PD(false), I_PD(false), _Padding0(false), _Padding1(false) {}
             constexpr CacheResp(bool UC, bool UCE, bool UD, bool UDP, bool SC, bool SD, bool I, bool UC_PD, bool UCE_PD, bool UD_PD, bool UDP_PD, bool SC_PD, bool SD_PD, bool I_PD) noexcept;
             CacheResp(uint16_t i16) noexcept;
             constexpr CacheResp(const CacheState state) noexcept;
@@ -140,13 +146,14 @@ namespace /*CHI::*/Xact {
     */
 
     inline constexpr CacheState::CacheState(bool UC, bool UCE, bool UD, bool UDP, bool SC, bool SD, bool I) noexcept
-        : UC    (UC     )
-        , UCE   (UCE    )
-        , UD    (UD     )
-        , UDP   (UDP    )
-        , SC    (SC     )
-        , SD    (SD     )
-        , I     (I      )
+        : UC        (UC     )
+        , UCE       (UCE    )
+        , UD        (UD     )
+        , UDP       (UDP    )
+        , SC        (SC     )
+        , SD        (SD     )
+        , I         (I      )
+        , _Padding0 (false  )
     { }
 
     inline CacheState::CacheState(uint8_t i8) noexcept
@@ -154,13 +161,14 @@ namespace /*CHI::*/Xact {
     { }
 
     inline constexpr CacheState::CacheState(const CacheResp resp) noexcept
-        : UC    (resp.UC    )
-        , UCE   (resp.UCE   )
-        , UD    (resp.UD    )
-        , UDP   (resp.UDP   )
-        , SC    (resp.SC    )
-        , SD    (resp.SD    )
-        , I     (resp.I     )
+        : UC        (resp.UC    )
+        , UCE       (resp.UCE   )
+        , UD        (resp.UD    )
+        , UDP       (resp.UDP   )
+        , SC        (resp.SC    )
+        , SD        (resp.SD    )
+        , I         (resp.I     )
+        , _Padding0 (false      )
     { }
  
     inline constexpr CacheState::operator bool() const noexcept
@@ -246,12 +254,12 @@ namespace /*CHI::*/Xact {
 
     inline uint8_t CacheState::operator&(const uint8_t v) const noexcept
     {
-        return (i8 & v) & 0x3FFF;
+        return (i8 & v) & 0x7F;
     }
 
     inline uint8_t CacheState::operator|(const uint8_t v) const noexcept
     {
-        return (i8 | v) & 0x3FFF;
+        return (i8 | v) & 0x7F;
     }
 
     inline std::string CacheState::ToString() const noexcept
@@ -278,20 +286,22 @@ namespace /*CHI::*/Xact {
     */
 
     inline constexpr CacheResp::CacheResp(bool UC, bool UCE, bool UD, bool UDP, bool SC, bool SD, bool I, bool UC_PD, bool UCE_PD, bool UD_PD, bool UDP_PD, bool SC_PD, bool SD_PD, bool I_PD) noexcept
-        : UC    (UC     )
-        , UCE   (UCE    )
-        , UD    (UD     )
-        , UDP   (UDP    )
-        , SC    (SC     )
-        , SD    (SD     )
-        , I     (I      )
-        , UC_PD (UC_PD  )
-        , UCE_PD(UCE_PD )
-        , UD_PD (UD_PD  )
-        , UDP_PD(UDP_PD )
-        , SC_PD (SC_PD  )
-        , SD_PD (SD_PD  )
-        , I_PD  (I_PD   )
+        : UC        (UC     )
+        , UCE       (UCE    )
+        , UD        (UD     )
+        , UDP       (UDP    )
+        , SC        (SC     )
+        , SD        (SD     )
+        , I         (I      )
+        , UC_PD     (UC_PD  )
+        , UCE_PD    (UCE_PD )
+        , UD_PD     (UD_PD  )
+        , UDP_PD    (UDP_PD )
+        , SC_PD     (SC_PD  )
+        , SD_PD     (SD_PD  )
+        , I_PD      (I_PD   )
+        , _Padding0 (false  )
+        , _Padding1 (false  )
     { }
 
     inline CacheResp::CacheResp(uint16_t i16) noexcept
@@ -299,20 +309,22 @@ namespace /*CHI::*/Xact {
     { }
 
     inline constexpr CacheResp::CacheResp(const CacheState state) noexcept
-        : UC    (state.UC   )
-        , UCE   (state.UCE  )
-        , UD    (state.UD   )
-        , UDP   (state.UDP  )
-        , SC    (state.SC   )
-        , SD    (state.SD   )
-        , I     (state.I    )
-        , UC_PD (false      )
-        , UCE_PD(false      )
-        , UD_PD (false      )
-        , UDP_PD(false      )
-        , SC_PD (false      )
-        , SD_PD (false      )
-        , I_PD  (false      )
+        : UC        (state.UC   )
+        , UCE       (state.UCE  )
+        , UD        (state.UD   )
+        , UDP       (state.UDP  )
+        , SC        (state.SC   )
+        , SD        (state.SD   )
+        , I         (state.I    )
+        , UC_PD     (false      )
+        , UCE_PD    (false      )
+        , UD_PD     (false      )
+        , UDP_PD    (false      )
+        , SC_PD     (false      )
+        , SD_PD     (false      )
+        , I_PD      (false      )
+        , _Padding0 (false      )
+        , _Padding1 (false      )
     { }
 
     inline constexpr CacheResp::operator bool() const noexcept
@@ -734,7 +746,7 @@ namespace CHI {
             {
                 case FwdState::I:               return CacheResps::I;
                 case FwdState::SC:              return CacheResps::SC;
-                case FwdState::UC:              return CacheResps::UC;
+                case FwdState::UC:              return CacheResps::UC | CacheResps::UD;
                 case FwdState::UD_PD:           return CacheResps::UD_PD;
                 case FwdState::SD_PD:           return CacheResps::SD_PD;
                 default:                        return CacheResps::None;
@@ -746,7 +758,7 @@ namespace CHI {
             switch (resp)
             {
                 case Resp::SnpRespDataPtl_I_PD: return CacheResps::I_PD;
-                case Resp::SnpRespDataPtl_UD:   return CacheResps::UD;
+                case Resp::SnpRespDataPtl_UD:   return CacheResps::UC | CacheResps::UD;
                 default:                        return CacheResps::None;
             }
         }
