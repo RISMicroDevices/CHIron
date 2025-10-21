@@ -685,17 +685,12 @@ namespace /*CHI::*/Xact {
 
                 if (flit.Opcode() == Opcodes::RSP::SnpResp)
                 {
-                    if (!retToSrc)
-                        g0 = &tables->GSnpResp_RetToSrc_0();
-                    else
-                        g0 = &tables->GSnpResp_RetToSrc_1();
+                    g0 = &tables->GSnpResp(retToSrc);
                 }
                 else if (flit.Opcode() == Opcodes::RSP::SnpRespFwded)
                 {
-                    if (!retToSrc)
-                        g1 = &tables->GSnpRespFwded_RetToSrc_0();
-                    else
-                        g1 = &tables->GSnpRespFwded_RetToSrc_1();
+                    g0 = &tables->G0SnpRespFwded(retToSrc);
+                    g1 = &tables->G1SnpRespFwded(retToSrc);
 
                     fwded = true;
                 }
@@ -712,14 +707,34 @@ namespace /*CHI::*/Xact {
             CacheResp resp = fwded ? CacheResp::FromSnpRespFwded(flit.Resp()) 
                                    : CacheResp::FromSnpResp(flit.Resp());
 
-            CacheState nextState = fwded ? CacheState::FromSnpRespFwded(flit.Resp()) 
-                                         : CacheState::FromSnpResp(flit.Resp());
+            CacheState nextState;
 
             //
             std::pair<CacheState, bool> prevState = EvaluateWithSeer(addr);
 
             //
-            if (g0)
+            if (g1)
+            {
+                CacheState xs
+                    = CacheStateTransitions::Intermediates::details::ProductG0(prevState.first, *g0, resp);
+
+                if (!xs)
+                    return XactDenial::DENIED_STATE_RESP_SNPRESPFWDED;
+
+                CacheResp xf
+                    = CacheStateTransitions::Intermediates::details::ProductG1(prevState.first, *g1, resp);
+
+                if (!xf) // TODO: Existence result of G1 should be consistent with G0, replace with assertion here.
+                    return XactDenial::DENIED_STATE_RESP_SNPRESPFWDED;
+
+                CacheResp fwdState = CacheResp::FromSnpRespFwded(flit.Resp());
+
+                if (!(fwdState & xf))
+                    return XactDenial::DENIED_STATE_FWD_SNPRESPFWDED;
+
+                nextState = xs;
+            }
+            else if (g0)
             {
                 CacheState xs 
                     = CacheStateTransitions::Intermediates::details::ProductG0(prevState.first, *g0, resp);
@@ -729,19 +744,8 @@ namespace /*CHI::*/Xact {
                     return fwded ? XactDenial::DENIED_STATE_RESP_SNPRESPFWDED 
                                  : XactDenial::DENIED_STATE_RESP_SNPRESP;
                 }
-            }
-            else if (g1)
-            {
-                CacheResp xf
-                    = CacheStateTransitions::Intermediates::details::ProductG1(prevState.first, *g1, resp);
 
-                if (!xf)
-                    return XactDenial::DENIED_STATE_RESP_SNPRESPFWDED;
-
-                CacheResp fwdState = CacheResp::FromSnpRespFwded(flit.Resp());
-
-                if (!(fwdState & xf))
-                    return XactDenial::DENIED_STATE_FWD_SNPRESPFWDED;
+                nextState = xs;
             }
             
             // Speculative path tracking
@@ -953,7 +957,8 @@ namespace /*CHI::*/Xact {
                 }
                 else if (flit.Opcode() == Opcodes::DAT::SnpRespDataFwded)
                 {
-                    g1 = &tables->GSnpRespDataFwded(retToSrc);
+                    g0 = &tables->G0SnpRespDataFwded(retToSrc);
+                    g1 = &tables->G1SnpRespDataFwded(retToSrc);
 
                     fwded = true;
                 }
@@ -972,16 +977,34 @@ namespace /*CHI::*/Xact {
                                                               : CacheResp::FromSnpRespData(flit.Resp())
             );
 
-            CacheState nextState = fwded ? CacheState::FromSnpRespDataFwded(flit.Resp()) : (
-                flit.Opcode() == Opcodes::DAT::SnpRespDataPtl ? CacheState::FromSnpRespDataPtl(flit.Resp())
-                                                              : CacheState::FromSnpRespData(flit.Resp())
-            );
+            CacheState nextState;
 
             //
             std::pair<CacheState, bool> prevState = EvaluateWithSeer(addr);
 
             //
-            if (g0)
+            if (g1)
+            {
+                CacheState xs
+                    = CacheStateTransitions::Intermediates::details::ProductG0(prevState.first, *g0, resp);
+
+                if (!xs)
+                    return XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED;
+
+                CacheResp xf
+                    = CacheStateTransitions::Intermediates::details::ProductG1(prevState.first, *g1, resp);
+
+                if (!xf) // TODO: Existence result of G1 should be consistent with G0, replace with assertion here.
+                    return XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED;
+
+                CacheResp fwdState = CacheResp::FromSnpRespDataFwded(flit.Resp());
+
+                if (!(fwdState & xf))
+                    return XactDenial::DENIED_STATE_FWD_SNPRESPDATAFWDED;
+
+                nextState = xs;
+            }
+            else if (g0)
             {
                 CacheState xs
                     = CacheStateTransitions::Intermediates::details::ProductG0(prevState.first, *g0, resp);
@@ -991,19 +1014,8 @@ namespace /*CHI::*/Xact {
                     return fwded ? XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED
                                  : XactDenial::DENIED_STATE_RESP_SNPRESPDATA;
                 }
-            }
-            else if (g1)
-            {
-                CacheResp xf
-                    = CacheStateTransitions::Intermediates::details::ProductG1(prevState.first, *g1, resp);
 
-                if (!xf)
-                    return XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED;
-
-                CacheResp fwdState = CacheResp::FromSnpRespDataFwded(flit.Resp());
-
-                if (!(fwdState & xf))
-                    return XactDenial::DENIED_STATE_FWD_SNPRESPDATAFWDED;
+                nextState = xs;
             }
 
             // Speculative path tracking

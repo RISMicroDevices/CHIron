@@ -452,6 +452,54 @@ namespace CHI {
                     }
 
                     template<size_t N, std::array<CacheStateTransition, N> Ts, CacheResp R, CacheState S>
+                    inline consteval TableG0Element GetTableG0SnpRespFwdedElement(RetToSrc retToSrc, TableG0Element E = TableG0Element()) noexcept
+                    {
+                        if constexpr (S)
+                        {
+                            CacheState state = CacheStates::None;
+                            for (CacheStateTransition T : Ts)
+                                if ((T.initialExpectedState & S) && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
+                                    state = state | T.finalState;
+
+                            E.states[GetStateTableIndex(S)] = state;
+
+                            return GetTableG0SnpRespFwdedElement<N, Ts, R, _NextState<S>()>(retToSrc, E);
+                        }
+                        else
+                            return E;
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, CacheResp R>
+                    inline consteval TableG0Element GetTableG0SnpRespFwdedElement(RetToSrc retToSrc) noexcept
+                    {
+                        return GetTableG0SnpRespFwdedElement<N, Ts, R, _NextState<CacheStates::None>()>(retToSrc);
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, CacheResp R, CacheState S>
+                    inline consteval TableG0Element GetTableG0SnpRespDataFwdedElement(RetToSrc retToSrc, TableG0Element E = TableG0Element()) noexcept
+                    {
+                        if constexpr (S)
+                        {
+                            CacheState state = CacheStates::None;
+                            for (CacheStateTransition T : Ts)
+                                if ((T.initialExpectedState & S) && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
+                                    state = state | T.finalState;
+
+                            E.states[GetStateTableIndex(S)] = state;
+
+                            return GetTableG0SnpRespDataFwdedElement<N, Ts, R, _NextState<S>()>(retToSrc, E);
+                        }
+                        else
+                            return E;
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, CacheResp R>
+                    inline consteval TableG0Element GetTableG0SnpRespDataFwdedElement(RetToSrc retToSrc) noexcept
+                    {
+                        return GetTableG0SnpRespDataFwdedElement<N, Ts, R, _NextState<CacheStates::None>()>(retToSrc);
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, CacheResp R, CacheState S>
                     inline consteval TableG1Element GetTableG1SnpRespFwdedElement(RetToSrc retToSrc, TableG1Element E = TableG1Element()) noexcept
                     {
                         if constexpr (S)
@@ -735,6 +783,44 @@ namespace CHI {
                         std::array<CacheStateTransition, N> Ts,
                         RetToSrc retToSrc,
                         CacheResp R,
+                        TableG0 A = TableG0()>
+                    inline consteval TableG0 GetTableG0SnpRespFwded() noexcept
+                    {
+                        if constexpr (R)
+                        {
+                            constexpr auto nextA = CopyOnWrite<GetRespTableIndex(R)>(A,
+                                GetTableG0SnpRespFwdedElement<N, Ts, R>(retToSrc));
+
+                            return GetTableG0SnpRespFwded<N, Ts, retToSrc, _NextResp<R>(), nextA>();
+                        }
+                        else
+                            return A;
+                    }
+
+                    template<
+                        size_t N,
+                        std::array<CacheStateTransition, N> Ts,
+                        RetToSrc retToSrc,
+                        CacheResp R,
+                        TableG0 A = TableG0()>
+                    inline consteval TableG0 GetTableG0SnpRespDataFwded() noexcept
+                    {
+                        if constexpr (R)
+                        {
+                            constexpr auto nextA = CopyOnWrite<GetRespTableIndex(R)>(A,
+                                GetTableG0SnpRespDataFwdedElement<N, Ts, R>(retToSrc));
+
+                            return GetTableG0SnpRespDataFwded<N, Ts, retToSrc, _NextResp<R>(), nextA>();
+                        }
+                        else
+                            return A;
+                    }
+
+                    template<
+                        size_t N,
+                        std::array<CacheStateTransition, N> Ts,
+                        RetToSrc retToSrc,
+                        CacheResp R,
                         TableG1 A = TableG1()>
                     inline consteval TableG1 GetTableG1SnpRespFwded() noexcept
                     {
@@ -863,6 +949,18 @@ namespace CHI {
                     inline consteval TableG0 GetTableG0SnpRespDataPtl() noexcept
                     {
                         return GetTableG0SnpRespDataPtl<N, Ts, retToSrc, _NextResp<CacheResps::None>()>();
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, RetToSrc retToSrc>
+                    inline consteval TableG0 GetTableG0SnpRespFwded() noexcept
+                    {
+                        return GetTableG0SnpRespFwded<N, Ts, retToSrc, _NextResp<CacheResps::None>()>();
+                    }
+
+                    template<size_t N, std::array<CacheStateTransition, N> Ts, RetToSrc retToSrc>
+                    inline consteval TableG0 GetTableG0SnpRespDataFwded() noexcept
+                    {
+                        return GetTableG0SnpRespDataFwded<N, Ts, retToSrc, _NextResp<CacheResps::None>()>();
                     }
 
                     template<size_t N, std::array<CacheStateTransition, N> Ts, RetToSrc retToSrc>
@@ -1200,24 +1298,29 @@ namespace CHI {
 
                 struct TablesSnpXFwd : public Tables {
                     /* union not used for constexpr, consteval compatibility */
-                    details::TableG0 g0; // SnpResp (RetToSrc = 0)
-                    details::TableG0 g1; // SnpResp (RetToSrc = 1)
-                    details::TableG0 g2; // SnpRespData (RetToSrc = 0)
-                    details::TableG0 g3; // SnpRespData (RetToSrc = 1)
-                    details::TableG1 g4; // SnpRespFwded (RetToSrc = 0)
-                    details::TableG1 g5; // SnpRespFwded (RetToSrc = 1)
-                    details::TableG1 g6; // SnpRespDataFwded (RetToSrc = 0)
-                    details::TableG1 g7; // SnpRespDataFwded (RetToSrc = 1)
-                    details::TableG0 g8; // SnpRespDataPtl (RetToSrc = 0)
-                    details::TableG0 g9; // SnpRespDataPtl (RetToSrc = 1)
+                    details::TableG0 g0;  // SnpResp (RetToSrc = 0)
+                    details::TableG0 g1;  // SnpResp (RetToSrc = 1)
+                    details::TableG0 g2;  // SnpRespData (RetToSrc = 0)
+                    details::TableG0 g3;  // SnpRespData (RetToSrc = 1)
+                    details::TableG0 g10; // SnpRespFwded (RetToSrc = 0)
+                    details::TableG1 g4;  // SnpRespFwded (RetToSrc = 0)
+                    details::TableG0 g11; // SnpRespFwded (RetToSrc = 1)
+                    details::TableG1 g5;  // SnpRespFwded (RetToSrc = 1)
+                    details::TableG0 g12; // SnpRespDataFwded (RetToSrc = 0)
+                    details::TableG1 g6;  // SnpRespDataFwded (RetToSrc = 0)
+                    details::TableG0 g13; // SnpRespDataFwded (RetToSrc = 1)
+                    details::TableG1 g7;  // SnpRespDataFwded (RetToSrc = 1)
+                    details::TableG0 g8;  // SnpRespDataPtl (RetToSrc = 0)
+                    details::TableG0 g9;  // SnpRespDataPtl (RetToSrc = 1)
 
                     inline constexpr TablesSnpXFwd() noexcept 
                         : Tables(Tables::Type::SnpXFwd) {}
                     
                     inline constexpr TablesSnpXFwd(details::TableG0 g0, details::TableG0 g1, details::TableG0 g2, details::TableG0 g3,
                                                   details::TableG1 g4, details::TableG1 g5, details::TableG1 g6, details::TableG1 g7,
-                                                  details::TableG0 g8, details::TableG0 g9) noexcept
-                        : Tables(Tables::Type::SnpXFwd), g0(g0), g1(g1), g2(g2), g3(g3), g4(g4), g5(g5), g6(g6), g7(g7), g8(g8), g9(g9) {}
+                                                  details::TableG0 g8, details::TableG0 g9,
+                                                  details::TableG0 g10, details::TableG0 g11, details::TableG0 g12, details::TableG0 g13) noexcept
+                        : Tables(Tables::Type::SnpXFwd), g0(g0), g1(g1), g2(g2), g3(g3), g10(g10), g4(g4), g11(g11), g5(g5), g12(g12), g6(g6), g13(g13), g7(g7), g8(g8), g9(g9) {}
                 
                     inline constexpr const details::TableG0& GSnpResp_RetToSrc_0() const noexcept
                     { return g0; }
@@ -1241,26 +1344,26 @@ namespace CHI {
 						return retToSrc ? GSnpRespData_RetToSrc_1() : GSnpRespData_RetToSrc_0();
                     }
 
-                    inline constexpr const details::TableG1& GSnpRespFwded_RetToSrc_0() const noexcept
+                    inline constexpr const details::TableG1& G1SnpRespFwded_RetToSrc_0() const noexcept
                     { return g4; }
 
-                    inline constexpr const details::TableG1& GSnpRespFwded_RetToSrc_1() const noexcept
+                    inline constexpr const details::TableG1& G1SnpRespFwded_RetToSrc_1() const noexcept
                     { return g5; }
 
-                    inline constexpr const details::TableG1& GSnpRespFwded(bool retToSrc) const noexcept
+                    inline constexpr const details::TableG1& G1SnpRespFwded(bool retToSrc) const noexcept
                     {
-						return retToSrc ? GSnpRespFwded_RetToSrc_1() : GSnpRespFwded_RetToSrc_0();
+						return retToSrc ? G1SnpRespFwded_RetToSrc_1() : G1SnpRespFwded_RetToSrc_0();
                     }
 
-                    inline constexpr const details::TableG1& GSnpRespDataFwded_RetToSrc_0() const noexcept
+                    inline constexpr const details::TableG1& G1SnpRespDataFwded_RetToSrc_0() const noexcept
                     { return g6; }
 
-                    inline constexpr const details::TableG1& GSnpRespDataFwded_RetToSrc_1() const noexcept
+                    inline constexpr const details::TableG1& G1SnpRespDataFwded_RetToSrc_1() const noexcept
                     { return g7; }
 
-                    inline constexpr const details::TableG1& GSnpRespDataFwded(bool retToSrc) const noexcept
+                    inline constexpr const details::TableG1& G1SnpRespDataFwded(bool retToSrc) const noexcept
                     {
-                        return retToSrc ? GSnpRespDataFwded_RetToSrc_1() : GSnpRespDataFwded_RetToSrc_0();
+                        return retToSrc ? G1SnpRespDataFwded_RetToSrc_1() : G1SnpRespDataFwded_RetToSrc_0();
                     }
 
                     inline constexpr const details::TableG0& GSnpRespDataPtl_RetToSrc_0() const noexcept
@@ -1272,6 +1375,28 @@ namespace CHI {
                     inline constexpr const details::TableG0& GSnpRespDataPtl(bool retToSrc) const noexcept
                     {
                         return retToSrc ? GSnpRespDataPtl_RetToSrc_1() : GSnpRespDataPtl_RetToSrc_0();
+                    }
+
+                    inline constexpr const details::TableG0& G0SnpRespFwded_RetToSrc_0() const noexcept
+                    { return g10; }
+
+                    inline constexpr const details::TableG0& G0SnpRespFwded_RetToSrc_1() const noexcept
+                    { return g11; }
+
+                    inline constexpr const details::TableG0& G0SnpRespFwded(bool retToSrc) const noexcept
+                    {
+                        return retToSrc ? G0SnpRespFwded_RetToSrc_1() : G0SnpRespFwded_RetToSrc_0();
+                    }
+
+                    inline constexpr const details::TableG0& G0SnpRespDataFwded_RetToSrc_0() const noexcept
+                    { return g12; }
+
+                    inline constexpr const details::TableG0& G0SnpRespDataFwded_RetToSrc_1() const noexcept
+                    { return g13; }
+
+                    inline constexpr const details::TableG0& G0SnpRespDataFwded(bool retToSrc) const noexcept
+                    {
+                        return retToSrc ? G0SnpRespDataFwded_RetToSrc_1() : G0SnpRespDataFwded_RetToSrc_0();
                     }
                 };
 
@@ -1320,7 +1445,11 @@ namespace CHI {
                     details::GetTableG1SnpRespDataFwded<Transitions::opcode.size(), Transitions::opcode, RetToSrcs::A0>(), \
                     details::GetTableG1SnpRespDataFwded<Transitions::opcode.size(), Transitions::opcode, RetToSrcs::A1>(), \
                     details::GetTableG0SnpRespDataPtl<Transitions::opcode.size(), Transitions::opcode, RetToSrcs::A0>(), \
-                    details::GetTableG0SnpRespDataPtl<Transitions::opcode.size(), Transitions::opcode, RetToSrcs::A1>() \
+                    details::GetTableG0SnpRespDataPtl<Transitions::opcode.size(), Transitions::opcode, RetToSrcs::A1>(), \
+                    details::GetTableG0SnpRespFwded<Transitions::opcode.size(), Transitions::opcode, RetToSrcs::A0>(), \
+                    details::GetTableG0SnpRespFwded<Transitions::opcode.size(), Transitions::opcode, RetToSrcs::A1>(), \
+                    details::GetTableG0SnpRespDataFwded<Transitions::opcode.size(), Transitions::opcode, RetToSrcs::A0>(), \
+                    details::GetTableG0SnpRespDataFwded<Transitions::opcode.size(), Transitions::opcode, RetToSrcs::A1>() \
                 )
 
                 // Intermediate tables for Read request transactions
