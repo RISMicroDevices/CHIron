@@ -318,6 +318,7 @@ namespace CHI {
             static std::shared_ptr<Xaction<config, conn>>   ConstructAllocatingRead(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructNonAllocatingRead(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructImmediateWrite(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructWriteZero(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructCopyBackWrite(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructDataless(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructHomeSnoop(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
@@ -882,6 +883,17 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructWriteZero(
+        Global<config, conn>*                   glbl,
+        const Topology&                         topo, 
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionWriteZero<config, conn>>(glbl, topo, reqFlit, retried);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructCopyBackWrite(
         Global<config, conn>*                   glbl,
         const Topology&                         topo, 
@@ -1010,8 +1022,8 @@ namespace /*CHI::*/Xact {
                                                                             // 0x40
         SET_REQ_XACTION(MakeReadUnique              , AllocatingRead    );  // 0x41
         SET_REQ_XACTION(WriteEvictOrEvict           , CopyBackWrite     );  // 0x42
-        SET_REQ_XACTION(WriteUniqueZero             , None              );  // 0x43
-        SET_REQ_XACTION(WriteNoSnpZero              , None              );  // 0x44
+        SET_REQ_XACTION(WriteUniqueZero             , WriteZero         );  // 0x43
+        SET_REQ_XACTION(WriteNoSnpZero              , WriteZero         );  // 0x44
                                                                             // 0x45
                                                                             // 0x46
         SET_REQ_XACTION(StashOnceSepShared          , None              );  // 0x47
