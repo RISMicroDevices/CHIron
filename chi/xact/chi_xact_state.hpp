@@ -747,6 +747,18 @@ namespace /*CHI::*/Xact {
 
                 nextState = xs;
             }
+
+            if (xaction.GetFirst().flit.snp.DoNotGoToSD())
+            {
+                // skip checks for SnpOnce & SnpOnceFwd
+                //  - which always allows to go to SD regardless of DoNotGoToSD
+                if (xaction.GetFirst().flit.snp.Opcode() != Opcodes::SNP::SnpOnce
+                 && xaction.GetFirst().flit.snp.Opcode() != Opcodes::SNP::SnpOnceFwd)
+                {
+                    if (nextState.SD)
+                        return XactDenial::DENIED_STATE_DONOTGOTOSD;
+                }
+            }
             
             // Speculative path tracking
             if (prevState.second)
@@ -1016,6 +1028,18 @@ namespace /*CHI::*/Xact {
                 }
 
                 nextState = xs;
+            }
+
+            if (xaction.GetFirst().flit.snp.DoNotGoToSD())
+            {
+                // skip checks for SnpOnce & SnpOnceFwd
+                //  - which always allows to go to SD regardless of DoNotGoToSD
+                if (xaction.GetFirst().flit.snp.Opcode() != Opcodes::SNP::SnpOnce
+                 && xaction.GetFirst().flit.snp.Opcode() != Opcodes::SNP::SnpOnceFwd)
+                {
+                    if (nextState.SD)
+                        return XactDenial::DENIED_STATE_DONOTGOTOSD;
+                }
             }
 
             // Speculative path tracking
