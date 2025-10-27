@@ -386,7 +386,7 @@ namespace CHI {
                         {
                             CacheState state = CacheStates::None;
                             for (CacheStateTransition T : Ts)
-                                if ((T.initialExpectedState & S) && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
+                                if ((T.initialExpectedState & S) && !T.respCompData && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
                                     state = state | T.finalState;
 
                             E.states[GetStateTableIndex(S)] = state;
@@ -410,7 +410,7 @@ namespace CHI {
                         {
                             CacheState state = CacheStates::None;
                             for (CacheStateTransition T : Ts)
-                                if ((T.initialExpectedState & S) && (T.respSnpRespData & R) && (T.retToSrc & retToSrc))
+                                if ((T.initialExpectedState & S) && !T.respCompData && (T.respSnpRespData & R) && (T.retToSrc & retToSrc))
                                     state = state | T.finalState;
 
                             E.states[GetStateTableIndex(S)] = state;
@@ -434,7 +434,7 @@ namespace CHI {
                         {
                             CacheState state = CacheStates::None;
                             for (CacheStateTransition T : Ts)
-                                if ((T.initialExpectedState & S) && (T.respSnpRespDataPtl & R) && (T.retToSrc & retToSrc))
+                                if ((T.initialExpectedState & S) && !T.respCompData && (T.respSnpRespDataPtl & R) && (T.retToSrc & retToSrc))
                                     state = state | T.finalState;
 
                             E.states[GetStateTableIndex(S)] = state;
@@ -458,7 +458,7 @@ namespace CHI {
                         {
                             CacheState state = CacheStates::None;
                             for (CacheStateTransition T : Ts)
-                                if ((T.initialExpectedState & S) && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
+                                if ((T.initialExpectedState & S) && T.respCompData && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
                                     state = state | T.finalState;
 
                             E.states[GetStateTableIndex(S)] = state;
@@ -482,7 +482,7 @@ namespace CHI {
                         {
                             CacheState state = CacheStates::None;
                             for (CacheStateTransition T : Ts)
-                                if ((T.initialExpectedState & S) && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
+                                if ((T.initialExpectedState & S) && T.respCompData && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
                                     state = state | T.finalState;
 
                             E.states[GetStateTableIndex(S)] = state;
@@ -506,7 +506,7 @@ namespace CHI {
                         {
                             CacheResp resp = CacheResps::None;
                             for (CacheStateTransition T : Ts)
-                                if ((T.initialExpectedState & S) && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
+                                if ((T.initialExpectedState & S) && T.respCompData && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
                                     resp = resp | T.respCompData;
 
                             E.resps[GetStateTableIndex(S)] = resp;
@@ -530,7 +530,7 @@ namespace CHI {
                         {
                             CacheResp resp = CacheResps::None;
                             for (CacheStateTransition T : Ts)
-                                if ((T.initialExpectedState & S) && (T.respSnpRespData & R) && (T.retToSrc & retToSrc))
+                                if ((T.initialExpectedState & S) && T.respCompData && (T.respSnpRespData & R) && (T.retToSrc & retToSrc))
                                     resp = resp | T.respCompData;
 
                             E.resps[GetStateTableIndex(S)] = resp;
