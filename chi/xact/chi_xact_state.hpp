@@ -727,7 +727,7 @@ namespace /*CHI::*/Xact {
                 if (!xf) // TODO: Existence result of G1 should be consistent with G0, replace with assertion here.
                     return XactDenial::DENIED_STATE_RESP_SNPRESPFWDED;
 
-                CacheResp fwdState = CacheResp::FromSnpRespFwded(flit.Resp());
+                CacheResp fwdState = CacheResp::FromSnpRespFwdedFwdState(flit.FwdState().decay());
 
                 if (!(fwdState & xf))
                     return XactDenial::DENIED_STATE_FWD_SNPRESPFWDED;
@@ -1009,7 +1009,7 @@ namespace /*CHI::*/Xact {
                 if (!xf) // TODO: Existence result of G1 should be consistent with G0, replace with assertion here.
                     return XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED;
 
-                CacheResp fwdState = CacheResp::FromSnpRespDataFwded(flit.Resp());
+                CacheResp fwdState = CacheResp::FromSnpRespDataFwdedFwdState(flit.FwdState().decay());
 
                 if (!(fwdState & xf))
                     return XactDenial::DENIED_STATE_FWD_SNPRESPDATAFWDED;
