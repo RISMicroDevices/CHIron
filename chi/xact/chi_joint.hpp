@@ -324,6 +324,7 @@ namespace CHI {
             static std::shared_ptr<Xaction<config, conn>>   ConstructHomeSnoop(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructForwardSnoop(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
             static std::shared_ptr<Xaction<config, conn>>   ConstructAtomic(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config, conn>>   ConstructIndependentStash(Global<config, conn>*, const Topology&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
 
         public:
             RNFJoint() noexcept;
@@ -949,6 +950,17 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructIndependentStash(
+        Global<config, conn>*                   glbl,       
+        const Topology&                         topo, 
+        const FiredRequestFlit<config, conn>&   reqFlit,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    {
+        return std::make_shared<XactionIndependentStash<config, conn>>(glbl, topo, reqFlit, retried);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline RNFJoint<config, conn>::RNFJoint() noexcept
     {
         // TXREQ transactions
@@ -989,8 +1001,8 @@ namespace /*CHI::*/Xact {
                                                                             // 0x1F
         SET_REQ_XACTION(WriteUniqueFullStash        , ImmediateWrite    );  // 0x20
         SET_REQ_XACTION(WriteUniquePtlStash         , ImmediateWrite    );  // 0x21
-        SET_REQ_XACTION(StashOnceShared             , None              );  // 0x22
-        SET_REQ_XACTION(StashOnceUnique             , None              );  // 0x23
+        SET_REQ_XACTION(StashOnceShared             , IndependentStash  );  // 0x22
+        SET_REQ_XACTION(StashOnceUnique             , IndependentStash  );  // 0x23
         SET_REQ_XACTION(ReadOnceCleanInvalid        , NonAllocatingRead );  // 0x24
         SET_REQ_XACTION(ReadOnceMakeInvalid         , NonAllocatingRead );  // 0x25
         SET_REQ_XACTION(ReadNotSharedDirty          , AllocatingRead    );  // 0x26
@@ -1026,8 +1038,8 @@ namespace /*CHI::*/Xact {
         SET_REQ_XACTION(WriteNoSnpZero              , WriteZero         );  // 0x44
                                                                             // 0x45
                                                                             // 0x46
-        SET_REQ_XACTION(StashOnceSepShared          , None              );  // 0x47
-        SET_REQ_XACTION(StashOnceSepUnique          , None              );  // 0x48
+        SET_REQ_XACTION(StashOnceSepShared          , IndependentStash  );  // 0x47
+        SET_REQ_XACTION(StashOnceSepUnique          , IndependentStash  );  // 0x48
                                                                             // 0x49
                                                                             // 0x4A
                                                                             // 0x4B

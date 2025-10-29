@@ -54,6 +54,7 @@ namespace CHI {
             WriteZero,
             CopyBackWrite,
             Atomic,
+            IndependentStash,
             Dataless,
             HomeRead,
             HomeWrite,
@@ -374,7 +375,33 @@ namespace CHI {
             virtual XactDenialEnum          NextDATNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
 
-        // TODO: XactionStash
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        class XactionIndependentStash : public Xaction<config, conn> {
+        public:
+            XactionIndependentStash(Global<config, conn>*                   glbl,
+                                    const Topology&                         topo,
+                                    const FiredRequestFlit<config, conn>&   first,
+                                    std::shared_ptr<Xaction<config, conn>>  retried) noexcept;
+
+        public:
+            virtual std::shared_ptr<Xaction<config, conn>>          Clone() const noexcept override;
+            std::shared_ptr<XactionIndependentStash<config, conn>>  CloneAsIs() const noexcept;
+
+        public:
+            bool                            IsCompResponseComplete(const Topology& topo) const noexcept;
+            bool                            IsStashDoneResponseComplete(const Topology& topo) const noexcept;
+
+            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+
+            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
+        
+        public:
+            virtual XactDenialEnum          NextRSPNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+        };
 
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
@@ -3829,6 +3856,236 @@ namespace /*CHI::*/Xact {
         }
 
         return XactDenial::DENIED_OPCODE;
+    }
+}
+
+
+// Implementation of: class XactionIndependentStash
+namespace /*CHI::*/Xact {
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactionIndependentStash<config, conn>::XactionIndependentStash(
+        Global<config, conn>*                   glbl,
+        const Topology&                         topo,
+        const FiredRequestFlit<config, conn>&   first,
+        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+        : Xaction<config, conn>(XactionType::IndependentStash, first, retried)
+    {
+        // *NOTICE: AllowRetry should be checked by external scoreboards.
+
+        this->firstDenial = XactDenial::ACCEPTED;
+
+        if (!this->first.IsREQ())
+        {
+            this->firstDenial = XactDenial::DENIED_CHANNEL;
+            return;
+        }
+
+        if (
+            this->first.flit.req.Opcode() != Opcodes::REQ::StashOnceUnique
+         && this->first.flit.req.Opcode() != Opcodes::REQ::StashOnceShared
+         && this->first.flit.req.Opcode() != Opcodes::REQ::StashOnceSepUnique
+         && this->first.flit.req.Opcode() != Opcodes::REQ::StashOnceSepShared
+        ) [[unlikely]]
+        {
+            this->firstDenial = XactDenial::DENIED_OPCODE;
+            return;
+        }
+
+        if (!this->first.IsFromRequesterToHome(topo))
+        {
+            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
+            return;
+        }
+
+        //
+        if (glbl)
+        {
+            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
+            if (this->firstDenial != XactDenial::ACCEPTED)
+                return;
+        }
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<Xaction<config, conn>> XactionIndependentStash<config, conn>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+    }
+        
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::shared_ptr<XactionIndependentStash<config, conn>> XactionIndependentStash<config, conn>::CloneAsIs() const noexcept
+    {
+        return std::make_shared<XactionIndependentStash<config, conn>>(*this);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionIndependentStash<config, conn>::IsCompResponseComplete(const Topology& topo) const noexcept
+    {
+        if (this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceUnique
+         || this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceShared)
+        {
+            return this->HasRSP({ Opcodes::RSP::Comp });
+        }
+        else if (this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepUnique
+              || this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepShared)
+        {
+            return this->HasRSP({ Opcodes::RSP::Comp, Opcodes::RSP::CompStashDone });
+        }
+
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionIndependentStash<config, conn>::IsStashDoneResponseComplete(const Topology& topo) const noexcept
+    {
+        if (this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceUnique
+         || this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceShared)
+        {
+            return true;
+        }
+        else if (this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepUnique
+              || this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepShared)
+        {
+            return this->HasRSP({ Opcodes::RSP::StashDone, Opcodes::RSP::CompStashDone }); 
+        }
+
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionIndependentStash<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    {
+        return IsComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionIndependentStash<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    {
+        return true;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionIndependentStash<config, conn>::IsComplete(const Topology& topo) const noexcept
+    {
+        return this->GotRetryAck() || IsCompResponseComplete(topo) && IsStashDoneResponseComplete(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionIndependentStash<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    {
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum XactionIndependentStash<config, conn>::NextRSPNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    {
+        if (this->IsComplete(topo))
+            return XactDenial::DENIED_COMPLETED;
+
+        if (!rspFlit.IsRSP())
+            return XactDenial::DENIED_CHANNEL;
+
+        if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RetryAck)
+            return this->NextRetryAckNoRecord(glbl, topo, rspFlit);
+        else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
+        {
+            if (!rspFlit.IsFromHomeToRequester(topo))
+                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+
+            if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
+                return XactDenial::DENIED_TGTID_MISMATCH;
+
+            if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
+                return XactDenial::DENIED_TXNID_MISMATCH;
+
+            if (this->HasRSP({ Opcodes::RSP::Comp }))
+                return XactDenial::DENIED_COMP_AFTER_COMP;
+
+            if (this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepUnique
+             || this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepShared)
+            {
+                if (this->HasRSP({ Opcodes::RSP::CompStashDone }))
+                    return XactDenial::DENIED_COMP_AFTER_COMPSTASHDONE;
+            }
+
+            //
+            if (glbl)
+            {
+                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                if (denial != XactDenial::ACCEPTED)
+                    return denial;
+            }
+
+            return XactDenial::ACCEPTED;
+        }
+        else if (this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepUnique
+              || this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepShared)
+        {
+            if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::StashDone
+             || rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompStashDone)
+            {
+                if (!rspFlit.IsFromHomeToRequester(topo))
+                    return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+
+                if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
+                    return XactDenial::DENIED_TGTID_MISMATCH;
+
+                if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
+                    return XactDenial::DENIED_TXNID_MISMATCH;
+
+                if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::StashDone)
+                {
+                    if (this->HasRSP({ Opcodes::RSP::StashDone }))
+                        return XactDenial::DENIED_STASHDONE_AFTER_STASHDONE;
+
+                    if (this->HasRSP({ Opcodes::RSP::CompStashDone }))
+                        return XactDenial::DENIED_STASHDONE_AFTER_COMPSTASHDONE;
+                }
+                else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompStashDone)
+                {
+                    if (this->HasRSP({ Opcodes::RSP::Comp }))
+                        return XactDenial::DENIED_COMPSTASHDONE_AFTER_COMP;
+
+                    if (this->HasRSP({ Opcodes::RSP::StashDone }))
+                        return XactDenial::DENIED_COMPSTASHDONE_AFTER_STASHDONE;
+
+                    if (this->HasRSP({ Opcodes::RSP::CompStashDone }))
+                        return XactDenial::DENIED_COMPSTASHDONE_AFTER_COMPSTASHDONE;
+                }
+                else
+                    return XactDenial::DENIED_OPCODE;
+
+                //
+                if (glbl)
+                {
+                    XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                    if (denial != XactDenial::ACCEPTED)
+                        return denial;
+                }
+
+                return XactDenial::ACCEPTED;
+            }
+        }
+
+        return XactDenial::DENIED_OPCODE;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum XactionIndependentStash<config, conn>::NextDATNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
+    {
+        return XactDenial::DENIED_CHANNEL;
     }
 }
 

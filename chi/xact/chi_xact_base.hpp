@@ -191,6 +191,13 @@ namespace CHI {
 
             inline constexpr XactDenialEnumBack DENIED_READRECEIPT_AFTER_READRECEIPT            ("XACT_DENIED_READRECEIPT_AFTER_READRECEIPT",           0x000B0000 | 41);
 
+            inline constexpr XactDenialEnumBack DENIED_COMP_AFTER_COMPSTASHDONE                 ("XACT_DENIED_COMP_AFTER_COMPSTASHDONE",                0x000B0000 | 42);
+            inline constexpr XactDenialEnumBack DENIED_STASHDONE_AFTER_STASHDONE                ("XACT_DENIED_STASHDONE_AFTER_STASHDONE",               0x000B0000 | 43);
+            inline constexpr XactDenialEnumBack DENIED_STASHDONE_AFTER_COMPSTASHDONE            ("XACT_DENIED_STASHDONE_AFTER_COMPSTASHDONE",           0x000B0000 | 44);
+            inline constexpr XactDenialEnumBack DENIED_COMPSTASHDONE_AFTER_COMP                 ("XACT_DENIED_COMPSTASHDONE_AFTER_COMP",                0x000B0000 | 45);
+            inline constexpr XactDenialEnumBack DENIED_COMPSTASHDONE_AFTER_STASHDONE            ("XACT_DENIED_COMPSTASHDONE_AFTER_STASHDONE",           0x000B0000 | 46);
+            inline constexpr XactDenialEnumBack DENIED_COMPSTASHDONE_AFTER_COMPSTASHDONE        ("XACT_DENIED_COMPSTASHDONE_AFTER_COMPSTASHDONE",       0x000B0000 | 47);
+
             inline constexpr XactDenialEnumBack DENIED_DUPLICATED_DATAID            ("XACT_DENIED_DUPLICATED_DATAID",           0x000B0000 | 48);
 
             inline constexpr XactDenialEnumBack DENIED_COMPACK_ON_NON_EXPCOMPACK    ("XACT_DENIED_COMPACK_ON_NON_EXPCOMPACK",   0x000B0000 | 49);
