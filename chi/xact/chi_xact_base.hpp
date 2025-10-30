@@ -90,7 +90,6 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_COMPLETED                    ("XACT_DENIED_COMPLETED",                   0x00000000 |  1);
             inline constexpr XactDenialEnumBack DENIED_SCOPE                        ("XACT_DENIED_SCOPE",                       0x00000000 |  2);
             inline constexpr XactDenialEnumBack DENIED_CHANNEL                      ("XACT_DENIED_CHANNEL",                     0x00000000 |  3);
-            inline constexpr XactDenialEnumBack DENIED_COMMUNICATION                ("XACT_DENIED_COMMUNICATION",               0x00000000 |  4);
             inline constexpr XactDenialEnumBack DENIED_TXNID_IN_USE                 ("XACT_DENIED_TXNID_IN_USE",                0x00000000 |  5);
             inline constexpr XactDenialEnumBack DENIED_TXNID_NOT_EXIST              ("XACT_DENIED_TXNID_NOT_EXIST",             0x00000000 |  6);
             inline constexpr XactDenialEnumBack DENIED_DBID_IN_USE                  ("XACT_DENIED_DBID_IN_USE",                 0x00000000 |  7);
@@ -126,8 +125,10 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_DAT_NOT_FROM_SN              ("XACT_DENIED_DAT_NOT_FROM_SN",             0x00020000 | 18);
             inline constexpr XactDenialEnumBack DENIED_DAT_NOT_FROM_SN_TO_HN        ("XACT_DENIED_DAT_NOT_FROM_SN_TO_HN",       0x00020000 | 19);
             inline constexpr XactDenialEnumBack DENIED_DAT_NOT_TO_HN_OR_RN          ("XACT_DENIED_DAT_NOT_TO_HN_OR_RN",         0x00020000 | 20);
-            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_TO_RN                ("XACT_DENIED_SNP_NOT_TO_RN",               0x00020000 | 21);
-            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_FROM_HN_TO_RN        ("XACT_DENIED_SNP_NOT_FROM_HN_TO_RN",       0x00020000 | 22);
+            inline constexpr XactDenialEnumBack DENIED_DAT_NOT_FROM_RN_TO_RN        ("XACT_DENIED_DAT_NOT_FROM_RN_TO_RN",       0x00020000 | 21);
+            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_TO_RN                ("XACT_DENIED_SNP_NOT_TO_RN",               0x00020000 | 22);
+            inline constexpr XactDenialEnumBack DENIED_SNP_NOT_FROM_HN_TO_RN        ("XACT_DENIED_SNP_NOT_FROM_HN_TO_RN",       0x00020000 | 23);
+            inline constexpr XactDenialEnumBack DENIED_RSP_RETRYACK_ROUTE           ("XACT_DENIED_RSP_RETRYACK_ROUTE",          0x00020000 | 24);
 
             inline constexpr XactDenialEnumBack DENIED_TXNID_MISMATCH               ("XACT_DENIED_TXNID_MISMATCH",              0x00040000 |  1);
             inline constexpr XactDenialEnumBack DENIED_DBID_MISMATCH                ("XACT_DENIED_DBID_MISMATCH",               0x00040000 |  2);
