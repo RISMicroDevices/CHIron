@@ -144,16 +144,16 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_PCRD_NO_RETRY                ("XACT_DENIED_PCRD_NO_RETRY",               0x000A0000 |  2);
             inline constexpr XactDenialEnumBack DENIED_PCRD_TYPE_MISMATCH           ("XACT_DENIED_PCRD_TYPE_MISMATCH",          0x000A0000 |  3);
 
-            inline constexpr XactDenialEnumBack DENIED_RESPSEP_AFTER_COMPDATA       ("XACT_DENIED_RESPSEP_AFTER_COMPDATA",      0x000B0000 |  0);
-            inline constexpr XactDenialEnumBack DENIED_RESPSEP_AFTER_COMP           ("XACT_DENIED_RESPSEP_AFTER_COMP",          0x000B0000 |  1);
+            inline constexpr XactDenialEnumBack DENIED_RESPSEPDATA_AFTER_COMPDATA   ("XACT_DENIED_RESPSEPDATA_AFTER_COMPDATA",  0x000B0000 |  0);
+            inline constexpr XactDenialEnumBack DENIED_RESPSEPDATA_AFTER_COMP       ("XACT_DENIED_RESPSEPDATA_AFTER_COMP",      0x000B0000 |  1);
             inline constexpr XactDenialEnumBack DENIED_COMP_AFTER_RESPSEP           ("XACT_DENIED_COMP_AFTER_RESPSEP",          0x000B0000 |  2);
             inline constexpr XactDenialEnumBack DENIED_COMP_AFTER_DATASEP           ("XACT_DENIED_COMP_AFTER_DATASEP",          0x000B0000 |  3);
             inline constexpr XactDenialEnumBack DENIED_COMP_AFTER_COMPDATA          ("XACT_DENIED_COMP_AFTER_COMPDATA",         0x000B0000 |  4);
             inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_RESPSEP       ("XACT_DENIED_COMPDATA_AFTER_RESPSEP",      0x000B0000 |  5);
             inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_DATASEP       ("XACT_DENIED_COMPDATA_AFTER_DATASEP",      0x000B0000 |  6);
             inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_COMP          ("XACT_DENIED_COMPDATA_AFTER_COMP",         0x000B0000 |  7);
-            inline constexpr XactDenialEnumBack DENIED_DATASEP_AFTER_COMP           ("XACT_DENIED_DATASEP_AFTER_COMP",          0x000B0000 |  8);
-            inline constexpr XactDenialEnumBack DENIED_DATASEP_AFTER_COMPDATA       ("XACT_DENIED_DATASEP_AFTER_COMPDATA",      0x000B0000 |  9);
+            inline constexpr XactDenialEnumBack DENIED_DATASEPRESP_AFTER_COMP       ("XACT_DENIED_DATASEPRESP_AFTER_COMP",      0x000B0000 |  8);
+            inline constexpr XactDenialEnumBack DENIED_DATASEPRESP_AFTER_COMPDATA   ("XACT_DENIED_DATASEPRESP_AFTER_COMPDATA",  0x000B0000 |  9);
             
             inline constexpr XactDenialEnumBack DENIED_DATA_BEFORE_DBIDRESP         ("XACT_DENIED_DATA_BEFORE_DBIDRESP",        0x000B0000 | 10);
             inline constexpr XactDenialEnumBack DENIED_DATA_AFTER_COMP              ("XACT_DENIED_DATA_AFTER_COMP",             0x000B0000 | 11);
@@ -207,6 +207,45 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_DWT_WITH_DBIDRESPORD         ("XACT_DENIED_DWT_WITH_DBIDRESPORD",        0x000B0000 | 51);
 
             inline constexpr XactDenialEnumBack DENIED_READRECEIPT_ON_NO_ORDER      ("XACT_DENIED_READRECEIPT_ON_NO_ORDER",     0x000B0000 | 52);
+
+            inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_SNPRESP                   ("XACT_DENIED_COMPDATA_AFTER_SNPRESP",                  0x000B0000 | 53);
+            inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_SNPRESPDATA               ("XACT_DENIED_COMPDATA_AFTER_SNPRESPDATA",              0x000B0000 | 54);
+            inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_SNPRESPDATAPTL            ("XACT_DENIED_COMPDATA_AFTER_SNPRESPDATAPTL",           0x000B0000 | 55);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESP_AFTER_COMPDATA                   ("XACT_DENIED_SNPRESP_AFTER_COMPDATA",                  0x000B0000 | 56);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESP_AFTER_SNPRESP                    ("XACT_DENIED_SNPRESP_AFTER_SNPRESP",                   0x000B0000 | 57);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESP_AFTER_SNPRESPDATA                ("XACT_DENIED_SNPRESP_AFTER_SNPRESPDATA",               0x000B0000 | 58);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESP_AFTER_SNPRESPDATAPTL             ("XACT_DENIED_SNPRESP_AFTER_SNPRESPDATAPTL",            0x000B0000 | 59);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESP_AFTER_SNPRESPFWDED               ("XACT_DENIED_SNPRESP_AFTER_SNPRESPFWDED",              0x000B0000 | 60);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESP_AFTER_SNPRESPDATAFWDED           ("XACT_DENIED_SNPRESP_AFTER_SNPRESPDATAFWDED",          0x000B0000 | 61);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATA_AFTER_COMPDATA               ("XACT_DENIED_SNPRESPDATA_AFTER_COMPDATA",              0x000B0000 | 62);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATA_AFTER_SNPRESP                ("XACT_DENIED_SNPRESPDATA_AFTER_SNPRESP",               0x000B0000 | 63);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATA_AFTER_SNPRESPDATAPTL         ("XACT_DENIED_SNPRESPDATA_AFTER_SNPRESPDATAPTL",        0x000B0000 | 64);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATA_AFTER_SNPRESPFWDED           ("XACT_DENIED_SNPRESPDATA_AFTER_SNPRESPFWDED",          0x000B0000 | 65);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATA_AFTER_SNPRESPDATAFWDED       ("XACT_DENIED_SNPRESPDATA_AFTER_SNPRESPDATAFWDED",      0x000B0000 | 66);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAPTL_AFTER_COMPDATA            ("XACT_DENIED_SNPRESPDATAPTL_AFTER_COMPDATA",           0x000B0000 | 67);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAPTL_AFTER_SNPRESP             ("XACT_DENIED_SNPRESPDATAPTL_AFTER_SNPRESP",            0x000B0000 | 68);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAPTL_AFTER_SNPRESPDATA         ("XACT_DENIED_SNPRESPDATAPTL_AFTER_SNPRESPDATA",        0x000B0000 | 69);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAPTL_AFTER_SNPRESPFWDED        ("XACT_DENIED_SNPRESPDATAPTL_AFTER_SNPRESPFWDED",       0x000B0000 | 70);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAPTL_AFTER_SNPRESPDATAFWDED    ("XACT_DENIED_SNPRESPDATAPTL_AFTER_SNPRESPDATAFWDED",   0x000B0000 | 71);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPFWDED_AFTER_SNPRESP               ("XACT_DENIED_SNPRESPFWDED_AFTER_SNPRESP",              0x000B0000 | 72);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPFWDED_AFTER_SNPRESPDATA           ("XACT_DENIED_SNPRESPFWDED_AFTER_SNPRESPDATA",          0x000B0000 | 73);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPFWDED_AFTER_SNPRESPDATAPTL        ("XACT_DENIED_SNPRESPFWDED_AFTER_SNPRESPDATAPTL",       0x000B0000 | 74);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPFWDED_AFTER_SNPRESPFWDED          ("XACT_DENIED_SNPRESPFWDED_AFTER_SNPRESPFWDED",         0x000B0000 | 75);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPFWDED_AFTER_SNPRESPDATAFWDED      ("XACT_DENIED_SNPRESPFWDED_AFTER_SNPRESPDATAFWDED",     0x000B0000 | 76);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAFWDED_AFTER_SNPRESP           ("XACT_DENIED_SNPRESPDATAFWDED_AFTER_SNPRESP",          0x000B0000 | 77);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAFWDED_AFTER_SNPRESPDATA       ("XACT_DENIED_SNPRESPDATAFWDED_AFTER_SNPRESPDATA",      0x000B0000 | 78);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAFWDED_AFTER_SNPRESPDATAPTL    ("XACT_DENIED_SNPRESPDATAFWDED_AFTER_SNPRESPDATAPTL",   0x000B0000 | 79);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAFWDED_AFTER_SNPRESPFWDED      ("XACT_DENIED_SNPRESPDATAFWDED_AFTER_SNPRESPFWDED",     0x000B0000 | 80);
+
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPFWDED_COMPDATA_FWDSTATE_MISMATCH      ("XACT_DENIED_SNPRESPFWDED_COMPDATA_FWDSTATE_MISMATCH",     0x000B0000 | 81);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAFWDED_COMPDATA_FWDSTATE_MISMATCH  ("XACT_DENIED_SNPRESPDATAFWDED_COMPDATA_FWDSTATE_MISMATCH", 0x000B0000 | 82);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAFWDED_FWDSTATE_MISMATCH           ("XACT_DENIED_SNPRESPDATAFWDED_FWDSTATE_MISMATCH",          0x000B0000 | 83);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAFWDED_RESP_MISMATCH               ("XACT_DENIED_SNPRESPDATAFWDED_RESP_MISMATCH",              0x000B0000 | 84);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATA_RESP_MISMATCH                    ("XACT_DENIED_SNPRESPDATA_RESP_MISMATCH",                   0x000B0000 | 85);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAPTL_RESP_MISMATCH                 ("XACT_DENIED_SNPRESPDATAPTL_RESP_MISMATCH",                0x000B0000 | 86);
+            inline constexpr XactDenialEnumBack DENIED_COMPDATA_RESP_MISMATCH                       ("XACT_DENIED_COMPDATA_RESP_MISMATCH",                      0x000B0000 | 87);
+            inline constexpr XactDenialEnumBack DENIED_DATASEPRESP_RESP_MISMATCH                    ("XACT_DENIED_DATASEPRESP_RESP_MISMATCH",                   0x000B0000 | 88);
+            inline constexpr XactDenialEnumBack DENIED_COPYBACKWRDATA_RESP_MISMATCH                 ("XACT_DENIED_COPYBACKWRDATA_RESP_MISMATCH",                0x000B0000 | 89);
 
             inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_XACT_TYPE         ("XACT_DENIED_RETRY_DIFF_XACT_TYPE",        0x000C0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_RETRY_NO_ALLOWRETRY          ("XACT_DENIED_RETRY_NO_ALLOWRETRY",         0x000C0000 |  1);

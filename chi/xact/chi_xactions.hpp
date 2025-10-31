@@ -1857,10 +1857,10 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_RESPSEP_AFTER_RESPSEP;
 
                 if (this->HasDAT({ Opcodes::DAT::CompData }))
-                    return XactDenial::DENIED_RESPSEP_AFTER_COMPDATA;
+                    return XactDenial::DENIED_RESPSEPDATA_AFTER_COMPDATA;
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
-                    return XactDenial::DENIED_RESPSEP_AFTER_COMP;
+                    return XactDenial::DENIED_RESPSEPDATA_AFTER_COMP;
             }
             else // Comp
             {
@@ -1975,15 +1975,27 @@ namespace /*CHI::*/Xact {
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_COMPDATA_AFTER_COMP;
+
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::CompData }))
+                {
+                    if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_COMPDATA_RESP_MISMATCH;
+                }
             }
 #ifdef CHI_ISSUE_EB_ENABLE
             else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::DataSepResp)
             {
                 if (this->HasDAT({ Opcodes::DAT::CompData }))
-                    return XactDenial::DENIED_DATASEP_AFTER_COMPDATA;
+                    return XactDenial::DENIED_DATASEPRESP_AFTER_COMPDATA;
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
-                    return XactDenial::DENIED_DATASEP_AFTER_COMP;
+                    return XactDenial::DENIED_DATASEPRESP_AFTER_COMP;
+
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::DataSepResp }))
+                {
+                    if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_DATASEPRESP_RESP_MISMATCH;
+                }
             }
 #endif
 
@@ -2229,7 +2241,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_RESPSEP_AFTER_RESPSEP;
 
             if (this->HasDAT({ Opcodes::DAT::CompData }))
-                return XactDenial::DENIED_RESPSEP_AFTER_COMPDATA;
+                return XactDenial::DENIED_RESPSEPDATA_AFTER_COMPDATA;
 
             auto optDBID = this->GetDBID();
             if (optDBID)
@@ -2293,15 +2305,27 @@ namespace /*CHI::*/Xact {
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_COMPDATA_AFTER_COMP;
+
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::CompData }))
+                {
+                    if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_COMPDATA_RESP_MISMATCH;
+                }
             }
 #ifdef CHI_ISSUE_EB_ENABLE
             else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::DataSepResp)
             {
                 if (this->HasDAT({ Opcodes::DAT::CompData }))
-                    return XactDenial::DENIED_DATASEP_AFTER_COMPDATA;
+                    return XactDenial::DENIED_DATASEPRESP_AFTER_COMPDATA;
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
-                    return XactDenial::DENIED_DATASEP_AFTER_COMP;
+                    return XactDenial::DENIED_DATASEPRESP_AFTER_COMP;
+
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::DataSepResp }))
+                {
+                    if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_DATASEPRESP_RESP_MISMATCH;
+                }
             }
 #endif
 
@@ -3419,6 +3443,12 @@ namespace /*CHI::*/Xact {
 
             if (datFlit.flit.dat.TxnID() != optDBIDSource->flit.rsp.DBID())
                 return XactDenial::DENIED_TXNID_MISMATCH;
+
+            if (auto p = this->GetLastDAT({ Opcodes::DAT::CopyBackWrData }))
+            {
+                if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                    return XactDenial::DENIED_COPYBACKWRDATA_RESP_MISMATCH;
+            }
 
             if (!this->NextREQDataID(datFlit))
                 return XactDenial::DENIED_DUPLICATED_DATAID;
@@ -4720,7 +4750,7 @@ namespace /*CHI::*/Xact {
             else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::DataSepResp)
             {
                 if (this->HasDAT({ Opcodes::DAT::CompData }))
-                    return XactDenial::DENIED_DATASEP_AFTER_COMPDATA;
+                    return XactDenial::DENIED_DATASEPRESP_AFTER_COMPDATA;
             }
 #endif
 
@@ -6193,12 +6223,23 @@ namespace /*CHI::*/Xact  {
                 return XactDenial::DENIED_TXNID_MISMATCH;
 
             if (this->HasRSP({ Opcodes::RSP::SnpResp }))
-                return XactDenial::DENIED_DUPLICATED_SNPRESP;
+            {
+                return XactDenial::DENIED_SNPRESP_AFTER_SNPRESP;
+            }
 
-            if (this->HasDAT({ 
+            if (auto p = this->GetLastDAT({ 
                     Opcodes::DAT::SnpRespData, 
                     Opcodes::DAT::SnpRespDataPtl }))
+            {
+                if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespData)
+                    return XactDenial::DENIED_SNPRESP_AFTER_SNPRESPDATA;
+                else if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+                    return XactDenial::DENIED_SNPRESP_AFTER_SNPRESPDATAPTL;
+                else
+                    assert(false && "should not reach here");
+
                 return XactDenial::DENIED_DUPLICATED_SNPRESP;
+            }
 
             //
             if (glbl)
@@ -6207,8 +6248,6 @@ namespace /*CHI::*/Xact  {
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
-
-            // TODO: check response state combination here
 
             return XactDenial::ACCEPTED;
         }
@@ -6243,6 +6282,24 @@ namespace /*CHI::*/Xact  {
             if (!this->NextSNPDataID(datFlit))
                 return XactDenial::DENIED_DUPLICATED_DATAID;
 
+            // check response consistency
+            if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespData)
+            {
+                if (auto p = this->GetLastDAT(Opcodes::DAT::SnpRespData))
+                {
+                    if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_SNPRESPDATA_RESP_MISMATCH;
+                }
+            }
+            else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+            {
+                if (auto p = this->GetLastDAT(Opcodes::DAT::SnpRespDataPtl))
+                {
+                    if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_SNPRESPDATAPTL_RESP_MISMATCH;
+                }
+            }
+
             //
             if (glbl)
             {
@@ -6250,8 +6307,6 @@ namespace /*CHI::*/Xact  {
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
-
-            // TODO: check reponse state combination here
 
             return XactDenial::ACCEPTED;
         }
@@ -6451,16 +6506,82 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.snp.TxnID())
                 return XactDenial::DENIED_TXNID_MISMATCH;
 
-            if (this->HasRSP({
+            
+            if (auto p = this->GetLastRSP({
                     Opcodes::RSP::SnpResp,
                     Opcodes::RSP::SnpRespFwded}))
-                return XactDenial::DENIED_DUPLICATED_SNPRESP;
+            {
+                if (p->flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+                {
+                    if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+                        return XactDenial::DENIED_SNPRESP_AFTER_SNPRESP;
+                    else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+                        return XactDenial::DENIED_SNPRESPFWDED_AFTER_SNPRESP;
+                    else
+                        assert(false && "should not reach here");
+                }
+                else if (p->flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+                {
+                    if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+                        return XactDenial::DENIED_SNPRESP_AFTER_SNPRESPFWDED;
+                    else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+                        return XactDenial::DENIED_SNPRESPFWDED_AFTER_SNPRESPFWDED;
+                    else
+                        assert(false && "should not reach here");
+                }
+                else
+                    assert(false && "should not reach here");
 
-            if (this->HasDAT({
+                return XactDenial::DENIED_DUPLICATED_SNPRESP;
+            }
+
+            if (auto p = this->GetLastDAT({
                     Opcodes::DAT::SnpRespData, 
                     Opcodes::DAT::SnpRespDataPtl,
                     Opcodes::DAT::SnpRespDataFwded}))
+            {
+                if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespData)
+                {
+                    if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+                        return XactDenial::DENIED_SNPRESP_AFTER_SNPRESPDATA;
+                    else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+                        return XactDenial::DENIED_SNPRESPFWDED_AFTER_SNPRESPDATA;
+                    else
+                        assert(false && "should not reach here");
+                }
+                else if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+                {
+                    if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+                        return XactDenial::DENIED_SNPRESP_AFTER_SNPRESPDATAPTL;
+                    else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+                        return XactDenial::DENIED_SNPRESPFWDED_AFTER_SNPRESPDATAPTL;
+                    else
+                        assert(false && "should not reach here");
+                }
+                else if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
+                {
+                    if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+                        return XactDenial::DENIED_SNPRESP_AFTER_SNPRESPDATAFWDED;
+                    else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+                        return XactDenial::DENIED_SNPRESPFWDED_AFTER_SNPRESPDATAFWDED;
+                    else
+                        assert(false && "should not reach here");
+                }
+                else
+                    assert(false && "should not reach here");
+
                 return XactDenial::DENIED_DUPLICATED_SNPRESP;
+            }
+
+            // check forward state consistency between forwarded responses
+            if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+            {
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::CompData }))
+                {
+                    if (rspFlit.flit.rsp.FwdState() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_SNPRESPFWDED_COMPDATA_FWDSTATE_MISMATCH;
+                }
+            }
 
             //
             if (glbl)
@@ -6469,8 +6590,6 @@ namespace /*CHI::*/Xact {
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
-            
-            // TODO: check response state combination here
 
             return XactDenial::ACCEPTED;
         }
@@ -6501,6 +6620,99 @@ namespace /*CHI::*/Xact {
             if (datFlit.flit.dat.TxnID() != this->first.flit.snp.TxnID())
                 return XactDenial::DENIED_TXNID_MISMATCH;
 
+            if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespData)
+            {
+                if (auto p = this->GetLastRSP({ 
+                    Opcodes::RSP::SnpResp,
+                    Opcodes::RSP::SnpRespFwded }))
+                {
+                    if (p->flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+                        return XactDenial::DENIED_SNPRESPDATA_AFTER_SNPRESP;
+                    else if (p->flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+                        return XactDenial::DENIED_SNPRESPDATA_AFTER_SNPRESPFWDED;
+                    else
+                        assert(false && "should not reach here");
+
+                    return XactDenial::DENIED_DUPLICATED_SNPRESPDATA;
+                }
+
+                if (auto p = this->GetLastDAT({
+                    Opcodes::DAT::SnpRespDataPtl,
+                    Opcodes::DAT::SnpRespDataFwded }))
+                {
+                    if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+                        return XactDenial::DENIED_SNPRESPDATA_AFTER_SNPRESPDATAPTL;
+                    else if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
+                        return XactDenial::DENIED_SNPRESPDATA_AFTER_SNPRESPDATAFWDED;
+                    else
+                        assert(false && "should not reach here");
+
+                    return XactDenial::DENIED_DUPLICATED_SNPRESPDATA;
+                }
+            }
+            else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+            {
+                if (auto p = this->GetLastRSP({ 
+                    Opcodes::RSP::SnpResp,
+                    Opcodes::RSP::SnpRespFwded }))
+                {
+                    if (p->flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+                        return XactDenial::DENIED_SNPRESPDATAPTL_AFTER_SNPRESP;
+                    else if (p->flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+                        return XactDenial::DENIED_SNPRESPDATAPTL_AFTER_SNPRESPFWDED;
+                    else
+                        assert(false && "should not reach here");
+
+                    return XactDenial::DENIED_DUPLICATED_SNPRESPDATA;
+                }
+
+                if (auto p = this->GetLastDAT({
+                    Opcodes::DAT::SnpRespData,
+                    Opcodes::DAT::SnpRespDataFwded}))
+                {
+                    if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespData)
+                        return XactDenial::DENIED_SNPRESPDATAPTL_AFTER_SNPRESPDATA;
+                    else if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
+                        return XactDenial::DENIED_SNPRESPDATAPTL_AFTER_SNPRESPDATAFWDED;
+                    else
+                        assert(false && "should not reach here");
+
+                    return XactDenial::DENIED_DUPLICATED_SNPRESPDATA;
+                }
+            }
+            else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
+            {
+                if (auto p = this->GetLastRSP({ 
+                    Opcodes::RSP::SnpResp,
+                    Opcodes::RSP::SnpRespFwded }))
+                {
+                    if (p->flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
+                        return XactDenial::DENIED_SNPRESPDATAFWDED_AFTER_SNPRESP;
+                    else if (p->flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
+                        return XactDenial::DENIED_SNPRESPDATAFWDED_AFTER_SNPRESPFWDED;
+                    else
+                        assert(false && "should not reach here");
+
+                    return XactDenial::DENIED_DUPLICATED_SNPRESPDATA;
+                }
+
+                if (auto p = this->GetLastDAT({
+                    Opcodes::DAT::SnpRespData,
+                    Opcodes::DAT::SnpRespDataPtl }))
+                {
+                    if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespData)
+                        return XactDenial::DENIED_SNPRESPDATAFWDED_AFTER_SNPRESPDATA;
+                    else if (p->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+                        return XactDenial::DENIED_SNPRESPDATAFWDED_AFTER_SNPRESPDATAPTL;
+                    else
+                        assert(false && "should not reach here");
+
+                    return XactDenial::DENIED_DUPLICATED_SNPRESPDATA;
+                }
+            }
+            else
+                assert(false && "should not reach here");
+
             if (!this->NextSNPDataID(datFlit, {
                 Opcodes::DAT::SnpRespData,
                 Opcodes::DAT::SnpRespDataPtl,
@@ -6508,6 +6720,41 @@ namespace /*CHI::*/Xact {
             }))
                 return XactDenial::DENIED_DUPLICATED_DATAID;
             
+            // check forward state consistency between forwarded responses
+            if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespData)
+            {
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::SnpRespData }))
+                {
+                    if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_SNPRESPDATA_RESP_MISMATCH;
+                }
+            }
+            else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
+            {
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::SnpRespDataPtl }))
+                {
+                    if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_SNPRESPDATAPTL_RESP_MISMATCH;
+                }
+            }
+            else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataFwded)
+            {
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::SnpRespDataFwded }))
+                {
+                    if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_SNPRESPDATAFWDED_RESP_MISMATCH;
+
+                    if (datFlit.flit.dat.FwdState() != p->flit.dat.FwdState())
+                        return XactDenial::DENIED_SNPRESPDATAFWDED_FWDSTATE_MISMATCH;
+                }
+
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::CompData }))
+                {
+                    if (datFlit.flit.dat.FwdState() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_SNPRESPDATAFWDED_COMPDATA_FWDSTATE_MISMATCH;
+                }
+            }
+
             //
             if (glbl)
             {
@@ -6515,8 +6762,6 @@ namespace /*CHI::*/Xact {
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
-
-            // TODO: check response state combination here
 
             return XactDenial::ACCEPTED;
         }
@@ -6541,6 +6786,18 @@ namespace /*CHI::*/Xact {
                 Opcodes::DAT::CompData
             }))
                 return XactDenial::DENIED_DUPLICATED_DATAID;
+
+            // check forward state consistency between forwarded responses
+            if (auto p = this->GetLastRSP({ Opcodes::RSP::SnpRespFwded }))
+            {
+                if (datFlit.flit.dat.Resp() != p->flit.rsp.FwdState())
+                    return XactDenial::DENIED_SNPRESPFWDED_COMPDATA_FWDSTATE_MISMATCH;
+            }
+            else if (auto p = this->GetLastDAT({ Opcodes::DAT::SnpRespDataFwded }))
+            {
+                if (datFlit.flit.dat.Resp() != p->flit.dat.FwdState())
+                    return XactDenial::DENIED_SNPRESPDATAFWDED_COMPDATA_FWDSTATE_MISMATCH;
+            }
             
             //
             if (glbl)
@@ -6549,8 +6806,6 @@ namespace /*CHI::*/Xact {
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
-
-            // TODO: check response state combination here
 
             return XactDenial::ACCEPTED;
         }
