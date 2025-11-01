@@ -28,10 +28,12 @@ namespace CHI {
 
             struct RNCohTrans {
                 CacheState                      initial;
+                CacheStateTransitions::Responses::details::TableR0
+                                                respDCT;
                 CacheStateTransitions::Intermediates::details::TableG2
-                    nested;
+                                                nested;
                 const CacheStateTransitions::Intermediates::Tables*
-                    tables;
+                                                tables;
                 CacheStateTransition::Type      type;
             };
         }
@@ -158,6 +160,7 @@ namespace /*CHI::*/Xact {
         #define SET_REQ(type, opcode)  { \
             static const details::RNCohTrans _##opcode { \
                 CacheStateTransitions::Initials::opcode, \
+                CacheStateTransitions::Responses::details::TableR0(), \
                 CacheStateTransitions::Intermediates::Nested::opcode, \
                 &CacheStateTransitions::Intermediates::opcode, \
                 CacheStateTransition::Type::type \
@@ -168,6 +171,7 @@ namespace /*CHI::*/Xact {
         #define SET_REQ_EX(type, opcode, name) { \
             static const details::RNCohTrans _##name { \
                 CacheStateTransitions::Initials::name, \
+                CacheStateTransitions::Responses::details::TableR0(), \
                 CacheStateTransitions::Intermediates::Nested::name, \
                 &CacheStateTransitions::Intermediates::name, \
                 CacheStateTransition::Type::type \
@@ -309,6 +313,7 @@ namespace /*CHI::*/Xact {
         #define SET_SNP(type, opcode)  { \
             static const details::RNCohTrans _##opcode { \
                 CacheStateTransitions::Initials::opcode, \
+                CacheStateTransitions::Responses::details::TableR0(), \
                 CacheStateTransitions::Intermediates::details::TableG2(), \
                 &CacheStateTransitions::Intermediates::opcode, \
                 CacheStateTransition::Type::type \
@@ -319,6 +324,7 @@ namespace /*CHI::*/Xact {
         #define SET_SNP_EX(type, opcode, name) { \
             static const details::RNCohTrans _##name { \
                 CacheStateTransitions::Initials::name, \
+                CacheStateTransitions::Responses::details::TableR0(), \
                 CacheStateTransitions::Intermediates::details::TableG2(), \
                 &CacheStateTransitions::Intermediates::name, \
                 CacheStateTransition::Type::type \
@@ -326,43 +332,67 @@ namespace /*CHI::*/Xact {
             snpDecoder[Opcodes::SNP::opcode].SetCompanion(&_##name); \
         }
 
-    //  SET_SNP(General     , SnpLCrdReturn         );  // 0x00
-        SET_SNP(Snoop       , SnpShared             );  // 0x01
-        SET_SNP(Snoop       , SnpClean              );  // 0x02
-        SET_SNP(Snoop       , SnpOnce               );  // 0x03
-        SET_SNP(Snoop       , SnpNotSharedDirty     );  // 0x04
-        SET_SNP(Snoop       , SnpUniqueStash        );  // 0x05
-        SET_SNP(Snoop       , SnpMakeInvalidStash   );  // 0x06
-        SET_SNP(Snoop       , SnpUnique             );  // 0x07
-        SET_SNP(Snoop       , SnpCleanShared        );  // 0x08
-        SET_SNP(Snoop       , SnpCleanInvalid       );  // 0x09
-        SET_SNP(Snoop       , SnpMakeInvalid        );  // 0x0A
-        SET_SNP(Snoop       , SnpStashUnique        );  // 0x0B
-        SET_SNP(Snoop       , SnpStashShared        );  // 0x0C
-    //                        SnpDVMOp                  // 0x0D
-                                                        // 0x0E
-                                                        // 0x0F
-        SET_SNP(Snoop       , SnpQuery              );  // 0x10
-        SET_SNP(SnoopForward, SnpSharedFwd          );  // 0x11
-        SET_SNP(SnoopForward, SnpCleanFwd           );  // 0x12
-        SET_SNP(SnoopForward, SnpOnceFwd            );  // 0x13
-        SET_SNP(SnoopForward, SnpNotSharedDirtyFwd  );  // 0x14
-        SET_SNP_EX(SnoopForward, SnpPreferUnique   , SnpPreferUnique_NoExcl   ); // 0x15
-        SET_SNP_EX(SnoopForward, SnpPreferUniqueFwd, SnpPreferUniqueFwd_NoExcl); // 0x16
-        SET_SNP(SnoopForward, SnpUniqueFwd          );  // 0x17
-                                                        // 0x18
-                                                        // 0x19
-                                                        // 0x1A
-                                                        // 0x1B
-                                                        // 0x1C
-                                                        // 0x1D
-                                                        // 0x1E
-                                                        // 0x1F
+         #define SET_SNPFWD(type, opcode)  { \
+            static const details::RNCohTrans _##opcode { \
+                CacheStateTransitions::Initials::opcode, \
+                CacheStateTransitions::Responses::opcode, \
+                CacheStateTransitions::Intermediates::details::TableG2(), \
+                &CacheStateTransitions::Intermediates::opcode, \
+                CacheStateTransition::Type::type \
+            }; \
+            snpDecoder[Opcodes::SNP::opcode].SetCompanion(&_##opcode); \
+        }
 
-        #undef SET_SNP
-        #undef SET_SNP_EX
+        #define SET_SNPFWD_EX(type, opcode, name) { \
+            static const details::RNCohTrans _##name { \
+                CacheStateTransitions::Initials::name, \
+                CacheStateTransitions::Responses::name, \
+                CacheStateTransitions::Intermediates::details::TableG2(), \
+                &CacheStateTransitions::Intermediates::name, \
+                CacheStateTransition::Type::type \
+            }; \
+            snpDecoder[Opcodes::SNP::opcode].SetCompanion(&_##name); \
+        }
+
+    //  SET_SNP(General     , SnpLCrdReturn             );  // 0x00
+        SET_SNP(Snoop       , SnpShared                 );  // 0x01
+        SET_SNP(Snoop       , SnpClean                  );  // 0x02
+        SET_SNP(Snoop       , SnpOnce                   );  // 0x03
+        SET_SNP(Snoop       , SnpNotSharedDirty         );  // 0x04
+        SET_SNP(Snoop       , SnpUniqueStash            );  // 0x05
+        SET_SNP(Snoop       , SnpMakeInvalidStash       );  // 0x06
+        SET_SNP(Snoop       , SnpUnique                 );  // 0x07
+        SET_SNP(Snoop       , SnpCleanShared            );  // 0x08
+        SET_SNP(Snoop       , SnpCleanInvalid           );  // 0x09
+        SET_SNP(Snoop       , SnpMakeInvalid            );  // 0x0A
+        SET_SNP(Snoop       , SnpStashUnique            );  // 0x0B
+        SET_SNP(Snoop       , SnpStashShared            );  // 0x0C
+    //                        SnpDVMOp                      // 0x0D
+                                                            // 0x0E
+                                                            // 0x0F
+        SET_SNP(Snoop       , SnpQuery                  );  // 0x10
+        SET_SNPFWD(SnoopForward, SnpSharedFwd           );  // 0x11
+        SET_SNPFWD(SnoopForward, SnpCleanFwd            );  // 0x12
+        SET_SNPFWD(SnoopForward, SnpOnceFwd             );  // 0x13
+        SET_SNPFWD(SnoopForward, SnpNotSharedDirtyFwd   );  // 0x14
+        SET_SNP_EX(SnoopForward, SnpPreferUnique   , SnpPreferUnique_NoExcl); // 0x15
+        SET_SNPFWD_EX(SnoopForward, SnpPreferUniqueFwd, SnpPreferUniqueFwd_NoExcl); // 0x16
+        SET_SNPFWD(SnoopForward, SnpUniqueFwd           );  // 0x17
+                                                            // 0x18
+                                                            // 0x19
+                                                            // 0x1A
+                                                            // 0x1B
+                                                            // 0x1C
+                                                            // 0x1D
+                                                            // 0x1E
+                                                            // 0x1F
+
         #undef SET_REQ
         #undef SET_REQ_EX
+        #undef SET_SNP
+        #undef SET_SNP_EX
+        #undef SET_SNPFWD
+        #undef SET_SNPFWD_EX
     }
 
     template<FlitConfigurationConcept       config,
@@ -732,6 +762,12 @@ namespace /*CHI::*/Xact {
                 if (!(fwdState & xf))
                     return XactDenial::DENIED_STATE_FWD_SNPRESPFWDED;
 
+                if (auto p = xaction.GetLastDAT({ Opcodes::DAT::CompData }))
+                {
+                    if (flit.FwdState() != p->flit.dat.Resp())
+                        return XactDenial::DENIED_STATE_FWD_MISMATCH;
+                }
+
                 nextState = xs;
             }
             else if (g0)
@@ -812,7 +848,7 @@ namespace /*CHI::*/Xact {
             if (firstDAT && firstDAT->flit.dat.DataID() != flit.DataID())
             {
                 if (firstDAT->flit.dat.Resp() != flit.Resp())
-                    return XactDenial::DENIED_STATE_MISMATCHED_REPEAT;
+                    return XactDenial::DENIED_STATE_MISMATCH_REPEAT;
 
                 return XactDenial::ACCEPTED;
             }
@@ -923,11 +959,11 @@ namespace /*CHI::*/Xact {
             if (firstDAT && firstDAT->flit.dat.DataID() != flit.DataID())
             {
                 if (firstDAT->flit.dat.Resp() != flit.Resp())
-                    return XactDenial::DENIED_STATE_MISMATCHED_REPEAT;
+                    return XactDenial::DENIED_STATE_MISMATCH_REPEAT;
 
                 if (flit.Opcode() == Opcodes::DAT::SnpRespDataFwded)
                     if (firstDAT->flit.dat.FwdState() != flit.FwdState())
-                        return XactDenial::DENIED_STATE_FWD_MISMATCHED_REPEAT;
+                        return XactDenial::DENIED_STATE_FWD_MISMATCH_REPEAT;
 
                 return XactDenial::ACCEPTED;
             }
@@ -937,6 +973,7 @@ namespace /*CHI::*/Xact {
             const CacheStateTransitions::Intermediates::details::TableG1* g1 = nullptr;
 
             bool fwded = false;
+            bool dct   = false;
 
             if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::SnpX)
             {
@@ -974,6 +1011,14 @@ namespace /*CHI::*/Xact {
 
                     fwded = true;
                 }
+                else if (flit.Opcode() == Opcodes::DAT::CompData)
+                {
+                    g0 = &tables->G0SnpRespDataFwded(retToSrc);
+                    g1 = &tables->G1SnpRespDataFwded(retToSrc);
+
+                    fwded = true;
+                    dct = true;
+                }
                 else
                     return XactDenial::DENIED_DAT_OPCODE;
             }
@@ -997,24 +1042,59 @@ namespace /*CHI::*/Xact {
             //
             if (g1)
             {
-                CacheState xs
-                    = CacheStateTransitions::Intermediates::details::ProductG0(prevState.first, *g0, resp);
+                if (!dct)
+                {
+                    CacheState xs
+                        = CacheStateTransitions::Intermediates::details::ProductG0(prevState.first, *g0, resp);
 
-                if (!xs)
-                    return XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED;
+                    if (!xs)
+                        return XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED;
 
-                CacheResp xf
-                    = CacheStateTransitions::Intermediates::details::ProductG1(prevState.first, *g1, resp);
+                    CacheResp xf
+                        = CacheStateTransitions::Intermediates::details::ProductG1(prevState.first, *g1, resp);
 
-                if (!xf) // TODO: Existence result of G1 should be consistent with G0, replace with assertion here.
-                    return XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED;
+                    if (!xf) // TODO: Existence result of G1 should be consistent with G0, replace with assertion here.
+                        return XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED;
 
-                CacheResp fwdState = CacheResp::FromSnpRespDataFwdedFwdState(flit.FwdState().decay());
+                    CacheResp fwdState = CacheResp::FromSnpRespDataFwdedFwdState(flit.FwdState().decay());
 
-                if (!(fwdState & xf))
-                    return XactDenial::DENIED_STATE_FWD_SNPRESPDATAFWDED;
+                    if (!(fwdState & xf))
+                        return XactDenial::DENIED_STATE_FWD_SNPRESPDATAFWDED;
 
-                nextState = xs;
+                    if (auto p = xaction.GetLastDAT({ Opcodes::DAT::CompData }))
+                    {
+                        if (flit.FwdState() != p->flit.dat.Resp())
+                            return XactDenial::DENIED_STATE_FWD_MISMATCH;
+                    }
+
+                    nextState = xs;
+                }
+                else
+                {
+                    if (auto p = xaction.GetLastRSP({ Opcodes::RSP::SnpRespFwded }))
+                    {
+                        if (flit.Resp() != p->flit.rsp.FwdState())
+                            return XactDenial::DENIED_STATE_FWD_MISMATCH;
+                    }
+                    else if (auto p = xaction.GetLastDAT({ Opcodes::DAT::SnpRespDataFwded }))
+                    {
+                        if (flit.Resp() != p->flit.dat.FwdState())
+                            return XactDenial::DENIED_STATE_FWD_MISMATCH;
+                    }
+                    else
+                    {
+                        // check DCT CompData response state by Table R0 only when SnpRespFwded/SnpRespDataFwded absent
+                        CacheResp xf
+                            = CacheStateTransitions::Responses::details::ProductR0(prevState.first, trans->respDCT);
+
+                        if (!(xf & CacheResp::FromCompData(flit.Resp())))
+                            return XactDenial::DENIED_STATE_FWD_COMPDATA;
+                    }
+
+                    // *NOTICE: The next state was not revealed when only sending DCT CompData,
+                    //          and state transitions would always be handled by Snoop Responses.
+                    nextState = prevState.first;
+                }
             }
             else if (g0)
             {
@@ -1311,7 +1391,7 @@ namespace /*CHI::*/Xact {
             if (firstDAT && firstDAT->flit.dat.DataID() != flit.DataID())
             {
                 if (firstDAT->flit.dat.Resp() != flit.Resp())
-                    return XactDenial::DENIED_STATE_MISMATCHED_REPEAT;
+                    return XactDenial::DENIED_STATE_MISMATCH_REPEAT;
 
                 return XactDenial::ACCEPTED;
             }
