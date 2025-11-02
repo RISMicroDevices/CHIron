@@ -6285,7 +6285,7 @@ namespace /*CHI::*/Xact  {
             // check response consistency
             if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespData)
             {
-                if (auto p = this->GetLastDAT(Opcodes::DAT::SnpRespData))
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::SnpRespData }))
                 {
                     if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
                         return XactDenial::DENIED_SNPRESPDATA_RESP_MISMATCH;
@@ -6293,7 +6293,7 @@ namespace /*CHI::*/Xact  {
             }
             else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
             {
-                if (auto p = this->GetLastDAT(Opcodes::DAT::SnpRespDataPtl))
+                if (auto p = this->GetLastDAT({ Opcodes::DAT::SnpRespDataPtl }))
                 {
                     if (datFlit.flit.dat.Resp() != p->flit.dat.Resp())
                         return XactDenial::DENIED_SNPRESPDATAPTL_RESP_MISMATCH;
