@@ -208,6 +208,9 @@ namespace CHI {
 
             inline constexpr XactDenialEnumBack DENIED_READRECEIPT_ON_NO_ORDER      ("XACT_DENIED_READRECEIPT_ON_NO_ORDER",     0x000B0000 | 52);
 
+            inline constexpr XactDenialEnumBack DENIED_SNPRESP_BEFORE_ALL_SNPDVMOP  ("XACT_DENIED_SNPRESP_BEFORE_ALL_SNPDVMOP", 0x000B0000 | 53);
+            inline constexpr XactDenialEnumBack DENIED_DUPLICATED_SNPDVMOP          ("XACT_DENIED_DUPLICATED_SNPDVMOP",         0x000B0000 | 54);
+
             inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_SNPRESP                   ("XACT_DENIED_COMPDATA_AFTER_SNPRESP",                  0x000B0000 | 53);
             inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_SNPRESPDATA               ("XACT_DENIED_COMPDATA_AFTER_SNPRESPDATA",              0x000B0000 | 54);
             inline constexpr XactDenialEnumBack DENIED_COMPDATA_AFTER_SNPRESPDATAPTL            ("XACT_DENIED_COMPDATA_AFTER_SNPRESPDATAPTL",           0x000B0000 | 55);
