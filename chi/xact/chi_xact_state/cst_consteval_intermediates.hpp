@@ -482,7 +482,7 @@ namespace CHI {
                         {
                             CacheState state = CacheStates::None;
                             for (CacheStateTransition T : Ts)
-                                if ((T.initialExpectedState & S) && T.respCompData && (T.respSnpResp & R) && (T.retToSrc & retToSrc))
+                                if ((T.initialExpectedState & S) && T.respCompData && (T.respSnpRespData & R) && (T.retToSrc & retToSrc))
                                     state = state | T.finalState;
 
                             E.states[GetStateTableIndex(S)] = state;
@@ -1115,8 +1115,8 @@ namespace CHI {
                             assert(std::popcount(Xr.i16) == 1);
 
                             auto px = GetStateFactorForG1(P);
-                            auto rx_0 = G1[GetRespTableIndex(CacheResps::UC)].i64_0;
-                            auto rx_1 = G1[GetRespTableIndex(CacheResps::UD)].i64_1;
+                            auto rx_0 = G1[GetRespTableIndex(Xr)].i64_0;
+                            auto rx_1 = G1[GetRespTableIndex(Xr)].i64_1;
 
                             return GetRespFromG1Element(
                                 px.first  & rx_0,
