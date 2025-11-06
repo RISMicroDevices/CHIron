@@ -754,8 +754,11 @@ namespace /*CHI::*/Xact {
                 CacheResp xf
                     = CacheStateTransitions::Intermediates::details::ProductG1(prevState.first, *g1, resp);
 
-                if (!xf) // TODO: Existence result of G1 should be consistent with G0, replace with assertion here.
+                if (!xf)
+                {
+                    assert(false && "existence inconsistency between G0 and G1");
                     return XactDenial::DENIED_STATE_RESP_SNPRESPFWDED;
+                }
 
                 CacheResp fwdState = CacheResp::FromSnpRespFwdedFwdState(flit.FwdState().decay());
 
@@ -1053,8 +1056,11 @@ namespace /*CHI::*/Xact {
                     CacheResp xf
                         = CacheStateTransitions::Intermediates::details::ProductG1(prevState.first, *g1, resp);
 
-                    if (!xf) // TODO: Existence result of G1 should be consistent with G0, replace with assertion here.
+                    if (!xf)
+                    {
+                        assert(false && "existence inconsistency between G0 and G1");
                         return XactDenial::DENIED_STATE_RESP_SNPRESPDATAFWDED;
+                    }
 
                     CacheResp fwdState = CacheResp::FromSnpRespDataFwdedFwdState(flit.FwdState().decay());
 
