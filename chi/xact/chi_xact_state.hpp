@@ -1032,9 +1032,11 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_SNP_OPCODE;
 
             //
-            CacheResp resp = fwded ? CacheResp::FromSnpRespDataFwded(flit.Resp()) : (
-                flit.Opcode() == Opcodes::DAT::SnpRespDataPtl ? CacheResp::FromSnpRespDataPtl(flit.Resp())
-                                                              : CacheResp::FromSnpRespData(flit.Resp())
+            CacheResp resp = dct ? CacheResp::FromCompData(flit.Resp()) : (
+                fwded ? CacheResp::FromSnpRespDataFwded(flit.Resp()) : (
+                    flit.Opcode() == Opcodes::DAT::SnpRespDataPtl ? CacheResp::FromSnpRespDataPtl(flit.Resp())
+                                                                  : CacheResp::FromSnpRespData(flit.Resp())
+                )
             );
 
             CacheState nextState;
@@ -1118,13 +1120,18 @@ namespace /*CHI::*/Xact {
 
             if (xaction.GetFirst().flit.snp.DoNotGoToSD())
             {
-                // skip checks for SnpOnce & SnpOnceFwd
-                //  - which always allows to go to SD regardless of DoNotGoToSD
-                if (xaction.GetFirst().flit.snp.Opcode() != Opcodes::SNP::SnpOnce
-                 && xaction.GetFirst().flit.snp.Opcode() != Opcodes::SNP::SnpOnceFwd)
+                // skip checks for DCT CompData
+                //  - which not revealing any certain transition in RN
+                if (!dct)
                 {
-                    if (nextState.SD)
-                        return XactDenial::DENIED_STATE_DONOTGOTOSD;
+                    // skip checks for SnpOnce & SnpOnceFwd
+                    //  - which always allows to go to SD regardless of DoNotGoToSD
+                    if (xaction.GetFirst().flit.snp.Opcode() != Opcodes::SNP::SnpOnce
+                     && xaction.GetFirst().flit.snp.Opcode() != Opcodes::SNP::SnpOnceFwd)
+                    {
+                        if (nextState.SD)
+                            return XactDenial::DENIED_STATE_DONOTGOTOSD;
+                    }
                 }
             }
 
