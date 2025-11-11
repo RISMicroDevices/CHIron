@@ -2265,6 +2265,213 @@ namespace CHI {
     };
 #endif
 
+
+    //
+    class RespAndFwdStateEnumBack {
+    public:
+        const char* name;
+        const int   value;
+
+    public:
+        inline constexpr RespAndFwdStateEnumBack(const char* name, const int value) noexcept
+        : name(name), value(value) { }
+
+    public:
+        inline constexpr operator int() const noexcept
+        { return value; }
+
+        inline constexpr operator const RespAndFwdStateEnumBack*() const noexcept
+        { return this; }
+
+        inline constexpr bool operator==(const RespAndFwdStateEnumBack& obj) const noexcept
+        { return value == obj.value; }
+
+        inline constexpr bool operator!=(const RespAndFwdStateEnumBack& obj) const noexcept
+        { return !(*this == obj); }
+
+        inline constexpr bool IsValid() const noexcept
+        { return value != INT_MIN; }
+
+        inline constexpr Resp::type Resp() const noexcept
+        { return Resp::type(value & 0x7); }
+
+        inline constexpr FwdState::type FwdState() const noexcept
+        { return FwdState::type((value >> 3) & 0x7); }
+    };
+
+    using RespAndFwdStateEnum = const RespAndFwdStateEnumBack*;
+
+    class RespAndFwdState {
+    protected:
+        union {
+            uint8_t     value;
+            struct {
+                uint8_t     resp        : 3;
+                uint8_t     fwdState    : 3;
+                uint8_t     _padding    : 2;
+            };
+        };
+
+    public:
+        inline constexpr RespAndFwdState(Resp::type resp, FwdState::type fwdState) noexcept
+        : resp(resp), fwdState(fwdState), _padding(0) { }
+
+    public:
+        inline constexpr Resp::type Resp() const noexcept
+        { return static_cast<Resp::type>(resp); };
+
+        inline constexpr FwdState::type FwdState() const noexcept
+        { return static_cast<FwdState::type>(fwdState); };
+
+    public:
+        inline constexpr operator uint8_t() const noexcept
+        { return resp | (fwdState << 3); };
+
+        inline constexpr bool operator==(const RespAndFwdState obj) const noexcept
+        { return resp == obj.resp && fwdState == obj.fwdState; }
+
+        inline constexpr bool operator!=(const RespAndFwdState obj) const noexcept
+        { return !(*this == obj); }
+
+        inline RespAndFwdStateEnum ToEnumSnpRespFwded() const noexcept;
+        inline RespAndFwdStateEnum ToEnumSnpRespDataFwded() const noexcept;
+    };
+
+    namespace RespAndFwdStates {
+
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_I           (Resp::SnpResp_I_Fwded_I            , FwdState::I       );
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_SC          (Resp::SnpResp_I_Fwded_SC           , FwdState::SC      );
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_UC          (Resp::SnpResp_I_Fwded_UC           , FwdState::UC      );
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_UD_PD       (Resp::SnpResp_I_Fwded_UD_PD        , FwdState::UD_PD   );
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_SD_PD       (Resp::SnpResp_I_Fwded_SD_PD        , FwdState::SD_PD   );
+        inline constexpr RespAndFwdState    SnpResp_SC_Fwded_I          (Resp::SnpResp_SC_Fwded_I           , FwdState::I       );
+        inline constexpr RespAndFwdState    SnpResp_SC_Fwded_SC         (Resp::SnpResp_SC_Fwded_SC          , FwdState::SC      );
+        inline constexpr RespAndFwdState    SnpResp_SC_Fwded_SD_PD      (Resp::SnpResp_SC_Fwded_SD_PD       , FwdState::SD_PD   );
+        inline constexpr RespAndFwdState    SnpResp_UC_Fwded_I          (Resp::SnpResp_UC_Fwded_I           , FwdState::I       );
+        inline constexpr RespAndFwdState    SnpResp_UD_Fwded_I          (Resp::SnpResp_UD_Fwded_I           , FwdState::I       );
+        inline constexpr RespAndFwdState    SnpResp_SD_Fwded_I          (Resp::SnpResp_SD_Fwded_I           , FwdState::I       );
+        inline constexpr RespAndFwdState    SnpResp_SD_Fwded_SC         (Resp::SnpResp_SD_Fwded_SC          , FwdState::SC      );
+
+        inline constexpr RespAndFwdState    SnpRespData_I_Fwded_SC      (Resp::SnpRespData_I_Fwded_SC       , FwdState::SC      );
+        inline constexpr RespAndFwdState    SnpRespData_I_Fwded_SD_PD   (Resp::SnpRespData_I_Fwded_SD_PD    , FwdState::SD_PD   );
+        inline constexpr RespAndFwdState    SnpRespData_SC_Fwded_SC     (Resp::SnpRespData_SC_Fwded_SC      , FwdState::SC      );
+        inline constexpr RespAndFwdState    SnpRespData_SC_Fwded_SD_PD  (Resp::SnpRespData_SC_Fwded_SD_PD   , FwdState::SD_PD   );
+        inline constexpr RespAndFwdState    SnpRespData_SD_Fwded_SC     (Resp::SnpRespData_SD_Fwded_SC      , FwdState::SC      );
+        inline constexpr RespAndFwdState    SnpRespData_I_PD_Fwded_I    (Resp::SnpRespData_I_PD_Fwded_I     , FwdState::I       );
+        inline constexpr RespAndFwdState    SnpRespData_I_PD_Fwded_SC   (Resp::SnpRespData_I_PD_Fwded_SC    , FwdState::SC      );
+        inline constexpr RespAndFwdState    SnpRespData_SC_PD_Fwded_I   (Resp::SnpRespData_SC_PD_Fwded_I    , FwdState::I       );
+        inline constexpr RespAndFwdState    SnpRespData_SC_PD_Fwded_SC  (Resp::SnpRespData_SC_PD_Fwded_SC   , FwdState::SC      );
+
+        inline bool IsSnpRespFwdedValid(Resp::type resp, FwdState::type fwdState) noexcept;
+        inline bool IsSnpRespDataFwdedValid(Resp::type resp, FwdState::type fwdState) noexcept;
+
+        namespace Enum {
+
+            inline constexpr RespAndFwdStateEnumBack Invalid                    ("Invalid", INT_MIN);
+
+            inline constexpr RespAndFwdStateEnumBack SnpResp_I_Fwded_I          ("SnpResp_I_Fwded_I"            , RespAndFwdStates::SnpResp_I_Fwded_I           );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_I_Fwded_SC         ("SnpResp_I_Fwded_SC"           , RespAndFwdStates::SnpResp_I_Fwded_SC          );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_I_Fwded_UC         ("SnpResp_I_Fwded_UC"           , RespAndFwdStates::SnpResp_I_Fwded_UC          );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_I_Fwded_UD_PD      ("SnpResp_I_Fwded_UD_PD"        , RespAndFwdStates::SnpResp_I_Fwded_UD_PD       );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_I_Fwded_SD_PD      ("SnpResp_I_Fwded_SD_PD"        , RespAndFwdStates::SnpResp_I_Fwded_SD_PD       );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_SC_Fwded_I         ("SnpResp_SC_Fwded_I"           , RespAndFwdStates::SnpResp_SC_Fwded_I          );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_SC_Fwded_SC        ("SnpResp_SC_Fwded_SC"          , RespAndFwdStates::SnpResp_SC_Fwded_SC         );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_SC_Fwded_SD_PD     ("SnpResp_SC_Fwded_SD_PD"       , RespAndFwdStates::SnpResp_SC_Fwded_SD_PD      );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_UC_Fwded_I         ("SnpResp_UC_Fwded_I"           , RespAndFwdStates::SnpResp_UC_Fwded_I          );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_UD_Fwded_I         ("SnpResp_UD_Fwded_I"           , RespAndFwdStates::SnpResp_UD_Fwded_I          );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_SD_Fwded_I         ("SnpResp_SD_Fwded_I"           , RespAndFwdStates::SnpResp_SD_Fwded_I          );
+            inline constexpr RespAndFwdStateEnumBack SnpResp_SD_Fwded_SC        ("SnpResp_SD_Fwded_SC"          , RespAndFwdStates::SnpResp_SD_Fwded_SC         );
+        
+            inline constexpr RespAndFwdStateEnumBack SnpRespData_I_Fwded_SC     ("SnpRespData_I_Fwded_SC"       , RespAndFwdStates::SnpRespData_I_Fwded_SC      );
+            inline constexpr RespAndFwdStateEnumBack SnpRespData_I_Fwded_SD_PD  ("SnpRespData_I_Fwded_SD_PD"    , RespAndFwdStates::SnpResp_I_Fwded_SD_PD       );
+            inline constexpr RespAndFwdStateEnumBack SnpRespData_SC_Fwded_SC    ("SnpRespData_SC_Fwded_SC"      , RespAndFwdStates::SnpRespData_SC_Fwded_SC     );
+            inline constexpr RespAndFwdStateEnumBack SnpRespData_SC_Fwded_SD_PD ("SnpRespData_SC_Fwded_SD_PD"   , RespAndFwdStates::SnpRespData_SC_Fwded_SD_PD  );
+            inline constexpr RespAndFwdStateEnumBack SnpRespData_SD_Fwded_SC    ("SnpRespData_SD_Fwded_SC"      , RespAndFwdStates::SnpRespData_SD_Fwded_SC     );
+            inline constexpr RespAndFwdStateEnumBack SnpRespData_I_PD_Fwded_I   ("SnpRespData_I_PD_Fwded_I"     , RespAndFwdStates::SnpRespData_I_PD_Fwded_I    );
+            inline constexpr RespAndFwdStateEnumBack SnpRespData_I_PD_Fwded_SC  ("SnpRespData_I_PD_Fwded_SC"    , RespAndFwdStates::SnpRespData_I_PD_Fwded_SC   );
+            inline constexpr RespAndFwdStateEnumBack SnpRespData_SC_PD_Fwded_I  ("SnpRespData_SC_PD_Fwded_I"    , RespAndFwdStates::SnpRespData_SC_PD_Fwded_I   );
+            inline constexpr RespAndFwdStateEnumBack SnpRespData_SC_PD_Fwded_SC ("SnpRespData_SC_PD_Fwded_SC"   , RespAndFwdStates::SnpRespData_SC_PD_Fwded_SC  );
+
+            namespace details {
+
+                inline RespAndFwdStateEnum* GetAllSnpResp() noexcept
+                {
+                    static RespAndFwdStateEnum ALL[64] = { nullptr };
+
+                    if (!ALL[0])
+                    {
+                        for (int i = 0; i < 64; i++)
+                            ALL[i] = Invalid;
+
+                        ALL[SnpResp_I_Fwded_I       ] = SnpResp_I_Fwded_I;
+                        ALL[SnpResp_I_Fwded_SC      ] = SnpResp_I_Fwded_SC;
+                        ALL[SnpResp_I_Fwded_UC      ] = SnpResp_I_Fwded_UC;
+                        ALL[SnpResp_I_Fwded_UD_PD   ] = SnpResp_I_Fwded_UD_PD;
+                        ALL[SnpResp_I_Fwded_SD_PD   ] = SnpResp_I_Fwded_SD_PD;
+                        ALL[SnpResp_SC_Fwded_I      ] = SnpResp_SC_Fwded_I;
+                        ALL[SnpResp_SC_Fwded_SC     ] = SnpResp_SC_Fwded_SC;
+                        ALL[SnpResp_SC_Fwded_SD_PD  ] = SnpResp_SC_Fwded_SD_PD;
+                        ALL[SnpResp_UC_Fwded_I      ] = SnpResp_UC_Fwded_I;
+                        ALL[SnpResp_UD_Fwded_I      ] = SnpResp_UD_Fwded_I;
+                        ALL[SnpResp_SD_Fwded_I      ] = SnpResp_SD_Fwded_I;
+                        ALL[SnpResp_SD_Fwded_SC     ] = SnpResp_SD_Fwded_SC;
+                    }
+
+                    return ALL;
+                }
+
+                inline RespAndFwdStateEnum* GetAllSnpRespData() noexcept
+                {
+                    static RespAndFwdStateEnum ALL[64] = { nullptr };
+
+                    if (!ALL[0])
+                    {
+                        for (int i = 0; i < 64; i++)
+                            ALL[i] = Invalid;
+
+                        ALL[SnpRespData_I_Fwded_SC      ] = SnpRespData_I_Fwded_SC;
+                        ALL[SnpRespData_I_Fwded_SD_PD   ] = SnpRespData_I_Fwded_SD_PD;
+                        ALL[SnpRespData_SC_Fwded_SC     ] = SnpRespData_SC_Fwded_SC;
+                        ALL[SnpRespData_SC_Fwded_SD_PD  ] = SnpRespData_SC_Fwded_SD_PD;
+                        ALL[SnpRespData_SD_Fwded_SC     ] = SnpRespData_SD_Fwded_SC;
+                        ALL[SnpRespData_I_PD_Fwded_I    ] = SnpRespData_I_PD_Fwded_I;
+                        ALL[SnpRespData_I_PD_Fwded_SC   ] = SnpRespData_I_PD_Fwded_SC;
+                        ALL[SnpRespData_SC_PD_Fwded_I   ] = SnpRespData_SC_PD_Fwded_I;
+                        ALL[SnpRespData_SC_PD_Fwded_SC  ] = SnpRespData_SC_PD_Fwded_SC;
+                    }
+
+                    return ALL;
+                }
+            }
+        }
+
+        inline bool IsSnpRespFwdedValid(Resp::type resp, FwdState::type fwdState) noexcept
+        {
+            return RespAndFwdState(resp, fwdState).ToEnumSnpRespFwded() != Enum::Invalid;
+        }
+
+        inline bool IsSnpRespDataFwdedValid(Resp::type resp, FwdState::type fwdState) noexcept
+        {
+            return RespAndFwdState(resp, fwdState).ToEnumSnpRespDataFwded() != Enum::Invalid;
+        }
+    }
+
+    inline RespAndFwdStateEnum RespAndFwdState::ToEnumSnpRespFwded() const noexcept
+    {
+        if (value < 64)
+            return RespAndFwdStates::Enum::details::GetAllSnpResp()[value];
+
+        return RespAndFwdStates::Enum::Invalid;
+    }
+
+    inline RespAndFwdStateEnum RespAndFwdState::ToEnumSnpRespDataFwded() const noexcept
+    {
+        if (value < 64)
+            return RespAndFwdStates::Enum::details::GetAllSnpRespData()[value];
+        
+        return RespAndFwdStates::Enum::Invalid;
+    }
+
 /*
 };
 */
