@@ -250,6 +250,9 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_DATASEPRESP_RESP_MISMATCH                    ("XACT_DENIED_DATASEPRESP_RESP_MISMATCH",                   0x000B0000 | 88);
             inline constexpr XactDenialEnumBack DENIED_COPYBACKWRDATA_RESP_MISMATCH                 ("XACT_DENIED_COPYBACKWRDATA_RESP_MISMATCH",                0x000B0000 | 89);
 
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPFWDED_INVALID_FWDSTATE_RESP           ("XACT_DENIED_SNPRESPFWDED_INVALID_FWDSTATE_RESP",          0x000B0000 | 90);
+            inline constexpr XactDenialEnumBack DENIED_SNPRESPDATAFWDED_INVALID_FWDSTATE_RESP       ("XACT_DENIED_SNPRESPDATAFWDED_INVALID_FWDSTATE_RESP",      0x000B0000 | 91);
+
             inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_XACT_TYPE         ("XACT_DENIED_RETRY_DIFF_XACT_TYPE",        0x000C0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_RETRY_NO_ALLOWRETRY          ("XACT_DENIED_RETRY_NO_ALLOWRETRY",         0x000C0000 |  1);
             inline constexpr XactDenialEnumBack DENIED_NO_MATCHING_RETRY            ("XACT_DENIED_NO_MATCHING_RETRY",           0x000C0000 |  2);

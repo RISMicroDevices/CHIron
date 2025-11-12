@@ -6540,7 +6540,6 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.snp.TxnID())
                 return XactDenial::DENIED_TXNID_MISMATCH;
 
-            
             if (auto p = this->GetLastRSP({
                     Opcodes::RSP::SnpResp,
                     Opcodes::RSP::SnpRespFwded}))
@@ -6607,9 +6606,13 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_DUPLICATED_SNPRESP;
             }
 
-            // check forward state consistency between forwarded responses
+            // check forward state and resp
             if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
             {
+                if (!RespAndFwdStates::IsSnpRespFwdedValid(rspFlit.flit.rsp.Resp(), rspFlit.flit.rsp.FwdState().decay()))
+                    return XactDenial::DENIED_SNPRESPFWDED_INVALID_FWDSTATE_RESP;
+
+                // check forward state consistency between forwarded responses
                 if (auto p = this->GetLastDAT({ Opcodes::DAT::CompData }))
                 {
                     if (rspFlit.flit.rsp.FwdState() != p->flit.dat.Resp())
@@ -6743,6 +6746,10 @@ namespace /*CHI::*/Xact {
 
                     return XactDenial::DENIED_DUPLICATED_SNPRESPDATA;
                 }
+
+                // check forward state and resp
+                if (!RespAndFwdStates::IsSnpRespDataFwdedValid(datFlit.flit.dat.Resp(), datFlit.flit.dat.FwdState().decay()))
+                    return XactDenial::DENIED_SNPRESPDATAFWDED_INVALID_FWDSTATE_RESP;
             }
             else
                 assert(false && "should not reach here");
