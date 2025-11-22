@@ -26,14 +26,42 @@ namespace CHI {
 */
     namespace Expresso::Flit {
 
+        enum class KeyCategory {
+            REQ = 0,
+            RSP,
+            DAT,
+            SNP
+        };
+
         class KeyBack {
         public:
-            const char* const   name;
-            const char* const   canonicalName;
+            const KeyBack* const    prev;
+            const KeyCategory       category;
+            const unsigned int      ordinal;
+            const char* const       name;
+            const char* const       canonicalName;
             
         public:
-            inline constexpr KeyBack(const char* name, const char* canonicalName) noexcept
-                : name(name), canonicalName(canonicalName) { };
+            inline constexpr KeyBack(const KeyCategory  category,
+                                     const char*        name,
+                                     const char*        canonicalName) noexcept
+                : prev          (nullptr)
+                , category      (category)
+                , ordinal       (0)
+                , name          (name)
+                , canonicalName (canonicalName) 
+            { }
+
+            inline constexpr KeyBack(const KeyCategory      category,
+                                     const char*            name,
+                                     const char*            canonicalName,
+                                     const KeyBack* const   prev) noexcept
+                : prev          (prev)
+                , category      (category)
+                , ordinal       (prev->ordinal + 1)
+                , name          (name)
+                , canonicalName (canonicalName) 
+            { }
 
         public:
             inline constexpr operator const KeyBack*() const noexcept
@@ -42,106 +70,140 @@ namespace CHI {
 
         using Key = const KeyBack*;
 
+        class KeyIterator {
+        protected:
+            Key current;
+
+        public:
+            inline constexpr KeyIterator(Key current) noexcept : current(current) {}
+
+        public: // iterator implementation
+            using iterator_category = std::forward_iterator_tag;
+            using value_type = const KeyBack*;
+            using difference_type = std::monostate;
+
+            inline value_type operator*() const noexcept { return current; }
+            inline value_type operator->() const noexcept { return current; }
+            inline KeyIterator& operator++() noexcept { if (current) current = current->prev; return *this; }
+            inline KeyIterator operator++(int) noexcept { auto tmp = *this; ++*this; return tmp; }
+
+            inline constexpr bool operator==(const KeyIterator& obj) const noexcept { return current == obj.current; }
+            inline constexpr bool operator!=(const KeyIterator& obj) const noexcept { return current != obj.current; }
+        };
+
+
         namespace Keys {
 
             namespace REQ {
-                inline constexpr KeyBack QoS                ("REQ.QoS",             "QoS"               );
-                inline constexpr KeyBack TgtID              ("REQ.TgtID",           "TgtID"             );
-                inline constexpr KeyBack SrcID              ("REQ.SrcID",           "SrcID"             );
-                inline constexpr KeyBack TxnID              ("REQ.TxnID",           "TxnID"             );
-                inline constexpr KeyBack ReturnNID          ("REQ.ReturnNID",       "ReturnNID"         );
-                inline constexpr KeyBack StashNID           ("REQ.StashNID",        "StashNID"          );
-                inline constexpr KeyBack SLCRepHint         ("REQ.SLCRepHint",      "SLCRepHint"        );
-                inline constexpr KeyBack StashNIDValid      ("REQ.StashNIDValid",   "StashNIDValid"     );
-                inline constexpr KeyBack Endian             ("REQ.Endian",          "Endian"            );
-                inline constexpr KeyBack Deep               ("REQ.Deep",            "Deep"              );
-                inline constexpr KeyBack ReturnTxnID        ("REQ.ReturnTxnID",     "ReturnTxnID"       );
-                inline constexpr KeyBack StashLPIDValid     ("REQ.StashLPIDValid",  "StashLPIDValid"    );
-                inline constexpr KeyBack StashLPID          ("REQ.StashLPID",       "StashLPID"         );
-                inline constexpr KeyBack Size               ("REQ.Size",            "Size"              );
-                inline constexpr KeyBack Addr               ("REQ.Addr",            "Addr"              );
-                inline constexpr KeyBack NS                 ("REQ.NS",              "NS"                );
-                inline constexpr KeyBack LikelyShared       ("REQ.LikelyShared",    "LikelyShared"      );
-                inline constexpr KeyBack AllowRetry         ("REQ.AllowRetry",      "AllowRetry"        );
-                inline constexpr KeyBack Order              ("REQ.Order",           "Order"             );
-                inline constexpr KeyBack PCrdType           ("REQ.PCrdType",        "PCrdType"          );
-                inline constexpr KeyBack MemAttr            ("REQ.MemAttr",         "MemAttr"           );
-                inline constexpr KeyBack SnpAttr            ("REQ.SnpAttr",         "SnpAttr"           );
-                inline constexpr KeyBack DoDWT              ("REQ.DoDWT",           "DoDWT"             );
-                inline constexpr KeyBack LPID               ("REQ.LPID",            "LPID"              );
-                inline constexpr KeyBack PGroupID           ("REQ.PGroupID",        "PGroupID"          );
-                inline constexpr KeyBack StashGroupID       ("REQ.StashGroupID",    "StashGroupID"      );
-                inline constexpr KeyBack TagGroupID         ("REQ.TagGroupID",      "TagGroupID"        );
-                inline constexpr KeyBack Excl               ("REQ.Excl",            "Excl"              );
-                inline constexpr KeyBack SnoopMe            ("REQ.SnoopMe",         "SnoopMe"           );
-                inline constexpr KeyBack ExpCompAck         ("REQ.ExpCompAck",      "ExpCompAck"        );
-                inline constexpr KeyBack TagOp              ("REQ.TagOp",           "TagOp"             );
-                inline constexpr KeyBack TraceTag           ("REQ.TraceTag",        "TraceTag"          );
-                inline constexpr KeyBack MPAM               ("REQ.MPAM",            "MPAM"              );
-                inline constexpr KeyBack RSVDC              ("REQ.RSVDC",           "RSVDC"             );
+                inline constexpr KeyBack RSVDC              (KeyCategory::REQ,  "REQ.RSVDC",           "RSVDC"             );
+                inline constexpr KeyBack MPAM               (KeyCategory::REQ,  "REQ.MPAM",            "MPAM"              , RSVDC          );
+                inline constexpr KeyBack TraceTag           (KeyCategory::REQ,  "REQ.TraceTag",        "TraceTag"          , MPAM           );
+                inline constexpr KeyBack TagOp              (KeyCategory::REQ,  "REQ.TagOp",           "TagOp"             , TraceTag       );
+                inline constexpr KeyBack ExpCompAck         (KeyCategory::REQ,  "REQ.ExpCompAck",      "ExpCompAck"        , TagOp          );
+                inline constexpr KeyBack SnoopMe            (KeyCategory::REQ,  "REQ.SnoopMe",         "SnoopMe"           , ExpCompAck     );
+                inline constexpr KeyBack Excl               (KeyCategory::REQ,  "REQ.Excl",            "Excl"              , SnoopMe        );
+                inline constexpr KeyBack TagGroupID         (KeyCategory::REQ,  "REQ.TagGroupID",      "TagGroupID"        , Excl           );
+                inline constexpr KeyBack StashGroupID       (KeyCategory::REQ,  "REQ.StashGroupID",    "StashGroupID"      , TagGroupID     );
+                inline constexpr KeyBack PGroupID           (KeyCategory::REQ,  "REQ.PGroupID",        "PGroupID"          , StashGroupID   );
+                inline constexpr KeyBack LPID               (KeyCategory::REQ,  "REQ.LPID",            "LPID"              , PGroupID       );
+                inline constexpr KeyBack DoDWT              (KeyCategory::REQ,  "REQ.DoDWT",           "DoDWT"             , LPID           );
+                inline constexpr KeyBack SnpAttr            (KeyCategory::REQ,  "REQ.SnpAttr",         "SnpAttr"           , DoDWT          );
+                inline constexpr KeyBack MemAttr            (KeyCategory::REQ,  "REQ.MemAttr",         "MemAttr"           , SnpAttr        );
+                inline constexpr KeyBack PCrdType           (KeyCategory::REQ,  "REQ.PCrdType",        "PCrdType"          , MemAttr        );
+                inline constexpr KeyBack Order              (KeyCategory::REQ,  "REQ.Order",           "Order"             , PCrdType       );
+                inline constexpr KeyBack AllowRetry         (KeyCategory::REQ,  "REQ.AllowRetry",      "AllowRetry"        , Order          );
+                inline constexpr KeyBack LikelyShared       (KeyCategory::REQ,  "REQ.LikelyShared",    "LikelyShared"      , AllowRetry     );
+                inline constexpr KeyBack NS                 (KeyCategory::REQ,  "REQ.NS",              "NS"                , LikelyShared   );
+                inline constexpr KeyBack Addr               (KeyCategory::REQ,  "REQ.Addr",            "Addr"              , NS             );
+                inline constexpr KeyBack Size               (KeyCategory::REQ,  "REQ.Size",            "Size"              , Addr           );
+                inline constexpr KeyBack StashLPID          (KeyCategory::REQ,  "REQ.StashLPID",       "StashLPID"         , Size           );
+                inline constexpr KeyBack StashLPIDValid     (KeyCategory::REQ,  "REQ.StashLPIDValid",  "StashLPIDValid"    , StashLPID      );
+                inline constexpr KeyBack ReturnTxnID        (KeyCategory::REQ,  "REQ.ReturnTxnID",     "ReturnTxnID"       , StashLPIDValid );
+                inline constexpr KeyBack Deep               (KeyCategory::REQ,  "REQ.Deep",            "Deep"              , ReturnTxnID    );
+                inline constexpr KeyBack Endian             (KeyCategory::REQ,  "REQ.Endian",          "Endian"            , Deep           );
+                inline constexpr KeyBack StashNIDValid      (KeyCategory::REQ,  "REQ.StashNIDValid",   "StashNIDValid"     , Endian         );
+                inline constexpr KeyBack SLCRepHint         (KeyCategory::REQ,  "REQ.SLCRepHint",      "SLCRepHint"        , StashNIDValid  );
+                inline constexpr KeyBack StashNID           (KeyCategory::REQ,  "REQ.StashNID",        "StashNID"          , SLCRepHint     );
+                inline constexpr KeyBack ReturnNID          (KeyCategory::REQ,  "REQ.ReturnNID",       "ReturnNID"         , StashNID       );
+                inline constexpr KeyBack TxnID              (KeyCategory::REQ,  "REQ.TxnID",           "TxnID"             , ReturnNID      );
+                inline constexpr KeyBack SrcID              (KeyCategory::REQ,  "REQ.SrcID",           "SrcID"             , TxnID          );
+                inline constexpr KeyBack TgtID              (KeyCategory::REQ,  "REQ.TgtID",           "TgtID"             , SrcID          );
+                inline constexpr KeyBack QoS                (KeyCategory::REQ,  "REQ.QoS",             "QoS"               , TgtID          );
+
+                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
+                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
             }
 
             namespace RSP {
-                inline constexpr KeyBack QoS                ("RSP.QoS",             "QoS"               );
-                inline constexpr KeyBack TgtID              ("RSP.TgtID",           "TgtId"             );
-                inline constexpr KeyBack SrcID              ("RSP.SrcID",           "SrcID"             );
-                inline constexpr KeyBack TxnID              ("RSP.TxnID",           "TxnID"             );
-                inline constexpr KeyBack RespErr            ("RSP.RespErr",         "RespErr"           );
-                inline constexpr KeyBack Resp               ("RSP.Resp",            "Resp"              );
-                inline constexpr KeyBack FwdState           ("RSP.FwdState",        "FwdState"          );
-                inline constexpr KeyBack DataPull           ("RSP.DataPull",        "DataPull"          );
-                inline constexpr KeyBack CBusy              ("RSP.CBusy",           "CBusy"             );
-                inline constexpr KeyBack DBID               ("RSP.DBID",            "DBID"              );
-                inline constexpr KeyBack PGroupID           ("RSP.PGroupID",        "PGroupID"          );
-                inline constexpr KeyBack StashGroupID       ("RSP.StashGroupID",    "StashGroupID"      );
-                inline constexpr KeyBack TagGroupID         ("RSP.TagGroupID",      "TagGroupID"        );
-                inline constexpr KeyBack PCrdType           ("RSP.PCrdType",        "PCrdType"          );
-                inline constexpr KeyBack TagOp              ("RSP.TagOp",           "TagOp"             );
-                inline constexpr KeyBack TraceTag           ("RSP.TraceTag",        "TraceTag"          );
+                inline constexpr KeyBack TraceTag           (KeyCategory::RSP,  "RSP.TraceTag",        "TraceTag"          );
+                inline constexpr KeyBack TagOp              (KeyCategory::RSP,  "RSP.TagOp",           "TagOp"             , TraceTag       );
+                inline constexpr KeyBack PCrdType           (KeyCategory::RSP,  "RSP.PCrdType",        "PCrdType"          , TagOp          );
+                inline constexpr KeyBack TagGroupID         (KeyCategory::RSP,  "RSP.TagGroupID",      "TagGroupID"        , PCrdType       );
+                inline constexpr KeyBack StashGroupID       (KeyCategory::RSP,  "RSP.StashGroupID",    "StashGroupID"      , TagGroupID     );
+                inline constexpr KeyBack PGroupID           (KeyCategory::RSP,  "RSP.PGroupID",        "PGroupID"          , StashGroupID   );
+                inline constexpr KeyBack DBID               (KeyCategory::RSP,  "RSP.DBID",            "DBID"              , PGroupID       );
+                inline constexpr KeyBack CBusy              (KeyCategory::RSP,  "RSP.CBusy",           "CBusy"             , DBID           );
+                inline constexpr KeyBack DataPull           (KeyCategory::RSP,  "RSP.DataPull",        "DataPull"          , CBusy          );
+                inline constexpr KeyBack FwdState           (KeyCategory::RSP,  "RSP.FwdState",        "FwdState"          , DataPull       );
+                inline constexpr KeyBack Resp               (KeyCategory::RSP,  "RSP.Resp",            "Resp"              , FwdState       );
+                inline constexpr KeyBack RespErr            (KeyCategory::RSP,  "RSP.RespErr",         "RespErr"           , Resp           );
+                inline constexpr KeyBack TxnID              (KeyCategory::RSP,  "RSP.TxnID",           "TxnID"             , RespErr        );
+                inline constexpr KeyBack SrcID              (KeyCategory::RSP,  "RSP.SrcID",           "SrcID"             , TxnID          );
+                inline constexpr KeyBack TgtID              (KeyCategory::RSP,  "RSP.TgtID",           "TgtId"             , SrcID          );
+                inline constexpr KeyBack QoS                (KeyCategory::RSP,  "RSP.QoS",             "QoS"               , TgtID          );
+
+                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
+                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
             }
 
             namespace DAT {
-                inline constexpr KeyBack QoS                ("DAT.QoS",             "QoS"               );
-                inline constexpr KeyBack TgtID              ("DAT.TgtID",           "TgtID"             );
-                inline constexpr KeyBack SrcID              ("DAT.SrcID",           "SrcID"             );
-                inline constexpr KeyBack TxnID              ("DAT.TxnID",           "TxnID"             );
-                inline constexpr KeyBack HomeNID            ("DAT.HomeNID",         "HomeNID"           );
-                inline constexpr KeyBack RespErr            ("DAT.RespErr",         "RespErr"           );
-                inline constexpr KeyBack Resp               ("DAT.Resp",            "Resp"              );
-                inline constexpr KeyBack FwdState           ("DAT.FwdState",        "FwdState"          );
-                inline constexpr KeyBack DataPull           ("DAT.DataPull",        "DataPull"          );
-                inline constexpr KeyBack DataSource         ("DAT.DataSource",      "DataSource"        );
-                inline constexpr KeyBack CBusy              ("DAT.CBusy",           "CBusy"             );
-                inline constexpr KeyBack DBID               ("DAT.DBID",            "DBID"              );
-                inline constexpr KeyBack CCID               ("DAT.CCID",            "CCID"              );
-                inline constexpr KeyBack DataID             ("DAT.DataID",          "DataID"            );
-                inline constexpr KeyBack TagOp              ("DAT.TagOp",           "TagOp"             );
-                inline constexpr KeyBack Tag                ("DAT.Tag",             "Tag"               );
-                inline constexpr KeyBack TU                 ("DAT.TU",              "TU"                );
-                inline constexpr KeyBack TraceTag           ("DAT.TraceTag",        "TraceTag"          );
-                inline constexpr KeyBack RSVDC              ("DAT.RSVDC",           "RSVDC"             );
-                inline constexpr KeyBack BE                 ("DAT.BE",              "BE"                );
-                inline constexpr KeyBack Data               ("DAT.Data",            "Data"              );
-                inline constexpr KeyBack DataCheck          ("DAT.DataCheck",       "DataCheck"         );
-                inline constexpr KeyBack Poison             ("DAT.Poison",          "Poison"            );                
+                inline constexpr KeyBack Poison             (KeyCategory::DAT,  "DAT.Poison",          "Poison"            );
+                inline constexpr KeyBack DataCheck          (KeyCategory::DAT,  "DAT.DataCheck",       "DataCheck"         , Poison         );
+                inline constexpr KeyBack Data               (KeyCategory::DAT,  "DAT.Data",            "Data"              , DataCheck      );
+                inline constexpr KeyBack BE                 (KeyCategory::DAT,  "DAT.BE",              "BE"                , Data           );
+                inline constexpr KeyBack RSVDC              (KeyCategory::DAT,  "DAT.RSVDC",           "RSVDC"             , BE             );
+                inline constexpr KeyBack TraceTag           (KeyCategory::DAT,  "DAT.TraceTag",        "TraceTag"          , RSVDC          );
+                inline constexpr KeyBack TU                 (KeyCategory::DAT,  "DAT.TU",              "TU"                , TraceTag       );
+                inline constexpr KeyBack Tag                (KeyCategory::DAT,  "DAT.Tag",             "Tag"               , TU             );
+                inline constexpr KeyBack TagOp              (KeyCategory::DAT,  "DAT.TagOp",           "TagOp"             , Tag            );
+                inline constexpr KeyBack DataID             (KeyCategory::DAT,  "DAT.DataID",          "DataID"            , TagOp          );
+                inline constexpr KeyBack CCID               (KeyCategory::DAT,  "DAT.CCID",            "CCID"              , DataID         );
+                inline constexpr KeyBack DBID               (KeyCategory::DAT,  "DAT.DBID",            "DBID"              , CCID           );
+                inline constexpr KeyBack CBusy              (KeyCategory::DAT,  "DAT.CBusy",           "CBusy"             , DBID           );
+                inline constexpr KeyBack DataSource         (KeyCategory::DAT,  "DAT.DataSource",      "DataSource"        , CBusy          );
+                inline constexpr KeyBack DataPull           (KeyCategory::DAT,  "DAT.DataPull",        "DataPull"          , DataSource     );
+                inline constexpr KeyBack FwdState           (KeyCategory::DAT,  "DAT.FwdState",        "FwdState"          , DataPull       );
+                inline constexpr KeyBack Resp               (KeyCategory::DAT,  "DAT.Resp",            "Resp"              , FwdState       );
+                inline constexpr KeyBack RespErr            (KeyCategory::DAT,  "DAT.RespErr",         "RespErr"           , Resp           );
+                inline constexpr KeyBack HomeNID            (KeyCategory::DAT,  "DAT.HomeNID",         "HomeNID"           , RespErr        );
+                inline constexpr KeyBack TxnID              (KeyCategory::DAT,  "DAT.TxnID",           "TxnID"             , HomeNID        );
+                inline constexpr KeyBack SrcID              (KeyCategory::DAT,  "DAT.SrcID",           "SrcID"             , TxnID          );
+                inline constexpr KeyBack TgtID              (KeyCategory::DAT,  "DAT.TgtID",           "TgtID"             , SrcID          );
+                inline constexpr KeyBack QoS                (KeyCategory::DAT,  "DAT.QoS",             "QoS"               , TgtID          );
+
+                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
+                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
             }
 
             namespace SNP {
-                inline constexpr KeyBack QoS                ("SNP.QoS",             "QoS"               );
-                inline constexpr KeyBack SrcID              ("SNP.SrcID",           "SrcID"             );
-                inline constexpr KeyBack TxnID              ("SNP.TxnID",           "TxnID"             );
-                inline constexpr KeyBack FwdNID             ("SNP.FwdNID",          "FwdNID"            );
-                inline constexpr KeyBack FwdTxnID           ("SNP.FwdTxnID",        "FwdTxnID"          );
-                inline constexpr KeyBack StashLPIDValid     ("SNP.StashLPIDValid",  "StashLPIDValid"    );
-                inline constexpr KeyBack StashLPID          ("SNP.StashLPID",       "StashLPID"         );
-                inline constexpr KeyBack VMIDExt            ("SNP.VMIDExt",         "VMIDExt"           );
-                inline constexpr KeyBack Addr               ("SNP.Addr",            "Addr"              );
-                inline constexpr KeyBack NS                 ("SNP.NS",              "NS"                );
-                inline constexpr KeyBack DoNotGoToSD        ("SNP.DoNotGoToSD",     "DoNotGoToSD"       );
-                inline constexpr KeyBack DoNotDataPull      ("SNP.DoNotDataPull",   "DoNotDataPull"     );
-                inline constexpr KeyBack RetToSrc           ("SNP.RetToSrc",        "RetToSrc"          );
-                inline constexpr KeyBack TraceTag           ("SNP.TraceTag",        "TraceTag"          );
-                inline constexpr KeyBack MPAM               ("SNP.MPAM",            "MPAM"              );
+                inline constexpr KeyBack MPAM               (KeyCategory::SNP,  "SNP.MPAM",            "MPAM"              );
+                inline constexpr KeyBack TraceTag           (KeyCategory::SNP,  "SNP.TraceTag",        "TraceTag"          , MPAM           );
+                inline constexpr KeyBack RetToSrc           (KeyCategory::SNP,  "SNP.RetToSrc",        "RetToSrc"          , TraceTag       );
+                inline constexpr KeyBack DoNotDataPull      (KeyCategory::SNP,  "SNP.DoNotDataPull",   "DoNotDataPull"     , RetToSrc       );
+                inline constexpr KeyBack DoNotGoToSD        (KeyCategory::SNP,  "SNP.DoNotGoToSD",     "DoNotGoToSD"       , DoNotDataPull  );
+                inline constexpr KeyBack NS                 (KeyCategory::SNP,  "SNP.NS",              "NS"                , DoNotGoToSD    );
+                inline constexpr KeyBack Addr               (KeyCategory::SNP,  "SNP.Addr",            "Addr"              , NS             );
+                inline constexpr KeyBack VMIDExt            (KeyCategory::SNP,  "SNP.VMIDExt",         "VMIDExt"           , Addr           );
+                inline constexpr KeyBack StashLPID          (KeyCategory::SNP,  "SNP.StashLPID",       "StashLPID"         , VMIDExt        );
+                inline constexpr KeyBack StashLPIDValid     (KeyCategory::SNP,  "SNP.StashLPIDValid",  "StashLPIDValid"    , StashLPID      );
+                inline constexpr KeyBack FwdTxnID           (KeyCategory::SNP,  "SNP.FwdTxnID",        "FwdTxnID"          , StashLPIDValid );
+                inline constexpr KeyBack FwdNID             (KeyCategory::SNP,  "SNP.FwdNID",          "FwdNID"            , FwdTxnID       );
+                inline constexpr KeyBack TxnID              (KeyCategory::SNP,  "SNP.TxnID",           "TxnID"             , FwdNID         );
+                inline constexpr KeyBack SrcID              (KeyCategory::SNP,  "SNP.SrcID",           "SrcID"             , TxnID          );
+                inline constexpr KeyBack QoS                (KeyCategory::SNP,  "SNP.QoS",             "QoS"               , SrcID          );
+
+                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
+                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
             }
         }
 

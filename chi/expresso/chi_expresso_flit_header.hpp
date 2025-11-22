@@ -7,5 +7,9 @@
 #include <iterator>             // IWYU pragma: export
 #include <vector>               // IWYU pragma: export
 #include <unordered_map>        // IWYU pragma: export
+#include <functional>           // IWYU pragma: export
+#include <iterator>             // IWYU pragma: export
+#include <utility>              // IWYU pragma: export
+#include <format>               // IWYU pragma: export
 
 #endif // __CHI__CHI_EXPRESSO_FLIT_HEADER
