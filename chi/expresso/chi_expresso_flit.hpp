@@ -207,49 +207,69 @@ namespace CHI {
             }
         }
 
+
+        enum class ValueType {
+            Integral,
+            Vector
+        };
+
         class Value {
         protected:
+            ValueType                   type;
             union       {
-                uint64_t    value;
-                uintptr_t   valuep;     // we are not using std::any here, because it throws
+                uint64_t                value;
+                std::vector<uint64_t>*  vector;
             };
 
         public:
-            inline Value() noexcept;
-            inline virtual ~Value() noexcept = default;
+            inline Value(ValueType type) noexcept;
+            inline Value(const Value& obj) noexcept;
+            inline Value(Value&& obj) noexcept;
+            inline ~Value() noexcept;
+
+        protected:
+            inline Value(const std::vector<uint64_t>& vec) noexcept;
+            inline Value(std::vector<uint64_t>&& vec) noexcept;
 
         public:
-            inline uint64_t         GetValue() const noexcept;
-            inline uintptr_t        GetValueRef() const noexcept;
+            inline Value& operator=(const Value&) noexcept;
+            inline Value& operator=(Value&&) noexcept;
 
-            template<class T>
-            inline T                GetValue() const noexcept;
+        public:
+            inline ValueType                    GetType() const noexcept;
+            inline bool                         IsIntegral() const noexcept;
+            inline bool                         IsVector() const noexcept;
 
-            template<class T>
-            inline T*               GetValueRef() const noexcept;
+            inline uint64_t                     GetValue() const noexcept;
+            inline std::vector<uint64_t>*       GetVector() const noexcept;
+
+            inline uint64_t&                    AsIntegral() noexcept;
+            inline uint64_t                     AsIntegral() const noexcept;
+
+            inline std::vector<uint64_t>&       AsVector() noexcept;
+            inline const std::vector<uint64_t>& AsVector() const noexcept;
         };
 
         class ValueIntegral : public Value {
         public:
             inline ValueIntegral(uint64_t value = 0) noexcept;
-            inline virtual ~ValueIntegral() noexcept = default;
 
         public:
             inline void             SetValue(uint64_t value) noexcept;
         };
 
+        static_assert(sizeof(ValueIntegral) == sizeof(Value));
+
         class ValueVector : public Value {
         public:
             inline ValueVector(size_t size) noexcept;
             inline ValueVector(size_t size, uint64_t* array) noexcept;
+            inline ValueVector(const std::vector<uint64_t>& vec) noexcept;
+            inline ValueVector(std::vector<uint64_t>&& vec) noexcept;
             inline ValueVector(const ValueVector& obj) noexcept;
             inline ValueVector(ValueVector&& obj) noexcept;
-            inline virtual ~ValueVector() noexcept;
+            inline ~ValueVector() noexcept;
 
-        protected:
-            inline std::vector<uint64_t>*       Get() noexcept;
-            inline const std::vector<uint64_t>* Get() const noexcept;
-            
         public:
             inline size_t           GetSize() const noexcept;
 
@@ -259,12 +279,21 @@ namespace CHI {
             inline uint64_t&        operator[](size_t index) noexcept;
             inline uint64_t         operator[](size_t index) const noexcept;
 
-            inline std::contiguous_iterator auto begin() noexcept;
-            inline std::contiguous_iterator auto end() noexcept;
+            inline std::random_access_iterator auto begin() noexcept;
+            inline std::random_access_iterator auto end() noexcept;
 
-            inline std::contiguous_iterator auto begin() const noexcept;
-            inline std::contiguous_iterator auto end() const noexcept;
+            inline std::random_access_iterator auto begin() const noexcept;
+            inline std::random_access_iterator auto end() const noexcept;
+
+            inline std::random_access_iterator auto rbegin() noexcept;
+            inline std::random_access_iterator auto rend() noexcept;
+
+            inline std::random_access_iterator auto rbegin() const noexcept;
+            inline std::random_access_iterator auto rend() const noexcept;
         };
+
+        static_assert(sizeof(ValueVector) == sizeof(Value));
+
 
         using KeyValueMap = std::unordered_map<Key, Value>;
 
@@ -305,29 +334,133 @@ namespace CHI {
 // Implementation of: class Value
 namespace /*CHI::*/Expresso::Flit {
 
-    inline Value::Value() noexcept
-    { }
+    inline Value::Value(ValueType type) noexcept
+        : type(type)
+    {
+        if (type == ValueType::Vector)
+            this->vector = new std::vector<uint64_t>;
+    }
+
+    inline Value::Value(const Value& obj) noexcept
+        : type(obj.type)
+    {
+        if (type == ValueType::Integral)
+            this->value = obj.value;
+        else if (type == ValueType::Vector)
+            this->vector = new std::vector<uint64_t>(*obj.vector);
+    }
+
+    inline Value::Value(Value&& obj) noexcept
+        : type(obj.type)
+    {
+        if (type == ValueType::Integral)
+            this->value = obj.value;
+        else if (type == ValueType::Vector)
+            this->vector = new std::vector<uint64_t>(std::move(*obj.vector));
+    }
+
+    inline Value::~Value() noexcept
+    {
+        if (type == ValueType::Vector)
+        {
+            if (this->vector)
+                delete this->vector;
+
+            this->vector = nullptr;
+        }
+    }
+
+    inline Value::Value(const std::vector<uint64_t>& vec) noexcept
+        : type(ValueType::Vector)
+    {
+        this->vector = new std::vector<uint64_t>(vec);
+    }
+
+    inline Value::Value(std::vector<uint64_t>&& vec) noexcept
+        : type(ValueType::Vector)
+    {
+        this->vector = new std::vector<uint64_t>(vec);
+    }
+
+    inline Value& Value::operator=(const Value& obj) noexcept
+    {
+        if (this->type == ValueType::Vector)
+        {
+            if (this->vector)
+                delete this->vector;
+        }
+
+        this->type = obj.type;
+
+        if (this->type == ValueType::Integral)
+            this->value = obj.value;
+        else if (this->type == ValueType::Vector)
+            this->vector = new std::vector<uint64_t>(*obj.vector);
+
+        return *this;
+    }
+
+    inline Value& Value::operator=(Value&& obj) noexcept
+    {
+        if (this->type == ValueType::Vector)
+        {
+            if (this->vector)
+                delete this->vector;
+        }
+
+        this->type = obj.type;
+
+        if (this->type == ValueType::Integral)
+            this->value = obj.value;
+        else if (this->type == ValueType::Vector)
+            this->vector = new std::vector<uint64_t>(std::move(*obj.vector));
+
+        return *this;
+    }
+
+    inline ValueType Value::GetType() const noexcept
+    {
+        return type;
+    }
+
+    inline bool Value::IsIntegral() const noexcept
+    {
+        return GetType() == ValueType::Integral;
+    }
+    
+    inline bool Value::IsVector() const noexcept
+    {
+        return GetType() == ValueType::Vector;
+    }
 
     inline uint64_t Value::GetValue() const noexcept
     {
         return value;
     }
 
-    inline uintptr_t Value::GetValueRef() const noexcept
+    inline std::vector<uint64_t>* Value::GetVector() const noexcept
     {
-        return valuep;
+        return vector;
     }
 
-    template<class T>
-    inline T Value::GetValue() const noexcept
+    inline uint64_t& Value::AsIntegral() noexcept
     {
-        return T(value);
+        return value;
     }
 
-    template<class T>
-    inline T* Value::GetValueRef() const noexcept
+    inline uint64_t Value::AsIntegral() const noexcept
     {
-        return (T*)(valuep);
+        return value;
+    }
+
+    inline std::vector<uint64_t>& Value::AsVector() noexcept
+    {
+        return *vector;
+    }
+
+    inline const std::vector<uint64_t>& Value::AsVector() const noexcept
+    {
+        return *vector;
     }
 }
 
@@ -336,6 +469,7 @@ namespace /*CHI::*/Expresso::Flit {
 namespace /*CHI::*/Expresso::Flit {
 
     inline ValueIntegral::ValueIntegral(uint64_t value) noexcept
+        : Value(ValueType::Integral)
     {
         this->value = value;
     }
@@ -351,95 +485,114 @@ namespace /*CHI::*/Expresso::Flit {
 namespace /*CHI::*/Expresso::Flit {
 
     inline ValueVector::ValueVector(size_t size) noexcept
+        : Value(ValueType::Vector)
     {
-        auto vec = new std::vector<uint64_t>(size);
-        this->valuep = reinterpret_cast<uintptr_t>(vec);
+        this->vector->reserve(size);
 
         for (size_t i = 0; i < size; i++)
-            vec->push_back(0);
+            this->vector->push_back(0);
     }
 
     inline ValueVector::ValueVector(size_t size, uint64_t* array) noexcept
+        : Value(ValueType::Vector)
     {
-        auto vec = new std::vector<uint64_t>(size);
-        this->valuep = reinterpret_cast<uintptr_t>(vec);
+        this->vector->reserve(size);
 
         for (size_t i = 0; i < size; i++)
-            vec->push_back(array[i]);
+            this->vector->push_back(array[i]);
     }
 
+    inline ValueVector::ValueVector(const std::vector<uint64_t>& vec) noexcept
+        : Value(vec)
+    { }
+
+    inline ValueVector::ValueVector(std::vector<uint64_t>&& vec) noexcept
+        : Value(vec)
+    { }
+
     inline ValueVector::ValueVector(const ValueVector& obj) noexcept
+        : Value(ValueType::Vector)
     {
-        this->valuep = reinterpret_cast<uintptr_t>(new std::vector<uint64_t>(*obj.Get()));
+        this->vector = new std::vector<uint64_t>(*obj.vector);
     }
 
     inline ValueVector::ValueVector(ValueVector&& obj) noexcept
+        : Value(ValueType::Vector)
     {
-        this->valuep = obj.valuep;
-        obj.valuep = 0;
+        this->vector = new std::vector<uint64_t>(std::move(*obj.vector));
     }
 
     inline ValueVector::~ValueVector() noexcept
     {
-        if (this->valuep)
-            delete Get();
+        if (this->vector)
+            delete vector;
         
-        this->valuep = 0;
-    }
-
-    inline std::vector<uint64_t>* ValueVector::Get() noexcept
-    {
-        return reinterpret_cast<std::vector<uint64_t>*>(valuep);
-    }
-
-    inline const std::vector<uint64_t>* ValueVector::Get() const noexcept
-    {
-        return reinterpret_cast<const std::vector<uint64_t>*>(valuep);
+        this->vector = nullptr;
     }
 
     inline size_t ValueVector::GetSize() const noexcept
     {
-        return Get()->size();
+        return vector->size();
     }
 
     inline uint64_t ValueVector::GetValue(size_t index) const noexcept
     {
-        return (*Get())[index];
+        return (*vector)[index];
     }
 
     inline void ValueVector::SetValue(size_t index, uint64_t value) noexcept
     {
-        (*Get())[index] = value;
+        (*vector)[index] = value;
     }
 
     inline uint64_t& ValueVector::operator[](size_t index) noexcept
     {
-        return (*Get())[index];
+        return (*vector)[index];
     }
 
     inline uint64_t ValueVector::operator[](size_t index) const noexcept
     {
-        return (*Get())[index];
+        return (*vector)[index];
     }
 
-    inline std::contiguous_iterator auto ValueVector::begin() noexcept
+    inline std::random_access_iterator auto ValueVector::begin() noexcept
     {
-        return Get()->begin();
+        return vector->begin();
     }
 
-    inline std::contiguous_iterator auto ValueVector::end() noexcept
+    inline std::random_access_iterator auto ValueVector::end() noexcept
     {
-        return Get()->end();
+        return vector->end();
     }
 
-    inline std::contiguous_iterator auto ValueVector::begin() const noexcept
+    inline std::random_access_iterator auto ValueVector::begin() const noexcept
     {
-        return Get()->begin();
+        return vector->begin();
     }
 
-    inline std::contiguous_iterator auto ValueVector::end() const noexcept
+    inline std::random_access_iterator auto ValueVector::end() const noexcept
     {
-        return Get()->end();
+        return vector->end();
+    }
+
+    inline std::random_access_iterator auto ValueVector::rbegin() noexcept
+    {
+        return vector->rbegin();
+    }
+
+    inline std::random_access_iterator auto ValueVector::rend() noexcept
+    {
+        return vector->rend();
+    }
+
+    inline std::random_access_iterator auto ValueVector::rbegin() const noexcept
+    {
+        return vector->rbegin();
+    }
+
+    inline std::random_access_iterator auto ValueVector::rend() const noexcept
+    {
+        return vector->rend();
     }
 }
 
