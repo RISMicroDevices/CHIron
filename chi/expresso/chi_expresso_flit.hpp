@@ -26,6 +26,20 @@ namespace CHI {
 */
     namespace Expresso::Flit {
 
+        class KeyBack;
+
+        using Key = const KeyBack*;
+        class Value;
+        using KeyValueMap = std::unordered_map<Key, Value>;
+
+        class Formatter;
+
+        using format_func = std::function<std::string(Key)>;
+
+        using formatter_func = std::string(const Formatter*, const KeyValueMap&, const format_func&);
+        using formatter_handle = std::function<formatter_func>;
+
+
         enum class KeyCategory {
             REQ = 0,
             RSP,
@@ -40,32 +54,41 @@ namespace CHI {
             const unsigned int      ordinal;
             const char* const       name;
             const char* const       canonicalName;
-            
+            formatter_func* const   formatterCaller;
+
         public:
-            inline constexpr KeyBack(const KeyCategory  category,
-                                     const char*        name,
-                                     const char*        canonicalName) noexcept
-                : prev          (nullptr)
-                , category      (category)
-                , ordinal       (0)
-                , name          (name)
-                , canonicalName (canonicalName) 
+            inline constexpr KeyBack(const KeyCategory          category,
+                                     const char*                name,
+                                     const char*                canonicalName,
+                                     formatter_func*            formatterCaller) noexcept
+                : prev              (nullptr)
+                , category          (category)
+                , ordinal           (0)
+                , name              (name)
+                , canonicalName     (canonicalName)
+                , formatterCaller   (formatterCaller)
             { }
 
-            inline constexpr KeyBack(const KeyCategory      category,
-                                     const char*            name,
-                                     const char*            canonicalName,
-                                     const KeyBack* const   prev) noexcept
-                : prev          (prev)
-                , category      (category)
-                , ordinal       (prev->ordinal + 1)
-                , name          (name)
-                , canonicalName (canonicalName) 
+            inline constexpr KeyBack(const KeyCategory          category,
+                                     const char*                name,
+                                     const char*                canonicalName,
+                                     const KeyBack* const       prev,
+                                     formatter_func*            formatterCaller) noexcept
+                : prev              (prev)
+                , category          (category)
+                , ordinal           (prev->ordinal + 1)
+                , name              (name)
+                , canonicalName     (canonicalName)
+                , formatterCaller   (formatterCaller)
             { }
 
         public:
             inline constexpr operator const KeyBack*() const noexcept
             { return this; }
+
+        public:
+            inline std::string Format(const Formatter& f, const KeyValueMap& kv, const format_func& fmt) const;
+            inline std::string Format(const Formatter& f, const KeyValueMap& kv, const std::string& fmt) const;
         };
 
         using Key = const KeyBack*;
@@ -90,123 +113,6 @@ namespace CHI {
             inline constexpr bool operator==(const KeyIterator& obj) const noexcept { return current == obj.current; }
             inline constexpr bool operator!=(const KeyIterator& obj) const noexcept { return current != obj.current; }
         };
-
-
-        namespace Keys {
-
-            namespace REQ {
-                inline constexpr KeyBack RSVDC              (KeyCategory::REQ,  "REQ.RSVDC",           "RSVDC"             );
-                inline constexpr KeyBack MPAM               (KeyCategory::REQ,  "REQ.MPAM",            "MPAM"              , RSVDC          );
-                inline constexpr KeyBack TraceTag           (KeyCategory::REQ,  "REQ.TraceTag",        "TraceTag"          , MPAM           );
-                inline constexpr KeyBack TagOp              (KeyCategory::REQ,  "REQ.TagOp",           "TagOp"             , TraceTag       );
-                inline constexpr KeyBack ExpCompAck         (KeyCategory::REQ,  "REQ.ExpCompAck",      "ExpCompAck"        , TagOp          );
-                inline constexpr KeyBack SnoopMe            (KeyCategory::REQ,  "REQ.SnoopMe",         "SnoopMe"           , ExpCompAck     );
-                inline constexpr KeyBack Excl               (KeyCategory::REQ,  "REQ.Excl",            "Excl"              , SnoopMe        );
-                inline constexpr KeyBack TagGroupID         (KeyCategory::REQ,  "REQ.TagGroupID",      "TagGroupID"        , Excl           );
-                inline constexpr KeyBack StashGroupID       (KeyCategory::REQ,  "REQ.StashGroupID",    "StashGroupID"      , TagGroupID     );
-                inline constexpr KeyBack PGroupID           (KeyCategory::REQ,  "REQ.PGroupID",        "PGroupID"          , StashGroupID   );
-                inline constexpr KeyBack LPID               (KeyCategory::REQ,  "REQ.LPID",            "LPID"              , PGroupID       );
-                inline constexpr KeyBack DoDWT              (KeyCategory::REQ,  "REQ.DoDWT",           "DoDWT"             , LPID           );
-                inline constexpr KeyBack SnpAttr            (KeyCategory::REQ,  "REQ.SnpAttr",         "SnpAttr"           , DoDWT          );
-                inline constexpr KeyBack MemAttr            (KeyCategory::REQ,  "REQ.MemAttr",         "MemAttr"           , SnpAttr        );
-                inline constexpr KeyBack PCrdType           (KeyCategory::REQ,  "REQ.PCrdType",        "PCrdType"          , MemAttr        );
-                inline constexpr KeyBack Order              (KeyCategory::REQ,  "REQ.Order",           "Order"             , PCrdType       );
-                inline constexpr KeyBack AllowRetry         (KeyCategory::REQ,  "REQ.AllowRetry",      "AllowRetry"        , Order          );
-                inline constexpr KeyBack LikelyShared       (KeyCategory::REQ,  "REQ.LikelyShared",    "LikelyShared"      , AllowRetry     );
-                inline constexpr KeyBack NS                 (KeyCategory::REQ,  "REQ.NS",              "NS"                , LikelyShared   );
-                inline constexpr KeyBack Addr               (KeyCategory::REQ,  "REQ.Addr",            "Addr"              , NS             );
-                inline constexpr KeyBack Size               (KeyCategory::REQ,  "REQ.Size",            "Size"              , Addr           );
-                inline constexpr KeyBack StashLPID          (KeyCategory::REQ,  "REQ.StashLPID",       "StashLPID"         , Size           );
-                inline constexpr KeyBack StashLPIDValid     (KeyCategory::REQ,  "REQ.StashLPIDValid",  "StashLPIDValid"    , StashLPID      );
-                inline constexpr KeyBack ReturnTxnID        (KeyCategory::REQ,  "REQ.ReturnTxnID",     "ReturnTxnID"       , StashLPIDValid );
-                inline constexpr KeyBack Deep               (KeyCategory::REQ,  "REQ.Deep",            "Deep"              , ReturnTxnID    );
-                inline constexpr KeyBack Endian             (KeyCategory::REQ,  "REQ.Endian",          "Endian"            , Deep           );
-                inline constexpr KeyBack StashNIDValid      (KeyCategory::REQ,  "REQ.StashNIDValid",   "StashNIDValid"     , Endian         );
-                inline constexpr KeyBack SLCRepHint         (KeyCategory::REQ,  "REQ.SLCRepHint",      "SLCRepHint"        , StashNIDValid  );
-                inline constexpr KeyBack StashNID           (KeyCategory::REQ,  "REQ.StashNID",        "StashNID"          , SLCRepHint     );
-                inline constexpr KeyBack ReturnNID          (KeyCategory::REQ,  "REQ.ReturnNID",       "ReturnNID"         , StashNID       );
-                inline constexpr KeyBack TxnID              (KeyCategory::REQ,  "REQ.TxnID",           "TxnID"             , ReturnNID      );
-                inline constexpr KeyBack SrcID              (KeyCategory::REQ,  "REQ.SrcID",           "SrcID"             , TxnID          );
-                inline constexpr KeyBack TgtID              (KeyCategory::REQ,  "REQ.TgtID",           "TgtID"             , SrcID          );
-                inline constexpr KeyBack QoS                (KeyCategory::REQ,  "REQ.QoS",             "QoS"               , TgtID          );
-
-                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
-                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
-            }
-
-            namespace RSP {
-                inline constexpr KeyBack TraceTag           (KeyCategory::RSP,  "RSP.TraceTag",        "TraceTag"          );
-                inline constexpr KeyBack TagOp              (KeyCategory::RSP,  "RSP.TagOp",           "TagOp"             , TraceTag       );
-                inline constexpr KeyBack PCrdType           (KeyCategory::RSP,  "RSP.PCrdType",        "PCrdType"          , TagOp          );
-                inline constexpr KeyBack TagGroupID         (KeyCategory::RSP,  "RSP.TagGroupID",      "TagGroupID"        , PCrdType       );
-                inline constexpr KeyBack StashGroupID       (KeyCategory::RSP,  "RSP.StashGroupID",    "StashGroupID"      , TagGroupID     );
-                inline constexpr KeyBack PGroupID           (KeyCategory::RSP,  "RSP.PGroupID",        "PGroupID"          , StashGroupID   );
-                inline constexpr KeyBack DBID               (KeyCategory::RSP,  "RSP.DBID",            "DBID"              , PGroupID       );
-                inline constexpr KeyBack CBusy              (KeyCategory::RSP,  "RSP.CBusy",           "CBusy"             , DBID           );
-                inline constexpr KeyBack DataPull           (KeyCategory::RSP,  "RSP.DataPull",        "DataPull"          , CBusy          );
-                inline constexpr KeyBack FwdState           (KeyCategory::RSP,  "RSP.FwdState",        "FwdState"          , DataPull       );
-                inline constexpr KeyBack Resp               (KeyCategory::RSP,  "RSP.Resp",            "Resp"              , FwdState       );
-                inline constexpr KeyBack RespErr            (KeyCategory::RSP,  "RSP.RespErr",         "RespErr"           , Resp           );
-                inline constexpr KeyBack TxnID              (KeyCategory::RSP,  "RSP.TxnID",           "TxnID"             , RespErr        );
-                inline constexpr KeyBack SrcID              (KeyCategory::RSP,  "RSP.SrcID",           "SrcID"             , TxnID          );
-                inline constexpr KeyBack TgtID              (KeyCategory::RSP,  "RSP.TgtID",           "TgtId"             , SrcID          );
-                inline constexpr KeyBack QoS                (KeyCategory::RSP,  "RSP.QoS",             "QoS"               , TgtID          );
-
-                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
-                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
-            }
-
-            namespace DAT {
-                inline constexpr KeyBack Poison             (KeyCategory::DAT,  "DAT.Poison",          "Poison"            );
-                inline constexpr KeyBack DataCheck          (KeyCategory::DAT,  "DAT.DataCheck",       "DataCheck"         , Poison         );
-                inline constexpr KeyBack Data               (KeyCategory::DAT,  "DAT.Data",            "Data"              , DataCheck      );
-                inline constexpr KeyBack BE                 (KeyCategory::DAT,  "DAT.BE",              "BE"                , Data           );
-                inline constexpr KeyBack RSVDC              (KeyCategory::DAT,  "DAT.RSVDC",           "RSVDC"             , BE             );
-                inline constexpr KeyBack TraceTag           (KeyCategory::DAT,  "DAT.TraceTag",        "TraceTag"          , RSVDC          );
-                inline constexpr KeyBack TU                 (KeyCategory::DAT,  "DAT.TU",              "TU"                , TraceTag       );
-                inline constexpr KeyBack Tag                (KeyCategory::DAT,  "DAT.Tag",             "Tag"               , TU             );
-                inline constexpr KeyBack TagOp              (KeyCategory::DAT,  "DAT.TagOp",           "TagOp"             , Tag            );
-                inline constexpr KeyBack DataID             (KeyCategory::DAT,  "DAT.DataID",          "DataID"            , TagOp          );
-                inline constexpr KeyBack CCID               (KeyCategory::DAT,  "DAT.CCID",            "CCID"              , DataID         );
-                inline constexpr KeyBack DBID               (KeyCategory::DAT,  "DAT.DBID",            "DBID"              , CCID           );
-                inline constexpr KeyBack CBusy              (KeyCategory::DAT,  "DAT.CBusy",           "CBusy"             , DBID           );
-                inline constexpr KeyBack DataSource         (KeyCategory::DAT,  "DAT.DataSource",      "DataSource"        , CBusy          );
-                inline constexpr KeyBack DataPull           (KeyCategory::DAT,  "DAT.DataPull",        "DataPull"          , DataSource     );
-                inline constexpr KeyBack FwdState           (KeyCategory::DAT,  "DAT.FwdState",        "FwdState"          , DataPull       );
-                inline constexpr KeyBack Resp               (KeyCategory::DAT,  "DAT.Resp",            "Resp"              , FwdState       );
-                inline constexpr KeyBack RespErr            (KeyCategory::DAT,  "DAT.RespErr",         "RespErr"           , Resp           );
-                inline constexpr KeyBack HomeNID            (KeyCategory::DAT,  "DAT.HomeNID",         "HomeNID"           , RespErr        );
-                inline constexpr KeyBack TxnID              (KeyCategory::DAT,  "DAT.TxnID",           "TxnID"             , HomeNID        );
-                inline constexpr KeyBack SrcID              (KeyCategory::DAT,  "DAT.SrcID",           "SrcID"             , TxnID          );
-                inline constexpr KeyBack TgtID              (KeyCategory::DAT,  "DAT.TgtID",           "TgtID"             , SrcID          );
-                inline constexpr KeyBack QoS                (KeyCategory::DAT,  "DAT.QoS",             "QoS"               , TgtID          );
-
-                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
-                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
-            }
-
-            namespace SNP {
-                inline constexpr KeyBack MPAM               (KeyCategory::SNP,  "SNP.MPAM",            "MPAM"              );
-                inline constexpr KeyBack TraceTag           (KeyCategory::SNP,  "SNP.TraceTag",        "TraceTag"          , MPAM           );
-                inline constexpr KeyBack RetToSrc           (KeyCategory::SNP,  "SNP.RetToSrc",        "RetToSrc"          , TraceTag       );
-                inline constexpr KeyBack DoNotDataPull      (KeyCategory::SNP,  "SNP.DoNotDataPull",   "DoNotDataPull"     , RetToSrc       );
-                inline constexpr KeyBack DoNotGoToSD        (KeyCategory::SNP,  "SNP.DoNotGoToSD",     "DoNotGoToSD"       , DoNotDataPull  );
-                inline constexpr KeyBack NS                 (KeyCategory::SNP,  "SNP.NS",              "NS"                , DoNotGoToSD    );
-                inline constexpr KeyBack Addr               (KeyCategory::SNP,  "SNP.Addr",            "Addr"              , NS             );
-                inline constexpr KeyBack VMIDExt            (KeyCategory::SNP,  "SNP.VMIDExt",         "VMIDExt"           , Addr           );
-                inline constexpr KeyBack StashLPID          (KeyCategory::SNP,  "SNP.StashLPID",       "StashLPID"         , VMIDExt        );
-                inline constexpr KeyBack StashLPIDValid     (KeyCategory::SNP,  "SNP.StashLPIDValid",  "StashLPIDValid"    , StashLPID      );
-                inline constexpr KeyBack FwdTxnID           (KeyCategory::SNP,  "SNP.FwdTxnID",        "FwdTxnID"          , StashLPIDValid );
-                inline constexpr KeyBack FwdNID             (KeyCategory::SNP,  "SNP.FwdNID",          "FwdNID"            , FwdTxnID       );
-                inline constexpr KeyBack TxnID              (KeyCategory::SNP,  "SNP.TxnID",           "TxnID"             , FwdNID         );
-                inline constexpr KeyBack SrcID              (KeyCategory::SNP,  "SNP.SrcID",           "SrcID"             , TxnID          );
-                inline constexpr KeyBack QoS                (KeyCategory::SNP,  "SNP.QoS",             "QoS"               , SrcID          );
-
-                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
-                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
-            }
-        }
-
 
         enum class ValueType {
             Integral,
@@ -295,8 +201,6 @@ namespace CHI {
         static_assert(sizeof(ValueVector) == sizeof(Value));
 
 
-        using KeyValueMap = std::unordered_map<Key, Value>;
-
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn>
         class Mapper {
@@ -318,17 +222,305 @@ namespace CHI {
             inline void     MapVector(Key key, size_t size, uint64_t* vec) noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn>
-        class Extracter {
 
+        class Formatter {
+        public:
+            inline std::string Format(const KeyValueMap&, Key, const format_func& fmt) const;
+            inline std::string Format(const KeyValueMap&, Key, const std::string& fmt) const;
+
+        public:
+            inline std::string FormatQoS(const KeyValueMap&, const format_func&) const; // REQ, RSP, DAT, SNP
+            inline std::string FormatTgtID(const KeyValueMap&, const format_func&) const; // REQ, RSP, DAT
+            inline std::string FormatSrcID(const KeyValueMap&, const format_func&) const; // REQ, RSP, DAT, SNP
+            inline std::string FormatTxnID(const KeyValueMap&, const format_func&) const; // REQ, RSP, DAT, SNP
+            inline std::string FormatReturnNID(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatStashNID(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatSLCRepHint(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatStashNIDValid(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatEndian(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatDeep(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatReturnTxnID(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatStashLPIDValid(const KeyValueMap&, const format_func&) const; // REQ, SNP
+            inline std::string FormatStashLPID(const KeyValueMap&, const format_func&) const; // REQ, SNP
+            inline std::string FormatSize(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatAddr(const KeyValueMap&, const format_func&) const; // REQ, SNP
+            inline std::string FormatNS(const KeyValueMap&, const format_func&) const; // REQ, SNP
+            inline std::string FormatLikelyShared(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatAllowRetry(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatOrder(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatPCrdType(const KeyValueMap&, const format_func&) const; // REQ, RSP
+            inline std::string FormatMemAttr(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatSnpAttr(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatDoDWT(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatLPID(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatPGroupID(const KeyValueMap&, const format_func&) const; // REQ, RSP
+            inline std::string FormatStashGroupID(const KeyValueMap&, const format_func&) const; // REQ, RSP
+            inline std::string FormatTagGroupID(const KeyValueMap&, const format_func&) const; // REQ, RSP
+            inline std::string FormatExcl(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatSnoopMe(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatExpCompAck(const KeyValueMap&, const format_func&) const; // REQ
+            inline std::string FormatTagOp(const KeyValueMap&, const format_func&) const; // REQ, RSP, DAT
+            inline std::string FormatTraceTag(const KeyValueMap&, const format_func&) const; // REQ, RSP, DAT, SNP
+            inline std::string FormatMPAM(const KeyValueMap&, const format_func&) const; // REQ, SNP
+            inline std::string FormatRSVDC(const KeyValueMap&, const format_func&) const; // REQ, DAT
+            inline std::string FormatRespErr(const KeyValueMap&, const format_func&) const; // RSP, DAT
+            inline std::string FormatResp(const KeyValueMap&, const format_func&) const; // RSP, DAT
+            inline std::string FormatFwdState(const KeyValueMap&, const format_func&) const; // RSP, DAT
+            inline std::string FormatDataPull(const KeyValueMap&, const format_func&) const; // RSP, DAT
+            inline std::string FormatCBusy(const KeyValueMap&, const format_func&) const; // RSP, DAT
+            inline std::string FormatDBID(const KeyValueMap&, const format_func&) const; // RSP, DAT
+            inline std::string FormatHomeNID(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatDataSource(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatCCID(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatDataID(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatTag(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatTU(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatBE(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatData(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatDataCheck(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatPoison(const KeyValueMap&, const format_func&) const; // DAT
+            inline std::string FormatFwdTxnID(const KeyValueMap&, const format_func&) const; // SNP
+            inline std::string FormatFwdNID(const KeyValueMap&, const format_func&) const; // SNP
+            inline std::string FormatVMIDExt(const KeyValueMap&, const format_func&) const; // SNP
+            inline std::string FormatDoNotGoToSD(const KeyValueMap&, const format_func&) const; // SNP
+            inline std::string FormatDoNotDataPull(const KeyValueMap&, const format_func&) const; // SNP
+            inline std::string FormatRetToSrc(const KeyValueMap&, const format_func&) const; // SNP
+
+        public:
+            virtual std::string FormatREQQoS(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQTgtID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQSrcID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQTxnID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQReturnNID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQStashNID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQSLCRepHint(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQStashNIDValid(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQEndian(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQDeep(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQReturnTxnID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQStashLPIDValid(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQStashLPID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQSize(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQAddr(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQNS(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQLikelyShared(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQAllowRetry(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQOrder(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQPCrdType(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQMemAttr(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQSnpAttr(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQDoDWT(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQLPID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQPGroupID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQStashGroupID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQTagGroupID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQExcl(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQSnoopMe(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQExpCompAck(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQTagOp(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQTraceTag(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQMPAM(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQRSVDC(const KeyValueMap&, const format_func&) const = 0;
+
+        public:
+            virtual std::string FormatRSPQoS(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPTgtID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPSrcID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPTxnID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPRespErr(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPResp(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPFwdState(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPDataPull(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPCBusy(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPDBID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPPGroupID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPStashGroupID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPTagGroupID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPPCrdType(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPTagOp(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPTraceTag(const KeyValueMap&, const format_func&) const = 0;
+
+        public:
+            virtual std::string FormatDATQoS(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATTgtID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATSrcID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATTxnID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATHomeNID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATRespErr(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATResp(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATFwdState(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATDataPull(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATDataSource(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATCBusy(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATDBID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATCCID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATDataID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATTagOp(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATTag(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATTU(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATTraceTag(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATRSVDC(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATBE(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATData(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATDataCheck(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATPoison(const KeyValueMap&, const format_func&) const = 0;
+
+        public:
+            virtual std::string FormatSNPQoS(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPSrcID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPTxnID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPFwdTxnID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPFwdNID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPStashLPIDValid(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPStashLPID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPVMIDExt(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPAddr(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPNS(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPDoNotGoToSD(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPDoNotDataPull(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPRetToSrc(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPTraceTag(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPMPAM(const KeyValueMap&, const format_func&) const = 0;
         };
 
-        // TODO
+
+        namespace Keys {
+
+            #define _FMTCALL(func) [](const Formatter* f, const KeyValueMap& kv, const format_func& fmt) { return f->func(kv, fmt); }
+
+            namespace REQ {
+                inline constexpr KeyBack RSVDC              (KeyCategory::REQ,  "REQ.RSVDC",           "RSVDC"                              , _FMTCALL(FormatREQRSVDC));
+                inline constexpr KeyBack MPAM               (KeyCategory::REQ,  "REQ.MPAM",            "MPAM"              , RSVDC          , _FMTCALL(FormatREQMPAM));
+                inline constexpr KeyBack TraceTag           (KeyCategory::REQ,  "REQ.TraceTag",        "TraceTag"          , MPAM           , _FMTCALL(FormatREQTraceTag));
+                inline constexpr KeyBack TagOp              (KeyCategory::REQ,  "REQ.TagOp",           "TagOp"             , TraceTag       , _FMTCALL(FormatREQTagOp));
+                inline constexpr KeyBack ExpCompAck         (KeyCategory::REQ,  "REQ.ExpCompAck",      "ExpCompAck"        , TagOp          , _FMTCALL(FormatREQExpCompAck));
+                inline constexpr KeyBack SnoopMe            (KeyCategory::REQ,  "REQ.SnoopMe",         "SnoopMe"           , ExpCompAck     , _FMTCALL(FormatREQSnoopMe));
+                inline constexpr KeyBack Excl               (KeyCategory::REQ,  "REQ.Excl",            "Excl"              , SnoopMe        , _FMTCALL(FormatREQExcl));
+                inline constexpr KeyBack TagGroupID         (KeyCategory::REQ,  "REQ.TagGroupID",      "TagGroupID"        , Excl           , _FMTCALL(FormatREQTagGroupID));
+                inline constexpr KeyBack StashGroupID       (KeyCategory::REQ,  "REQ.StashGroupID",    "StashGroupID"      , TagGroupID     , _FMTCALL(FormatREQStashGroupID));
+                inline constexpr KeyBack PGroupID           (KeyCategory::REQ,  "REQ.PGroupID",        "PGroupID"          , StashGroupID   , _FMTCALL(FormatREQPGroupID));
+                inline constexpr KeyBack LPID               (KeyCategory::REQ,  "REQ.LPID",            "LPID"              , PGroupID       , _FMTCALL(FormatREQLPID));
+                inline constexpr KeyBack DoDWT              (KeyCategory::REQ,  "REQ.DoDWT",           "DoDWT"             , LPID           , _FMTCALL(FormatREQDoDWT));
+                inline constexpr KeyBack SnpAttr            (KeyCategory::REQ,  "REQ.SnpAttr",         "SnpAttr"           , DoDWT          , _FMTCALL(FormatREQSnpAttr));
+                inline constexpr KeyBack MemAttr            (KeyCategory::REQ,  "REQ.MemAttr",         "MemAttr"           , SnpAttr        , _FMTCALL(FormatREQMemAttr));
+                inline constexpr KeyBack PCrdType           (KeyCategory::REQ,  "REQ.PCrdType",        "PCrdType"          , MemAttr        , _FMTCALL(FormatREQPCrdType));
+                inline constexpr KeyBack Order              (KeyCategory::REQ,  "REQ.Order",           "Order"             , PCrdType       , _FMTCALL(FormatREQOrder));
+                inline constexpr KeyBack AllowRetry         (KeyCategory::REQ,  "REQ.AllowRetry",      "AllowRetry"        , Order          , _FMTCALL(FormatREQAllowRetry));
+                inline constexpr KeyBack LikelyShared       (KeyCategory::REQ,  "REQ.LikelyShared",    "LikelyShared"      , AllowRetry     , _FMTCALL(FormatREQLikelyShared));
+                inline constexpr KeyBack NS                 (KeyCategory::REQ,  "REQ.NS",              "NS"                , LikelyShared   , _FMTCALL(FormatREQNS));
+                inline constexpr KeyBack Addr               (KeyCategory::REQ,  "REQ.Addr",            "Addr"              , NS             , _FMTCALL(FormatREQAddr));
+                inline constexpr KeyBack Size               (KeyCategory::REQ,  "REQ.Size",            "Size"              , Addr           , _FMTCALL(FormatREQSize));
+                inline constexpr KeyBack StashLPID          (KeyCategory::REQ,  "REQ.StashLPID",       "StashLPID"         , Size           , _FMTCALL(FormatREQStashLPID));
+                inline constexpr KeyBack StashLPIDValid     (KeyCategory::REQ,  "REQ.StashLPIDValid",  "StashLPIDValid"    , StashLPID      , _FMTCALL(FormatREQStashLPIDValid));
+                inline constexpr KeyBack ReturnTxnID        (KeyCategory::REQ,  "REQ.ReturnTxnID",     "ReturnTxnID"       , StashLPIDValid , _FMTCALL(FormatREQReturnTxnID));
+                inline constexpr KeyBack Deep               (KeyCategory::REQ,  "REQ.Deep",            "Deep"              , ReturnTxnID    , _FMTCALL(FormatREQDeep));
+                inline constexpr KeyBack Endian             (KeyCategory::REQ,  "REQ.Endian",          "Endian"            , Deep           , _FMTCALL(FormatREQEndian));
+                inline constexpr KeyBack StashNIDValid      (KeyCategory::REQ,  "REQ.StashNIDValid",   "StashNIDValid"     , Endian         , _FMTCALL(FormatREQStashNIDValid));
+                inline constexpr KeyBack SLCRepHint         (KeyCategory::REQ,  "REQ.SLCRepHint",      "SLCRepHint"        , StashNIDValid  , _FMTCALL(FormatREQSLCRepHint));
+                inline constexpr KeyBack StashNID           (KeyCategory::REQ,  "REQ.StashNID",        "StashNID"          , SLCRepHint     , _FMTCALL(FormatREQStashNID));
+                inline constexpr KeyBack ReturnNID          (KeyCategory::REQ,  "REQ.ReturnNID",       "ReturnNID"         , StashNID       , _FMTCALL(FormatREQReturnNID));
+                inline constexpr KeyBack TxnID              (KeyCategory::REQ,  "REQ.TxnID",           "TxnID"             , ReturnNID      , _FMTCALL(FormatREQTxnID));
+                inline constexpr KeyBack SrcID              (KeyCategory::REQ,  "REQ.SrcID",           "SrcID"             , TxnID          , _FMTCALL(FormatREQSrcID));
+                inline constexpr KeyBack TgtID              (KeyCategory::REQ,  "REQ.TgtID",           "TgtID"             , SrcID          , _FMTCALL(FormatREQTgtID));
+                inline constexpr KeyBack QoS                (KeyCategory::REQ,  "REQ.QoS",             "QoS"               , TgtID          , _FMTCALL(FormatREQQoS));
+
+                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
+                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
+            }
+
+            namespace RSP {
+                inline constexpr KeyBack TraceTag           (KeyCategory::RSP,  "RSP.TraceTag",        "TraceTag"                           , _FMTCALL(FormatRSPTraceTag));
+                inline constexpr KeyBack TagOp              (KeyCategory::RSP,  "RSP.TagOp",           "TagOp"             , TraceTag       , _FMTCALL(FormatRSPTagOp));
+                inline constexpr KeyBack PCrdType           (KeyCategory::RSP,  "RSP.PCrdType",        "PCrdType"          , TagOp          , _FMTCALL(FormatRSPPCrdType));
+                inline constexpr KeyBack TagGroupID         (KeyCategory::RSP,  "RSP.TagGroupID",      "TagGroupID"        , PCrdType       , _FMTCALL(FormatRSPTagGroupID));
+                inline constexpr KeyBack StashGroupID       (KeyCategory::RSP,  "RSP.StashGroupID",    "StashGroupID"      , TagGroupID     , _FMTCALL(FormatRSPStashGroupID));
+                inline constexpr KeyBack PGroupID           (KeyCategory::RSP,  "RSP.PGroupID",        "PGroupID"          , StashGroupID   , _FMTCALL(FormatRSPPGroupID));
+                inline constexpr KeyBack DBID               (KeyCategory::RSP,  "RSP.DBID",            "DBID"              , PGroupID       , _FMTCALL(FormatRSPDBID));
+                inline constexpr KeyBack CBusy              (KeyCategory::RSP,  "RSP.CBusy",           "CBusy"             , DBID           , _FMTCALL(FormatRSPCBusy));
+                inline constexpr KeyBack DataPull           (KeyCategory::RSP,  "RSP.DataPull",        "DataPull"          , CBusy          , _FMTCALL(FormatRSPDataPull));
+                inline constexpr KeyBack FwdState           (KeyCategory::RSP,  "RSP.FwdState",        "FwdState"          , DataPull       , _FMTCALL(FormatRSPFwdState));
+                inline constexpr KeyBack Resp               (KeyCategory::RSP,  "RSP.Resp",            "Resp"              , FwdState       , _FMTCALL(FormatRSPResp));
+                inline constexpr KeyBack RespErr            (KeyCategory::RSP,  "RSP.RespErr",         "RespErr"           , Resp           , _FMTCALL(FormatRSPRespErr));
+                inline constexpr KeyBack TxnID              (KeyCategory::RSP,  "RSP.TxnID",           "TxnID"             , RespErr        , _FMTCALL(FormatRSPTxnID));
+                inline constexpr KeyBack SrcID              (KeyCategory::RSP,  "RSP.SrcID",           "SrcID"             , TxnID          , _FMTCALL(FormatRSPSrcID));
+                inline constexpr KeyBack TgtID              (KeyCategory::RSP,  "RSP.TgtID",           "TgtID"             , SrcID          , _FMTCALL(FormatRSPTgtID));
+                inline constexpr KeyBack QoS                (KeyCategory::RSP,  "RSP.QoS",             "QoS"               , TgtID          , _FMTCALL(FormatRSPQoS));
+
+                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
+                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
+            }
+
+            namespace DAT {
+                inline constexpr KeyBack Poison             (KeyCategory::DAT,  "DAT.Poison",          "Poison"                             , _FMTCALL(FormatDATPoison));
+                inline constexpr KeyBack DataCheck          (KeyCategory::DAT,  "DAT.DataCheck",       "DataCheck"         , Poison         , _FMTCALL(FormatDATDataCheck));
+                inline constexpr KeyBack Data               (KeyCategory::DAT,  "DAT.Data",            "Data"              , DataCheck      , _FMTCALL(FormatDATData));
+                inline constexpr KeyBack BE                 (KeyCategory::DAT,  "DAT.BE",              "BE"                , Data           , _FMTCALL(FormatDATBE));
+                inline constexpr KeyBack RSVDC              (KeyCategory::DAT,  "DAT.RSVDC",           "RSVDC"             , BE             , _FMTCALL(FormatDATRSVDC));
+                inline constexpr KeyBack TraceTag           (KeyCategory::DAT,  "DAT.TraceTag",        "TraceTag"          , RSVDC          , _FMTCALL(FormatDATTraceTag));
+                inline constexpr KeyBack TU                 (KeyCategory::DAT,  "DAT.TU",              "TU"                , TraceTag       , _FMTCALL(FormatDATTU));
+                inline constexpr KeyBack Tag                (KeyCategory::DAT,  "DAT.Tag",             "Tag"               , TU             , _FMTCALL(FormatDATTag));
+                inline constexpr KeyBack TagOp              (KeyCategory::DAT,  "DAT.TagOp",           "TagOp"             , Tag            , _FMTCALL(FormatDATTagOp));
+                inline constexpr KeyBack DataID             (KeyCategory::DAT,  "DAT.DataID",          "DataID"            , TagOp          , _FMTCALL(FormatDATDataID));
+                inline constexpr KeyBack CCID               (KeyCategory::DAT,  "DAT.CCID",            "CCID"              , DataID         , _FMTCALL(FormatDATCCID));
+                inline constexpr KeyBack DBID               (KeyCategory::DAT,  "DAT.DBID",            "DBID"              , CCID           , _FMTCALL(FormatDATDBID));
+                inline constexpr KeyBack CBusy              (KeyCategory::DAT,  "DAT.CBusy",           "CBusy"             , DBID           , _FMTCALL(FormatDATCBusy));
+                inline constexpr KeyBack DataSource         (KeyCategory::DAT,  "DAT.DataSource",      "DataSource"        , CBusy          , _FMTCALL(FormatDATDataSource));
+                inline constexpr KeyBack DataPull           (KeyCategory::DAT,  "DAT.DataPull",        "DataPull"          , DataSource     , _FMTCALL(FormatDATDataPull));
+                inline constexpr KeyBack FwdState           (KeyCategory::DAT,  "DAT.FwdState",        "FwdState"          , DataPull       , _FMTCALL(FormatDATFwdState));
+                inline constexpr KeyBack Resp               (KeyCategory::DAT,  "DAT.Resp",            "Resp"              , FwdState       , _FMTCALL(FormatDATResp));
+                inline constexpr KeyBack RespErr            (KeyCategory::DAT,  "DAT.RespErr",         "RespErr"           , Resp           , _FMTCALL(FormatDATRespErr));
+                inline constexpr KeyBack HomeNID            (KeyCategory::DAT,  "DAT.HomeNID",         "HomeNID"           , RespErr        , _FMTCALL(FormatDATHomeNID));
+                inline constexpr KeyBack TxnID              (KeyCategory::DAT,  "DAT.TxnID",           "TxnID"             , HomeNID        , _FMTCALL(FormatDATTxnID));
+                inline constexpr KeyBack SrcID              (KeyCategory::DAT,  "DAT.SrcID",           "SrcID"             , TxnID          , _FMTCALL(FormatDATSrcID));
+                inline constexpr KeyBack TgtID              (KeyCategory::DAT,  "DAT.TgtID",           "TgtID"             , SrcID          , _FMTCALL(FormatDATTgtID));
+                inline constexpr KeyBack QoS                (KeyCategory::DAT,  "DAT.QoS",             "QoS"               , TgtID          , _FMTCALL(FormatDATQoS));
+
+                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
+                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
+            }
+
+            namespace SNP {
+                inline constexpr KeyBack MPAM               (KeyCategory::SNP,  "SNP.MPAM",            "MPAM"                               , _FMTCALL(FormatSNPMPAM));
+                inline constexpr KeyBack TraceTag           (KeyCategory::SNP,  "SNP.TraceTag",        "TraceTag"          , MPAM           , _FMTCALL(FormatSNPTraceTag));
+                inline constexpr KeyBack RetToSrc           (KeyCategory::SNP,  "SNP.RetToSrc",        "RetToSrc"          , TraceTag       , _FMTCALL(FormatSNPRetToSrc));
+                inline constexpr KeyBack DoNotDataPull      (KeyCategory::SNP,  "SNP.DoNotDataPull",   "DoNotDataPull"     , RetToSrc       , _FMTCALL(FormatSNPDoNotDataPull));
+                inline constexpr KeyBack DoNotGoToSD        (KeyCategory::SNP,  "SNP.DoNotGoToSD",     "DoNotGoToSD"       , DoNotDataPull  , _FMTCALL(FormatSNPDoNotGoToSD));
+                inline constexpr KeyBack NS                 (KeyCategory::SNP,  "SNP.NS",              "NS"                , DoNotGoToSD    , _FMTCALL(FormatSNPNS));
+                inline constexpr KeyBack Addr               (KeyCategory::SNP,  "SNP.Addr",            "Addr"              , NS             , _FMTCALL(FormatSNPAddr));
+                inline constexpr KeyBack VMIDExt            (KeyCategory::SNP,  "SNP.VMIDExt",         "VMIDExt"           , Addr           , _FMTCALL(FormatSNPVMIDExt));
+                inline constexpr KeyBack StashLPID          (KeyCategory::SNP,  "SNP.StashLPID",       "StashLPID"         , VMIDExt        , _FMTCALL(FormatSNPStashLPID));
+                inline constexpr KeyBack StashLPIDValid     (KeyCategory::SNP,  "SNP.StashLPIDValid",  "StashLPIDValid"    , StashLPID      , _FMTCALL(FormatSNPStashLPIDValid));
+                inline constexpr KeyBack FwdTxnID           (KeyCategory::SNP,  "SNP.FwdTxnID",        "FwdTxnID"          , StashLPIDValid , _FMTCALL(FormatSNPFwdTxnID));
+                inline constexpr KeyBack FwdNID             (KeyCategory::SNP,  "SNP.FwdNID",          "FwdNID"            , FwdTxnID       , _FMTCALL(FormatSNPFwdNID));
+                inline constexpr KeyBack TxnID              (KeyCategory::SNP,  "SNP.TxnID",           "TxnID"             , FwdNID         , _FMTCALL(FormatSNPTxnID));
+                inline constexpr KeyBack SrcID              (KeyCategory::SNP,  "SNP.SrcID",           "SrcID"             , TxnID          , _FMTCALL(FormatSNPSrcID));
+                inline constexpr KeyBack QoS                (KeyCategory::SNP,  "SNP.QoS",             "QoS"               , SrcID          , _FMTCALL(FormatSNPQoS));
+
+                inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
+                inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
+            }
+
+            #undef _FMTCALL
+        }
     }
 /*
 }
 */
+
+
+// Implementation of: class KeyBack
+namespace /*CHI::*/Expresso::Flit {
+
+    inline std::string KeyBack::Format(const Formatter& f, const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return formatterCaller(&f, kv, fmt);
+    }
+
+    inline std::string KeyBack::Format(const Formatter& f, const KeyValueMap& kv, const std::string& fmt) const
+    {
+        return formatterCaller(&f, kv, [fmt](auto) { return fmt; });
+    }
+}
 
 
 // Implementation of: class Value
@@ -756,6 +948,355 @@ namespace /*CHI::*/Expresso::Flit {
     inline void Mapper<config, conn>::MapVector(Key key, size_t size, uint64_t* vec) noexcept
     {
         map[key] = ValueVector(size, vec);
+    }
+}
+
+
+// Implementation of: class Formatter
+namespace /*CHI::*/Expresso::Flit {
+
+    inline std::string Formatter::Format(const KeyValueMap& kv, Key key, const format_func& fmt) const
+    {
+        return key->formatterCaller(this, kv, fmt);
+    }
+
+    inline std::string Formatter::Format(const KeyValueMap& kv, Key key, const std::string& fmt) const
+    {
+        return key->formatterCaller(this, kv, [fmt](auto) { return fmt; });
+    }
+
+    inline std::string Formatter::FormatQoS(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQQoS(kv, fmt);
+        if (result.empty()) result = FormatRSPQoS(kv, fmt);
+        if (result.empty()) result = FormatDATQoS(kv, fmt);
+        if (result.empty()) result = FormatSNPQoS(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatTgtID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQTgtID(kv, fmt);
+        if (result.empty()) result = FormatRSPTgtID(kv, fmt);
+        if (result.empty()) result = FormatDATTgtID(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatSrcID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQSrcID(kv, fmt);
+        if (result.empty()) result = FormatRSPSrcID(kv, fmt);
+        if (result.empty()) result = FormatDATSrcID(kv, fmt);
+        if (result.empty()) result = FormatSNPSrcID(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatTxnID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQTxnID(kv, fmt);
+        if (result.empty()) result = FormatRSPTxnID(kv, fmt);
+        if (result.empty()) result = FormatDATTxnID(kv, fmt);
+        if (result.empty()) result = FormatSNPTxnID(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatReturnNID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQReturnNID(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatStashNID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQStashNID(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatSLCRepHint(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQSLCRepHint(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatStashNIDValid(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQStashNIDValid(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatEndian(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQEndian(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatDeep(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQDeep(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatReturnTxnID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQReturnTxnID(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatStashLPIDValid(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQStashLPIDValid(kv, fmt);
+        if (result.empty()) result = FormatSNPStashLPIDValid(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatStashLPID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQStashLPID(kv, fmt);
+        if (result.empty()) result = FormatSNPStashLPID(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatSize(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQSize(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatAddr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQAddr(kv, fmt);
+        if (result.empty()) result = FormatSNPAddr(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatNS(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQNS(kv, fmt);
+        if (result.empty()) result = FormatSNPNS(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatLikelyShared(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQLikelyShared(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatAllowRetry(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQAllowRetry(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatOrder(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQOrder(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatPCrdType(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQPCrdType(kv, fmt);
+        if (result.empty()) result = FormatRSPPCrdType(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatMemAttr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQMemAttr(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatSnpAttr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQSnpAttr(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatDoDWT(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQDoDWT(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatLPID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQLPID(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatPGroupID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQPGroupID(kv, fmt);
+        if (result.empty()) result = FormatRSPPGroupID(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatStashGroupID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQStashGroupID(kv, fmt);
+        if (result.empty()) result = FormatRSPStashGroupID(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatTagGroupID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQTagGroupID(kv, fmt);
+        if (result.empty()) result = FormatRSPTagGroupID(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatExcl(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQExcl(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatSnoopMe(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQSnoopMe(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatExpCompAck(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatREQExpCompAck(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatTagOp(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQTagOp(kv, fmt);
+        if (result.empty()) result = FormatRSPTagOp(kv, fmt);
+        if (result.empty()) result = FormatDATTagOp(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatTraceTag(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQTraceTag(kv, fmt);
+        if (result.empty()) result = FormatRSPTraceTag(kv, fmt);
+        if (result.empty()) result = FormatDATTraceTag(kv, fmt);
+        if (result.empty()) result = FormatSNPTraceTag(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatMPAM(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQMPAM(kv, fmt);
+        if (result.empty()) result = FormatSNPMPAM(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatRSVDC(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQRSVDC(kv, fmt);
+        if (result.empty()) result = FormatDATRSVDC(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatRespErr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatRSPRespErr(kv, fmt);
+        if (result.empty()) result = FormatDATRespErr(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatResp(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatRSPResp(kv, fmt);
+        if (result.empty()) result = FormatDATResp(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatFwdState(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatRSPFwdState(kv, fmt);
+        if (result.empty()) result = FormatDATFwdState(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatDataPull(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatRSPDataPull(kv, fmt);
+        if (result.empty()) result = FormatDATDataPull(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatCBusy(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatRSPCBusy(kv, fmt);
+        if (result.empty()) result = FormatDATCBusy(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatDBID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatRSPDBID(kv, fmt);
+        if (result.empty()) result = FormatDATDBID(kv, fmt);
+        return result;
+    }
+
+    inline std::string Formatter::FormatHomeNID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATHomeNID(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatDataSource(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATDataSource(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatCCID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATCCID(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatDataID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATDataID(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatTag(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATTag(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatTU(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATTU(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatBE(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATBE(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatData(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATData(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatDataCheck(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATDataCheck(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatPoison(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatDATPoison(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatFwdTxnID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatSNPFwdTxnID(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatFwdNID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatSNPFwdNID(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatVMIDExt(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatSNPVMIDExt(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatDoNotGoToSD(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatSNPDoNotGoToSD(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatDoNotDataPull(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatSNPDoNotDataPull(kv, fmt);
+    }
+
+    inline std::string Formatter::FormatRetToSrc(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return FormatSNPRetToSrc(kv, fmt);
     }
 }
 

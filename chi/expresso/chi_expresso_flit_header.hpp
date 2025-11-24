@@ -11,5 +11,8 @@
 #include <iterator>             // IWYU pragma: export
 #include <utility>              // IWYU pragma: export
 #include <format>               // IWYU pragma: export
+#include <type_traits>          // IWYU pragma: export
+#include <sstream>              // IWYU pragma: export
+#include <iomanip>              // IWYU pragma: export
 
 #endif // __CHI__CHI_EXPRESSO_FLIT_HEADER
