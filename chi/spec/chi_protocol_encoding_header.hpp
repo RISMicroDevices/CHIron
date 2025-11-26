@@ -5,5 +5,6 @@
 
 #include <climits>              // IWYU pragma: export
 #include <array>                // IWYU pragma: export
+#include <type_traits>          // IWYU pragma: export
 
 #endif

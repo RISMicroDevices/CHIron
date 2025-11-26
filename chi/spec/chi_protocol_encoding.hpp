@@ -1898,6 +1898,37 @@ namespace CHI {
     }
 
 
+    namespace chi_protocol_encoding::details {
+
+        template<class T>
+        class EnumerationUnsaturated {
+        public:
+            const char*     name;
+            const int       value;
+            const T* const  prev;
+
+        public:
+            inline constexpr EnumerationUnsaturated(const char* name, const int value, const T* const prev = nullptr) noexcept
+            : name(name), value(value), prev(prev) { }
+
+            inline constexpr operator int() const noexcept
+            { return value; }
+
+            inline constexpr operator const T*() const noexcept
+            { return static_cast<const T*>(this); };
+
+            inline constexpr bool operator==(const T& obj) const noexcept
+            { return value == obj.value; }
+
+            inline constexpr bool operator!=(const T& obj) const noexcept
+            { return !(*this == obj); }
+
+            inline constexpr bool IsValid() const noexcept
+            { return value != INT_MIN; }
+        };
+    }
+
+
     //
     template<unsigned I>
     struct Size {
@@ -1914,37 +1945,68 @@ namespace CHI {
 //  *Reserved*                                                                   = 0b111;
 
 
-    namespace NS {
+    //
+    using NS = uint1_t;
+
+    class NSEnumBack : public chi_protocol_encoding::details::EnumerationUnsaturated<NSEnumBack> {
+    public:
+        inline constexpr NSEnumBack(const char* name, const int value, const NSEnumBack* prev = nullptr) noexcept
+        : EnumerationUnsaturated(name, value, prev) {}
+    };
+
+    using NSEnum = const NSEnumBack*;
+
+    namespace NSs {
 
         /*
         Non-secure.
         */
 
         // NS type
-        using type = uint1_t;
+        using type = NS;
 
         // NS encodings
-        constexpr type  SecureAccess        = 0b0;
-        constexpr type  NonSecureAccess     = 0b1;
+        constexpr type  Secure          = 0b0;
+        constexpr type  NonSecure       = 0b1;
+
+        //
+        namespace Enum {
+            inline constexpr NSEnumBack Invalid         ("Invalid", INT_MIN);
+
+            inline constexpr NSEnumBack Secure          ("Secure"   , NSs::Secure);
+            inline constexpr NSEnumBack NonSecure       ("NonSecure", NSs::NonSecure, Secure);
+        };
+
+        inline constexpr NSEnum ToEnum(NS ns) noexcept;
+        inline constexpr bool IsValid(NS ns) noexcept;
     };
 
 
     //
-    namespace MemAttr {
+    using MemAttr = uint4_t;
+
+    class MemAttrEnumBack : public chi_protocol_encoding::details::EnumerationUnsaturated<MemAttrEnumBack> {
+    public:
+        inline constexpr MemAttrEnumBack(const char* name, const int value, const MemAttrEnumBack* prev = nullptr) noexcept
+        : EnumerationUnsaturated(name, value, prev) {}
+    };
+
+    using MemAttrEnum = const MemAttrEnumBack*;
+
+    namespace MemAttrs {
 
         /*
         Memory Attributes.
         */
 
         // MemAttr type
-        using type = uint4_t;
+        using type = MemAttr;
 
         // MemAttr fields
         constexpr type  EWA             = 0b0001;       // Early Write Acknowledge bit.
         constexpr type  Device          = 0b0010;       // Device bit.
         constexpr type  Cacheable       = 0b0100;       // Cacheable bit.
         constexpr type  Allocate        = 0b1000;       // Allocate hint bit.
-
 
         // MemAttr field encodings
         constexpr type  EWAPermitted            = 0b0001;
@@ -1959,24 +2021,47 @@ namespace CHI {
         constexpr type  RecommendToAllocate     = 0b1000;
         constexpr type  RecommendToNotAllocate  = 0b0000;
 
-
         // MemAttr helpers
         inline constexpr type ExtractEWA(type memattr)          { return memattr & EWA; }
         inline constexpr type ExtractDevice(type memattr)       { return memattr & Device; }
         inline constexpr type ExtractCacheable(type memattr)    { return memattr & Cacheable; }
         inline constexpr type ExtractAllocate(type memattr)     { return memattr & Allocate; }
 
-
         //
         static_assert(is_same_len_v<type, Flits::REQ<>::memattr_t>);
+
+        //
+        namespace Enum {
+            inline constexpr MemAttrEnumBack    Invalid                     ("Invalid", INT_MIN);
+
+            inline constexpr MemAttrEnumBack    Device_nEWA                 ("Device Non-EWA"               , Device);
+            inline constexpr MemAttrEnumBack    Device_EWA                  ("Device EWA"                   , Device | EWA                  , Device_nEWA);
+            inline constexpr MemAttrEnumBack    NonCacheable_NonBufferable  ("Non-cacheable Non-bufferable" , 0                             , Device_EWA);
+            inline constexpr MemAttrEnumBack    NonCacheable_Bufferable     ("Non-cacheable Bufferable"     , EWA                           , NonCacheable_NonBufferable);
+            inline constexpr MemAttrEnumBack    WriteBack_NoAllocate        ("WriteBack No-allocate"        , Cacheable | EWA               , NonCacheable_Bufferable   );
+            inline constexpr MemAttrEnumBack    WriteBack_Allocate          ("WriteBack Allocate"           , Allocate | Cacheable | EWA    , WriteBack_NoAllocate      );
+        };
+
+        inline constexpr MemAttrEnum ToEnum(MemAttr memAttr) noexcept;
+        inline constexpr bool IsValid(MemAttr memAttr) noexcept;
     };
 
 
     // 
-    namespace SnpAttr {
+    using SnpAttr = uint1_t;
+
+    class SnpAttrEnumBack : public chi_protocol_encoding::details::EnumerationUnsaturated<SnpAttrEnumBack> {
+    public:
+        inline constexpr SnpAttrEnumBack(const char* name, const int value, const SnpAttrEnumBack* prev = nullptr) noexcept
+        : EnumerationUnsaturated(name, value, prev) {}
+    };
+
+    using SnpAttrEnum = const SnpAttrEnumBack*;
+
+    namespace SnpAttrs {
 
         // SnpAttr type
-        using type = uint1_t;
+        using type = SnpAttr;
 
         // SnpAttr field encodings
         constexpr type  NonSnoopable    = 0b0;
@@ -1984,29 +2069,71 @@ namespace CHI {
 
         //
         static_assert(is_same_len_v<type, Flits::REQ<>::snpattr_t>);
+
+        //
+        namespace Enum {
+            inline constexpr SnpAttrEnumBack    Invalid             ("<Invalid>", INT_MIN);
+
+            inline constexpr SnpAttrEnumBack    NonSnoopable        ("Non-snoopable"    , SnpAttrs::NonSnoopable);
+            inline constexpr SnpAttrEnumBack    Snoopable           ("Snoopable"        , SnpAttrs::Snoopable       , NonSnoopable);
+        };
+
+        inline constexpr SnpAttrEnum ToEnum(SnpAttr snpAttr) noexcept;
+        inline constexpr bool IsValid(SnpAttr snpAttr) noexcept;
     };
 
 
     //
-    namespace Endian {
+    using Endian = uint1_t;
+
+    class EndianEnumBack : public chi_protocol_encoding::details::EnumerationUnsaturated<EndianEnumBack> {
+    public:
+        inline constexpr EndianEnumBack(const char* name, const int value, const EndianEnumBack* prev = nullptr) noexcept
+        : EnumerationUnsaturated(name, value, prev) {}
+    };
+
+    using EndianEnum = const EndianEnumBack*;
+
+    namespace Endians {
 
         // Endian type
-        using type = uint1_t;
+        using type = Endian;
 
         // Endian field encodings
-        constexpr type  LittleEndian    = 0b0;
-        constexpr type  BigEndian       = 0b1;
+        constexpr type  Little          = 0b0;
+        constexpr type  Big             = 0b1;
 
         //
         static_assert(is_same_len_v<type, Flits::REQ<>::endian_t>);
+
+        //
+        namespace Enum {
+            inline constexpr EndianEnumBack Invalid         ("<Invalid>", INT_MIN);
+
+            inline constexpr EndianEnumBack Little          ("Little"   , Endians::Little);
+            inline constexpr EndianEnumBack Big             ("Big"      , Endians::Big      , Little    );
+        };
+
+        inline constexpr EndianEnum ToEnum(Endian endian) noexcept;
+        inline constexpr bool IsValid(Endian endian) noexcept;
     };
 
     
     //
-    namespace Order {
+    using Order = uint2_t;
+
+    class OrderEnumBack : public chi_protocol_encoding::details::EnumerationUnsaturated<OrderEnumBack> {
+    public:
+        inline constexpr OrderEnumBack(const char* name, const int value, const OrderEnumBack* prev = nullptr) noexcept
+        : EnumerationUnsaturated(name, value, prev) {}
+    };
+
+    using OrderEnum = const OrderEnumBack*;
+
+    namespace Orders {
 
         // Order type
-        using type = uint2_t;
+        using type = Order;
 
         // Order field encodings
         constexpr type  NoOrdering          = 0b00;
@@ -2016,14 +2143,37 @@ namespace CHI {
 
         //
         static_assert(is_same_len_v<type, Flits::REQ<>::order_t>);
+
+        //
+        namespace Enum {
+            inline constexpr OrderEnumBack  Invalid         ("<Invalid>", INT_MIN);
+
+            inline constexpr OrderEnumBack  NoOrdering      ("No Ordering"      , Orders::NoOrdering);
+            inline constexpr OrderEnumBack  RequestAccepted ("Request Accepted" , Orders::RequestAccepted   , NoOrdering        );
+            inline constexpr OrderEnumBack  RequestOrder    ("Request Order"    , Orders::RequestOrder      , RequestAccepted   );
+            inline constexpr OrderEnumBack  EndpointOrder   ("Endpoint Order"   , Orders::EndpointOrder     , RequestOrder      );
+        }
+
+        inline constexpr OrderEnum ToEnum(Order order) noexcept;
+        inline constexpr bool IsValid(Order order) noexcept;
     };
 
 
     //
-    namespace RespErr {
+    using RespErr = uint2_t;
+
+    class RespErrEnumBack : public chi_protocol_encoding::details::EnumerationUnsaturated<RespErrEnumBack> {
+    public:
+        inline constexpr RespErrEnumBack(const char* name, const int value, const RespErrEnumBack* prev = nullptr) noexcept
+        : EnumerationUnsaturated(name, value, prev) {}
+    };
+
+    using RespErrEnum = const RespErrEnumBack*;
+
+    namespace RespErrs {
 
         // RespErr type
-        using type = uint2_t;
+        using type = RespErr;
 
         // RespErr field encodings
         constexpr type  OK                  = 0b00;     // Normal OK
@@ -2034,20 +2184,159 @@ namespace CHI {
         //
         static_assert(is_same_len_v<type, Flits::DAT<>::resperr_t>);
         static_assert(is_same_len_v<type, Flits::RSP<>::resperr_t>);
+
+        //
+        namespace Enum {
+            inline constexpr RespErrEnumBack  Invalid       ("<Invalid>", INT_MIN);
+
+            inline constexpr RespErrEnumBack  OK            ("OK"   , RespErrs::OK);
+            inline constexpr RespErrEnumBack  EXOK          ("EXOK" , RespErrs::EXOK    , OK    );
+            inline constexpr RespErrEnumBack  DERR          ("DERR" , RespErrs::DERR    , EXOK  );
+            inline constexpr RespErrEnumBack  NDERR         ("NDERR", RespErrs::NDERR   , DERR  );
+        }
+
+        inline constexpr RespErrEnum ToEnum(RespErr respErr) noexcept;
+        inline constexpr bool IsValid(RespErr respErr) noexcept;
     };
 
 
     //
-    namespace Resp {
+    using Resp = uint3_t;
+
+    class RespEnumBack : public chi_protocol_encoding::details::EnumerationUnsaturated<RespEnumBack> {
+    public:
+        inline constexpr RespEnumBack(const char* name, const int value, const RespEnumBack* prev = nullptr) noexcept
+        : EnumerationUnsaturated(name, value, prev) {}
+    };
+
+    using RespEnum = const RespEnumBack*;
+
+    namespace Resps {
 
         // Resp type
-        using type = uint3_t;
+        using type = Resp;
 
         // Resp fields
         constexpr type PassDirty                        = 0b100;
 
-        // Resp field encodings     
-        // TODO: better classification and constraint expressions
+        // Resp field encodings
+        constexpr type  I                               = 0b000;
+        constexpr type  Fail                            = 0b000;
+        constexpr type  SC                              = 0b001;
+        constexpr type  Pass                            = 0b001;
+        constexpr type  UC                              = 0b010;
+        constexpr type  UD                              = 0b010;
+        constexpr type  SD                              = 0b011;
+        constexpr type  I_PD                            = 0b100;
+        constexpr type  SC_PD                           = 0b101;
+        constexpr type  UC_PD                           = 0b110;
+        constexpr type  UD_PD                           = 0b110;
+        constexpr type  SD_PD                           = 0b111;
+
+        namespace Enum {
+            inline constexpr RespEnumBack   Invalid         ("<Invalid>", INT_MIN);
+
+            inline constexpr RespEnumBack   I_or_Fail       ("I/Fail"       , Resps::I      );
+            inline constexpr RespEnumBack   SC_or_Pass      ("SC/Pass"      , Resps::SC     , I_or_Fail     );
+            inline constexpr RespEnumBack   UC_or_UD        ("UC/UD"        , Resps::UC     , SC_or_Pass    );
+            inline constexpr RespEnumBack   SD              ("SD"           , Resps::SD     , UC_or_UD      );
+            inline constexpr RespEnumBack   I_PD            ("I_PD"         , Resps::I_PD   , SD            );
+            inline constexpr RespEnumBack   SC_PD           ("SC_PD"        , Resps::SC_PD  , I_PD          );
+            inline constexpr RespEnumBack   UC_PD_or_UD_PD  ("UC_PD/UD_PD"  , Resps::UC_PD  , SC_PD         );
+            inline constexpr RespEnumBack   SD_PD           ("SD_PD"        , Resps::SD_PD  , UC_PD_or_UD_PD);
+        }
+
+        inline constexpr RespEnum ToEnum(Resp resp) noexcept;
+        inline constexpr bool IsValid(Resp resp) noexcept;
+
+        // Resp field encodings for specified response types
+        namespace Snoop {
+            constexpr type  I           = Resps::I;
+            constexpr type  SC          = Resps::SC;
+            constexpr type  UC_or_UD    = Resps::UC;
+            constexpr type  SD          = Resps::SD;
+            constexpr type  I_PD        = Resps::I_PD;
+            constexpr type  SC_PD       = Resps::SC_PD;
+            constexpr type  UC_PD       = Resps::UC_PD;
+
+            //
+            namespace Enum {
+                inline constexpr RespEnumBack   Invalid     ("<Invalid>", INT_MIN);
+
+                inline constexpr RespEnumBack   I           ("I"    , Snoop::I          );
+                inline constexpr RespEnumBack   SC          ("SC"   , Snoop::SC         , I         );
+                inline constexpr RespEnumBack   UC_or_UD    ("UC/UD", Snoop::UC_or_UD   , SC        );
+                inline constexpr RespEnumBack   SD          ("SD"   , Snoop::SD         , UC_or_UD  );
+                inline constexpr RespEnumBack   I_PD        ("I_PD" , Snoop::I_PD       , SD        );
+                inline constexpr RespEnumBack   SC_PD       ("SC_PD", Snoop::SC_PD      , I_PD      );
+                inline constexpr RespEnumBack   UC_PD       ("UC_PD", Snoop::UC_PD      , SC_PD     );
+            }
+
+            inline constexpr RespEnum ToEnum(Resp resp) noexcept;
+            inline constexpr bool IsValid(Resp resp) noexcept;
+        }
+
+        namespace Comp {
+            constexpr type  I           = Resps::I;
+            constexpr type  SC          = Resps::SC;
+            constexpr type  UC          = Resps::UC;
+            constexpr type  UD_PD       = Resps::UD_PD;
+            constexpr type  SD_PD       = Resps::SD_PD;
+
+            //
+            namespace Enum {
+                inline constexpr RespEnumBack   Invalid     ("<Invalid>", INT_MIN);
+
+                inline constexpr RespEnumBack   I           ("I"    , Comp::I);
+                inline constexpr RespEnumBack   SC          ("SC"   , Comp::SC          , I         );
+                inline constexpr RespEnumBack   UC          ("UC"   , Comp::UC          , SC        );
+                inline constexpr RespEnumBack   UD_PD       ("UD_PD", Comp::UD_PD       , UC        );
+                inline constexpr RespEnumBack   SD_PD       ("SD_PD", Comp::SD_PD       , UD_PD     );
+            }
+
+            inline constexpr RespEnum ToEnum(Resp resp) noexcept;
+            inline constexpr bool IsValid(Resp resp) noexcept;
+        }
+
+        namespace WriteData {
+            constexpr type  I           = Resps::I;
+            constexpr type  SC          = Resps::SC;
+            constexpr type  UC          = Resps::UC;
+            constexpr type  UD_PD       = Resps::UD_PD;
+            constexpr type  SD_PD       = Resps::SD_PD;
+
+            //
+            namespace Enum {
+                inline constexpr RespEnumBack   Invalid     ("<Invalid>", INT_MIN);
+
+                inline constexpr RespEnumBack   I           ("I"    , WriteData::I);
+                inline constexpr RespEnumBack   SC          ("SC"   , WriteData::SC     , I         );
+                inline constexpr RespEnumBack   UC          ("UC"   , WriteData::UC     , SC        );
+                inline constexpr RespEnumBack   UD_PD       ("UD_PD", WriteData::UD_PD  , UC        );
+                inline constexpr RespEnumBack   SD_PD       ("SD_PD", WriteData::SD_PD  , UD_PD     );
+            }
+
+            inline constexpr RespEnum ToEnum(Resp resp) noexcept;
+            inline constexpr bool IsValid(Resp resp) noexcept;
+        }
+
+        namespace TagMatch {
+            constexpr type  Fail        = Resps::Fail;
+            constexpr type  Pass        = Resps::Pass;
+
+            //
+            namespace Enum {
+                inline constexpr RespEnumBack   Invalid     ("<Invalid>", INT_MIN);
+
+                inline constexpr RespEnumBack   Fail        ("Fail" , TagMatch::Fail);
+                inline constexpr RespEnumBack   Pass        ("Pass" , TagMatch::Pass    , Fail      );
+            }
+
+            inline constexpr RespEnum ToEnum(Resp resp) noexcept;
+            inline constexpr bool IsValid(Resp resp) noexcept;
+        }
+
+        // Resp field encodings for specified opcodes
         //======================================================
         constexpr type  CompData_I                      = 0b000;
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -2197,10 +2486,20 @@ namespace CHI {
 
 
     //
-    namespace FwdState {
+    using FwdState = uint3_t;
+
+    class FwdStateEnumBack : public chi_protocol_encoding::details::EnumerationUnsaturated<FwdStateEnumBack> {
+    public:
+        inline constexpr FwdStateEnumBack(const char* name, const int value, const FwdStateEnumBack* const prev = nullptr) noexcept
+        : EnumerationUnsaturated(name, value, prev) { }
+    };
+
+    using FwdStateEnum = const FwdStateEnumBack*;
+
+    namespace FwdStates {
 
         // FwdState type
-        using type = uint3_t;
+        using type = FwdState;
 
         // FwdState field masks
         constexpr type  MASK_PassDity           = 0b100;
@@ -2222,6 +2521,20 @@ namespace CHI {
         //
         static_assert(is_same_len_v<type, Flits::DAT<>::fwdstate_t>);
         static_assert(is_same_len_v<type, Flits::RSP<>::fwdstate_t>);
+
+        //
+        namespace Enum {
+            inline constexpr FwdStateEnumBack   Invalid     ("<Invalid>", INT_MIN);
+
+            inline constexpr FwdStateEnumBack   I           ("I"    , FwdStates::I       );
+            inline constexpr FwdStateEnumBack   SC          ("SC"   , FwdStates::SC      , I    );
+            inline constexpr FwdStateEnumBack   UC          ("UC"   , FwdStates::UC      , SC   );
+            inline constexpr FwdStateEnumBack   UD_PD       ("UD_PD", FwdStates::UD_PD   , UC   );
+            inline constexpr FwdStateEnumBack   SD_PD       ("SD_PD", FwdStates::SD_PD   , UD_PD);
+        }
+
+        inline constexpr FwdStateEnum ToEnum(FwdState fwdState) noexcept;
+        inline constexpr bool IsValid(FwdState fwdState) noexcept;
     };
 
 
@@ -2266,6 +2579,10 @@ namespace CHI {
 #endif
 
 
+    // ARM Memory Types under combination of MemAttr, SnpAttr, Order
+    // TODO: class MemoryType
+
+
     //
     class RespAndFwdStateEnumBack {
     public:
@@ -2292,11 +2609,11 @@ namespace CHI {
         inline constexpr bool IsValid() const noexcept
         { return value != INT_MIN; }
 
-        inline constexpr Resp::type Resp() const noexcept
-        { return Resp::type(value & 0x7); }
+        inline constexpr Resp GetResp() const noexcept
+        { return Resp(value & 0x7); }
 
-        inline constexpr FwdState::type FwdState() const noexcept
-        { return FwdState::type((value >> 3) & 0x7); }
+        inline constexpr FwdState GetFwdState() const noexcept
+        { return FwdState((value >> 3) & 0x7); }
     };
 
     using RespAndFwdStateEnum = const RespAndFwdStateEnumBack*;
@@ -2313,15 +2630,15 @@ namespace CHI {
         };
 
     public:
-        inline constexpr RespAndFwdState(Resp::type resp, FwdState::type fwdState) noexcept
+        inline constexpr RespAndFwdState(Resp resp, FwdState fwdState) noexcept
         : resp(resp), fwdState(fwdState), _padding(0) { }
 
     public:
-        inline constexpr Resp::type Resp() const noexcept
-        { return static_cast<Resp::type>(resp); };
+        inline constexpr Resp GetResp() const noexcept
+        { return static_cast<Resp>(resp); };
 
-        inline constexpr FwdState::type FwdState() const noexcept
-        { return static_cast<FwdState::type>(fwdState); };
+        inline constexpr FwdState GetFwdState() const noexcept
+        { return static_cast<FwdState>(fwdState); };
 
     public:
         inline constexpr operator uint8_t() const noexcept
@@ -2339,35 +2656,38 @@ namespace CHI {
 
     namespace RespAndFwdStates {
 
-        inline constexpr RespAndFwdState    SnpResp_I_Fwded_I           (Resp::SnpResp_I_Fwded_I            , FwdState::I       );
-        inline constexpr RespAndFwdState    SnpResp_I_Fwded_SC          (Resp::SnpResp_I_Fwded_SC           , FwdState::SC      );
-        inline constexpr RespAndFwdState    SnpResp_I_Fwded_UC          (Resp::SnpResp_I_Fwded_UC           , FwdState::UC      );
-        inline constexpr RespAndFwdState    SnpResp_I_Fwded_UD_PD       (Resp::SnpResp_I_Fwded_UD_PD        , FwdState::UD_PD   );
-        inline constexpr RespAndFwdState    SnpResp_I_Fwded_SD_PD       (Resp::SnpResp_I_Fwded_SD_PD        , FwdState::SD_PD   );
-        inline constexpr RespAndFwdState    SnpResp_SC_Fwded_I          (Resp::SnpResp_SC_Fwded_I           , FwdState::I       );
-        inline constexpr RespAndFwdState    SnpResp_SC_Fwded_SC         (Resp::SnpResp_SC_Fwded_SC          , FwdState::SC      );
-        inline constexpr RespAndFwdState    SnpResp_SC_Fwded_SD_PD      (Resp::SnpResp_SC_Fwded_SD_PD       , FwdState::SD_PD   );
-        inline constexpr RespAndFwdState    SnpResp_UC_Fwded_I          (Resp::SnpResp_UC_Fwded_I           , FwdState::I       );
-        inline constexpr RespAndFwdState    SnpResp_UD_Fwded_I          (Resp::SnpResp_UD_Fwded_I           , FwdState::I       );
-        inline constexpr RespAndFwdState    SnpResp_SD_Fwded_I          (Resp::SnpResp_SD_Fwded_I           , FwdState::I       );
-        inline constexpr RespAndFwdState    SnpResp_SD_Fwded_SC         (Resp::SnpResp_SD_Fwded_SC          , FwdState::SC      );
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_I           (Resps::SnpResp_I_Fwded_I           , FwdStates::I      );
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_SC          (Resps::SnpResp_I_Fwded_SC          , FwdStates::SC     );
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_UC          (Resps::SnpResp_I_Fwded_UC          , FwdStates::UC     );
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_UD_PD       (Resps::SnpResp_I_Fwded_UD_PD       , FwdStates::UD_PD  );
+        inline constexpr RespAndFwdState    SnpResp_I_Fwded_SD_PD       (Resps::SnpResp_I_Fwded_SD_PD       , FwdStates::SD_PD  );
+        inline constexpr RespAndFwdState    SnpResp_SC_Fwded_I          (Resps::SnpResp_SC_Fwded_I          , FwdStates::I      );
+        inline constexpr RespAndFwdState    SnpResp_SC_Fwded_SC         (Resps::SnpResp_SC_Fwded_SC         , FwdStates::SC     );
+        inline constexpr RespAndFwdState    SnpResp_SC_Fwded_SD_PD      (Resps::SnpResp_SC_Fwded_SD_PD      , FwdStates::SD_PD  );
+        inline constexpr RespAndFwdState    SnpResp_UC_Fwded_I          (Resps::SnpResp_UC_Fwded_I          , FwdStates::I      );
+        inline constexpr RespAndFwdState    SnpResp_UD_Fwded_I          (Resps::SnpResp_UD_Fwded_I          , FwdStates::I      );
+        inline constexpr RespAndFwdState    SnpResp_SD_Fwded_I          (Resps::SnpResp_SD_Fwded_I          , FwdStates::I      );
+        inline constexpr RespAndFwdState    SnpResp_SD_Fwded_SC         (Resps::SnpResp_SD_Fwded_SC         , FwdStates::SC     );
 
-        inline constexpr RespAndFwdState    SnpRespData_I_Fwded_SC      (Resp::SnpRespData_I_Fwded_SC       , FwdState::SC      );
-        inline constexpr RespAndFwdState    SnpRespData_I_Fwded_SD_PD   (Resp::SnpRespData_I_Fwded_SD_PD    , FwdState::SD_PD   );
-        inline constexpr RespAndFwdState    SnpRespData_SC_Fwded_SC     (Resp::SnpRespData_SC_Fwded_SC      , FwdState::SC      );
-        inline constexpr RespAndFwdState    SnpRespData_SC_Fwded_SD_PD  (Resp::SnpRespData_SC_Fwded_SD_PD   , FwdState::SD_PD   );
-        inline constexpr RespAndFwdState    SnpRespData_SD_Fwded_SC     (Resp::SnpRespData_SD_Fwded_SC      , FwdState::SC      );
-        inline constexpr RespAndFwdState    SnpRespData_I_PD_Fwded_I    (Resp::SnpRespData_I_PD_Fwded_I     , FwdState::I       );
-        inline constexpr RespAndFwdState    SnpRespData_I_PD_Fwded_SC   (Resp::SnpRespData_I_PD_Fwded_SC    , FwdState::SC      );
-        inline constexpr RespAndFwdState    SnpRespData_SC_PD_Fwded_I   (Resp::SnpRespData_SC_PD_Fwded_I    , FwdState::I       );
-        inline constexpr RespAndFwdState    SnpRespData_SC_PD_Fwded_SC  (Resp::SnpRespData_SC_PD_Fwded_SC   , FwdState::SC      );
+        inline constexpr RespAndFwdState    SnpRespData_I_Fwded_SC      (Resps::SnpRespData_I_Fwded_SC      , FwdStates::SC     );
+        inline constexpr RespAndFwdState    SnpRespData_I_Fwded_SD_PD   (Resps::SnpRespData_I_Fwded_SD_PD   , FwdStates::SD_PD  );
+        inline constexpr RespAndFwdState    SnpRespData_SC_Fwded_SC     (Resps::SnpRespData_SC_Fwded_SC     , FwdStates::SC     );
+        inline constexpr RespAndFwdState    SnpRespData_SC_Fwded_SD_PD  (Resps::SnpRespData_SC_Fwded_SD_PD  , FwdStates::SD_PD  );
+        inline constexpr RespAndFwdState    SnpRespData_SD_Fwded_SC     (Resps::SnpRespData_SD_Fwded_SC     , FwdStates::SC     );
+        inline constexpr RespAndFwdState    SnpRespData_I_PD_Fwded_I    (Resps::SnpRespData_I_PD_Fwded_I    , FwdStates::I      );
+        inline constexpr RespAndFwdState    SnpRespData_I_PD_Fwded_SC   (Resps::SnpRespData_I_PD_Fwded_SC   , FwdStates::SC     );
+        inline constexpr RespAndFwdState    SnpRespData_SC_PD_Fwded_I   (Resps::SnpRespData_SC_PD_Fwded_I   , FwdStates::I      );
+        inline constexpr RespAndFwdState    SnpRespData_SC_PD_Fwded_SC  (Resps::SnpRespData_SC_PD_Fwded_SC  , FwdStates::SC     );
 
-        inline bool IsSnpRespFwdedValid(Resp::type resp, FwdState::type fwdState) noexcept;
-        inline bool IsSnpRespDataFwdedValid(Resp::type resp, FwdState::type fwdState) noexcept;
+        inline bool IsSnpRespFwdedValid(Resp resp, FwdState fwdState) noexcept;
+        inline bool IsSnpRespDataFwdedValid(Resp resp, FwdState fwdState) noexcept;
+
+        inline RespAndFwdStateEnum ToEnumSnpRespFwded(Resp resp, FwdState fwdState) noexcept;
+        inline RespAndFwdStateEnum ToEnumSnpRespDataFwded(Resp resp, FwdState fwdState) noexcept;
 
         namespace Enum {
 
-            inline constexpr RespAndFwdStateEnumBack Invalid                    ("Invalid", INT_MIN);
+            inline constexpr RespAndFwdStateEnumBack Invalid                    ("<Invalid>", INT_MIN);
 
             inline constexpr RespAndFwdStateEnumBack SnpResp_I_Fwded_I          ("SnpResp_I_Fwded_I"            , RespAndFwdStates::SnpResp_I_Fwded_I           );
             inline constexpr RespAndFwdStateEnumBack SnpResp_I_Fwded_SC         ("SnpResp_I_Fwded_SC"           , RespAndFwdStates::SnpResp_I_Fwded_SC          );
@@ -2391,68 +2711,378 @@ namespace CHI {
             inline constexpr RespAndFwdStateEnumBack SnpRespData_I_PD_Fwded_SC  ("SnpRespData_I_PD_Fwded_SC"    , RespAndFwdStates::SnpRespData_I_PD_Fwded_SC   );
             inline constexpr RespAndFwdStateEnumBack SnpRespData_SC_PD_Fwded_I  ("SnpRespData_SC_PD_Fwded_I"    , RespAndFwdStates::SnpRespData_SC_PD_Fwded_I   );
             inline constexpr RespAndFwdStateEnumBack SnpRespData_SC_PD_Fwded_SC ("SnpRespData_SC_PD_Fwded_SC"   , RespAndFwdStates::SnpRespData_SC_PD_Fwded_SC  );
+        }
+    }
 
-            namespace details {
+    
 
-                inline RespAndFwdStateEnum* GetAllSnpResp() noexcept
-                {
-                    static RespAndFwdStateEnum ALL[64] = { nullptr };
+/*
+};
+*/
 
-                    if (!ALL[0])
-                    {
-                        for (int i = 0; i < 64; i++)
-                            ALL[i] = Invalid;
 
-                        ALL[SnpResp_I_Fwded_I       ] = SnpResp_I_Fwded_I;
-                        ALL[SnpResp_I_Fwded_SC      ] = SnpResp_I_Fwded_SC;
-                        ALL[SnpResp_I_Fwded_UC      ] = SnpResp_I_Fwded_UC;
-                        ALL[SnpResp_I_Fwded_UD_PD   ] = SnpResp_I_Fwded_UD_PD;
-                        ALL[SnpResp_I_Fwded_SD_PD   ] = SnpResp_I_Fwded_SD_PD;
-                        ALL[SnpResp_SC_Fwded_I      ] = SnpResp_SC_Fwded_I;
-                        ALL[SnpResp_SC_Fwded_SC     ] = SnpResp_SC_Fwded_SC;
-                        ALL[SnpResp_SC_Fwded_SD_PD  ] = SnpResp_SC_Fwded_SD_PD;
-                        ALL[SnpResp_UC_Fwded_I      ] = SnpResp_UC_Fwded_I;
-                        ALL[SnpResp_UD_Fwded_I      ] = SnpResp_UD_Fwded_I;
-                        ALL[SnpResp_SD_Fwded_I      ] = SnpResp_SD_Fwded_I;
-                        ALL[SnpResp_SD_Fwded_SC     ] = SnpResp_SD_Fwded_SC;
-                    }
+// Implementation of enumeration table constevals
+/*namespace CHI {*/
 
-                    return ALL;
-                }
+    namespace chi_protocol_encoding::details {
 
-                inline RespAndFwdStateEnum* GetAllSnpRespData() noexcept
-                {
-                    static RespAndFwdStateEnum ALL[64] = { nullptr };
+        template<class T, size_t Bits>
+        requires std::is_convertible_v<const T*, const EnumerationUnsaturated<T>*>
+        inline consteval std::array<const T*, 1 << Bits> NextElement(const T* E, std::array<const T*, 1 << Bits> A) noexcept
+        {
+            A[E->value] = E;
 
-                    if (!ALL[0])
-                    {
-                        for (int i = 0; i < 64; i++)
-                            ALL[i] = Invalid;
+            if (!E->prev)
+                return A;
+            else
+                return NextElement<T, Bits>(*E->prev, A);
+        }
 
-                        ALL[SnpRespData_I_Fwded_SC      ] = SnpRespData_I_Fwded_SC;
-                        ALL[SnpRespData_I_Fwded_SD_PD   ] = SnpRespData_I_Fwded_SD_PD;
-                        ALL[SnpRespData_SC_Fwded_SC     ] = SnpRespData_SC_Fwded_SC;
-                        ALL[SnpRespData_SC_Fwded_SD_PD  ] = SnpRespData_SC_Fwded_SD_PD;
-                        ALL[SnpRespData_SD_Fwded_SC     ] = SnpRespData_SD_Fwded_SC;
-                        ALL[SnpRespData_I_PD_Fwded_I    ] = SnpRespData_I_PD_Fwded_I;
-                        ALL[SnpRespData_I_PD_Fwded_SC   ] = SnpRespData_I_PD_Fwded_SC;
-                        ALL[SnpRespData_SC_PD_Fwded_I   ] = SnpRespData_SC_PD_Fwded_I;
-                        ALL[SnpRespData_SC_PD_Fwded_SC  ] = SnpRespData_SC_PD_Fwded_SC;
-                    }
+        template<class T, size_t Bits, const T* First, const T* Invalid>
+        requires std::is_convertible_v<const T*, const EnumerationUnsaturated<T>*>
+        inline consteval std::array<const T*, 1 << Bits> GetTable() noexcept
+        {
+            std::array<const T*, 1 << Bits> A;
+            for (auto& E : A)
+                E = Invalid;
 
-                    return ALL;
-                }
+            return NextElement<T, Bits>(First, A);
+        }
+    }
+/*}*/
+
+
+// Implementation of NSs enumeration functions
+/*namespace CHI {*/
+
+    namespace NSs {
+
+        namespace Enum::details {
+            inline constexpr std::array<NSEnum, 1 << NS::BITS> TABLE =
+                chi_protocol_encoding::details::GetTable<NSEnumBack, NS::BITS, NSs::Enum::NonSecure, Enum::Invalid>();
+        }
+
+        inline constexpr NSEnum ToEnum(NS ns) noexcept
+        {
+            return Enum::details::TABLE[ns];
+        }
+
+        inline constexpr bool IsValid(NS ns) noexcept
+        {
+            return ToEnum(ns)->IsValid();
+        }
+    }
+/*}*/
+
+
+// Implementation of SnpAttrs enumeration functions
+/*namespace CHI {*/
+
+    namespace SnpAttrs {
+
+        namespace Enum::details {
+            inline constexpr std::array<SnpAttrEnum, 1 << SnpAttr::BITS> TABLE =
+                chi_protocol_encoding::details::GetTable<SnpAttrEnumBack, SnpAttr::BITS, SnpAttrs::Enum::Snoopable, Enum::Invalid>();
+        }
+
+        inline constexpr SnpAttrEnum ToEnum(SnpAttr snpAttr) noexcept
+        {
+            return Enum::details::TABLE[snpAttr];
+        }
+
+        inline constexpr bool IsValid(SnpAttr snpAttr) noexcept
+        {
+            return ToEnum(snpAttr)->IsValid();
+        }
+    }
+/*}*/
+
+
+// Implementation of Endians enumeration functions
+/*namespace CHI {*/
+
+    namespace Endians {
+
+        namespace Enum::details {
+            inline constexpr std::array<EndianEnum, 1 << Endian::BITS> TABLE =
+                chi_protocol_encoding::details::GetTable<EndianEnumBack, Endian::BITS, Endians::Enum::Big, Enum::Invalid>();
+        }
+
+        inline constexpr EndianEnum ToEnum(Endian endian) noexcept
+        {
+            return Enum::details::TABLE[endian];
+        }
+
+        inline constexpr bool IsValid(Endian endian) noexcept
+        {
+            return ToEnum(endian)->IsValid();
+        }
+    }
+/*}*/
+
+
+// Implementation of MemAttrs enumeration functions
+/*namespace CHI {*/
+
+    namespace MemAttrs {
+
+        namespace Enum::details {
+            inline constexpr std::array<MemAttrEnum, 1 << MemAttr::BITS> TABLE =
+                chi_protocol_encoding::details::GetTable<MemAttrEnumBack, MemAttr::BITS, MemAttrs::Enum::WriteBack_Allocate, Enum::Invalid>();
+        }
+
+        inline constexpr MemAttrEnum ToEnum(MemAttr memAttr) noexcept
+        {
+            return Enum::details::TABLE[memAttr];
+        }
+
+        inline constexpr bool IsValid(MemAttr memAttr) noexcept
+        {
+            return ToEnum(memAttr)->IsValid();
+        }
+    }
+/*}*/
+
+
+// Implementation of Orders enumeration functions
+/*namespace CHI {*/
+
+    namespace Orders {
+
+        namespace Enum::details {
+            inline constexpr std::array<OrderEnum, 1 << Order::BITS> TABLE =
+                chi_protocol_encoding::details::GetTable<OrderEnumBack, Order::BITS, Orders::Enum::EndpointOrder, Enum::Invalid>();
+        }
+
+        inline constexpr OrderEnum ToEnum(Order order) noexcept
+        {
+            return Enum::details::TABLE[order];
+        }
+
+        inline constexpr bool IsValid(Order order) noexcept
+        {
+            return ToEnum(order)->IsValid();
+        }
+    }
+/*}*/
+
+
+// Implementation of RespErrs enumeration functions
+/*namespace CHI {*/
+
+    namespace RespErrs {
+
+        namespace Enum::details {
+            inline constexpr std::array<RespErrEnum, 1 << RespErr::BITS> TABLE =
+                chi_protocol_encoding::details::GetTable<RespErrEnumBack, RespErr::BITS, RespErrs::Enum::NDERR, Enum::Invalid>();
+        }
+
+        inline constexpr RespErrEnum ToEnum(RespErr respErr) noexcept
+        {
+            return Enum::details::TABLE[respErr];
+        }
+
+        inline constexpr bool IsValid(RespErr respErr) noexcept
+        {
+            return ToEnum(respErr)->IsValid();
+        }
+    }
+/*}*/
+
+
+// Implementation of Resps enumeration functions
+/*namespace CHI {*/
+
+    namespace Resps {
+
+        namespace Enum::details {
+            inline constexpr std::array<RespEnum, 1 << Resp::BITS> TABLE =
+                chi_protocol_encoding::details::GetTable<RespEnumBack, Resp::BITS, Resps::Enum::SD_PD, Enum::Invalid>();
+        }
+
+        inline constexpr RespEnum ToEnum(Resp resp) noexcept
+        {
+            return Enum::details::TABLE[resp];
+        }
+
+        inline constexpr bool IsValid(Resp resp) noexcept
+        {
+            return ToEnum(resp)->IsValid();
+        }
+
+        namespace Snoop {
+
+            namespace Enum::details {
+                inline constexpr std::array<RespEnum, 1 << Resp::BITS> TABLE =
+                    chi_protocol_encoding::details::GetTable<RespEnumBack, Resp::BITS, Snoop::Enum::UC_PD, Enum::Invalid>();
+            }
+
+            inline constexpr RespEnum ToEnum(Resp resp) noexcept
+            {
+                return Enum::details::TABLE[resp];
+            }
+
+            inline constexpr bool IsValid(Resp resp) noexcept
+            {
+                return ToEnum(resp)->IsValid();
             }
         }
 
-        inline bool IsSnpRespFwdedValid(Resp::type resp, FwdState::type fwdState) noexcept
-        {
-            return RespAndFwdState(resp, fwdState).ToEnumSnpRespFwded() != Enum::Invalid;
+        namespace Comp {
+
+            namespace Enum::details {
+                inline constexpr std::array<RespEnum, 1 << Resp::BITS> TABLE =
+                    chi_protocol_encoding::details::GetTable<RespEnumBack, Resp::BITS, Comp::Enum::SD_PD, Comp::Enum::Invalid>();
+            }
+
+            inline constexpr RespEnum ToEnum(Resp resp) noexcept
+            {
+                return Enum::details::TABLE[resp];
+            }
+
+            inline constexpr bool IsValid(Resp resp) noexcept
+            {
+                return ToEnum(resp)->IsValid();
+            }
         }
 
-        inline bool IsSnpRespDataFwdedValid(Resp::type resp, FwdState::type fwdState) noexcept
+        namespace WriteData {
+
+            namespace Enum::details {
+                inline constexpr std::array<RespEnum, 1 << Resp::BITS> TABLE =
+                    chi_protocol_encoding::details::GetTable<RespEnumBack, Resp::BITS, WriteData::Enum::SD_PD, WriteData::Enum::Invalid>();
+            }
+
+            inline constexpr RespEnum ToEnum(Resp resp) noexcept
+            {
+                return Enum::details::TABLE[resp];
+            }
+
+            inline constexpr bool IsValid(Resp resp) noexcept
+            {
+                return ToEnum(resp)->IsValid();
+            }
+        }
+
+        namespace TagMatch {
+            
+            namespace Enum::details {
+                inline constexpr std::array<RespEnum, 1 << Resp::BITS> TABLE =
+                    chi_protocol_encoding::details::GetTable<RespEnumBack, Resp::BITS, TagMatch::Enum::Pass, TagMatch::Enum::Invalid>();
+            }
+
+            inline constexpr RespEnum ToEnum(Resp resp) noexcept
+            {
+                return Enum::details::TABLE[resp];
+            }
+
+            inline constexpr bool IsValid(Resp resp) noexcept
+            {
+                return ToEnum(resp)->IsValid();
+            }
+        }
+    }
+/*}*/
+
+
+// Implementation of FwdStates enumeration functions
+/*namespace CHI {*/
+
+    namespace FwdStates {
+
+        namespace Enum::details {
+            inline constexpr std::array<FwdStateEnum, 1 << FwdState::BITS> TABLE =
+                chi_protocol_encoding::details::GetTable<FwdStateEnumBack, FwdState::BITS, Enum::SD_PD, Enum::Invalid>();
+        }
+
+        inline constexpr FwdStateEnum ToEnum(FwdState fwdState) noexcept
         {
-            return RespAndFwdState(resp, fwdState).ToEnumSnpRespDataFwded() != Enum::Invalid;
+            return Enum::details::TABLE[fwdState];
+        }
+
+        inline constexpr bool IsValid(FwdState fwdState) noexcept
+        {
+            return ToEnum(fwdState)->IsValid();
+        }
+    }
+/*}*/
+
+
+// Implementation of RespAndFwdStates enumeration functions
+/*namespace CHI {*/
+
+    namespace RespAndFwdStates {
+
+        namespace Enum::details {
+
+            inline RespAndFwdStateEnum* GetAllSnpResp() noexcept
+            {
+                static RespAndFwdStateEnum ALL[64] = { nullptr };
+
+                if (!ALL[0])
+                {
+                    for (int i = 0; i < 64; i++)
+                        ALL[i] = Invalid;
+
+                    ALL[SnpResp_I_Fwded_I       ] = SnpResp_I_Fwded_I;
+                    ALL[SnpResp_I_Fwded_SC      ] = SnpResp_I_Fwded_SC;
+                    ALL[SnpResp_I_Fwded_UC      ] = SnpResp_I_Fwded_UC;
+                    ALL[SnpResp_I_Fwded_UD_PD   ] = SnpResp_I_Fwded_UD_PD;
+                    ALL[SnpResp_I_Fwded_SD_PD   ] = SnpResp_I_Fwded_SD_PD;
+                    ALL[SnpResp_SC_Fwded_I      ] = SnpResp_SC_Fwded_I;
+                    ALL[SnpResp_SC_Fwded_SC     ] = SnpResp_SC_Fwded_SC;
+                    ALL[SnpResp_SC_Fwded_SD_PD  ] = SnpResp_SC_Fwded_SD_PD;
+                    ALL[SnpResp_UC_Fwded_I      ] = SnpResp_UC_Fwded_I;
+                    ALL[SnpResp_UD_Fwded_I      ] = SnpResp_UD_Fwded_I;
+                    ALL[SnpResp_SD_Fwded_I      ] = SnpResp_SD_Fwded_I;
+                    ALL[SnpResp_SD_Fwded_SC     ] = SnpResp_SD_Fwded_SC;
+                }
+
+                return ALL;
+            }
+
+            inline RespAndFwdStateEnum* GetAllSnpRespData() noexcept
+            {
+                static RespAndFwdStateEnum ALL[64] = { nullptr };
+
+                if (!ALL[0])
+                {
+                    for (int i = 0; i < 64; i++)
+                        ALL[i] = Invalid;
+
+                    ALL[SnpRespData_I_Fwded_SC      ] = SnpRespData_I_Fwded_SC;
+                    ALL[SnpRespData_I_Fwded_SD_PD   ] = SnpRespData_I_Fwded_SD_PD;
+                    ALL[SnpRespData_SC_Fwded_SC     ] = SnpRespData_SC_Fwded_SC;
+                    ALL[SnpRespData_SC_Fwded_SD_PD  ] = SnpRespData_SC_Fwded_SD_PD;
+                    ALL[SnpRespData_SD_Fwded_SC     ] = SnpRespData_SD_Fwded_SC;
+                    ALL[SnpRespData_I_PD_Fwded_I    ] = SnpRespData_I_PD_Fwded_I;
+                    ALL[SnpRespData_I_PD_Fwded_SC   ] = SnpRespData_I_PD_Fwded_SC;
+                    ALL[SnpRespData_SC_PD_Fwded_I   ] = SnpRespData_SC_PD_Fwded_I;
+                    ALL[SnpRespData_SC_PD_Fwded_SC  ] = SnpRespData_SC_PD_Fwded_SC;
+                }
+
+                return ALL;
+            }
+        }
+
+        inline bool IsSnpRespFwdedValid(Resp resp, FwdState fwdState) noexcept
+        {
+            return ToEnumSnpRespFwded(resp, fwdState) != Enum::Invalid;
+        }
+
+        inline bool IsSnpRespDataFwdedValid(Resp resp, FwdState fwdState) noexcept
+        {
+            return ToEnumSnpRespDataFwded(resp, fwdState) != Enum::Invalid;
+        }
+
+        inline RespAndFwdStateEnum ToEnumSnpRespFwded(Resp resp, FwdState fwdState) noexcept
+        {
+            return RespAndFwdState(resp, fwdState).ToEnumSnpRespFwded();
+        }
+
+        inline RespAndFwdStateEnum ToEnumSnpRespDataFwded(Resp resp, FwdState fwdState) noexcept
+        {
+            return RespAndFwdState(resp, fwdState).ToEnumSnpRespDataFwded();
         }
     }
 
@@ -2471,10 +3101,7 @@ namespace CHI {
         
         return RespAndFwdStates::Enum::Invalid;
     }
-
-/*
-};
-*/
+/*}*/
 
 
 #endif // __CHI__CHI_PROTOCOL_ENCODING_*
