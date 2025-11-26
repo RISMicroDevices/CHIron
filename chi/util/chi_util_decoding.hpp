@@ -253,6 +253,9 @@ namespace CHI {
             };
         }
 
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using REQDecoder = REQ::Decoder<_Tflit, _Tcompanion>;
+
         //
         namespace SNP {
 
@@ -266,6 +269,9 @@ namespace CHI {
                 virtual ~Decoder() noexcept;
             };
         }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using SNPDecoder = SNP::Decoder<_Tflit, _Tcompanion>;
 
         //
         namespace DAT {
@@ -281,6 +287,9 @@ namespace CHI {
             };
         }
 
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using DATDecoder = DAT::Decoder<_Tflit, _Tcompanion>;
+
         //
         namespace RSP {
 
@@ -294,7 +303,22 @@ namespace CHI {
                 virtual ~Decoder() noexcept;
             };
         }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using RSPDecoder = RSP::Decoder<_Tflit, _Tcompanion>;
     }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using REQOpcodeDecoder = Opcodes::REQDecoder<_Tflit, _Tcompanion>;
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using SNPOpcodeDecoder = Opcodes::SNPDecoder<_Tflit, _Tcompanion>;
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using RSPOpcodeDecoder = Opcodes::RSPDecoder<_Tflit, _Tcompanion>;
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using DATOpcodeDecoder = Opcodes::DATDecoder<_Tflit, _Tcompanion>;
 /*
 }
 */
