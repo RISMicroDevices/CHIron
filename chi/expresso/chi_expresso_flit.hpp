@@ -242,6 +242,7 @@ namespace CHI {
             inline std::string FormatReturnTxnID(const KeyValueMap&, const format_func&) const; // REQ
             inline std::string FormatStashLPIDValid(const KeyValueMap&, const format_func&) const; // REQ, SNP
             inline std::string FormatStashLPID(const KeyValueMap&, const format_func&) const; // REQ, SNP
+            inline std::string FormatOpcode(const KeyValueMap&, const format_func&) const; // REQ, RSP, DAT, SNP
             inline std::string FormatSize(const KeyValueMap&, const format_func&) const; // REQ
             inline std::string FormatAddr(const KeyValueMap&, const format_func&) const; // REQ, SNP
             inline std::string FormatNS(const KeyValueMap&, const format_func&) const; // REQ, SNP
@@ -300,6 +301,7 @@ namespace CHI {
             virtual std::string FormatREQReturnTxnID(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatREQStashLPIDValid(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatREQStashLPID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatREQOpcode(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatREQSize(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatREQAddr(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatREQNS(const KeyValueMap&, const format_func&) const = 0;
@@ -327,6 +329,7 @@ namespace CHI {
             virtual std::string FormatRSPTgtID(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatRSPSrcID(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatRSPTxnID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatRSPOpcode(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatRSPRespErr(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatRSPResp(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatRSPFwdState(const KeyValueMap&, const format_func&) const = 0;
@@ -346,6 +349,7 @@ namespace CHI {
             virtual std::string FormatDATSrcID(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatDATTxnID(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatDATHomeNID(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatDATOpcode(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatDATRespErr(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatDATResp(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatDATFwdState(const KeyValueMap&, const format_func&) const = 0;
@@ -374,6 +378,7 @@ namespace CHI {
             virtual std::string FormatSNPStashLPIDValid(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatSNPStashLPID(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatSNPVMIDExt(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPOpcode(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatSNPAddr(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatSNPNS(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatSNPDoNotGoToSD(const KeyValueMap&, const format_func&) const = 0;
@@ -384,6 +389,8 @@ namespace CHI {
         };
 
         
+        // *NOTICE: Formatter is not responsible for any value checking,
+        //          which should be done before being added into KeyValueMap.
         template<FlitConfigurationConcept       config>
         class DefaultFormatter : public virtual Formatter {
             /*
@@ -394,17 +401,21 @@ namespace CHI {
                 Formatting string: "{} = {} ({})"
                 Output with specific field key-value:
                     - REQ::QoS      = 0x01 -> "QoS = 1 (1)"
-                    - REQ::Opcode   = 0x06 -> "Opcode = <unknown> (6)"
-                    - REQ::Opcode   = 0x07 -> "Opcode = ReadUnique (7)"
-                    - REQ::MemAttr  = 0x03 -> "MemAttr = EWA, Device (3)"
-                    - REQ::RespErr  = 0x00 -> "RespErr = OK (0)"
+                    - REQ::Opcode   = 0x06 -> "Opcode = 6 (6)"
+                    - REQ::Opcode   = 0x07 -> "Opcode = 7 (7)"
+                    - REQ::MemAttr  = 0x03 -> "MemAttr = 3 (3)"
+                    - REQ::RespErr  = 0x00 -> "RespErr = 0 (0)"
                     ...
                     - DAT::Data     = 0xFFFFFFFF_CCCC... -> "0xFFFFFFFFCCCC... (256)"
                     ...
             */
         protected:
-            inline std::string  _FormatNonDecodingIntegral(const KeyValueMap&, Key key, const format_func&) const;
-            inline std::string  _FormatNonDecodingVector(const KeyValueMap&, Key key, const format_func&) const;
+            inline bool ExtractIntegral(const KeyValueMap&, Key, uint64_t* dst = nullptr) const;
+            inline bool ExtractVector(const KeyValueMap&, Key, const std::vector<uint64_t>** dst = nullptr) const;
+
+        protected:
+            inline std::string  _FormatNonDecodingIntegral(const KeyValueMap&, Key, const format_func&) const;
+            inline std::string  _FormatNonDecodingVector(const KeyValueMap&, Key, const format_func&) const;
 
         public:
             inline virtual std::string  FormatREQQoS(const KeyValueMap&, const format_func&) const override;
@@ -420,6 +431,7 @@ namespace CHI {
             inline virtual std::string  FormatREQReturnTxnID(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string  FormatREQStashLPIDValid(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string  FormatREQStashLPID(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string  FormatREQOpcode(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string  FormatREQSize(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string  FormatREQAddr(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string  FormatREQNS(const KeyValueMap&, const format_func&) const override;
@@ -447,6 +459,7 @@ namespace CHI {
             inline virtual std::string FormatRSPTgtID(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatRSPSrcID(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatRSPTxnID(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatRSPOpcode(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatRSPRespErr(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatRSPResp(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatRSPFwdState(const KeyValueMap&, const format_func&) const override;
@@ -466,6 +479,7 @@ namespace CHI {
             inline virtual std::string FormatDATSrcID(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatDATTxnID(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatDATHomeNID(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatDATOpcode(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatDATRespErr(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatDATResp(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatDATFwdState(const KeyValueMap&, const format_func&) const override;
@@ -494,6 +508,7 @@ namespace CHI {
             inline virtual std::string FormatSNPStashLPIDValid(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatSNPStashLPID(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatSNPVMIDExt(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatSNPOpcode(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatSNPAddr(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatSNPNS(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatSNPDoNotGoToSD(const KeyValueMap&, const format_func&) const override;
@@ -533,7 +548,8 @@ namespace CHI {
                 inline constexpr KeyBack NS                 (KeyCategory::REQ,  "REQ.NS",              "NS"                , LikelyShared   , _FMTCALL(FormatREQNS));
                 inline constexpr KeyBack Addr               (KeyCategory::REQ,  "REQ.Addr",            "Addr"              , NS             , _FMTCALL(FormatREQAddr));
                 inline constexpr KeyBack Size               (KeyCategory::REQ,  "REQ.Size",            "Size"              , Addr           , _FMTCALL(FormatREQSize));
-                inline constexpr KeyBack StashLPID          (KeyCategory::REQ,  "REQ.StashLPID",       "StashLPID"         , Size           , _FMTCALL(FormatREQStashLPID));
+                inline constexpr KeyBack Opcode             (KeyCategory::REQ,  "REQ.Opcode",          "Opcode"            , Size           , _FMTCALL(FormatREQOpcode));
+                inline constexpr KeyBack StashLPID          (KeyCategory::REQ,  "REQ.StashLPID",       "StashLPID"         , Opcode         , _FMTCALL(FormatREQStashLPID));
                 inline constexpr KeyBack StashLPIDValid     (KeyCategory::REQ,  "REQ.StashLPIDValid",  "StashLPIDValid"    , StashLPID      , _FMTCALL(FormatREQStashLPIDValid));
                 inline constexpr KeyBack ReturnTxnID        (KeyCategory::REQ,  "REQ.ReturnTxnID",     "ReturnTxnID"       , StashLPIDValid , _FMTCALL(FormatREQReturnTxnID));
                 inline constexpr KeyBack Deep               (KeyCategory::REQ,  "REQ.Deep",            "Deep"              , ReturnTxnID    , _FMTCALL(FormatREQDeep));
@@ -564,7 +580,8 @@ namespace CHI {
                 inline constexpr KeyBack FwdState           (KeyCategory::RSP,  "RSP.FwdState",        "FwdState"          , DataPull       , _FMTCALL(FormatRSPFwdState));
                 inline constexpr KeyBack Resp               (KeyCategory::RSP,  "RSP.Resp",            "Resp"              , FwdState       , _FMTCALL(FormatRSPResp));
                 inline constexpr KeyBack RespErr            (KeyCategory::RSP,  "RSP.RespErr",         "RespErr"           , Resp           , _FMTCALL(FormatRSPRespErr));
-                inline constexpr KeyBack TxnID              (KeyCategory::RSP,  "RSP.TxnID",           "TxnID"             , RespErr        , _FMTCALL(FormatRSPTxnID));
+                inline constexpr KeyBack Opcode             (KeyCategory::RSP,  "RSP.Opcode",          "Opcode"            , RespErr        , _FMTCALL(FormatRSPOpcode));
+                inline constexpr KeyBack TxnID              (KeyCategory::RSP,  "RSP.TxnID",           "TxnID"             , Opcode         , _FMTCALL(FormatRSPTxnID));
                 inline constexpr KeyBack SrcID              (KeyCategory::RSP,  "RSP.SrcID",           "SrcID"             , TxnID          , _FMTCALL(FormatRSPSrcID));
                 inline constexpr KeyBack TgtID              (KeyCategory::RSP,  "RSP.TgtID",           "TgtID"             , SrcID          , _FMTCALL(FormatRSPTgtID));
                 inline constexpr KeyBack QoS                (KeyCategory::RSP,  "RSP.QoS",             "QoS"               , TgtID          , _FMTCALL(FormatRSPQoS));
@@ -592,7 +609,8 @@ namespace CHI {
                 inline constexpr KeyBack FwdState           (KeyCategory::DAT,  "DAT.FwdState",        "FwdState"          , DataPull       , _FMTCALL(FormatDATFwdState));
                 inline constexpr KeyBack Resp               (KeyCategory::DAT,  "DAT.Resp",            "Resp"              , FwdState       , _FMTCALL(FormatDATResp));
                 inline constexpr KeyBack RespErr            (KeyCategory::DAT,  "DAT.RespErr",         "RespErr"           , Resp           , _FMTCALL(FormatDATRespErr));
-                inline constexpr KeyBack HomeNID            (KeyCategory::DAT,  "DAT.HomeNID",         "HomeNID"           , RespErr        , _FMTCALL(FormatDATHomeNID));
+                inline constexpr KeyBack Opcode             (KeyCategory::DAT,  "DAT.Opcode",          "Opcode"            , RespErr        , _FMTCALL(FormatDATOpcode));
+                inline constexpr KeyBack HomeNID            (KeyCategory::DAT,  "DAT.HomeNID",         "HomeNID"           , Opcode         , _FMTCALL(FormatDATHomeNID));
                 inline constexpr KeyBack TxnID              (KeyCategory::DAT,  "DAT.TxnID",           "TxnID"             , HomeNID        , _FMTCALL(FormatDATTxnID));
                 inline constexpr KeyBack SrcID              (KeyCategory::DAT,  "DAT.SrcID",           "SrcID"             , TxnID          , _FMTCALL(FormatDATSrcID));
                 inline constexpr KeyBack TgtID              (KeyCategory::DAT,  "DAT.TgtID",           "TgtID"             , SrcID          , _FMTCALL(FormatDATTgtID));
@@ -610,7 +628,8 @@ namespace CHI {
                 inline constexpr KeyBack DoNotGoToSD        (KeyCategory::SNP,  "SNP.DoNotGoToSD",     "DoNotGoToSD"       , DoNotDataPull  , _FMTCALL(FormatSNPDoNotGoToSD));
                 inline constexpr KeyBack NS                 (KeyCategory::SNP,  "SNP.NS",              "NS"                , DoNotGoToSD    , _FMTCALL(FormatSNPNS));
                 inline constexpr KeyBack Addr               (KeyCategory::SNP,  "SNP.Addr",            "Addr"              , NS             , _FMTCALL(FormatSNPAddr));
-                inline constexpr KeyBack VMIDExt            (KeyCategory::SNP,  "SNP.VMIDExt",         "VMIDExt"           , Addr           , _FMTCALL(FormatSNPVMIDExt));
+                inline constexpr KeyBack Opcode             (KeyCategory::SNP,  "SNP.Opcode",          "Opcode"            , Addr           , _FMTCALL(FormatSNPOpcode));
+                inline constexpr KeyBack VMIDExt            (KeyCategory::SNP,  "SNP.VMIDExt",         "VMIDExt"           , Opcode         , _FMTCALL(FormatSNPVMIDExt));
                 inline constexpr KeyBack StashLPID          (KeyCategory::SNP,  "SNP.StashLPID",       "StashLPID"         , VMIDExt        , _FMTCALL(FormatSNPStashLPID));
                 inline constexpr KeyBack StashLPIDValid     (KeyCategory::SNP,  "SNP.StashLPIDValid",  "StashLPIDValid"    , StashLPID      , _FMTCALL(FormatSNPStashLPIDValid));
                 inline constexpr KeyBack FwdTxnID           (KeyCategory::SNP,  "SNP.FwdTxnID",        "FwdTxnID"          , StashLPIDValid , _FMTCALL(FormatSNPFwdTxnID));
@@ -1172,6 +1191,15 @@ namespace /*CHI::*/Expresso::Flit {
         return result;
     }
 
+    inline std::string Formatter::FormatOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        std::string result = FormatREQOpcode(kv, fmt);
+        if (result.empty()) result = FormatRSPOpcode(kv, fmt);
+        if (result.empty()) result = FormatDATOpcode(kv, fmt);
+        if (result.empty()) result = FormatSNPOpcode(kv, fmt);
+        return result;
+    }
+
     inline std::string Formatter::FormatSize(const KeyValueMap& kv, const format_func& fmt) const
     {
         return FormatREQSize(kv, fmt);
@@ -1428,31 +1456,65 @@ namespace /*CHI::*/Expresso::Flit {
 namespace /*CHI::*/Expresso::Flit {
 
     template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::_FormatNonDecodingIntegral(const KeyValueMap& kv, Key key, const format_func& fmt) const
+    inline bool DefaultFormatter<config>::ExtractIntegral(const KeyValueMap& kv, Key key, uint64_t* dst) const
     {
         auto iter = kv.find(key);
+
         if (iter == kv.end())
-            return std::string();
+            return false;
+
         if (!iter->second.IsIntegral())
+            return false;
+        
+        if (dst)
+            *dst = iter->second.AsIntegral();
+
+        return true;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool DefaultFormatter<config>::ExtractVector(const KeyValueMap& kv, Key key, const std::vector<uint64_t>** dst) const
+    {
+        auto iter = kv.find(key);
+
+        if (iter == kv.end())
+            return false;
+
+        if (!iter->second.IsVector())
+            return false;
+
+        if (dst)
+            *dst = &iter->second.AsVector();
+
+        return true;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DefaultFormatter<config>::_FormatNonDecodingIntegral(const KeyValueMap& kv, Key key, const format_func& fmt) const
+    {
+        uint64_t integral;
+
+        if (!ExtractIntegral(kv, key, &integral))
             return std::string();
-        uint64_t integral = iter->second.AsIntegral();
+
         return std::vformat(fmt(key), std::make_format_args(key->canonicalName, integral, integral));
     }
 
     template<FlitConfigurationConcept config>
     inline std::string DefaultFormatter<config>::_FormatNonDecodingVector(const KeyValueMap& kv, Key key, const format_func& fmt) const
     {
-        auto iter = kv.find(key);
-        if (iter == kv.end())
+        const std::vector<uint64_t>* vector;
+
+        if (!ExtractVector(kv, key, &vector))
             return std::string();
-        if (!iter->second.IsVector())
-            return std::string();
-        const ValueVector& vector = reinterpret_cast<const ValueVector&>(iter->second);
+
         std::ostringstream dataStrOss;
-        for (auto dataIter = vector.rbegin(); dataIter != vector.rend(); dataIter++)
+        for (auto dataIter = vector->rbegin(); dataIter != vector->rend(); dataIter++)
             dataStrOss << std::hex << std::setfill('0') << std::setw(16) << *dataIter;
         std::string dataStr = dataStrOss.str();
-        size_t bitCount = vector.GetSize() * 64;
+
+        size_t bitCount = vector->size() * 64;
+
         return std::vformat(fmt(key), std::make_format_args(key->canonicalName, dataStr, bitCount));
     }
 
@@ -1532,6 +1594,12 @@ namespace /*CHI::*/Expresso::Flit {
     inline std::string DefaultFormatter<config>::FormatREQStashLPID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::StashLPID, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DefaultFormatter<config>::FormatREQOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatNonDecodingIntegral(kv, Keys::REQ::Opcode, fmt);
     }
 
     template<FlitConfigurationConcept config>
@@ -1685,6 +1753,12 @@ namespace /*CHI::*/Expresso::Flit {
     }
 
     template<FlitConfigurationConcept config>
+    inline std::string DefaultFormatter<config>::FormatRSPOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatNonDecodingIntegral(kv, Keys::RSP::Opcode, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
     inline std::string DefaultFormatter<config>::FormatRSPRespErr(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::RespErr, fmt);
@@ -1784,6 +1858,12 @@ namespace /*CHI::*/Expresso::Flit {
     inline std::string DefaultFormatter<config>::FormatDATHomeNID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::HomeNID, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DefaultFormatter<config>::FormatDATOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatNonDecodingIntegral(kv, Keys::DAT::Opcode, fmt);
     }
 
     template<FlitConfigurationConcept config>
@@ -1940,6 +2020,12 @@ namespace /*CHI::*/Expresso::Flit {
     inline std::string DefaultFormatter<config>::FormatSNPVMIDExt(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::VMIDExt, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DefaultFormatter<config>::FormatSNPOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatNonDecodingIntegral(kv, Keys::SNP::Opcode, fmt);
     }
 
     template<FlitConfigurationConcept config>
