@@ -74,6 +74,10 @@ namespace CHI {
             static constexpr size_t     OPCODE_SLOT_COUNT = 1 << _Tflit::OPCODE_WIDTH;
 
         public:
+            using opcode_t = _Tflit::opcode_t;
+            using OpcodeInfo = OpcodeInfo<opcode_t, _Tcompanion>;
+
+        public:
             class OpcodeIterator {
             private:
                 const DecoderBase<_Tflit, _Tcompanion>* host;
@@ -88,107 +92,90 @@ namespace CHI {
                                bool                                     masked,
                                std::bitset<OPCODE_SLOT_COUNT>           mask) noexcept;
 
-                const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                    Next() noexcept;
+                const OpcodeInfo& Next() noexcept;
             };
 
             friend class OpcodeIterator;
 
         protected:
-            OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>  opcodes[OPCODE_SLOT_COUNT];
-            OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>  opcode_invalid;
+            OpcodeInfo  opcodes[OPCODE_SLOT_COUNT];
+            OpcodeInfo  opcode_invalid;
 
         protected:
-            std::bitset<OPCODE_SLOT_COUNT>                      mask_RNF;
-            std::bitset<OPCODE_SLOT_COUNT>                      mask_RND;
-            std::bitset<OPCODE_SLOT_COUNT>                      mask_RNI;
+            std::bitset<OPCODE_SLOT_COUNT>  mask_RNF;
+            std::bitset<OPCODE_SLOT_COUNT>  mask_RND;
+            std::bitset<OPCODE_SLOT_COUNT>  mask_RNI;
 
-            std::bitset<OPCODE_SLOT_COUNT>                      mask_HNF;
-            std::bitset<OPCODE_SLOT_COUNT>                      mask_HNI;
+            std::bitset<OPCODE_SLOT_COUNT>  mask_HNF;
+            std::bitset<OPCODE_SLOT_COUNT>  mask_HNI;
 
-            std::bitset<OPCODE_SLOT_COUNT>                      mask_SNF;
-            std::bitset<OPCODE_SLOT_COUNT>                      mask_SNI;
+            std::bitset<OPCODE_SLOT_COUNT>  mask_SNF;
+            std::bitset<OPCODE_SLOT_COUNT>  mask_SNI;
 
-            std::bitset<OPCODE_SLOT_COUNT>                      mask_MN;
+            std::bitset<OPCODE_SLOT_COUNT>  mask_MN;
 
         public:
             inline virtual ~DecoderBase() noexcept;
 
         public:
-            virtual OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+            virtual OpcodeInfo&
                 operator[](size_t index) noexcept;
 
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+            virtual const OpcodeInfo&
                 operator[](size_t index) const noexcept;
 
         public:
-            virtual OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                GetInvalid() noexcept;
-
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                GetInvalid() const noexcept;
-
-            virtual OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                Invalid() noexcept;
-
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                Invalid() const noexcept;
+            virtual OpcodeInfo&         GetInvalid() noexcept;
+            virtual const OpcodeInfo&   GetInvalid() const noexcept;
+            virtual OpcodeInfo&         Invalid() noexcept;
+            virtual const OpcodeInfo&   Invalid() const noexcept;
 
         public:
             /*
             Opcode decode (for the entire opcode set)
             */
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                Decode(typename _Tflit::opcode_t opcode) const noexcept;
+            virtual const OpcodeInfo&   Decode(typename _Tflit::opcode_t opcode) const noexcept;
 
         public:
             /*
             Opcode decode for RN-F
             */
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                DecodeRNF(typename _Tflit::opcode_t opcode) const noexcept;
+            virtual const OpcodeInfo&   DecodeRNF(typename _Tflit::opcode_t opcode) const noexcept;
 
             /*
             Opcode decode for RN-D
             */
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                DecodeRND(typename _Tflit::opcode_t opcode) const noexcept;
+            virtual const OpcodeInfo&   DecodeRND(typename _Tflit::opcode_t opcode) const noexcept;
 
             /*
             Opcode decode for RN-I
             */
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                DecodeRNI(typename _Tflit::opcode_t opcode) const noexcept;
+            virtual const OpcodeInfo&   DecodeRNI(typename _Tflit::opcode_t opcode) const noexcept;
 
             /*
             Opcode decode for HN-F
             */
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                DecodeHNF(typename _Tflit::opcode_t opcode) const noexcept;
+            virtual const OpcodeInfo&   DecodeHNF(typename _Tflit::opcode_t opcode) const noexcept;
 
             /*
             Opcode decode for HN-I
             */
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                DecodeHNI(typename _Tflit::opcode_t opcode) const noexcept;
+            virtual const OpcodeInfo&   DecodeHNI(typename _Tflit::opcode_t opcode) const noexcept;
 
             /*
             Opcode decode for SN-F
             */
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                DecodeSNF(typename _Tflit::opcode_t opcode) const noexcept;
+            virtual const OpcodeInfo&   DecodeSNF(typename _Tflit::opcode_t opcode) const noexcept;
 
             /*
             Opcode decode for SN-I
             */
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                DecodeSNI(typename _Tflit::opcode_t opcode) const noexcept;
+            virtual const OpcodeInfo&   DecodeSNI(typename _Tflit::opcode_t opcode) const noexcept;
 
             /*
             Opcode decode for MN
             */
-            virtual const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
-                DecodeMN(typename _Tflit::opcode_t opcode) const noexcept;
+            virtual const OpcodeInfo&   DecodeMN(typename _Tflit::opcode_t opcode) const noexcept;
             
         public:
             /*
@@ -485,8 +472,7 @@ namespace CHI {
         inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
             DecoderBase<_Tflit, _Tcompanion>::Decode(typename _Tflit::opcode_t opcode) const noexcept
         {
-            const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>& info 
-                = opcodes[opcode];
+            const OpcodeInfo& info = opcodes[opcode];
 
             if (!info.IsValid())
                 return opcode_invalid;
