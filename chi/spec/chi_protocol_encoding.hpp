@@ -1928,21 +1928,51 @@ namespace CHI {
         };
     }
 
-
+    
     //
-    template<unsigned I>
-    struct Size {
-        static constexpr Flits::REQ<>::ssize_t value {/*BRACE required by GCC 11 on C++20, GCC is Wrong!*/};
+    using Size = uint3_t;
+
+    class SizeEnumBack : public chi_protocol_encoding::details::EnumerationUnsaturated<SizeEnumBack> {
+    public:
+        inline constexpr SizeEnumBack(const char* name, const int value, const SizeEnumBack* prev = nullptr) noexcept
+        : EnumerationUnsaturated(name, value, prev) {}
     };
 
-    template<> struct Size<1    > { static constexpr Flits::REQ<>::ssize_t value = 0b000; };
-    template<> struct Size<2    > { static constexpr Flits::REQ<>::ssize_t value = 0b001; };
-    template<> struct Size<4    > { static constexpr Flits::REQ<>::ssize_t value = 0b010; };
-    template<> struct Size<8    > { static constexpr Flits::REQ<>::ssize_t value = 0b011; };
-    template<> struct Size<16   > { static constexpr Flits::REQ<>::ssize_t value = 0b100; };
-    template<> struct Size<32   > { static constexpr Flits::REQ<>::ssize_t value = 0b101; };
-    template<> struct Size<64   > { static constexpr Flits::REQ<>::ssize_t value = 0b110; };
-//  *Reserved*                                                                   = 0b111;
+    using SizeEnum = const SizeEnumBack*;
+
+    namespace Sizes {
+
+        // Size type
+        using type = Size;
+
+        // Size encodings
+        inline constexpr type   B1      = 0b000;
+        inline constexpr type   B2      = 0b001;
+        inline constexpr type   B4      = 0b010;
+        inline constexpr type   B8      = 0b011;
+        inline constexpr type   B16     = 0b100;
+        inline constexpr type   B32     = 0b101;
+        inline constexpr type   B64     = 0b110;
+
+        //
+        static_assert(is_same_len_v<type, Flits::REQ<>::ssize_t>);
+
+        //
+        namespace Enum {
+            inline constexpr SizeEnumBack   Invalid         ("Invalid", INT_MIN);
+
+            inline constexpr SizeEnumBack   B1              ("1 Byte"   , Sizes::B1);
+            inline constexpr SizeEnumBack   B2              ("2 Bytes"  , Sizes::B2 , B1    );
+            inline constexpr SizeEnumBack   B4              ("4 Bytes"  , Sizes::B4 , B2    );
+            inline constexpr SizeEnumBack   B8              ("8 Bytes"  , Sizes::B8 , B4    );
+            inline constexpr SizeEnumBack   B16             ("16 Bytes" , Sizes::B16, B8    );
+            inline constexpr SizeEnumBack   B32             ("32 Bytes" , Sizes::B32, B16   );
+            inline constexpr SizeEnumBack   B64             ("64 Bytes" , Sizes::B64, B32   );
+        };
+
+        inline constexpr SizeEnum ToEnum(Size size) noexcept;
+        inline constexpr bool IsValid(Size size) noexcept;
+    };
 
 
     //
@@ -1973,8 +2003,8 @@ namespace CHI {
         namespace Enum {
             inline constexpr NSEnumBack Invalid         ("Invalid", INT_MIN);
 
-            inline constexpr NSEnumBack Secure          ("Secure"   , NSs::Secure);
-            inline constexpr NSEnumBack NonSecure       ("NonSecure", NSs::NonSecure, Secure);
+            inline constexpr NSEnumBack Secure          ("Secure"       , NSs::Secure);
+            inline constexpr NSEnumBack NonSecure       ("Non-secure"   , NSs::NonSecure, Secure);
         };
 
         inline constexpr NSEnum ToEnum(NS ns) noexcept;
@@ -2747,6 +2777,29 @@ namespace CHI {
                 E = Invalid;
 
             return NextElement<T, Bits>(First, A);
+        }
+    }
+/*}*/
+
+
+// Implementation of Sizes enumeration functions
+/*namespace CHI {*/
+
+    namespace Sizes {
+
+        namespace Enum::details {
+            inline constexpr std::array<SizeEnum, 1 << Size::BITS> TABLE =
+                chi_protocol_encoding::details::GetTable<SizeEnumBack, Size::BITS, Sizes::Enum::B64, Enum::Invalid>();
+        }
+
+        inline constexpr SizeEnum ToEnum(Size size) noexcept
+        {
+            return Enum::details::TABLE[size];
+        }
+
+        inline constexpr bool IsValid(Size size) noexcept
+        {
+            return ToEnum(size)->IsValid();
         }
     }
 /*}*/
