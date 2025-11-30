@@ -61,11 +61,11 @@ namespace CHI {
             std::string     ToString() const noexcept;
 
         public:
-            static constexpr CacheState FromSnpResp(typename Resp::type resp) noexcept;
-            static constexpr CacheState FromSnpRespData(typename Resp::type resp) noexcept;
-            static constexpr CacheState FromSnpRespDataPtl(typename Resp::type resp) noexcept;
-            static constexpr CacheState FromSnpRespFwded(typename Resp::type resp) noexcept;
-            static constexpr CacheState FromSnpRespDataFwded(typename Resp::type resp) noexcept;
+            static constexpr CacheState FromSnpResp(Resp resp) noexcept;
+            static constexpr CacheState FromSnpRespData(Resp resp) noexcept;
+            static constexpr CacheState FromSnpRespDataPtl(Resp resp) noexcept;
+            static constexpr CacheState FromSnpRespFwded(Resp resp) noexcept;
+            static constexpr CacheState FromSnpRespDataFwded(Resp resp) noexcept;
         };
 
         class CacheResp {
@@ -120,18 +120,18 @@ namespace CHI {
             std::string     ToString() const noexcept;
 
         public:
-            static constexpr CacheResp FromCompData(typename Resp::type resp) noexcept;
-            static constexpr CacheResp FromDataSepResp(typename Resp::type resp) noexcept;
-            static constexpr CacheResp FromRespSepData(typename Resp::type resp) noexcept;
-            static constexpr CacheResp FromComp(typename Resp::type resp) noexcept;
-            static constexpr CacheResp FromCopyBackWrData(typename Resp::type resp) noexcept;
-            static constexpr CacheResp FromSnpResp(typename Resp::type resp) noexcept;
-            static constexpr CacheResp FromSnpRespFwded(typename FwdState::type fwdState) noexcept;
-            static constexpr CacheResp FromSnpRespFwdedFwdState(typename FwdState::type fwdState) noexcept;
-            static constexpr CacheResp FromSnpRespData(typename Resp::type resp) noexcept;
-            static constexpr CacheResp FromSnpRespDataFwded(typename Resp::type resp) noexcept;
-            static constexpr CacheResp FromSnpRespDataFwdedFwdState(typename FwdState::type fwdState) noexcept;
-            static constexpr CacheResp FromSnpRespDataPtl(typename Resp::type resp) noexcept;
+            static constexpr CacheResp FromCompData(Resp resp) noexcept;
+            static constexpr CacheResp FromDataSepResp(Resp resp) noexcept;
+            static constexpr CacheResp FromRespSepData(Resp resp) noexcept;
+            static constexpr CacheResp FromComp(Resp resp) noexcept;
+            static constexpr CacheResp FromCopyBackWrData(Resp resp) noexcept;
+            static constexpr CacheResp FromSnpResp(Resp resp) noexcept;
+            static constexpr CacheResp FromSnpRespFwded(FwdState fwdState) noexcept;
+            static constexpr CacheResp FromSnpRespFwdedFwdState(FwdState fwdState) noexcept;
+            static constexpr CacheResp FromSnpRespData(Resp resp) noexcept;
+            static constexpr CacheResp FromSnpRespDataFwded(Resp resp) noexcept;
+            static constexpr CacheResp FromSnpRespDataFwdedFwdState(FwdState fwdState) noexcept;
+            static constexpr CacheResp FromSnpRespDataPtl(Resp resp) noexcept;
         };
     }
 /*
@@ -525,240 +525,240 @@ namespace CHI {
         }
 
         //
-        inline constexpr CacheState CacheState::FromSnpResp(typename Resp::type resp) noexcept
+        inline constexpr CacheState CacheState::FromSnpResp(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::SnpResp_I:       return CacheStates::I;
-                case Resp::SnpResp_SC:      return CacheStates::SC;
-                case Resp::SnpResp_UC:      return CacheStates::UC | CacheStates::UD;
-            //  case Resp::SnpResp_UD:      return CacheStates::UC | CacheStates::UD;
-                case Resp::SnpResp_SD:      return CacheStates::SD;
+                case Resps::SnpResp_I:      return CacheStates::I;
+                case Resps::SnpResp_SC:     return CacheStates::SC;
+                case Resps::SnpResp_UC:     return CacheStates::UC | CacheStates::UD;
+            //  case Resps::SnpResp_UD:     return CacheStates::UC | CacheStates::UD;
+                case Resps::SnpResp_SD:     return CacheStates::SD;
                 default:                    return CacheStates::None;
             }
         }
         //
-        inline constexpr CacheState CacheState::FromSnpRespData(typename Resp::type resp) noexcept
+        inline constexpr CacheState CacheState::FromSnpRespData(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::SnpRespData_I:       return CacheStates::I;
-                case Resp::SnpRespData_UC:      return CacheStates::UC | CacheStates::UD;
-            //  case Resp::SnpRespData_UD:      return CacheStates::UC | CacheStates::UD;
-                case Resp::SnpRespData_SC:      return CacheStates::SC;
-                case Resp::SnpRespData_SD:      return CacheStates::SD;
-                case Resp::SnpRespData_I_PD:    return CacheStates::I;
-                case Resp::SnpRespData_UC_PD:   return CacheStates::UC | CacheStates::UD;
-                case Resp::SnpRespData_SC_PD:   return CacheStates::SC;
+                case Resps::SnpRespData_I:      return CacheStates::I;
+                case Resps::SnpRespData_UC:     return CacheStates::UC | CacheStates::UD;
+            //  case Resps::SnpRespData_UD:     return CacheStates::UC | CacheStates::UD;
+                case Resps::SnpRespData_SC:     return CacheStates::SC;
+                case Resps::SnpRespData_SD:     return CacheStates::SD;
+                case Resps::SnpRespData_I_PD:   return CacheStates::I;
+                case Resps::SnpRespData_UC_PD:  return CacheStates::UC | CacheStates::UD;
+                case Resps::SnpRespData_SC_PD:  return CacheStates::SC;
                 default:                        return CacheStates::None;
             }
         }
         //
-        inline constexpr CacheState CacheState::FromSnpRespDataPtl(typename Resp::type resp) noexcept
+        inline constexpr CacheState CacheState::FromSnpRespDataPtl(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::SnpRespDataPtl_I_PD: return CacheStates::I;
-                case Resp::SnpRespDataPtl_UD:   return CacheStates::UDP;
+                case Resps::SnpRespDataPtl_I_PD:return CacheStates::I;
+                case Resps::SnpRespDataPtl_UD:  return CacheStates::UDP;
                 default:                        return CacheStates::None;
             }
         }
         //
-        inline constexpr CacheState CacheState::FromSnpRespFwded(typename Resp::type resp) noexcept
+        inline constexpr CacheState CacheState::FromSnpRespFwded(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::SnpResp_I_Fwded_I:       return CacheStates::I;
-            //  case Resp::SnpResp_I_Fwded_SC:      return CacheStates::I;
-            //  case Resp::SnpResp_I_Fwded_UC:      return CacheStates::I;
-            //  case Resp::SnpResp_I_Fwded_UD_PD:   return CacheStates::I;
-            //  case Resp::SnpResp_I_Fwded_SD_PD:   return CacheStates::I;
-                case Resp::SnpResp_SC_Fwded_I:      return CacheStates::SC;
-            //  case Resp::SnpResp_SC_Fwded_SC:     return CacheStates::SC;
-            //  case Resp::SnpResp_SC_Fwded_SD_PD:  return CacheStates::SC;
-                case Resp::SnpResp_UC_Fwded_I:      return CacheStates::UC | CacheStates::UD;
-            //  case Resp::SnpResp_UD_Fwded_I:      return CacheStates::UC | CacheStates::UD;
-                case Resp::SnpResp_SD_Fwded_I:      return CacheStates::SD;
-            //  case Resp::SnpResp_SD_Fwded_SC:     return CacheStates::SD;
+                case Resps::SnpResp_I_Fwded_I:      return CacheStates::I;
+            //  case Resps::SnpResp_I_Fwded_SC:     return CacheStates::I;
+            //  case Resps::SnpResp_I_Fwded_UC:     return CacheStates::I;
+            //  case Resps::SnpResp_I_Fwded_UD_PD:  return CacheStates::I;
+            //  case Resps::SnpResp_I_Fwded_SD_PD:  return CacheStates::I;
+                case Resps::SnpResp_SC_Fwded_I:     return CacheStates::SC;
+            //  case Resps::SnpResp_SC_Fwded_SC:    return CacheStates::SC;
+            //  case Resps::SnpResp_SC_Fwded_SD_PD: return CacheStates::SC;
+                case Resps::SnpResp_UC_Fwded_I:     return CacheStates::UC | CacheStates::UD;
+            //  case Resps::SnpResp_UD_Fwded_I:     return CacheStates::UC | CacheStates::UD;
+                case Resps::SnpResp_SD_Fwded_I:     return CacheStates::SD;
+            //  case Resps::SnpResp_SD_Fwded_SC:    return CacheStates::SD;
                 default:                            return CacheStates::None;
             }
         }
         //
-        inline constexpr CacheState CacheState::FromSnpRespDataFwded(typename Resp::type resp) noexcept
+        inline constexpr CacheState CacheState::FromSnpRespDataFwded(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::SnpRespData_I_Fwded_SC:      return CacheStates::I;
-            //  case Resp::SnpRespData_I_Fwded_SD_PD:   return CacheStates::I;
-                case Resp::SnpRespData_SC_Fwded_SC:     return CacheStates::SC;
-            //  case Resp::SnpRespData_SC_Fwded_SD_PD:  return CacheStates::SC;
-                case Resp::SnpRespData_SD_Fwded_SC:     return CacheStates::SD;
-                case Resp::SnpRespData_I_PD_Fwded_I:    return CacheStates::I;
-            //  case Resp::SnpRespData_I_PD_Fwded_SC:   return CacheStates::I;
-                case Resp::SnpRespData_SC_PD_Fwded_I:   return CacheStates::SC;
-            //  case Resp::SnpRespData_SC_PD_Fwded_SC:  return CacheStates::SC;
+                case Resps::SnpRespData_I_Fwded_SC:     return CacheStates::I;
+            //  case Resps::SnpRespData_I_Fwded_SD_PD:  return CacheStates::I;
+                case Resps::SnpRespData_SC_Fwded_SC:    return CacheStates::SC;
+            //  case Resps::SnpRespData_SC_Fwded_SD_PD: return CacheStates::SC;
+                case Resps::SnpRespData_SD_Fwded_SC:    return CacheStates::SD;
+                case Resps::SnpRespData_I_PD_Fwded_I:   return CacheStates::I;
+            //  case Resps::SnpRespData_I_PD_Fwded_SC:  return CacheStates::I;
+                case Resps::SnpRespData_SC_PD_Fwded_I:  return CacheStates::SC;
+            //  case Resps::SnpRespData_SC_PD_Fwded_SC: return CacheStates::SC;
                 default:                                return CacheStates::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromCompData(typename Resp::type resp) noexcept
+        inline constexpr CacheResp CacheResp::FromCompData(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::CompData_I:          return CacheResps::I;
-                case Resp::CompData_UC:         return CacheResps::UC;
-                case Resp::CompData_SC:         return CacheResps::SC;
-                case Resp::CompData_UD_PD:      return CacheResps::UD_PD;
-                case Resp::CompData_SD_PD:      return CacheResps::SD_PD;
+                case Resps::CompData_I:         return CacheResps::I;
+                case Resps::CompData_UC:        return CacheResps::UC;
+                case Resps::CompData_SC:        return CacheResps::SC;
+                case Resps::CompData_UD_PD:     return CacheResps::UD_PD;
+                case Resps::CompData_SD_PD:     return CacheResps::SD_PD;
                 default:                        return CacheResps::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromDataSepResp(typename Resp::type resp) noexcept
+        inline constexpr CacheResp CacheResp::FromDataSepResp(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::DataSepResp_I:       return CacheResps::I;
-                case Resp::DataSepResp_UC:      return CacheResps::UC;
-                case Resp::DataSepResp_SC:      return CacheResps::SC;
-                case Resp::DataSepResp_UD_PD:   return CacheResps::UD_PD;
+                case Resps::DataSepResp_I:      return CacheResps::I;
+                case Resps::DataSepResp_UC:     return CacheResps::UC;
+                case Resps::DataSepResp_SC:     return CacheResps::SC;
+                case Resps::DataSepResp_UD_PD:  return CacheResps::UD_PD;
                 default:                        return CacheResps::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromRespSepData(typename Resp::type resp) noexcept
+        inline constexpr CacheResp CacheResp::FromRespSepData(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::RespSepData_I:       return CacheResps::I;
-                case Resp::RespSepData_UC:      return CacheResps::UC;
-                case Resp::RespSepData_SC:      return CacheResps::SC;
-                case Resp::RespSepData_UD_PD:   return CacheResps::UD_PD;
+                case Resps::RespSepData_I:      return CacheResps::I;
+                case Resps::RespSepData_UC:     return CacheResps::UC;
+                case Resps::RespSepData_SC:     return CacheResps::SC;
+                case Resps::RespSepData_UD_PD:  return CacheResps::UD_PD;
                 default:                        return CacheResps::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromComp(typename Resp::type resp) noexcept
+        inline constexpr CacheResp CacheResp::FromComp(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::Comp_I:              return CacheResps::I;
-                case Resp::Comp_UC:             return CacheResps::UC;
-                case Resp::Comp_SC:             return CacheResps::SC;
-                case Resp::Comp_UD_PD:          return CacheResps::UD_PD;
+                case Resps::Comp_I:             return CacheResps::I;
+                case Resps::Comp_UC:            return CacheResps::UC;
+                case Resps::Comp_SC:            return CacheResps::SC;
+                case Resps::Comp_UD_PD:         return CacheResps::UD_PD;
                 default:                        return CacheResps::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromCopyBackWrData(typename Resp::type resp) noexcept
+        inline constexpr CacheResp CacheResp::FromCopyBackWrData(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::CopyBackWrData_I:    return CacheResps::I;
-                case Resp::CopyBackWrData_UC:   return CacheResps::UC;
-                case Resp::CopyBackWrData_SC:   return CacheResps::SC;
-                case Resp::CopyBackWrData_UD_PD:return CacheResps::UD_PD;
-                case Resp::CopyBackWrData_SD_PD:return CacheResps::SD_PD;
-                default:                        return CacheResps::None;
-            }
-        }
-
-        inline constexpr CacheResp CacheResp::FromSnpResp(typename Resp::type resp) noexcept
-        {
-            switch (resp)
-            {
-                case Resp::SnpResp_I:           return CacheResps::I;
-                case Resp::SnpResp_SC:          return CacheResps::SC;
-                case Resp::SnpResp_UC:          return CacheResps::UC | CacheResps::UD;
-                case Resp::SnpResp_SD:          return CacheResps::SD;
-                default:                        return CacheResps::None;
-            }
-        }
-
-        inline constexpr CacheResp CacheResp::FromSnpRespFwded(typename Resp::type resp) noexcept
-        {
-            switch (resp)
-            {
-                case Resp::SnpResp_I_Fwded_I:       return CacheResps::I;
-            //  case Resp::SnpResp_I_Fwded_SC:      return CacheResps::I;
-            //  case Resp::SnpResp_I_Fwded_UC:      return CacheResps::I;
-            //  case Resp::SnpResp_I_Fwded_UD_PD:   return CacheResps::I;
-            //  case Resp::SnpResp_I_Fwded_SD_PD:   return CacheResps::I;
-                case Resp::SnpResp_SC_Fwded_I:      return CacheResps::SC;
-            //  case Resp::SnpResp_SC_Fwded_SC:     return CacheResps::SC;
-            //  case Resp::SnpResp_SC_Fwded_SD_PD:  return CacheResps::SC;
-                case Resp::SnpResp_UC_Fwded_I:      return CacheResps::UC | CacheResps::UD;
-            //  case Resp::SnpResp_UD_Fwded_I:      return CacheResps::UC | CacheResps::UD;
-                case Resp::SnpResp_SD_Fwded_I:      return CacheResps::SD;
-            //  case Resp::SnpResp_SD_Fwded_SC:     return CacheResps::SD;
+                case Resps::CopyBackWrData_I:       return CacheResps::I;
+                case Resps::CopyBackWrData_UC:      return CacheResps::UC;
+                case Resps::CopyBackWrData_SC:      return CacheResps::SC;
+                case Resps::CopyBackWrData_UD_PD:   return CacheResps::UD_PD;
+                case Resps::CopyBackWrData_SD_PD:   return CacheResps::SD_PD;
                 default:                            return CacheResps::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromSnpRespFwdedFwdState(typename FwdState::type fwdState) noexcept
+        inline constexpr CacheResp CacheResp::FromSnpResp(Resp resp) noexcept
+        {
+            switch (resp)
+            {
+                case Resps::SnpResp_I:          return CacheResps::I;
+                case Resps::SnpResp_SC:         return CacheResps::SC;
+                case Resps::SnpResp_UC:         return CacheResps::UC | CacheResps::UD;
+                case Resps::SnpResp_SD:         return CacheResps::SD;
+                default:                        return CacheResps::None;
+            }
+        }
+
+        inline constexpr CacheResp CacheResp::FromSnpRespFwded(Resp resp) noexcept
+        {
+            switch (resp)
+            {
+                case Resps::SnpResp_I_Fwded_I:      return CacheResps::I;
+            //  case Resps::SnpResp_I_Fwded_SC:     return CacheResps::I;
+            //  case Resps::SnpResp_I_Fwded_UC:     return CacheResps::I;
+            //  case Resps::SnpResp_I_Fwded_UD_PD:  return CacheResps::I;
+            //  case Resps::SnpResp_I_Fwded_SD_PD:  return CacheResps::I;
+                case Resps::SnpResp_SC_Fwded_I:     return CacheResps::SC;
+            //  case Resps::SnpResp_SC_Fwded_SC:    return CacheResps::SC;
+            //  case Resps::SnpResp_SC_Fwded_SD_PD: return CacheResps::SC;
+                case Resps::SnpResp_UC_Fwded_I:     return CacheResps::UC | CacheResps::UD;
+            //  case Resps::SnpResp_UD_Fwded_I:     return CacheResps::UC | CacheResps::UD;
+                case Resps::SnpResp_SD_Fwded_I:     return CacheResps::SD;
+            //  case Resps::SnpResp_SD_Fwded_SC:    return CacheResps::SD;
+                default:                            return CacheResps::None;
+            }
+        }
+
+        inline constexpr CacheResp CacheResp::FromSnpRespFwdedFwdState(FwdState fwdState) noexcept
         {
             switch (fwdState)
             {
-                case FwdState::I:               return CacheResps::I;
-                case FwdState::SC:              return CacheResps::SC;
-                case FwdState::UC:              return CacheResps::UC;
-                case FwdState::UD_PD:           return CacheResps::UD_PD;
-                case FwdState::SD_PD:           return CacheResps::SD_PD;
+                case FwdStates::I:              return CacheResps::I;
+                case FwdStates::SC:             return CacheResps::SC;
+                case FwdStates::UC:             return CacheResps::UC;
+                case FwdStates::UD_PD:          return CacheResps::UD_PD;
+                case FwdStates::SD_PD:          return CacheResps::SD_PD;
                 default:                        return CacheResps::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromSnpRespData(typename Resp::type resp) noexcept
+        inline constexpr CacheResp CacheResp::FromSnpRespData(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::SnpRespData_I:       return CacheResps::I;
-                case Resp::SnpRespData_UC:      return CacheResps::UC | CacheResps::UD;
-                case Resp::SnpRespData_SC:      return CacheResps::SC;
-                case Resp::SnpRespData_SD:      return CacheResps::SD;
-                case Resp::SnpRespData_I_PD:    return CacheResps::I_PD;
-                case Resp::SnpRespData_UC_PD:   return CacheResps::UC_PD;
-                case Resp::SnpRespData_SC_PD:   return CacheResps::SC_PD;
+                case Resps::SnpRespData_I:      return CacheResps::I;
+                case Resps::SnpRespData_UC:     return CacheResps::UC | CacheResps::UD;
+                case Resps::SnpRespData_SC:     return CacheResps::SC;
+                case Resps::SnpRespData_SD:     return CacheResps::SD;
+                case Resps::SnpRespData_I_PD:   return CacheResps::I_PD;
+                case Resps::SnpRespData_UC_PD:  return CacheResps::UC_PD;
+                case Resps::SnpRespData_SC_PD:  return CacheResps::SC_PD;
                 default:                        return CacheResps::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromSnpRespDataFwded(typename Resp::type resp) noexcept
+        inline constexpr CacheResp CacheResp::FromSnpRespDataFwded(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::SnpRespData_I_Fwded_SC:      return CacheResps::I;
-            //  case Resp::SnpRespData_I_Fwded_SD_PD:   return CacheResps::I;
-                case Resp::SnpRespData_SC_Fwded_SC:     return CacheResps::SC;
-            //  case Resp::SnpRespData_SC_Fwded_SD_PD:  return CacheResps::SC;
-                case Resp::SnpRespData_SD_Fwded_SC:     return CacheResps::SD;
-                case Resp::SnpRespData_I_PD_Fwded_I:    return CacheResps::I_PD;
-            //  case Resp::SnpRespData_I_PD_Fwded_SC:   return CacheResps::I_PD;
-                case Resp::SnpRespData_SC_PD_Fwded_I:   return CacheResps::SC_PD;
-            //  case Resp::SnpRespData_SC_PD_Fwded_SC:  return CacheResps::SC_PD;
+                case Resps::SnpRespData_I_Fwded_SC:     return CacheResps::I;
+            //  case Resps::SnpRespData_I_Fwded_SD_PD:  return CacheResps::I;
+                case Resps::SnpRespData_SC_Fwded_SC:    return CacheResps::SC;
+            //  case Resps::SnpRespData_SC_Fwded_SD_PD: return CacheResps::SC;
+                case Resps::SnpRespData_SD_Fwded_SC:    return CacheResps::SD;
+                case Resps::SnpRespData_I_PD_Fwded_I:   return CacheResps::I_PD;
+            //  case Resps::SnpRespData_I_PD_Fwded_SC:  return CacheResps::I_PD;
+                case Resps::SnpRespData_SC_PD_Fwded_I:  return CacheResps::SC_PD;
+            //  case Resps::SnpRespData_SC_PD_Fwded_SC: return CacheResps::SC_PD;
                 default:                                return CacheResps::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromSnpRespDataFwdedFwdState(typename FwdState::type fwdState) noexcept
+        inline constexpr CacheResp CacheResp::FromSnpRespDataFwdedFwdState(FwdState fwdState) noexcept
         {
             switch (fwdState)
             {
-                case FwdState::I:               return CacheResps::I;
-                case FwdState::SC:              return CacheResps::SC;
-                case FwdState::UC:              return CacheResps::UC | CacheResps::UD;
-                case FwdState::UD_PD:           return CacheResps::UD_PD;
-                case FwdState::SD_PD:           return CacheResps::SD_PD;
+                case FwdStates::I:              return CacheResps::I;
+                case FwdStates::SC:             return CacheResps::SC;
+                case FwdStates::UC:             return CacheResps::UC | CacheResps::UD;
+                case FwdStates::UD_PD:          return CacheResps::UD_PD;
+                case FwdStates::SD_PD:          return CacheResps::SD_PD;
                 default:                        return CacheResps::None;
             }
         }
 
-        inline constexpr CacheResp CacheResp::FromSnpRespDataPtl(typename Resp::type resp) noexcept
+        inline constexpr CacheResp CacheResp::FromSnpRespDataPtl(Resp resp) noexcept
         {
             switch (resp)
             {
-                case Resp::SnpRespDataPtl_I_PD: return CacheResps::I_PD;
-                case Resp::SnpRespDataPtl_UD:   return CacheResps::UC | CacheResps::UD;
+                case Resps::SnpRespDataPtl_I_PD:return CacheResps::I_PD;
+                case Resps::SnpRespDataPtl_UD:  return CacheResps::UC | CacheResps::UD;
                 default:                        return CacheResps::None;
             }
         }
