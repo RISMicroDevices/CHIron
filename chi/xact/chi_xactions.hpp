@@ -1546,19 +1546,19 @@ namespace /*CHI::*/Xact {
 
                 // MemAttr
                 if (FieldTrait::IsApplicable(fields->Allocate))
-                    if (MemAttr::ExtractAllocate(origin.MemAttr()) != MemAttr::ExtractAllocate(retry.MemAttr()))
+                    if (MemAttrs::ExtractAllocate(origin.MemAttr()) != MemAttrs::ExtractAllocate(retry.MemAttr()))
                         return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
 
                 if (FieldTrait::IsApplicable(fields->Cacheable))
-                    if (MemAttr::ExtractCacheable(origin.MemAttr()) != MemAttr::ExtractCacheable(retry.MemAttr()))
+                    if (MemAttrs::ExtractCacheable(origin.MemAttr()) != MemAttrs::ExtractCacheable(retry.MemAttr()))
                         return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
 
                 if (FieldTrait::IsApplicable(fields->Device))
-                    if (MemAttr::ExtractDevice(origin.MemAttr()) != MemAttr::ExtractDevice(retry.MemAttr()))
+                    if (MemAttrs::ExtractDevice(origin.MemAttr()) != MemAttrs::ExtractDevice(retry.MemAttr()))
                         return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
                 
                 if (FieldTrait::IsApplicable(fields->EWA))
-                    if (MemAttr::ExtractEWA(origin.MemAttr()) != MemAttr::ExtractEWA(origin.MemAttr()))
+                    if (MemAttrs::ExtractEWA(origin.MemAttr()) != MemAttrs::ExtractEWA(origin.MemAttr()))
                         return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
 
                 // SnpAttr
@@ -1687,7 +1687,7 @@ namespace /*CHI::*/Xact {
         const FiredResponseFlit<config, conn>&                              datFlit,
         std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>  opcodes) noexcept
     {
-        return NextDataID(Size<64>::value, datFlit, opcodes);
+        return NextDataID(Sizes::B64, datFlit, opcodes);
     }
 }
 
@@ -6179,7 +6179,7 @@ namespace /*CHI::*/Xact  {
     inline bool XactionHomeSnoop<config, conn>::IsDataComplete(const Topology& topo) const noexcept
     {
         std::bitset<4> completeDataIDMask =
-            details::GetDataIDCompleteMask<config, conn>(Size<64>::value);
+            details::GetDataIDCompleteMask<config, conn>(Sizes::B64);
 
         bool needCollectedSnpDataID = false;
 
@@ -6199,7 +6199,7 @@ namespace /*CHI::*/Xact  {
             {
                 needCollectedSnpDataID = true;
                 collectedSnpDataID |= details::CollectDataID<config, conn>(
-                    Size<64>::value, iter->flit.dat.DataID());
+                    Sizes::B64, iter->flit.dat.DataID());
                 continue;
             }
         }
@@ -6434,7 +6434,7 @@ namespace /*CHI::*/Xact {
     inline bool XactionForwardSnoop<config, conn>::IsDataComplete(const Topology& topo) const noexcept
     {
         std::bitset<4> completeDataIDMask =
-            details::GetDataIDCompleteMask<config, conn>(Size<64>::value);
+            details::GetDataIDCompleteMask<config, conn>(Sizes::B64);
         
         bool needCollectedSnpDataID = false;
         bool needCollectedFwdDataID = false;
@@ -6455,7 +6455,7 @@ namespace /*CHI::*/Xact {
             {
                 needCollectedSnpDataID = true;
                 collectedSnpDataID |= details::CollectDataID<config, conn>(
-                    Size<64>::value, iter->flit.dat.DataID());
+                    Sizes::B64, iter->flit.dat.DataID());
                 continue;
             }
             else if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
@@ -6468,13 +6468,13 @@ namespace /*CHI::*/Xact {
                 needCollectedFwdDataID = true;
                 needCollectedSnpDataID = true;
                 collectedSnpDataID |= details::CollectDataID<config, conn>(
-                    Size<64>::value, iter->flit.dat.DataID());
+                    Sizes::B64, iter->flit.dat.DataID());
                 continue;
             }
             else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData)
             {
                 collectedFwdDataID |= details::CollectDataID<config, conn>(
-                    Size<64>::value, iter->flit.dat.DataID());
+                    Sizes::B64, iter->flit.dat.DataID());
                 continue;
             }
         }
