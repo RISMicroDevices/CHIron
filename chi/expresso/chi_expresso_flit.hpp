@@ -7,6 +7,7 @@
 #   define CHI_ISSUE_EB_ENABLE
 #   include "chi_expresso_flit_header.hpp"      // IWYU pragma: keep
 #   include "../spec/chi_protocol_flits.hpp"    // IWYU pragma: keep
+#   include "../util/chi_util_decoding.hpp"     // IWYU pragma: keep
 #endif
 
 
@@ -520,6 +521,95 @@ namespace CHI {
 
         template<FlitConfigurationConcept       config>
         using PlainFormatter = DefaultFormatter<config>;
+
+
+        template<FlitConfigurationConcept       config>
+        class DecodingFormatter : public virtual PlainFormatter<config> {
+            /*
+            *NOTICE: The Default Plain Formatter provides three parameters,
+                     exceptions might be thrown with formatting string with more than three parameters.
+
+            *NOTICE: MTE (TagMatch, TagOp...) not supported.
+                
+            Example:
+                Formatting string: "{} = {} ({})"
+                Output with specific field key-value:
+                    - REQ::QoS      = 0x01 -> "QoS = 1 (1)"
+                    - REQ::Opcode   = 0x06 -> "Opcode = <unknown> (6)"
+                    - REQ::Opcode   = 0x07 -> "Opcode = ReadUnique (7)"
+                    - REQ::MemAttr  = 0x03 -> "MemAttr = EWA, Device (3)"
+                    - REQ::RespErr  = 0x00 -> "RespErr = OK (0)"
+                    ...
+                    - DAT::Data     = 0xFFFFFFFF_CCCC... -> "0xFFFFFFFFCCCC... (256)"
+                    ...
+            */
+        protected:
+            REQOpcodeDecoder<config> reqDecoder;
+            SNPOpcodeDecoder<config> snpDecoder;
+            RSPOpcodeDecoder<config> rspDecoder;
+            DATOpcodeDecoder<config> datDecoder;
+
+        protected:
+            template<Key key, typename Tflit>
+            inline std::string _FormatDecodingOpcode(const Opcodes::DecoderBase<Tflit>* decoder, const KeyValueMap&, const format_func& func) const;
+
+            template<Key key>
+            inline std::string _FormatDecodingNS(const KeyValueMap&, const format_func&) const;
+
+            template<Key key>
+            inline std::string _FormatDecodingSize(const KeyValueMap&, const format_func&) const;
+
+            template<Key key>
+            inline std::string _FormatDecodingMemAttr(const KeyValueMap&, const format_func&) const;
+
+            template<Key key>
+            inline std::string _FormatDecodingSnpAttr(const KeyValueMap&, const format_func&) const;
+
+            template<Key key>
+            inline std::string _FormatDecodingOrder(const KeyValueMap&, const format_func&) const;
+
+            template<Key key>
+            inline std::string _FormatDecodingEndian(const KeyValueMap&, const format_func&) const;
+
+            template<Key key>
+            inline std::string _FormatDecodingResp(const KeyValueMap&, const format_func&) const;
+
+            template<Key key>
+            inline std::string _FormatDecodingFwdState(const KeyValueMap&, const format_func&) const;
+
+            template<Key key>
+            inline std::string _FormatDecodingRespErr(const KeyValueMap&, const format_func&) const;
+
+        public:
+            inline virtual std::string FormatREQOpcode(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatRSPOpcode(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatDATOpcode(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatSNPOpcode(const KeyValueMap&, const format_func&) const override;
+
+            inline virtual std::string FormatSNPAddr(const KeyValueMap&, const format_func&) const override;
+
+            inline virtual std::string FormatREQNS(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatSNPNS(const KeyValueMap&, const format_func&) const override;
+
+            inline virtual std::string FormatREQSize(const KeyValueMap&, const format_func&) const override;
+
+            inline virtual std::string FormatREQMemAttr(const KeyValueMap&, const format_func&) const override;
+
+            inline virtual std::string FormatREQSnpAttr(const KeyValueMap&, const format_func&) const override;
+
+            inline virtual std::string FormatREQOrder(const KeyValueMap&, const format_func&) const override;
+            
+            inline virtual std::string FormatREQEndian(const KeyValueMap&, const format_func&) const override;
+
+            inline virtual std::string FormatRSPResp(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatDATResp(const KeyValueMap&, const format_func&) const override;
+
+            inline virtual std::string FormatRSPFwdState(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatDATFwdState(const KeyValueMap&, const format_func&) const override;
+
+            inline virtual std::string FormatRSPRespErr(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatDATRespErr(const KeyValueMap&, const format_func&) const override;
+        };
 
 
         namespace Keys {
@@ -2068,6 +2158,301 @@ namespace /*CHI::*/Expresso::Flit {
     inline std::string DefaultFormatter<config>::FormatSNPMPAM(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::MPAM, fmt);
+    }
+}
+
+
+// Implementation of: class DecodingFormatter
+namespace /*CHI::*/Expresso::Flit {
+
+    template<FlitConfigurationConcept config>
+    template<Key key, typename Tflit>
+    inline std::string DecodingFormatter<config>::_FormatDecodingOpcode(const Opcodes::DecoderBase<Tflit>* decoder, const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intOpcode;
+        if (!this->ExtractIntegral(kv, key, &intOpcode))
+            return std::string();
+
+        const auto& opcodeInfo = decoder->Decode(intOpcode);
+
+        if (!opcodeInfo.IsValid())
+            return std::vformat(fmt(key), std::make_format_args(key->canonicalName, "<Unknown>", intOpcode));
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, opcodeInfo.GetName(), intOpcode));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatREQOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingOpcode<Keys::REQ::Opcode>(reqDecoder, kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatRSPOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingOpcode<Keys::RSP::Opcode>(rspDecoder, kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatDATOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingOpcode<Keys::DAT::Opcode>(datDecoder, kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatSNPOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingOpcode<Keys::SNP::Opcode>(snpDecoder, kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatSNPAddr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        constexpr Key key = Keys::SNP::Addr;
+
+        uint64_t snpAddr;
+        if (!this->ExtractIntegral(kv, key, &snpAddr))
+            return std::string();
+
+        uint64_t snpPAddr = snpAddr << 3;
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, snpPAddr, snpAddr));
+    }
+
+    template<FlitConfigurationConcept config>
+    template<Key key>
+    inline std::string DecodingFormatter<config>::_FormatDecodingNS(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intNS;
+        if (!this->ExtractIntegral(kv, key, &intNS))
+            return std::string();
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, NSs::ToEnum(intNS)->name, intNS));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatREQNS(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingNS<Keys::REQ::NS>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatSNPNS(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingNS<Keys::SNP::NS>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    template<Key key>
+    inline std::string DecodingFormatter<config>::_FormatDecodingSize(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intSize;
+        if (!this->ExtractIntegral(kv, key, &intSize))
+            return std::string();
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, Sizes::ToEnum(intSize)->name, intSize));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatREQSize(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingSize<Keys::REQ::Size>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    template<Key key>
+    inline std::string DecodingFormatter<config>::_FormatDecodingMemAttr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intMemAttr;
+        if (!this->ExtractIntegral(kv, key, &intMemAttr))
+            return std::string();
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, MemAttrs::ToEnum(intMemAttr)->name, intMemAttr));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatREQMemAttr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingMemAttr<Keys::REQ::MemAttr>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    template<Key key>
+    inline std::string DecodingFormatter<config>::_FormatDecodingSnpAttr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intSnpAttr;
+        if (!this->ExtractIntegral(kv, key, &intSnpAttr))
+            return std::string();
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, SnpAttrs::ToEnum(intSnpAttr)->name, intSnpAttr));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatREQSnpAttr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingSnpAttr<Keys::REQ::SnpAttr>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    template<Key key>
+    inline std::string DecodingFormatter<config>::_FormatDecodingOrder(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intOrder;
+        if (!this->ExtractIntegral(kv, key, &intOrder))
+            return std::string();
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, Orders::ToEnum(intOrder)->name, intOrder));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatREQOrder(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingOrder<Keys::REQ::Order>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    template<Key key>
+    inline std::string DecodingFormatter<config>::_FormatDecodingEndian(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intEndian;
+        if (!this->ExtractIntegral(kv, key, &intEndian))
+            return std::string();
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, Endians::ToEnum(intEndian)->name, intEndian));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatREQEndian(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingEndian<Keys::REQ::Endian>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    template<Key key>
+    inline std::string DecodingFormatter<config>::_FormatDecodingResp(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intResp;
+        if (!this->ExtractIntegral(kv, key, &intResp))
+            return std::string();
+
+        if constexpr (key == Keys::RSP::Resp)
+        {
+            uint64_t intOpcode;
+            if (this->ExtractIntegral(kv, Keys::RSP::Opcode, &intOpcode))
+            {
+                RespEnum resp;
+                switch (intOpcode)
+                {
+                    case Opcodes::RSP::SnpResp:
+                    case Opcodes::RSP::SnpRespFwded:
+                        resp = Resps::Snoop::ToEnum(intResp);
+                        break;
+
+                    case Opcodes::RSP::Comp:
+                    case Opcodes::RSP::RespSepData:
+                        resp = Resps::Comp::ToEnum(intResp);
+                        break;
+
+                    default:
+                        resp = Resps::ToEnum(intResp);
+                        break;
+                }
+
+                return std::vformat(fmt(key), std::make_format_args(key->canonicalName, resp->name, intResp));
+            }
+        }
+
+        if constexpr (key == Keys::DAT::Resp)
+        {
+            uint64_t intOpcode;
+            if (this->ExtractIntegral(kv, Keys::DAT::Opcode, &intOpcode))
+            {
+                RespEnum resp;
+                switch (intOpcode)
+                {
+                    case Opcodes::DAT::SnpRespData:
+                    case Opcodes::DAT::SnpRespDataPtl:
+                    case Opcodes::DAT::SnpRespDataFwded:
+                        resp = Resps::Snoop::ToEnum(intResp);
+                        break;
+
+                    case Opcodes::DAT::CompData:
+                    case Opcodes::DAT::DataSepResp:
+                        resp = Resps::Comp::ToEnum(intResp);
+                        break;
+
+                    case Opcodes::DAT::CopyBackWrData:
+                        resp = Resps::WriteData::ToEnum(intResp);
+                        break;
+
+                    default:
+                        resp = Resps::ToEnum(intResp);
+                        break;
+                }
+
+                return std::vformat(fmt(key), std::make_format_args(key->canonicalName, resp->name, intResp));
+            }
+        }
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, Resps::ToEnum(intResp)->name, intResp));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatRSPResp(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingRSP<Keys::RSP::Resp>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatDATResp(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingDAT<Keys::DAT::Resp>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    template<Key key>
+    inline std::string DecodingFormatter<config>::_FormatDecodingFwdState(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intFwdState;
+        if (!this->ExtractIntegral(kv, key, &intFwdState))
+            return std::string();
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, FwdStates::ToEnum(intFwdState)->name, intFwdState));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatRSPFwdState(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingFwdState<Keys::RSP::FwdState>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatDATFwdState(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingFwdState<Keys::DAT::FwdState>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    template<Key key>
+    inline std::string DecodingFormatter<config>::_FormatDecodingRespErr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        uint64_t intRespErr;
+        if (!this->ExtractIntegral(kv, key, &intRespErr))
+            return std::string();
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, RespErrs::ToEnum(intRespErr)->name, intRespErr));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatRSPRespErr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingRespErr<Keys::RSP::RespErr>(kv, fmt);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string DecodingFormatter<config>::FormatDATRespErr(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatDecodingRespErr<Keys::DAT::RespErr>(kv, fmt);
     }
 }
 
