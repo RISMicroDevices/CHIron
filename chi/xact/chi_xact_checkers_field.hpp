@@ -120,12 +120,12 @@ namespace CHI {
                         break;
 
                     case FieldConvention::B8:
-                        if (val != Size<8>::value)
+                        if (val != Sizes::B8)
                             return false;
                         break;
                     
                     case FieldConvention::B64:
-                        if (val != Size<64>::value)
+                        if (val != Sizes::B64)
                             return false;
                         break;
                     
@@ -213,10 +213,10 @@ namespace /*CHI::*/Xact {
         CHECK_REQ   (Addr           , ADDR          );
         CHECK_REQ   (NS             , NS            );
         CHECK_REQ   (Size           , SIZE          );
-        CHECK_REQ_EX(Allocate       , MemAttr::ExtractAllocate(reqFlit.MemAttr()) != 0  , MEMATTR_ALLOCATE  );
-        CHECK_REQ_EX(Cacheable      , MemAttr::ExtractCacheable(reqFlit.MemAttr()) != 0 , MEMATTR_CACHEABLE );
-        CHECK_REQ_EX(Device         , MemAttr::ExtractDevice(reqFlit.MemAttr()) != 0    , MEMATTR_DEVICE    );
-        CHECK_REQ_EX(EWA            , MemAttr::ExtractEWA(reqFlit.MemAttr()) != 0       , MEMATTR_EWA       );
+        CHECK_REQ_EX(Allocate       , MemAttrs::ExtractAllocate(reqFlit.MemAttr()) != 0  , MEMATTR_ALLOCATE  );
+        CHECK_REQ_EX(Cacheable      , MemAttrs::ExtractCacheable(reqFlit.MemAttr()) != 0 , MEMATTR_CACHEABLE );
+        CHECK_REQ_EX(Device         , MemAttrs::ExtractDevice(reqFlit.MemAttr()) != 0    , MEMATTR_DEVICE    );
+        CHECK_REQ_EX(EWA            , MemAttrs::ExtractEWA(reqFlit.MemAttr()) != 0       , MEMATTR_EWA       );
         CHECK_REQ   (SnpAttr        , SNPATTR       );
 #ifdef CHI_ISSUE_EB_ENABLE
         CHECK_REQ   (DoDWT          , DODWT         );
