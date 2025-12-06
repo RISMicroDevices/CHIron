@@ -2400,13 +2400,13 @@ namespace /*CHI::*/Expresso::Flit {
     template<FlitConfigurationConcept config>
     inline std::string DecodingFormatter<config>::FormatRSPResp(const KeyValueMap& kv, const format_func& fmt) const
     {
-        return _FormatDecodingRSP<Keys::RSP::Resp>(kv, fmt);
+        return _FormatDecodingResp<Keys::RSP::Resp>(kv, fmt);
     }
 
     template<FlitConfigurationConcept config>
     inline std::string DecodingFormatter<config>::FormatDATResp(const KeyValueMap& kv, const format_func& fmt) const
     {
-        return _FormatDecodingDAT<Keys::DAT::Resp>(kv, fmt);
+        return _FormatDecodingResp<Keys::DAT::Resp>(kv, fmt);
     }
 
     template<FlitConfigurationConcept config>
