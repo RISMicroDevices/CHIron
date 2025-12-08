@@ -14,7 +14,7 @@ TCPtInitial* TCPtInitial::ForkREQ(std::string title, Flits::REQ<config>::opcode_
     forked->req.SrcID() = 4; // from #4 RN-F
     forked->req.TxnID() = 1;
     forked->req.Opcode() = opcode;
-    forked->req.Size() = Size<64>::value;
+    forked->req.Size() = Sizes::B64;
     forked->req.AllowRetry() = 1;
     forked->req.Addr() = addr;
 
