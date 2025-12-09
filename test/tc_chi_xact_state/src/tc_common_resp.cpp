@@ -18,7 +18,7 @@ TCPtResp* TCPtResp::ForkREQ(std::string title, Flits::REQ<config>::opcode_t opco
     forked->req.SrcID() = 4; // from #4 RN-F
     forked->req.TxnID() = 2;
     forked->req.Opcode() = opcode;
-    forked->req.Size() = Size<64>::value;
+    forked->req.Size() = Sizes::B64;
     forked->req.AllowRetry() = 1;
     forked->req.Addr() = 0;
     forked->req.ExpCompAck() = 1;
@@ -73,7 +73,7 @@ Flits::RSP<config> TCPtResp::GenFlitRXRSP() const noexcept
     rxrsp.TgtID() = 4; // to #4 HN-F
     rxrsp.SrcID() = 2; // from #2 HN-F
     rxrsp.TxnID() = 2;
-    rxrsp.RespErr() = RespErr::OK;
+    rxrsp.RespErr() = RespErrs::OK;
     return rxrsp;
 }
 
@@ -84,7 +84,7 @@ Flits::DAT<config> TCPtResp::GenFlitRXDAT() const noexcept
     rxdat.SrcID() = 2; // from #2 HN-F
     rxdat.TxnID() = 2;
     rxdat.HomeNID() = 2;
-    rxdat.RespErr() = RespErr::OK;
+    rxdat.RespErr() = RespErrs::OK;
     rxdat.BE() = 0xFFFFFFFFU;
     return rxdat;
 }
@@ -95,7 +95,7 @@ Flits::RSP<config> TCPtResp::GenFlitTXRSP() const noexcept
     txrsp.TgtID() = 2; // to #2 HN-F
     txrsp.SrcID() = 4; // from #4 RN-F
     txrsp.TxnID() = 2;
-    txrsp.RespErr() = RespErr::OK;
+    txrsp.RespErr() = RespErrs::OK;
     return txrsp;
 }
 
@@ -105,7 +105,7 @@ Flits::DAT<config> TCPtResp::GenFlitTXDAT() const noexcept
     txdat.TgtID() = 2; // to #2 HN-F
     txdat.SrcID() = 4; // from #4 RN-F
     txdat.TxnID() = 2;
-    txdat.RespErr() = RespErr::OK;
+    txdat.RespErr() = RespErrs::OK;
     return txdat;
 }
 
@@ -117,7 +117,7 @@ Flits::DAT<config> TCPtResp::GenDCTFlitTXDAT() const noexcept
     txdat.TxnID() = 0;
     txdat.DBID() = 2;
     txdat.HomeNID() = 2; // #2 HN-F
-    txdat.RespErr() = RespErr::OK;
+    txdat.RespErr() = RespErrs::OK;
     return txdat;
 }
 
@@ -205,7 +205,7 @@ Flits::DAT<config> TCPtResp::GenWriteDataCancel() const noexcept
     return txdat;
 }
 
-Flits::RSP<config> TCPtResp::GenFlitSnpResp(Resp::type resp) const noexcept
+Flits::RSP<config> TCPtResp::GenFlitSnpResp(Resp resp) const noexcept
 {
     Flits::RSP<config> txrsp = GenFlitTXRSP();
     txrsp.Opcode() = Opcodes::RSP::SnpResp;
@@ -213,7 +213,7 @@ Flits::RSP<config> TCPtResp::GenFlitSnpResp(Resp::type resp) const noexcept
     return txrsp;
 }
 
-Flits::DAT<config> TCPtResp::GenFlitSnpRespData(Resp::type resp) const noexcept
+Flits::DAT<config> TCPtResp::GenFlitSnpRespData(Resp resp) const noexcept
 {
     Flits::DAT<config> txdat = GenFlitTXDAT();
     txdat.Opcode() = Opcodes::DAT::SnpRespData;
@@ -221,7 +221,7 @@ Flits::DAT<config> TCPtResp::GenFlitSnpRespData(Resp::type resp) const noexcept
     return txdat;
 }
 
-Flits::DAT<config> TCPtResp::GenFlitSnpRespDataPtl(Resp::type resp) const noexcept
+Flits::DAT<config> TCPtResp::GenFlitSnpRespDataPtl(Resp resp) const noexcept
 {
     Flits::DAT<config> txdat = GenFlitTXDAT();
     txdat.Opcode() = Opcodes::DAT::SnpRespDataPtl;
@@ -229,7 +229,7 @@ Flits::DAT<config> TCPtResp::GenFlitSnpRespDataPtl(Resp::type resp) const noexce
     return txdat;
 }
 
-Flits::RSP<config> TCPtResp::GenFlitSnpRespFwded(Resp::type resp) const noexcept
+Flits::RSP<config> TCPtResp::GenFlitSnpRespFwded(Resp resp) const noexcept
 {
     Flits::RSP<config> txrsp = GenFlitTXRSP();
     txrsp.Opcode() = Opcodes::RSP::SnpRespFwded;
@@ -237,7 +237,7 @@ Flits::RSP<config> TCPtResp::GenFlitSnpRespFwded(Resp::type resp) const noexcept
     return txrsp;
 }
 
-Flits::DAT<config> TCPtResp::GenFlitSnpRespDataFwded(Resp::type resp) const noexcept
+Flits::DAT<config> TCPtResp::GenFlitSnpRespDataFwded(Resp resp) const noexcept
 {
     Flits::DAT<config> txdat = GenFlitTXDAT();
     txdat.Opcode() = Opcodes::DAT::SnpRespDataFwded;
@@ -245,7 +245,7 @@ Flits::DAT<config> TCPtResp::GenFlitSnpRespDataFwded(Resp::type resp) const noex
     return txdat;
 }
 
-Flits::DAT<config> TCPtResp::GenDCTFlitCompData(Resp::type resp) const noexcept
+Flits::DAT<config> TCPtResp::GenDCTFlitCompData(Resp resp) const noexcept
 {
     Flits::DAT<config> txdat = GenDCTFlitTXDAT();
     txdat.Opcode() = Opcodes::DAT::CompData;
@@ -559,7 +559,7 @@ TCPtResp* TCPtResp::ForkInstantCompDBIDResp(std::string title) noexcept
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkInstantComp(std::string title, Resp::type resp) noexcept
+TCPtResp* TCPtResp::ForkInstantComp(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
         std::cout << "[  --] " << title << "\n";
@@ -586,7 +586,7 @@ TCPtResp* TCPtResp::ForkInstantComp(std::string title, Resp::type resp) noexcept
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkInstantCompAndDBIDResp(std::string title, Resp::type resp) noexcept
+TCPtResp* TCPtResp::ForkInstantCompAndDBIDResp(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
         std::cout << "[  --] " << title << "\n";
@@ -713,7 +713,7 @@ TCPtResp* TCPtResp::ForkWriteDataCancel(std::string title) noexcept
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkSnpResp(std::string title, Resp::type resp) noexcept
+TCPtResp* TCPtResp::ForkSnpResp(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
         std::cout << "[  --] " << title << "\n";
@@ -728,7 +728,7 @@ TCPtResp* TCPtResp::ForkSnpResp(std::string title, Resp::type resp) noexcept
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkSnpRespData(std::string title, Resp::type resp) noexcept
+TCPtResp* TCPtResp::ForkSnpRespData(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
         std::cout << "[  --] " << title << "\n";
@@ -743,7 +743,7 @@ TCPtResp* TCPtResp::ForkSnpRespData(std::string title, Resp::type resp) noexcept
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkSnpRespDataPtl(std::string title, Resp::type resp) noexcept
+TCPtResp* TCPtResp::ForkSnpRespDataPtl(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
         std::cout << "[  --] " << title << "\n";
@@ -758,7 +758,7 @@ TCPtResp* TCPtResp::ForkSnpRespDataPtl(std::string title, Resp::type resp) noexc
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkSnpRespFwded(std::string title, Resp::type resp, bool ext) noexcept
+TCPtResp* TCPtResp::ForkSnpRespFwded(std::string title, Resp resp, bool ext) noexcept
 {
     if (!title.empty())
         std::cout << "[  --] " << title << (ext ? "" : "\n");
@@ -773,7 +773,7 @@ TCPtResp* TCPtResp::ForkSnpRespFwded(std::string title, Resp::type resp, bool ex
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkSnpRespDataFwded(std::string title, Resp::type resp, bool ext) noexcept
+TCPtResp* TCPtResp::ForkSnpRespDataFwded(std::string title, Resp resp, bool ext) noexcept
 {
     if (!title.empty())
         std::cout << "[  --] " << title << (ext ? "" : "\n");
@@ -788,7 +788,7 @@ TCPtResp* TCPtResp::ForkSnpRespDataFwded(std::string title, Resp::type resp, boo
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkDCTCompData(std::string title, Resp::type resp, bool ext) noexcept
+TCPtResp* TCPtResp::ForkDCTCompData(std::string title, Resp resp, bool ext) noexcept
 {
     if (!title.empty())
         std::cout << "[  --] " << title << (ext ? "" : "\n");
@@ -803,7 +803,7 @@ TCPtResp* TCPtResp::ForkDCTCompData(std::string title, Resp::type resp, bool ext
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkInstantSnpRespFwded(std::string title, Resp::type resp, Xact::CacheState state) noexcept
+TCPtResp* TCPtResp::ForkInstantSnpRespFwded(std::string title, Resp resp, Xact::CacheState state) noexcept
 {
     TCPtResp* forked = ForkSnpRespFwded(title, resp, true);
 
@@ -872,7 +872,7 @@ TCPtResp* TCPtResp::ForkInstantSnpRespFwded(std::string title, Resp::type resp, 
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkInstantSnpRespDataFwded(std::string title, Resp::type resp, Xact::CacheState state) noexcept
+TCPtResp* TCPtResp::ForkInstantSnpRespDataFwded(std::string title, Resp resp, Xact::CacheState state) noexcept
 {
     TCPtResp* forked = ForkSnpRespDataFwded(title, resp, true);
 
@@ -989,7 +989,7 @@ TCPtResp* TCPtResp::ForkInstantSnpRespDataFwded(std::string title, Resp::type re
     return forked;
 }
 
-TCPtResp* TCPtResp::ForkInstantDCTCompData(std::string title, Resp::type resp, Xact::CacheState state, bool checkState) noexcept
+TCPtResp* TCPtResp::ForkInstantDCTCompData(std::string title, Resp resp, Xact::CacheState state, bool checkState) noexcept
 {
     TCPtResp* forked = ForkDCTCompData(title, resp, true);
 
@@ -1106,7 +1106,7 @@ TCPtResp* TCPtResp::ForkInstantDCTCompData(std::string title, Resp::type resp, X
     return forked;
 }
 
-TCPtResp* TCPtResp::LeafSnpRespFwded(std::string title, Resp::type resp, Xact::CacheState state, bool accept) noexcept
+TCPtResp* TCPtResp::LeafSnpRespFwded(std::string title, Resp resp, Xact::CacheState state, bool accept) noexcept
 {
     //
     if (totalCount)
@@ -1222,7 +1222,7 @@ TCPtResp* TCPtResp::LeafSnpRespFwded(std::string title, Resp::type resp, Xact::C
     return this;
 }
 
-TCPtResp* TCPtResp::LeafSnpRespDataFwded(std::string title, Resp::type resp, Xact::CacheState state, bool accept) noexcept
+TCPtResp* TCPtResp::LeafSnpRespDataFwded(std::string title, Resp resp, Xact::CacheState state, bool accept) noexcept
 {
     //
     if (totalCount)
@@ -1396,7 +1396,7 @@ TCPtResp* TCPtResp::LeafSnpRespDataFwded(std::string title, Resp::type resp, Xac
     return this;
 }
 
-TCPtResp* TCPtResp::LeafDCTCompData(std::string title, Resp::type resp, Xact::CacheState state, bool accept, bool doubleReject) noexcept
+TCPtResp* TCPtResp::LeafDCTCompData(std::string title, Resp resp, Xact::CacheState state, bool accept, bool doubleReject) noexcept
 {
     //
     if (totalCount)
@@ -1589,12 +1589,12 @@ TCPtResp* TCPtResp::LeafDCTCompData(std::string title, Resp::type resp, Xact::Ca
     return this;
 }
 
-TCPtResp* TCPtResp::Leaf(std::string title, Resp::type resp, Xact::CacheState state, bool accept, bool reserve, bool checkState) noexcept
+TCPtResp* TCPtResp::Leaf(std::string title, Resp resp, Xact::CacheState state, bool accept, bool reserve, bool checkState) noexcept
 {
-    return LeafFwd(title, resp, FwdState::I, state, accept, false, reserve, checkState);
+    return LeafFwd(title, resp, FwdStates::I, state, accept, false, reserve, checkState);
 }
 
-TCPtResp* TCPtResp::LeafFwd(std::string title, Resp::type resp, FwdState::type fwdState, Xact::CacheState state, bool accept, bool doubleReject, bool reserve, bool checkState) noexcept
+TCPtResp* TCPtResp::LeafFwd(std::string title, Resp resp, FwdState fwdState, Xact::CacheState state, bool accept, bool doubleReject, bool reserve, bool checkState) noexcept
 {
     //
     if (totalCount)
@@ -1789,12 +1789,12 @@ TCPtResp* TCPtResp::LeafFwd(std::string title, Resp::type resp, FwdState::type f
     }
 }
 
-TCPtResp* TCPtResp::LeafRepeat(std::string title, Resp::type resp, Xact::CacheState state, bool accept, bool reserve, bool checkState) noexcept
+TCPtResp* TCPtResp::LeafRepeat(std::string title, Resp resp, Xact::CacheState state, bool accept, bool reserve, bool checkState) noexcept
 {
-    return LeafFwdRepeat(title, resp, FwdState::I, state , accept, false, reserve, checkState);
+    return LeafFwdRepeat(title, resp, FwdStates::I, state , accept, false, reserve, checkState);
 }
 
-TCPtResp* TCPtResp::LeafFwdRepeat(std::string title, Resp::type resp, FwdState::type fwdState, Xact::CacheState state, bool accept, bool doubleReject, bool reserve, bool checkState) noexcept
+TCPtResp* TCPtResp::LeafFwdRepeat(std::string title, Resp resp, FwdState fwdState, Xact::CacheState state, bool accept, bool doubleReject, bool reserve, bool checkState) noexcept
 {
     //
     if (totalCount)
@@ -2038,47 +2038,47 @@ TCPtResp* TCPtResp::LeafFwdRepeat(std::string title, Resp::type resp, FwdState::
     }
 }
 
-TCPtResp* TCPtResp::LeafNoCheck(std::string title, Resp::type resp, bool accept, bool reserve) noexcept
+TCPtResp* TCPtResp::LeafNoCheck(std::string title, Resp resp, bool accept, bool reserve) noexcept
 {
     return Leaf(title, resp, Xact::CacheStates::None, accept, reserve, false);
 }
 
-TCPtResp* TCPtResp::LeafRepeatNoCheck(std::string title, Resp::type resp, bool accept, bool reserve) noexcept
+TCPtResp* TCPtResp::LeafRepeatNoCheck(std::string title, Resp resp, bool accept, bool reserve) noexcept
 {
     return LeafRepeat(title, resp, Xact::CacheStates::None, accept, reserve, false);
 }
 
-TCPtResp* TCPtResp::LeafReserve(std::string title, Resp::type resp, Xact::CacheState state, bool checkState) noexcept
+TCPtResp* TCPtResp::LeafReserve(std::string title, Resp resp, Xact::CacheState state, bool checkState) noexcept
 {
     return Leaf(title, resp, state, true, true, checkState);
 }
 
-TCPtResp* TCPtResp::LeafRepeatReserve(std::string title, Resp::type resp, Xact::CacheState state, bool checkState) noexcept
+TCPtResp* TCPtResp::LeafRepeatReserve(std::string title, Resp resp, Xact::CacheState state, bool checkState) noexcept
 {
     return LeafRepeat(title, resp, state, true, true, checkState);
 }
 
-TCPtResp* TCPtResp::LeafFwdReserve(std::string title, Resp::type resp, FwdState::type fwdState, Xact::CacheState state, bool checkState) noexcept
+TCPtResp* TCPtResp::LeafFwdReserve(std::string title, Resp resp, FwdState fwdState, Xact::CacheState state, bool checkState) noexcept
 {
     return LeafFwd(title, resp, fwdState, state, true, false, true, checkState);
 }
 
-TCPtResp* TCPtResp::LeafFwdRepeatReserve(std::string title, Resp::type resp, FwdState::type fwdState, Xact::CacheState state, bool checkState) noexcept
+TCPtResp* TCPtResp::LeafFwdRepeatReserve(std::string title, Resp resp, FwdState fwdState, Xact::CacheState state, bool checkState) noexcept
 {
     return LeafFwdRepeat(title, resp, fwdState, state, true, true, checkState);
 }
 
-TCPtResp* TCPtResp::LeafReserveNoCheck(std::string title, Resp::type resp) noexcept
+TCPtResp* TCPtResp::LeafReserveNoCheck(std::string title, Resp resp) noexcept
 {
     return Leaf(title, resp, Xact::CacheStates::None, true, true, false);
 }
 
-TCPtResp* TCPtResp::LeafRepeatReserveNoCheck(std::string title, Resp::type resp) noexcept
+TCPtResp* TCPtResp::LeafRepeatReserveNoCheck(std::string title, Resp resp) noexcept
 {
     return LeafRepeat(title, resp, Xact::CacheStates::None, true, true, false);
 }
 
-TCPtResp* TCPtResp::LeafAndForkSnpRespFwded(std::string title, Resp::type resp, Xact::CacheState state, Resp::type nextResp) noexcept
+TCPtResp* TCPtResp::LeafAndForkSnpRespFwded(std::string title, Resp resp, Xact::CacheState state, Resp nextResp) noexcept
 {
     TCPtResp* forked = Leaf(title, resp, state, true, true);
 
@@ -2091,7 +2091,7 @@ TCPtResp* TCPtResp::LeafAndForkSnpRespFwded(std::string title, Resp::type resp, 
     return forked;
 }
 
-TCPtResp* TCPtResp::LeafAndForkSnpRespDataFwded(std::string title, Resp::type resp, Xact::CacheState state, Resp::type nextResp) noexcept
+TCPtResp* TCPtResp::LeafAndForkSnpRespDataFwded(std::string title, Resp resp, Xact::CacheState state, Resp nextResp) noexcept
 {
     TCPtResp* forked = Leaf(title, resp, state, true, true);
 
@@ -2104,7 +2104,7 @@ TCPtResp* TCPtResp::LeafAndForkSnpRespDataFwded(std::string title, Resp::type re
     return forked;
 }
 
-TCPtResp* TCPtResp::LeafAndForkDCTCompData(std::string title, Resp::type resp, Xact::CacheState state, Resp::type nextResp) noexcept
+TCPtResp* TCPtResp::LeafAndForkDCTCompData(std::string title, Resp resp, Xact::CacheState state, Resp nextResp) noexcept
 {
     TCPtResp* forked = Leaf(title, resp, state, true, true);
 
@@ -2117,7 +2117,7 @@ TCPtResp* TCPtResp::LeafAndForkDCTCompData(std::string title, Resp::type resp, X
     return forked;
 }
 
-TCPtResp* TCPtResp::LeafRepeatAndForkSnpRespFwded(std::string title, Resp::type resp, Xact::CacheState state, Resp::type nextResp) noexcept
+TCPtResp* TCPtResp::LeafRepeatAndForkSnpRespFwded(std::string title, Resp resp, Xact::CacheState state, Resp nextResp) noexcept
 {
     TCPtResp* forked = LeafRepeat(title, resp, state, true, true);
 
@@ -2130,7 +2130,7 @@ TCPtResp* TCPtResp::LeafRepeatAndForkSnpRespFwded(std::string title, Resp::type 
     return forked;
 }
 
-TCPtResp* TCPtResp::LeafRepeatAndForkSnpRespDataFwded(std::string title, Resp::type resp, Xact::CacheState state, Resp::type nextResp) noexcept
+TCPtResp* TCPtResp::LeafRepeatAndForkSnpRespDataFwded(std::string title, Resp resp, Xact::CacheState state, Resp nextResp) noexcept
 {
     TCPtResp* forked = LeafRepeat(title, resp, state, true, true);
 
@@ -2143,7 +2143,7 @@ TCPtResp* TCPtResp::LeafRepeatAndForkSnpRespDataFwded(std::string title, Resp::t
     return forked;
 }
 
-TCPtResp* TCPtResp::LeafRepeatAndForkDCTCompData(std::string title, Resp::type resp, Xact::CacheState state, Resp::type nextResp) noexcept
+TCPtResp* TCPtResp::LeafRepeatAndForkDCTCompData(std::string title, Resp resp, Xact::CacheState state, Resp nextResp) noexcept
 {
     TCPtResp* forked = LeafRepeat(title, resp, state, true, true);
 
