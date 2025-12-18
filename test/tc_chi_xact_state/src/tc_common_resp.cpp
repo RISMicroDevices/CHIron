@@ -6,7 +6,7 @@
 TCPtResp* TCPtResp::ForkREQ(std::string title, Flits::REQ<config>::opcode_t opcode) noexcept
 {
     if (!title.empty())
-        std::cout << "[ >> ] " << title << "\n";
+        std::cout << "[  >> ] " << title << "\n";
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -38,7 +38,7 @@ TCPtResp* TCPtResp::ForkREQ(std::string title, Flits::REQ<config>::opcode_t opco
 TCPtResp* TCPtResp::ForkSNP(std::string title, Flits::SNP<config>::opcode_t opcode, bool retToSrc, bool doNotGoToSD) noexcept
 {
     if (!title.empty())
-        std::cout << "[ >> ] " << title << "\n";
+        std::cout << "[  >> ] " << title << "\n";
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -256,7 +256,7 @@ Flits::DAT<config> TCPtResp::GenDCTFlitCompData(Resp resp) const noexcept
 TCPtResp* TCPtResp::TestAndForkInitial(std::string title, Xact::CacheState state) noexcept
 {
     if (!title.empty())
-        std::cout << "[ ---] " << title << "\n";
+        std::cout << "[  ---] " << title << "\n";
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -300,7 +300,7 @@ TCPtResp* TCPtResp::TestAndForkInitial(std::string title, Xact::CacheState state
 TCPtResp* TCPtResp::TestAndForkTransfer(std::string title, Xact::CacheState initial, Xact::CacheState intermediate) noexcept
 {
     if (!title.empty())
-        std::cout << "[ ---] " << title;
+        std::cout << "[  ---] " << title;
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -367,7 +367,7 @@ TCPtResp* TCPtResp::TestAndForkTransfer(std::string title, Xact::CacheState init
 TCPtResp* TCPtResp::TestAndLeafTransfer(std::string title, Xact::CacheState initial, Xact::CacheState intermediate, bool accept) noexcept
 {
     if (!title.empty())
-        std::cout << "[ ---] " << title;
+        std::cout << "[  ---] " << title;
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -445,7 +445,7 @@ TCPtResp* TCPtResp::TestAndLeafTransfer(std::string title, Xact::CacheState init
 TCPtResp* TCPtResp::ForkCompData(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -460,7 +460,7 @@ TCPtResp* TCPtResp::ForkCompData(std::string title) noexcept
 TCPtResp* TCPtResp::ForkDataSepResp(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -475,7 +475,7 @@ TCPtResp* TCPtResp::ForkDataSepResp(std::string title) noexcept
 TCPtResp* TCPtResp::ForkComp(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -490,7 +490,7 @@ TCPtResp* TCPtResp::ForkComp(std::string title) noexcept
 TCPtResp* TCPtResp::ForkCompStashDone(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -505,7 +505,7 @@ TCPtResp* TCPtResp::ForkCompStashDone(std::string title) noexcept
 TCPtResp* TCPtResp::ForkCompPersist(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -520,7 +520,7 @@ TCPtResp* TCPtResp::ForkCompPersist(std::string title) noexcept
 TCPtResp* TCPtResp::ForkCompDBIDResp(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -535,7 +535,7 @@ TCPtResp* TCPtResp::ForkCompDBIDResp(std::string title) noexcept
 TCPtResp* TCPtResp::ForkInstantCompDBIDResp(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -562,7 +562,7 @@ TCPtResp* TCPtResp::ForkInstantCompDBIDResp(std::string title) noexcept
 TCPtResp* TCPtResp::ForkInstantComp(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -589,7 +589,7 @@ TCPtResp* TCPtResp::ForkInstantComp(std::string title, Resp resp) noexcept
 TCPtResp* TCPtResp::ForkInstantCompAndDBIDResp(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -629,7 +629,7 @@ TCPtResp* TCPtResp::ForkInstantCompAndDBIDResp(std::string title, Resp resp) noe
 TCPtResp* TCPtResp::ForkInstantDBIDResp(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -656,7 +656,7 @@ TCPtResp* TCPtResp::ForkInstantDBIDResp(std::string title) noexcept
 TCPtResp* TCPtResp::ForkCopyBackWrData(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -671,7 +671,7 @@ TCPtResp* TCPtResp::ForkCopyBackWrData(std::string title) noexcept
 TCPtResp* TCPtResp::ForkNonCopyBackWrData(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -686,7 +686,7 @@ TCPtResp* TCPtResp::ForkNonCopyBackWrData(std::string title) noexcept
 TCPtResp* TCPtResp::ForkNCBWrDataCompAck(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -701,7 +701,7 @@ TCPtResp* TCPtResp::ForkNCBWrDataCompAck(std::string title) noexcept
 TCPtResp* TCPtResp::ForkWriteDataCancel(std::string title) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
     
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -716,7 +716,7 @@ TCPtResp* TCPtResp::ForkWriteDataCancel(std::string title) noexcept
 TCPtResp* TCPtResp::ForkSnpResp(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -731,7 +731,7 @@ TCPtResp* TCPtResp::ForkSnpResp(std::string title, Resp resp) noexcept
 TCPtResp* TCPtResp::ForkSnpRespData(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -746,7 +746,7 @@ TCPtResp* TCPtResp::ForkSnpRespData(std::string title, Resp resp) noexcept
 TCPtResp* TCPtResp::ForkSnpRespDataPtl(std::string title, Resp resp) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << "\n";
+        std::cout << "[   --] " << title << "\n";
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -761,7 +761,7 @@ TCPtResp* TCPtResp::ForkSnpRespDataPtl(std::string title, Resp resp) noexcept
 TCPtResp* TCPtResp::ForkSnpRespFwded(std::string title, Resp resp, bool ext) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << (ext ? "" : "\n");
+        std::cout << "[   --] " << title << (ext ? "" : "\n");
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -776,7 +776,7 @@ TCPtResp* TCPtResp::ForkSnpRespFwded(std::string title, Resp resp, bool ext) noe
 TCPtResp* TCPtResp::ForkSnpRespDataFwded(std::string title, Resp resp, bool ext) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << (ext ? "" : "\n");
+        std::cout << "[   --] " << title << (ext ? "" : "\n");
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -791,7 +791,7 @@ TCPtResp* TCPtResp::ForkSnpRespDataFwded(std::string title, Resp resp, bool ext)
 TCPtResp* TCPtResp::ForkDCTCompData(std::string title, Resp resp, bool ext) noexcept
 {
     if (!title.empty())
-        std::cout << "[  --] " << title << (ext ? "" : "\n");
+        std::cout << "[   --] " << title << (ext ? "" : "\n");
 
     //
     TCPtResp* forked = new TCPtResp(*this);
@@ -1115,7 +1115,7 @@ TCPtResp* TCPtResp::LeafSnpRespFwded(std::string title, Resp resp, Xact::CacheSt
     if (!title.empty())
         std::cout 
             << StringAppender("[")
-                .NextWidth(4).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
+                .NextWidth(5).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
                 .Append("] ")
                 .ToString() 
             << title;
@@ -1231,7 +1231,7 @@ TCPtResp* TCPtResp::LeafSnpRespDataFwded(std::string title, Resp resp, Xact::Cac
     if (!title.empty())
         std::cout 
             << StringAppender("[")
-                .NextWidth(4).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
+                .NextWidth(5).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
                 .Append("] ")
                 .ToString() 
             << title;
@@ -1405,7 +1405,7 @@ TCPtResp* TCPtResp::LeafDCTCompData(std::string title, Resp resp, Xact::CacheSta
     if (!title.empty())
         std::cout 
             << StringAppender("[")
-                .NextWidth(4).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
+                .NextWidth(5).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
                 .Append("] ")
                 .ToString() 
             << title;
@@ -1603,7 +1603,7 @@ TCPtResp* TCPtResp::LeafFwd(std::string title, Resp resp, FwdState fwdState, Xac
     if (!title.empty())
         std::cout 
             << StringAppender("[")
-                .NextWidth(4).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
+                .NextWidth(5).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
                 .Append("] ")
                 .ToString() 
             << title;
@@ -1803,7 +1803,7 @@ TCPtResp* TCPtResp::LeafFwdRepeat(std::string title, Resp resp, FwdState fwdStat
     if (!title.empty())
         std::cout 
             << StringAppender("[")
-                .NextWidth(4).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
+                .NextWidth(5).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
                 .Append("] ")
                 .ToString() 
             << title;

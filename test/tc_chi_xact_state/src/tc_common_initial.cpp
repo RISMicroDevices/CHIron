@@ -5,7 +5,7 @@
 TCPtInitial* TCPtInitial::ForkREQ(std::string title, Flits::REQ<config>::opcode_t opcode) noexcept
 {
     if (!title.empty())
-        std::cout << "[ >> ] " << title << "\n";
+        std::cout << "[  >> ] " << title << "\n";
 
     //
     TCPtInitial* forked = new TCPtInitial(*this);
@@ -39,7 +39,7 @@ TCPtInitial* TCPtInitial::ForkSilentTransitions(
 ) noexcept
 {
     if (!title.empty())
-        std::cout << "[----] " << title << "\n";
+        std::cout << "[-----] " << title << "\n";
 
     //
     TCPtInitial* forked = new TCPtInitial(*this);
@@ -58,7 +58,7 @@ TCPtInitial* TCPtInitial::Leaf(std::string title, Xact::CacheState state, bool a
     if (!title.empty())
         std::cout 
             << StringAppender("[")
-                .NextWidth(4).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
+                .NextWidth(5).Fill(' ').Left().Append(totalCount ? *totalCount : 0)
                 .Append("] ")
                 .ToString() 
             << title;
