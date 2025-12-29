@@ -52,9 +52,9 @@ namespace CHI {
         using XactScopeEnum = const XactScopeEnumBack*;
 
         namespace XactScope {
-            inline constexpr XactScopeEnumBack  Requester   ("Requester",   1);
-            inline constexpr XactScopeEnumBack  Home        ("Home",        2);
-            inline constexpr XactScopeEnumBack  Subordinate ("Subordinate", 3);
+            inline constexpr XactScopeEnumBack  Requester   ("Requester",   0);
+            inline constexpr XactScopeEnumBack  Home        ("Home",        1);
+            inline constexpr XactScopeEnumBack  Subordinate ("Subordinate", 2);
         }
 
 
@@ -580,6 +580,8 @@ namespace CHI {
             bool            IsFromSubordinate(const Topology& topo) const noexcept;
 
         public:
+            bool            IsFrom(const Topology& topo, XactScopeEnum from) const noexcept;
+            bool            IsTo(const Topology& topo, XactScopeEnum to) const noexcept;
             bool            IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept;
             bool            IsFromRequesterToHome(const Topology& topo) const noexcept;
             bool            IsFromRequesterToSubordinate(const Topology& topo) const noexcept;
@@ -587,6 +589,12 @@ namespace CHI {
             bool            IsFromHomeToSubordinate(const Topology& topo) const noexcept;
             bool            IsFromSubordinateToRequester(const Topology& topo) const noexcept;
             bool            IsFromSubordinateToHome(const Topology& topo) const noexcept;
+
+        public:
+            bool            IsTXREQ(const Topology& topo, XactScopeEnum scope) const noexcept;
+            bool            IsRXREQ(const Topology& topo, XactScopeEnum scope) const noexcept;
+            bool            IsTXSNP(const Topology& topo, XactScopeEnum scope) const noexcept;
+            bool            IsRXSNP(const Topology& topo, XactScopeEnum scope) const noexcept;
         };
 
         template<FlitConfigurationConcept       config,
@@ -638,6 +646,8 @@ namespace CHI {
 #endif
 
         public:
+            bool            IsFrom(const Topology& topo, XactScopeEnum from) const noexcept;
+            bool            IsTo(const Topology& topo, XactScopeEnum to) const noexcept;
             bool            IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept;
             bool            IsFromRequesterToHome(const Topology& topo) const noexcept;
             bool            IsFromRequesterToSubordinate(const Topology& topo) const noexcept;
@@ -645,6 +655,12 @@ namespace CHI {
             bool            IsFromHomeToSubordinate(const Topology& topo) const noexcept;
             bool            IsFromSubordinateToRequester(const Topology& topo) const noexcept;
             bool            IsFromSubordinateToHome(const Topology& topo) const noexcept;
+
+        public:
+            bool            IsTXRSP(const Topology& topo, XactScopeEnum scope) const noexcept;
+            bool            IsRXRSP(const Topology& topo, XactScopeEnum scope) const noexcept;
+            bool            IsTXDAT(const Topology& topo, XactScopeEnum scope) const noexcept;
+            bool            IsRXDAT(const Topology& topo, XactScopeEnum scope) const noexcept;
         };
     }
 /*
@@ -951,7 +967,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFrom(const Topology& topo, XactScopeEnum from) const noexcept
     {
         switch (from->value)
         {
@@ -971,6 +987,13 @@ namespace /*CHI::*/Xact {
                 return false;
         }
 
+        return true;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredRequestFlit<config, conn>::IsTo(const Topology& topo, XactScopeEnum to) const noexcept
+    {
         switch (to->value)
         {
             case XactScope::Requester:
@@ -990,6 +1013,13 @@ namespace /*CHI::*/Xact {
         }
 
         return true;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredRequestFlit<config, conn>::IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept
+    {
+        return IsFrom(topo, from) && IsTo(topo, to);
     }
 
     template<FlitConfigurationConcept       config,
@@ -1032,6 +1062,34 @@ namespace /*CHI::*/Xact {
     inline bool FiredRequestFlit<config, conn>::IsFromSubordinateToHome(const Topology& topo) const noexcept
     {
         return IsFromSubordinate(topo) && IsToHome(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredRequestFlit<config, conn>::IsTXREQ(const Topology& topo, XactScopeEnum scope) const noexcept
+    {
+        return IsREQ() && IsFrom(topo, scope);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredRequestFlit<config, conn>::IsRXREQ(const Topology& topo, XactScopeEnum scope) const noexcept
+    {
+        return IsREQ() && IsTo(topo, scope);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredRequestFlit<config, conn>::IsTXSNP(const Topology& topo, XactScopeEnum scope) const noexcept
+    {
+        return IsSNP() && IsFrom(topo, scope);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredRequestFlit<config, conn>::IsRXSNP(const Topology& topo, XactScopeEnum scope) const noexcept
+    {
+        return IsSNP() && IsTo(topo, scope);
     }
 }
 
@@ -1433,7 +1491,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFrom(const Topology& topo, XactScopeEnum from) const noexcept
     {
         switch (from->value)
         {
@@ -1453,6 +1511,13 @@ namespace /*CHI::*/Xact {
                 return false;
         }
 
+        return true;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredResponseFlit<config, conn>::IsTo(const Topology& topo, XactScopeEnum to) const noexcept
+    {
         switch (to->value)
         {
             case XactScope::Requester:
@@ -1472,6 +1537,13 @@ namespace /*CHI::*/Xact {
         }
 
         return true;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredResponseFlit<config, conn>::IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept
+    {
+        return IsFrom(topo, from) && IsTo(topo, to);
     }
 
     template<FlitConfigurationConcept       config,
@@ -1514,6 +1586,34 @@ namespace /*CHI::*/Xact {
     inline bool FiredResponseFlit<config, conn>::IsFromSubordinateToHome(const Topology& topo) const noexcept
     {
         return IsFromSubordinate(topo) && IsToHome(topo);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredResponseFlit<config, conn>::IsTXRSP(const Topology& topo, XactScopeEnum scope) const noexcept
+    {
+        return IsRSP() && IsFrom(topo, scope);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredResponseFlit<config, conn>::IsRXRSP(const Topology& topo, XactScopeEnum scope) const noexcept
+    {
+        return IsRSP() && IsTo(topo, scope);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredResponseFlit<config, conn>::IsTXDAT(const Topology& topo, XactScopeEnum scope) const noexcept
+    {
+        return IsDAT() && IsFrom(topo, scope);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool FiredResponseFlit<config, conn>::IsRXDAT(const Topology& topo, XactScopeEnum scope) const noexcept
+    {
+        return IsDAT() && IsTo(topo, scope);
     }
 }
 
