@@ -30,12 +30,39 @@ namespace CHI {
 
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        class GlobalCheckFieldMapping {
+        public:
+            bool enable = true;
+            struct {
+                bool                                        enable  = true;
+                RequestFieldMappingChecker<config, conn>    checker;
+            } REQ;
+            struct {
+                bool                                        enable  = true;
+                SnoopFieldMappingChecker<config, conn>      checker;
+            } SNP;
+            struct {
+                bool                                        enable  = true;
+                ResponseFieldMappingChecker<config, conn>   checker;
+            } RSP;
+            struct {
+                bool                                        enable  = true;
+                DataFieldMappingChecker<config, conn>       checker;
+            } DAT;
+
+        public:
+            XactDenialEnum  Check(const Flits::REQ<config, conn>&) const noexcept;
+            XactDenialEnum  Check(const Flits::SNP<config, conn>&) const noexcept;
+            XactDenialEnum  Check(const Flits::RSP<config, conn>&) const noexcept;
+            XactDenialEnum  Check(const Flits::DAT<config, conn>&) const noexcept;
+        };
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class Global {
         public:
-            RequestFieldMappingChecker<config, conn>    reqFieldMappingChecker;
-            SnoopFieldMappingChecker<config, conn>      snpFieldMappingChecker;
-            ResponseFieldMappingChecker<config, conn>   rspFieldMappingChecker;
-            DataFieldMappingChecker<config, conn>       datFieldMappingChecker;
+            std::shared_ptr<GlobalCheckFieldMapping<config, conn>>
+                CHECK_FIELD_MAPPING;
         };
 
         template<FlitConfigurationConcept       config,
@@ -803,6 +830,51 @@ namespace /*CHI::*/Xact::details {
 
 
 
+// Implementation of: class GlobalCheckFieldMapping
+namespace /*CHI::*/Xact {
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum GlobalCheckFieldMapping<config, conn>::Check(const Flits::REQ<config, conn>& reqFlit) const noexcept
+    {
+        if (!enable || !REQ.enable)
+            return XactDenial::ACCEPTED;
+
+        return REQ.checker.Check(reqFlit);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum GlobalCheckFieldMapping<config, conn>::Check(const Flits::SNP<config, conn>& snpFlit) const noexcept
+    {
+        if (!enable || !SNP.enable)
+            return XactDenial::ACCEPTED;
+
+        return SNP.checker.Check(snpFlit);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum GlobalCheckFieldMapping<config, conn>::Check(const Flits::RSP<config, conn>& rspFlit) const noexcept
+    {
+        if (!enable || !RSP.enable)
+            return XactDenial::ACCEPTED;
+
+        return RSP.checker.Check(rspFlit);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline XactDenialEnum GlobalCheckFieldMapping<config, conn>::Check(const Flits::DAT<config, conn>& datFlit) const noexcept
+    {
+        if (!enable || !DAT.enable)
+            return XactDenial::ACCEPTED;
+
+        return DAT.checker.Check(datFlit);
+    }
+}
+
+
 // Implementation of: class Xaction::SubsequenceKey
 namespace /*CHI::*/Xact {
     /*
@@ -1410,7 +1482,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+            XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
             if (denial != XactDenial::ACCEPTED)
                 return denial;
         }
@@ -1442,7 +1514,7 @@ namespace /*CHI::*/Xact {
         if (glbl)
         {
             RequestFieldMapping fields 
-                = glbl->reqFieldMappingChecker.table.Get(this->first.flit.req.Opcode());
+                = glbl->CHECK_FIELD_MAPPING->REQ.checker.table.Get(this->first.flit.req.Opcode());
 
             if (fields)
             {
@@ -1739,7 +1811,7 @@ namespace /*CHI::*/Xact {
 
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(firstFlit.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(firstFlit.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -1927,7 +1999,7 @@ namespace /*CHI::*/Xact {
 
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -1962,7 +2034,7 @@ namespace /*CHI::*/Xact {
 
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2050,7 +2122,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2105,7 +2177,7 @@ namespace /*CHI::*/Xact {
 
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(firstFlit.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(firstFlit.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -2252,7 +2324,7 @@ namespace /*CHI::*/Xact {
 
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2291,7 +2363,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2380,7 +2452,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2433,7 +2505,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(firstFlit.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(firstFlit.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -2555,7 +2627,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2582,7 +2654,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2610,7 +2682,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2674,7 +2746,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(firstFlit.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(firstFlit.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -2889,7 +2961,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2939,7 +3011,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2997,7 +3069,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3037,7 +3109,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3095,7 +3167,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -3117,7 +3189,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -3136,7 +3208,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -3195,7 +3267,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(firstFlit.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(firstFlit.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -3397,7 +3469,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3430,7 +3502,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3490,7 +3562,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3546,7 +3618,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -3721,7 +3793,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3766,7 +3838,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3814,7 +3886,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3873,7 +3945,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3911,7 +3983,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -3966,7 +4038,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -4086,7 +4158,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -4133,7 +4205,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -4203,7 +4275,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -4386,7 +4458,7 @@ namespace /*CHI::*/Xact {
                     //
                     if (glbl)
                     {
-                        XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                        XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                         if (denial != XactDenial::ACCEPTED)
                             return denial;
                     }
@@ -4420,7 +4492,7 @@ namespace /*CHI::*/Xact {
                     //
                     if (glbl)
                     {
-                        XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                        XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                         if (denial != XactDenial::ACCEPTED)
                             return denial;
                     }
@@ -4448,7 +4520,7 @@ namespace /*CHI::*/Xact {
                     //
                     if (glbl)
                     {
-                        XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                        XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                         if (denial != XactDenial::ACCEPTED)
                             return denial;
                     }
@@ -4487,7 +4559,7 @@ namespace /*CHI::*/Xact {
                     //
                     if (glbl)
                     {
-                        XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                        XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                         if (denial != XactDenial::ACCEPTED)
                             return denial;
                     }
@@ -4514,7 +4586,7 @@ namespace /*CHI::*/Xact {
                     //
                     if (glbl)
                     {
-                        XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                        XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                         if (denial != XactDenial::ACCEPTED)
                             return denial;
                     }
@@ -4541,7 +4613,7 @@ namespace /*CHI::*/Xact {
                     //
                     if (glbl)
                     {
-                        XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                        XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                         if (denial != XactDenial::ACCEPTED)
                             return denial;
                     }
@@ -4606,7 +4678,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -4731,7 +4803,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -4794,7 +4866,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -4848,7 +4920,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -5001,7 +5073,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -5043,7 +5115,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -5101,7 +5173,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -5152,7 +5224,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -5167,7 +5239,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -5221,7 +5293,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -5423,7 +5495,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -5561,7 +5633,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -5600,7 +5672,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -5627,7 +5699,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -5654,7 +5726,7 @@ namespace /*CHI::*/Xact {
                 //
                 if (glbl)
                 {
-                    XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                    XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                     if (denial != XactDenial::ACCEPTED)
                         return denial;
                 }
@@ -5718,7 +5790,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->reqFieldMappingChecker.Check(first.flit.req);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -5888,7 +5960,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -5933,7 +6005,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -5981,7 +6053,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -6038,7 +6110,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -6076,7 +6148,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -6135,7 +6207,7 @@ namespace /*CHI::*/Xact  {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->snpFieldMappingChecker.Check(first.flit.snp);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.snp);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -6278,7 +6350,7 @@ namespace /*CHI::*/Xact  {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -6337,7 +6409,7 @@ namespace /*CHI::*/Xact  {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -6388,7 +6460,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->snpFieldMappingChecker.Check(first.flit.snp);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.snp);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -6623,7 +6695,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -6799,7 +6871,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -6843,7 +6915,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->datFieldMappingChecker.Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -6889,7 +6961,7 @@ namespace /*CHI::*/Xact {
         //
         if (glbl)
         {
-            this->firstDenial = glbl->snpFieldMappingChecker.Check(first.flit.snp);
+            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.snp);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -6974,7 +7046,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -7037,7 +7109,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->snpFieldMappingChecker.Check(snpFlit.flit.snp);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(snpFlit.flit.snp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }

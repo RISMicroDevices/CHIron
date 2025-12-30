@@ -1642,7 +1642,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -2704,7 +2704,7 @@ namespace /*CHI::*/Xact {
             //
             if (glbl)
             {
-                XactDenialEnum denial = glbl->rspFieldMappingChecker.Check(rspFlit);
+                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
