@@ -57,12 +57,46 @@ namespace CHI {
             XactDenialEnum  Check(const Flits::DAT<config, conn>&) const noexcept;
         };
 
+        class GlobalSAMScope {
+        public:
+            /*
+            Whether enabling SAM-scope-interferenced Node ID checkings.
+            The Node ID consistency between flits through out a transaction was never checked with this disabled.
+            */
+            bool enable = true;
+
+            /*
+            Default SAM Scope when not specified by Node ID.
+            Requester Nodes and Home Nodes that were not listed/configured in this container would refer to
+            this value.
+            */
+            SAMScopeEnum defaultScope = SAMScope::AfterSAM;
+
+        protected:
+            std::unordered_map<uint16_t, SAMScopeEnum> scopes;
+            
+        public:
+            void            Set(uint16_t nodeId, SAMScopeEnum scope) noexcept;
+            SAMScopeEnum    Get(uint16_t nodeId) const noexcept;
+        };
+
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class Global {
         public:
+            /*
+            Enable Controls and Checkers of Flit Field Checking.
+            */
             std::shared_ptr<GlobalCheckFieldMapping<config, conn>>
                 CHECK_FIELD_MAPPING;
+
+            /*
+            (SAM, System Address Map)
+            SAM Scopes of Nodes, indicating the transaction flits were observed either before or after SAM.
+            Node ID inferencings and checkings are interferenced by SAM Scopes.
+            */
+            std::shared_ptr<GlobalSAMScope>
+                SAM_SCOPE;
         };
 
         template<FlitConfigurationConcept       config,
@@ -873,6 +907,27 @@ namespace /*CHI::*/Xact {
         return DAT.checker.Check(datFlit);
     }
 }
+
+
+// Implementation of: class GlobalSAMScope
+namespace /*CHI::*/Xact {
+
+    inline void GlobalSAMScope::Set(uint16_t nodeId, SAMScopeEnum scope) noexcept
+    {
+        scopes[nodeId] = scope;
+    }
+
+    inline SAMScopeEnum GlobalSAMScope::Get(uint16_t nodeId) const noexcept
+    {
+        auto iter = scopes.find(nodeId);
+        
+        if (iter == scopes.end())
+            return defaultScope;
+        else
+            return iter->second;
+    }
+}
+
 
 
 // Implementation of: class Xaction::SubsequenceKey
