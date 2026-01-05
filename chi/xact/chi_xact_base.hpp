@@ -11,7 +11,6 @@
 
 #include "chi_xact_base/chi_xact_base_denial.hpp"       // IWYU pragma: keep
 #include "chi_xact_base/chi_xact_base_topology.hpp"     // IWYU pragma: keep
-#include "chi_xact_base/chi_xact_base_flit.hpp"         // IWYU pragma: keep
 #include "chi_xact_base/chi_xact_base_sam.hpp"          // IWYU pragma: keep
 
 

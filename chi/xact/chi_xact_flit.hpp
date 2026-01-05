@@ -1,17 +1,25 @@
 //#pragma once
 
-#include "includes.hpp"
-#include "chi_xact_base_topology.hpp"
+//#ifndef __CHI__CHI_XACT_FLIT
+//#define __CHI__CHI_XACT_FLIT
+
+#ifndef CHI_XACT_FLIT__STANDALONE
+#   include "chi_xact_flit_header.hpp"          // IWYU pragma: keep
+#   include "chi_xact_base_header.hpp"          // IWYU pragma: keep
+#   include "chi_xact_base.hpp"                 // IWYU pragma: keep
+#   include "chi_xact_global_header.hpp"        // IWYU pragma: keep
+#   include "chi_xact_global.hpp"               // IWYU pragma: keep
+#endif
 
 
-#if (!defined(CHI_ISSUE_B_ENABLE)  || !defined(__CHI__CHI_XACT_BASE_B__FLIT)) \
- && (!defined(CHI_ISSUE_EB_ENABLE) || !defined(__CHI__CHI_XACT_BASE_EB__FLIT))
+#if (!defined(CHI_ISSUE_B_ENABLE)  || !defined(__CHI__CHI_XACT_FLIT_B)) \
+ && (!defined(CHI_ISSUE_EB_ENABLE) || !defined(__CHI__CHI_XACT_FLIT_EB))
 
 #ifdef CHI_ISSUE_B_ENABLE
-#   define __CHI__CHI_XACT_BASE_B__FLIT
+#   define __CHI__CHI_XACT_FLIT_B
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
-#   define __CHI__CHI_XACT_BASE_EB__FLIT
+#   define __CHI__CHI_XACT_FLIT_EB
 #endif
 
 
@@ -1043,3 +1051,5 @@ namespace /*CHI::*/Xact {
 
 
 #endif
+
+//#endif // __CHI__CHI_XACT_FLIT

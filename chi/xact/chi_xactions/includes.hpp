@@ -6,4 +6,6 @@
 #   include "../chi_xact_base.hpp"                     // IWYU pragma: keep
 #   include "../chi_xact_global_header.hpp"            // IWYU pragma: keep
 #   include "../chi_xact_global.hpp"                   // IWYU pragma: keep
+#   include "../chi_xact_flit_header.hpp"              // IWYU pragma: keep
+#   include "../chi_xact_flit.hpp"                     // IWYU pragma: keep
 #endif
