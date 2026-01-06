@@ -28,6 +28,8 @@ namespace CHI {
 */
     namespace Xact {
 
+        using GlobalTopology = Topology;
+
         template<FlitConfigurationConcept       config,
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class GlobalCheckFieldMapping {
@@ -85,6 +87,12 @@ namespace CHI {
         class Global {
         public:
             /*
+            Topology of nodes, providing node IDs and types.
+            */
+            std::shared_ptr<GlobalTopology>
+                TOPOLOGY;
+
+            /*
             Enable Controls and Checkers of Flit Field Checking.
             */
             std::shared_ptr<GlobalCheckFieldMapping<config, conn>>
@@ -94,9 +102,14 @@ namespace CHI {
             (SAM, System Address Map)
             SAM Scopes of Nodes, indicating the transaction flits were observed either before or after SAM.
             Node ID inferencings and checkings are interferenced by SAM Scopes.
+            SAMs were applied to outgoing requests of Request Nodes and Home Nodes, targeting either Home Nodes 
+            or Subordinate Nodes.
             */
             std::shared_ptr<GlobalSAMScope>
                 SAM_SCOPE;
+
+        public:
+            Global() noexcept;
         };
     }
 /*
@@ -166,6 +179,19 @@ namespace /*CHI::*/Xact {
         else
             return iter->second;
     }
+}
+
+
+// Implementation of: class Global
+namespace /*CHI::*/Xact {
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline Global<config, conn>::Global() noexcept
+        : TOPOLOGY              (std::make_shared<GlobalTopology>())
+        , CHECK_FIELD_MAPPING   (std::make_shared<GlobalCheckFieldMapping<config, conn>>())
+        , SAM_SCOPE             (std::make_shared<GlobalSAMScope>())
+    { }
 }
 
 
