@@ -85,31 +85,31 @@ namespace CHI {
             bool            IsRXSNP() const noexcept;
 
         public:
-            bool            IsToRequester(const Topology& topo) const noexcept;
-            bool            IsToHome(const Topology& topo) const noexcept;
-            bool            IsToSubordinate(const Topology& topo) const noexcept;
+            bool            IsToRequester(const Global<config, conn>&) const noexcept;
+            bool            IsToHome(const Global<config, conn>&) const noexcept;
+            bool            IsToSubordinate(const Global<config, conn>&) const noexcept;
 
         public:
-            bool            IsFromRequester(const Topology& topo) const noexcept;
-            bool            IsFromHome(const Topology& topo) const noexcept;
-            bool            IsFromSubordinate(const Topology& topo) const noexcept;
+            bool            IsFromRequester(const Global<config, conn>&) const noexcept;
+            bool            IsFromHome(const Global<config, conn>&) const noexcept;
+            bool            IsFromSubordinate(const Global<config, conn>&) const noexcept;
 
         public:
-            bool            IsFrom(const Topology& topo, XactScopeEnum from) const noexcept;
-            bool            IsTo(const Topology& topo, XactScopeEnum to) const noexcept;
-            bool            IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept;
-            bool            IsFromRequesterToHome(const Topology& topo) const noexcept;
-            bool            IsFromRequesterToSubordinate(const Topology& topo) const noexcept;
-            bool            IsFromHomeToRequester(const Topology& topo) const noexcept;
-            bool            IsFromHomeToSubordinate(const Topology& topo) const noexcept;
-            bool            IsFromSubordinateToRequester(const Topology& topo) const noexcept;
-            bool            IsFromSubordinateToHome(const Topology& topo) const noexcept;
+            bool            IsFrom(const Global<config, conn>&, XactScopeEnum from) const noexcept;
+            bool            IsTo(const Global<config, conn>&, XactScopeEnum to) const noexcept;
+            bool            IsFromTo(const Global<config, conn>&, XactScopeEnum from, XactScopeEnum to) const noexcept;
+            bool            IsFromRequesterToHome(const Global<config, conn>&) const noexcept;
+            bool            IsFromRequesterToSubordinate(const Global<config, conn>&) const noexcept;
+            bool            IsFromHomeToRequester(const Global<config, conn>&) const noexcept;
+            bool            IsFromHomeToSubordinate(const Global<config, conn>&) const noexcept;
+            bool            IsFromSubordinateToRequester(const Global<config, conn>&) const noexcept;
+            bool            IsFromSubordinateToHome(const Global<config, conn>&) const noexcept;
 
         public:
-            bool            IsTXREQ(const Topology& topo, XactScopeEnum scope) const noexcept;
-            bool            IsRXREQ(const Topology& topo, XactScopeEnum scope) const noexcept;
-            bool            IsTXSNP(const Topology& topo, XactScopeEnum scope) const noexcept;
-            bool            IsRXSNP(const Topology& topo, XactScopeEnum scope) const noexcept;
+            bool            IsTXREQ(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
+            bool            IsRXREQ(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
+            bool            IsTXSNP(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
+            bool            IsRXSNP(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
         };
 
         template<FlitConfigurationConcept       config,
@@ -137,45 +137,45 @@ namespace CHI {
             bool            IsRXDAT() const noexcept;
 
         public:
-            bool            IsToRequester(const Topology& topo) const noexcept;
-            bool            IsToHome(const Topology& topo) const noexcept;
-            bool            IsToSubordinate(const Topology& topo) const noexcept;
+            bool            IsToRequester(const Global<config, conn>&) const noexcept;
+            bool            IsToHome(const Global<config, conn>&) const noexcept;
+            bool            IsToSubordinate(const Global<config, conn>&) const noexcept;
 
-            bool            IsToRequesterDCT(const Topology& topo) const noexcept;
-            bool            IsToRequesterDMT(const Topology& topo) const noexcept;
+            bool            IsToRequesterDCT(const Global<config, conn>&) const noexcept;
+            bool            IsToRequesterDMT(const Global<config, conn>&) const noexcept;
 #ifdef CHI_ISSUE_EB_ENABLE
-            bool            IsToRequesterDWT(const Topology& topo) const noexcept;
-            bool            IsToSubordinateDWT(const Topology& topo) const noexcept;
+            bool            IsToRequesterDWT(const Global<config, conn>&) const noexcept;
+            bool            IsToSubordinateDWT(const Global<config, conn>&) const noexcept;
 #endif
 
         public:
-            bool            IsFromRequester(const Topology& topo) const noexcept;
-            bool            IsFromHome(const Topology& topo) const noexcept;
-            bool            IsFromSubordinate(const Topology& topo) const noexcept;
+            bool            IsFromRequester(const Global<config, conn>&) const noexcept;
+            bool            IsFromHome(const Global<config, conn>&) const noexcept;
+            bool            IsFromSubordinate(const Global<config, conn>&) const noexcept;
 
-            bool            IsFromRequesterDCT(const Topology& topo) const noexcept;
-            bool            IsFromSubordinateDMT(const Topology& topo) const noexcept;
+            bool            IsFromRequesterDCT(const Global<config, conn>&) const noexcept;
+            bool            IsFromSubordinateDMT(const Global<config, conn>&) const noexcept;
 #ifdef CHI_ISSUE_EB_ENABLE
-            bool            IsFromRequesterDWT(const Topology& topo) const noexcept;
-            bool            IsFromSubordinateDWT(const Topology& topo) const noexcept;
+            bool            IsFromRequesterDWT(const Global<config, conn>&) const noexcept;
+            bool            IsFromSubordinateDWT(const Global<config, conn>&) const noexcept;
 #endif
 
         public:
-            bool            IsFrom(const Topology& topo, XactScopeEnum from) const noexcept;
-            bool            IsTo(const Topology& topo, XactScopeEnum to) const noexcept;
-            bool            IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept;
-            bool            IsFromRequesterToHome(const Topology& topo) const noexcept;
-            bool            IsFromRequesterToSubordinate(const Topology& topo) const noexcept;
-            bool            IsFromHomeToRequester(const Topology& topo) const noexcept;
-            bool            IsFromHomeToSubordinate(const Topology& topo) const noexcept;
-            bool            IsFromSubordinateToRequester(const Topology& topo) const noexcept;
-            bool            IsFromSubordinateToHome(const Topology& topo) const noexcept;
+            bool            IsFrom(const Global<config, conn>&, XactScopeEnum from) const noexcept;
+            bool            IsTo(const Global<config, conn>&, XactScopeEnum to) const noexcept;
+            bool            IsFromTo(const Global<config, conn>&, XactScopeEnum from, XactScopeEnum to) const noexcept;
+            bool            IsFromRequesterToHome(const Global<config, conn>&) const noexcept;
+            bool            IsFromRequesterToSubordinate(const Global<config, conn>&) const noexcept;
+            bool            IsFromHomeToRequester(const Global<config, conn>&) const noexcept;
+            bool            IsFromHomeToSubordinate(const Global<config, conn>&) const noexcept;
+            bool            IsFromSubordinateToRequester(const Global<config, conn>&) const noexcept;
+            bool            IsFromSubordinateToHome(const Global<config, conn>&) const noexcept;
 
         public:
-            bool            IsTXRSP(const Topology& topo, XactScopeEnum scope) const noexcept;
-            bool            IsRXRSP(const Topology& topo, XactScopeEnum scope) const noexcept;
-            bool            IsTXDAT(const Topology& topo, XactScopeEnum scope) const noexcept;
-            bool            IsRXDAT(const Topology& topo, XactScopeEnum scope) const noexcept;
+            bool            IsTXRSP(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
+            bool            IsRXRSP(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
+            bool            IsTXDAT(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
+            bool            IsRXDAT(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
         };
     }
 /*
@@ -289,16 +289,15 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsToRequester(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsToRequester(const Global<config, conn>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
             case XactScope::Requester:
-                return this->IsRX();
+                return this->IsRXSNP();
 
             case XactScope::Home:
-                return this->IsTXREQ() && topo.IsRequester(flit.req.TgtID()) 
-                    || this->IsTXSNP();
+                return this->IsTXSNP();
 
             case XactScope::Subordinate:
                 return false;
@@ -310,16 +309,57 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsToHome(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsToHome(const Global<config, conn>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
             case XactScope::Requester:
-                // Don't check TgtID of TXREQ, RN E-SAM could remap this on network
-                return this->IsTXREQ() /*&& topo.IsHome(flit.req.TgtId())*/;
+
+                if (this->IsTXREQ())
+                {
+                    if (glbl.SAM_SCOPE->enable)
+                    {
+                        switch (glbl.SAM_SCOPE->Get(flit.req.SrcID())->value)
+                        {
+                            case SAMScope::AfterSAM:
+                                return glbl.TOPOLOGY->IsHome(flit.req.TgtID());
+
+                            case SAMScope::BeforeSAM:
+                                return true; // Do not check TgtID of TXREQ before SAM
+
+                            [[unlikely]] default:
+                                return false;
+                        }
+                    }
+                    else
+                        return true; // Do not check TgtID of TXREQ on SAM check disabled
+                }
+                else
+                    return false;
 
             case XactScope::Home:
-                return this->IsRXREQ();
+                
+                if (this->IsRXREQ())
+                {
+                    if (glbl.SAM_SCOPE->enable)
+                    {
+                        switch (glbl.SAM_SCOPE->Get(flit.req.SrcID())->value)
+                        {
+                            case SAMScope::AfterSAM:
+                                return glbl.TOPOLOGY->IsHome(flit.req.TgtID());
+
+                            case SAMScope::BeforeSAM:
+                                return true; // Do not check TgtID of RXREQ before SAM
+
+                            [[unlikely]] default:
+                                return false;
+                        }
+                    }
+                    else
+                        return true; // Do not check TgtID of RXREQ on SAM check disabled
+                }
+                else
+                    return false;
 
             case XactScope::Subordinate:
                 return false;
@@ -331,18 +371,78 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsToSubordinate(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsToSubordinate(const Global<config, conn>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
-            case XactScope::Requester:
-                return false;
+            case XactScope::Requester: // For PrefetchTgt only in standard AMBA CHI
 
-            case XactScope::Home:
-                return this->IsTXREQ() && topo.IsSubordinate(flit.req.TgtID());
+                if (this->IsTXREQ())
+                {
+                    if (glbl.SAM_SCOPE->enable)
+                    {
+                        case SAMScope::AfterSAM:
+                            return glbl.TOPOLOGY->IsSubordinate(flit.req.TgtID());
+
+                        case SAMScope::BeforeSAM:
+                            return flit.req.Opcode() == Opcodes::REQ::PrefetchTgt; // Do not check TgtID of TXREQ before SAM
+
+                        [[unlikely]] default:
+                            return false;
+                    }
+                    else
+                        return flit.req.Opcode() == Opcodes::REQ::PrefetchTgt; // Do not check TgtID of TXREQ on SAM check disabled
+                }
+                else
+                    return false;
+
+            case XactScope::Home: // Except PrefetchTgt
+
+                if (this->IsTXREQ())
+                {
+                    if (glbl.SAM_SCOPE->enable)
+                    {
+                        switch (glbl.SAM_SCOPE->Get(flit.req.SrcID())->value)
+                        {
+                            case SAMScope::AfterSAM:
+                                return glbl.TOPOLOGY->IsSubordinate(flit.req.TgtID());
+
+                            case SAMScope::BeforeSAM:
+                                return flit.req.Opcode() != Opcodes::REQ::PrefetchTgt; // Do not check TgtID of TXREQ before SAM
+
+                            [[unlikely]] default:
+                                return false;
+                        }
+                    }
+                    else
+                        return flit.req.Opcode() != Opcodes::REQ::PrefetchTgt; // Do not check TgtID of TXREQ on SAM check disabled
+                }
+                else
+                    return false;
 
             case XactScope::Subordinate:
-                return this->IsRXREQ();
+
+                if (this->IsRXREQ())
+                {
+                    if (glbl.SAM_SCOPE->enable)
+                    {
+                        switch (glbl.SAM_SCOPE->Get(flit.req.SrcID())->value)
+                        {
+                            case SAMScope::AfterSAM:
+                                return glbl.TOPOLOGY->IsSubordinate(flit.req.TgtID());
+
+                            case SAMScope::BeforeSAM:
+                                return true; // Do not check TgtID of RXREQ before SAM
+
+                            [[unlikely]] default:
+                                return false;
+                        }
+                    }
+                    else
+                        return true; // Do not check TgtID of RXREQ on SAM check disabled
+                }
+                else
+                    return false;
 
             [[unlikely]] default:
                 return false;
@@ -351,7 +451,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromRequester(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromRequester(const Global<config, conn>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
@@ -371,7 +471,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromHome(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromHome(const Global<config, conn>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
@@ -391,7 +491,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromSubordinate(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromSubordinate(const Global<config, conn>& glbl) const noexcept
     {
         // Requests never come from Subordnates.
         return false;
@@ -399,20 +499,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFrom(const Topology& topo, XactScopeEnum from) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFrom(const Global<config, conn>& glbl, XactScopeEnum from) const noexcept
     {
         switch (from->value)
         {
             case XactScope::Requester:
-                if (!IsFromRequester(topo))
+                if (!IsFromRequester(glbl))
                     return false;
 
             case XactScope::Home:
-                if (!IsFromHome(topo))
+                if (!IsFromHome(glbl))
                     return false;
 
             case XactScope::Subordinate:
-                if (!IsFromSubordinate(topo))
+                if (!IsFromSubordinate(glbl))
                     return false;
 
             [[unlikely]] default:
@@ -424,20 +524,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsTo(const Topology& topo, XactScopeEnum to) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsTo(const Global<config, conn>& glbl, XactScopeEnum to) const noexcept
     {
         switch (to->value)
         {
             case XactScope::Requester:
-                if (!IsToRequester(topo))
+                if (!IsToRequester(glbl))
                     return false;
             
             case XactScope::Home:
-                if (!IsToHome(topo))
+                if (!IsToHome(glbl))
                     return false;
             
             case XactScope::Subordinate:
-                if (!IsToSubordinate(topo))
+                if (!IsToSubordinate(glbl))
                     return false;
 
             [[unlikely]] default:
@@ -449,79 +549,79 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromTo(const Global<config, conn>& glbl, XactScopeEnum from, XactScopeEnum to) const noexcept
     {
-        return IsFrom(topo, from) && IsTo(topo, to);
+        return IsFrom(glbl, from) && IsTo(glbl, to);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromRequesterToHome(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromRequesterToHome(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromRequester(topo) && IsToHome(topo);
+        return IsFromRequester(glbl) && IsToHome(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromRequesterToSubordinate(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromRequesterToSubordinate(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromRequester(topo) && IsToSubordinate(topo);
+        return IsFromRequester(glbl) && IsToSubordinate(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromHomeToRequester(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromHomeToRequester(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromHome(topo) && IsToRequester(topo);
+        return IsFromHome(glbl) && IsToRequester(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromHomeToSubordinate(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromHomeToSubordinate(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromHome(topo) && IsToSubordinate(topo);
+        return IsFromHome(glbl) && IsToSubordinate(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromSubordinateToRequester(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromSubordinateToRequester(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromSubordinate(topo) && IsToRequester(topo);
+        return IsFromSubordinate(glbl) && IsToRequester(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromSubordinateToHome(const Topology& topo) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsFromSubordinateToHome(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromSubordinate(topo) && IsToHome(topo);
+        return IsFromSubordinate(glbl) && IsToHome(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsTXREQ(const Topology& topo, XactScopeEnum scope) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsTXREQ(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
     {
-        return IsREQ() && IsFrom(topo, scope);
+        return IsREQ() && IsFrom(glbl, scope);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsRXREQ(const Topology& topo, XactScopeEnum scope) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsRXREQ(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
     {
-        return IsREQ() && IsTo(topo, scope);
+        return IsREQ() && IsTo(glbl, scope);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsTXSNP(const Topology& topo, XactScopeEnum scope) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsTXSNP(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
     {
-        return IsSNP() && IsFrom(topo, scope);
+        return IsSNP() && IsFrom(glbl, scope);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsRXSNP(const Topology& topo, XactScopeEnum scope) const noexcept
+    inline bool FiredRequestFlit<config, conn>::IsRXSNP(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
     {
-        return IsSNP() && IsTo(topo, scope);
+        return IsSNP() && IsTo(glbl, scope);
     }
 }
 
@@ -604,25 +704,25 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToRequester(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsToRequester(const Global<config, conn>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
             case XactScope::Requester:
                 return this->IsRX()
-                    || IsToRequesterDCT(topo);
+                    || IsToRequesterDCT(glbl);
 
             case XactScope::Home:
-                return this->IsTXRSP() && topo.IsRequester(flit.rsp.TgtID())
-                    || this->IsTXDAT() && topo.IsRequester(flit.dat.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID());
 
             case XactScope::Subordinate:
-                return IsToRequesterDMT(topo)
+                return IsToRequesterDMT(glbl)
 #ifdef CHI_ISSUE_B_ENABLE
                     ;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
-                    || IsToRequesterDWT(topo);
+                    || IsToRequesterDWT(glbl);
 #endif
 
             [[unlikely]] default:
@@ -632,20 +732,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToHome(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsToHome(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXRSP() && topo.IsHome(flit.rsp.TgtID()) 
-                    || this->IsTXDAT() && topo.IsHome(flit.dat.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY->IsHome(flit.rsp.TgtID()) 
+                    || this->IsTXDAT() && glbl.TOPOLOGY->IsHome(flit.dat.TgtID());
 
             case XactScope::Home:
                 return this->IsRX();
 
             case XactScope::Subordinate:
-                return this->IsTXRSP() && topo.IsHome(flit.rsp.TgtID())
-                    || this->IsTXDAT() && topo.IsHome(flit.dat.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY->IsHome(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY->IsHome(flit.dat.TgtID());
 
             [[unlikely]] default:
                 return false;
@@ -654,7 +754,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToSubordinate(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsToSubordinate(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -663,12 +763,12 @@ namespace /*CHI::*/Xact {
                 return false;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
-                return IsToSubordinateDWT(topo);
+                return IsToSubordinateDWT(glbl);
 #endif
 
             case XactScope::Home:
-                return this->IsTXRSP() && topo.IsSubordinate(flit.rsp.TgtID())
-                    || this->IsTXDAT() && topo.IsSubordinate(flit.dat.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY->IsSubordinate(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.TgtID());
 
             case XactScope::Subordinate:
                 return this->IsRX();
@@ -680,15 +780,15 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToRequesterDCT(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsToRequesterDCT(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXRSP() && topo.IsRequester(flit.rsp.TgtID())
-                    || this->IsTXDAT() && topo.IsRequester(flit.dat.TgtID())
-                    || this->IsRXRSP() && topo.IsRequester(flit.rsp.SrcID())
-                    || this->IsRXDAT() && topo.IsRequester(flit.dat.SrcID());
+                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID())
+                    || this->IsRXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
 
             case XactScope::Home:
                 return false;
@@ -703,18 +803,18 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToRequesterDMT(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsToRequesterDMT(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXDAT() && topo.IsSubordinate(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.SrcID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsTXDAT() && topo.IsRequester(flit.dat.TgtID());
+                return this->IsTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID());
 
             [[unlikely]] default:
                 return false;
@@ -724,18 +824,18 @@ namespace /*CHI::*/Xact {
 #ifdef CHI_ISSUE_EB_ENABLE
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToRequesterDWT(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsToRequesterDWT(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXRSP() && topo.IsSubordinate(flit.rsp.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY->IsSubordinate(flit.rsp.SrcID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsTXRSP() && topo.IsRequester(flit.rsp.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID());
 
             [[unlikely]] default:
                 return false;
@@ -746,18 +846,18 @@ namespace /*CHI::*/Xact {
 #ifdef CHI_ISSUE_EB_ENABLE
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToSubordinateDWT(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsToSubordinateDWT(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXDAT() && topo.IsSubordinate(flit.dat.TgtID());
+                return this->IsTXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.TgtID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsRXDAT() && topo.IsRequester(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
 
             [[unlikely]] default:
                 return false;
@@ -767,20 +867,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequester(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromRequester(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
                 return this->IsTX()
-                    || IsFromRequesterDCT(topo);
+                    || IsFromRequesterDCT(glbl);
 
             case XactScope::Home:
-                return this->IsRXRSP() && topo.IsRequester(flit.rsp.SrcID())
-                    || this->IsRXDAT() && topo.IsRequester(flit.dat.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
 
             case XactScope::Subordinate:
-                return IsFromRequesterDWT(topo);
+                return IsFromRequesterDWT(glbl);
 
             [[unlikely]] default:
                 return false;
@@ -789,19 +889,19 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromHome(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromHome(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXRSP() && topo.IsHome(flit.rsp.SrcID())
-                    || this->IsRXDAT() && topo.IsHome(flit.dat.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY->IsHome(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY->IsHome(flit.dat.SrcID());
 
             case XactScope::Home:
                 return this->IsTX();
 
             case XactScope::Subordinate:
-                return this->IsRXDAT() && topo.IsHome(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY->IsHome(flit.dat.SrcID());
 
             [[unlikely]] default:
                 return false;
@@ -810,7 +910,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinate(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromSubordinate(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -819,12 +919,12 @@ namespace /*CHI::*/Xact {
                 return false;
 #endif
 #ifdef CHI_ISSUE_EB_ENABLE
-                return IsFromSubordinateDWT(topo);
+                return IsFromSubordinateDWT(glbl);
 #endif
 
             case XactScope::Home:
-                return this->IsRXRSP() && topo.IsSubordinate(flit.rsp.SrcID())
-                    || this->IsRXDAT() && topo.IsSubordinate(flit.dat.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY->IsSubordinate(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.SrcID());
 
             case XactScope::Subordinate:
                 return this->IsTX();
@@ -836,15 +936,15 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequesterDCT(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromRequesterDCT(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXRSP() && topo.IsRequester(flit.rsp.TgtID())
-                    || this->IsTXDAT() && topo.IsRequester(flit.dat.TgtID())
-                    || this->IsRXRSP() && topo.IsRequester(flit.rsp.SrcID())
-                    || this->IsRXDAT() && topo.IsRequester(flit.dat.SrcID());
+                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID())
+                    || this->IsRXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
 
             case XactScope::Home:
                 return false;
@@ -859,18 +959,18 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateDMT(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateDMT(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXDAT() && topo.IsSubordinate(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.SrcID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->isTXDAT() && topo.IsRequester(flit.dat.TgtID());
+                return this->isTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID());
 
             [[unlikely]] default:
                 return false;   
@@ -880,18 +980,18 @@ namespace /*CHI::*/Xact {
 #ifdef CHI_ISSUE_EB_ENABLE
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequesterDWT(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromRequesterDWT(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXDAT() && topo.IsSubordinate(flit.dat.TgtID());
+                return this->IsTXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.TgtID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsRXDAT() && topo.IsRequester(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
 
             [[unlikely]] default:
                 return false;
@@ -902,18 +1002,18 @@ namespace /*CHI::*/Xact {
 #ifdef CHI_ISSUE_EB_ENABLE
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateDWT(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateDWT(const Global<config, conn>& glbl) const noexcept
     {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXRSP() && topo.IsSubordinate(flit.rsp.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY->IsSubordinate(flit.rsp.SrcID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsTXRSP() && topo.IsRequester(flit.rsp.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID());
 
             [[unlikely]] default:
                 return false;
@@ -923,20 +1023,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFrom(const Topology& topo, XactScopeEnum from) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFrom(const Global<config, conn>& glbl, XactScopeEnum from) const noexcept
     {
         switch (from->value)
         {
             case XactScope::Requester:
-                if (!IsFromRequester(topo))
+                if (!IsFromRequester(glbl))
                     return false;
 
             case XactScope::Home:
-                if (!IsFromHome(topo))
+                if (!IsFromHome(glbl))
                     return false;
 
             case XactScope::Subordinate:
-                if (!IsFromSubordinate(topo))
+                if (!IsFromSubordinate(glbl))
                     return false;
 
             [[unlikely]] default:
@@ -948,20 +1048,20 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsTo(const Topology& topo, XactScopeEnum to) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsTo(const Global<config, conn>& glbl, XactScopeEnum to) const noexcept
     {
         switch (to->value)
         {
             case XactScope::Requester:
-                if (!IsToRequester(topo))
+                if (!IsToRequester(glbl))
                     return false;
             
             case XactScope::Home:
-                if (!IsToHome(topo))
+                if (!IsToHome(glbl))
                     return false;
             
             case XactScope::Subordinate:
-                if (!IsToSubordinate(topo))
+                if (!IsToSubordinate(glbl))
                     return false;
 
             [[unlikely]] default:
@@ -973,79 +1073,79 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromTo(const Topology& topo, XactScopeEnum from, XactScopeEnum to) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromTo(const Global<config, conn>& glbl, XactScopeEnum from, XactScopeEnum to) const noexcept
     {
-        return IsFrom(topo, from) && IsTo(topo, to);
+        return IsFrom(glbl, from) && IsTo(glbl, to);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequesterToHome(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromRequesterToHome(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromRequester(topo) && IsToHome(topo);
+        return IsFromRequester(glbl) && IsToHome(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequesterToSubordinate(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromRequesterToSubordinate(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromRequester(topo) && IsToSubordinate(topo);
+        return IsFromRequester(glbl) && IsToSubordinate(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromHomeToRequester(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromHomeToRequester(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromHome(topo) && IsToRequester(topo);
+        return IsFromHome(glbl) && IsToRequester(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromHomeToSubordinate(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromHomeToSubordinate(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromHome(topo) && IsToSubordinate(topo);
+        return IsFromHome(glbl) && IsToSubordinate(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateToRequester(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateToRequester(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromSubordinate(topo) && IsToRequester(topo);
+        return IsFromSubordinate(glbl) && IsToRequester(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateToHome(const Topology& topo) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateToHome(const Global<config, conn>& glbl) const noexcept
     {
-        return IsFromSubordinate(topo) && IsToHome(topo);
+        return IsFromSubordinate(glbl) && IsToHome(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsTXRSP(const Topology& topo, XactScopeEnum scope) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsTXRSP(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
     {
-        return IsRSP() && IsFrom(topo, scope);
+        return IsRSP() && IsFrom(glbl, scope);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsRXRSP(const Topology& topo, XactScopeEnum scope) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsRXRSP(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
     {
-        return IsRSP() && IsTo(topo, scope);
+        return IsRSP() && IsTo(glbl, scope);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsTXDAT(const Topology& topo, XactScopeEnum scope) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsTXDAT(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
     {
-        return IsDAT() && IsFrom(topo, scope);
+        return IsDAT() && IsFrom(glbl, scope);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsRXDAT(const Topology& topo, XactScopeEnum scope) const noexcept
+    inline bool FiredResponseFlit<config, conn>::IsRXDAT(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
     {
-        return IsDAT() && IsTo(topo, scope);
+        return IsDAT() && IsTo(glbl, scope);
     }
 }
 
