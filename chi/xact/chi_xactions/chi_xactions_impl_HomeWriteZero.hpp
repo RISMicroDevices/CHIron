@@ -24,8 +24,7 @@ namespace CHI {
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class XactionHomeWriteZero : public Xaction<config, conn> {
         public:
-            XactionHomeWriteZero(Global<config, conn>*                  glbl,
-                                 const Topology&                        topo,
+            XactionHomeWriteZero(const Global<config, conn>&            glbl,
                                  const FiredRequestFlit<config, conn>&  first,
                                  std::shared_ptr<Xaction<config, conn>> retried) noexcept;
 
@@ -34,17 +33,17 @@ namespace CHI {
             std::shared_ptr<XactionHomeWriteZero<config, conn>> CloneAsIs() const noexcept;
 
         public:
-            bool                            IsResponseComplete(const Topology& topo) const noexcept;
+            bool                            IsResponseComplete(const Global<config, conn>& glbl) const noexcept;
 
-            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
-            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
-            virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Global<config, conn>& glbl) const noexcept override;
+            virtual bool                    IsComplete(const Global<config, conn>& glbl) const noexcept override;
 
-            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
 
             public:
-            virtual XactDenialEnum          NextRSPNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
     }
 /*
@@ -58,8 +57,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline XactionHomeWriteZero<config, conn>::XactionHomeWriteZero(
-        Global<config, conn>*                   glbl,
-        const Topology&                         topo,
+        const Global<config, conn>&             glbl,
         const FiredRequestFlit<config, conn>&   first,
         std::shared_ptr<Xaction<config, conn>>  retried
     ) noexcept
@@ -83,16 +81,16 @@ namespace /*CHI::*/Xact {
             return;
         }
 
-        if (!this->first.IsFromHomeToSubordinate(topo))
+        if (!this->first.IsFromHomeToSubordinate(glbl))
         {
             this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_HN_TO_SN;
             return;
         }
 
         //
-        if (glbl)
+        if (glbl.CHECK_FIELD_MAPPING->enable)
         {
-            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.req);
+            this->firstDenial = glbl.CHECK_FIELD_MAPPING->Check(first.flit.req);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -114,7 +112,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeWriteZero<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
+    inline bool XactionHomeWriteZero<config, conn>::IsResponseComplete(const Global<config, conn>& glbl) const noexcept
     {
         bool gotDBID = false;
         bool gotComp = false;
@@ -152,51 +150,51 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeWriteZero<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    inline bool XactionHomeWriteZero<config, conn>::IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept
     {
-        return this->GotRetryAck() || IsResponseComplete(topo);
+        return this->GotRetryAck() || IsResponseComplete(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeWriteZero<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    inline bool XactionHomeWriteZero<config, conn>::IsDBIDComplete(const Global<config, conn>& glbl) const noexcept
     {
         return true;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeWriteZero<config, conn>::IsComplete(const Topology& topo) const noexcept
+    inline bool XactionHomeWriteZero<config, conn>::IsComplete(const Global<config, conn>& glbl) const noexcept
     {
-        return this->GotRetryAck() || IsResponseComplete(topo);
+        return this->GotRetryAck() || IsResponseComplete(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeWriteZero<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    inline bool XactionHomeWriteZero<config, conn>::IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept
     {
         return false;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionHomeWriteZero<config, conn>::NextRSPNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    inline XactDenialEnum XactionHomeWriteZero<config, conn>::NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
-        if (this->IsComplete(topo))
+        if (this->IsComplete(glbl))
             return XactDenial::DENIED_COMPLETED;
 
         if (!rspFlit.IsRSP())
             return XactDenial::DENIED_CHANNEL;
 
         if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RetryAck)
-            return this->NextRetryAckNoRecord(glbl, topo, rspFlit);
+            return this->NextRetryAckNoRecord(glbl, rspFlit);
         else if (
             rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp
          || rspFlit.flit.rsp.Opcode() == Opcodes::RSP::DBIDResp
          || rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp
         )
         {
-            if (!rspFlit.IsFromSubordinateToHome(topo))
+            if (!rspFlit.IsFromSubordinateToHome(glbl))
                 return XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN;
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
@@ -233,6 +231,14 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_COMP_AFTER_COMP;
             }
 
+            //
+            if (glbl.CHECK_FIELD_MAPPING->enable)
+            {
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
+                if (denial != XactDenial::ACCEPTED)
+                    return denial;
+            }
+
             return XactDenial::ACCEPTED;
         }
 
@@ -241,7 +247,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionHomeWriteZero<config, conn>::NextDATNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hashDBID, bool& firstDBID) noexcept
+    inline XactDenialEnum XactionHomeWriteZero<config, conn>::NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hashDBID, bool& firstDBID) noexcept
     {
         return XactDenial::DENIED_CHANNEL;
     }

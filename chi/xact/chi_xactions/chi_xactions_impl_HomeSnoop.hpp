@@ -24,25 +24,25 @@ namespace CHI {
                  CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
         class XactionHomeSnoop : public Xaction<config, conn> {
         public:
-            XactionHomeSnoop(Global<config, conn>* glbl, const Topology& topo, const FiredRequestFlit<config, conn>& first) noexcept;
+            XactionHomeSnoop(const Global<config, conn>& glbl, const FiredRequestFlit<config, conn>& first) noexcept;
 
         public:
             virtual std::shared_ptr<Xaction<config, conn>>  Clone() const noexcept override;
             std::shared_ptr<XactionHomeSnoop<config, conn>> CloneAsIs() const noexcept;
 
         public:
-            bool                            IsResponseComplete(const Topology& topo) const noexcept;
-            bool                            IsDataComplete(const Topology& topo) const noexcept;
+            bool                            IsResponseComplete(const Global<config, conn>& glbl) const noexcept;
+            bool                            IsDataComplete(const Global<config, conn>& glbl) const noexcept;
 
-            virtual bool                    IsTxnIDComplete(const Topology& topo) const noexcept override;
-            virtual bool                    IsDBIDComplete(const Topology& topo) const noexcept override;
-            virtual bool                    IsComplete(const Topology& topo) const noexcept override;
+            virtual bool                    IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Global<config, conn>& glbl) const noexcept override;
+            virtual bool                    IsComplete(const Global<config, conn>& glbl) const noexcept override;
 
-            virtual bool                    IsDBIDOverlappable(const Topology& topo) const noexcept override;
+            virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
 
         public:
-            virtual XactDenialEnum          NextRSPNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
     }
 /*
@@ -55,7 +55,7 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactionHomeSnoop<config, conn>::XactionHomeSnoop(Global<config, conn>* glbl, const Topology& topo, const FiredRequestFlit<config, conn>& first) noexcept
+    inline XactionHomeSnoop<config, conn>::XactionHomeSnoop(const Global<config, conn>& glbl, const FiredRequestFlit<config, conn>& first) noexcept
         : Xaction<config, conn>(XactionType::HomeSnoop, first)
     {
         this->firstDenial = XactDenial::ACCEPTED;
@@ -87,16 +87,16 @@ namespace /*CHI::*/Xact  {
             return;
         }
 
-        if (!this->first.IsFromHomeToRequester(topo))
+        if (!this->first.IsFromHomeToRequester(glbl))
         {
             this->firstDenial = XactDenial::DENIED_SNP_NOT_FROM_HN_TO_RN;
             return;
         }
 
         //
-        if (glbl)
+        if (glbl.CHECK_FIELD_MAPPING->enable)
         {
-            this->firstDenial = glbl->CHECK_FIELD_MAPPING->Check(first.flit.snp);
+            this->firstDenial = glbl.CHECK_FIELD_MAPPING->Check(first.flit.snp);
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
@@ -118,7 +118,7 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsResponseComplete(const Topology& topo) const noexcept
+    inline bool XactionHomeSnoop<config, conn>::IsResponseComplete(const Global<config, conn>& glbl) const noexcept
     {
         size_t index = 0;
         for (auto iter = this->subsequence.begin(); iter != this->subsequence.end(); iter++, index++)
@@ -137,7 +137,7 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsDataComplete(const Topology& topo) const noexcept
+    inline bool XactionHomeSnoop<config, conn>::IsDataComplete(const Global<config, conn>& glbl) const noexcept
     {
         std::bitset<4> completeDataIDMask =
             details::GetDataIDCompleteMask<config, conn>(Sizes::B64);
@@ -170,37 +170,37 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsTxnIDComplete(const Topology& topo) const noexcept
+    inline bool XactionHomeSnoop<config, conn>::IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept
     {
-        return IsComplete(topo);
+        return IsComplete(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsDBIDComplete(const Topology& topo) const noexcept
+    inline bool XactionHomeSnoop<config, conn>::IsDBIDComplete(const Global<config, conn>& glbl) const noexcept
     {
-        return IsComplete(topo);
+        return IsComplete(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsComplete(const Topology& topo) const noexcept
+    inline bool XactionHomeSnoop<config, conn>::IsComplete(const Global<config, conn>& glbl) const noexcept
     {
-        return IsResponseComplete(topo) && IsDataComplete(topo);
+        return IsResponseComplete(glbl) && IsDataComplete(glbl);
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsDBIDOverlappable(const Topology& topo) const noexcept
+    inline bool XactionHomeSnoop<config, conn>::IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept
     {
         return false;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextRSPNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
-        if (this->IsComplete(topo))
+        if (this->IsComplete(glbl))
             return XactDenial::DENIED_COMPLETED;
 
         if (!rspFlit.IsRSP())
@@ -208,7 +208,7 @@ namespace /*CHI::*/Xact  {
 
         if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
         {
-            if (!rspFlit.IsFromRequesterToHome(topo))
+            if (!rspFlit.IsFromRequesterToHome(glbl))
                 return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.snp.SrcID())
@@ -237,9 +237,9 @@ namespace /*CHI::*/Xact  {
             }
 
             //
-            if (glbl)
+            if (glbl.CHECK_FIELD_MAPPING->enable)
             {
-                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
@@ -252,9 +252,9 @@ namespace /*CHI::*/Xact  {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextDATNoRecord(Global<config, conn>* glbl, const Topology& topo, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
+    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
-        if (this->IsComplete(topo))
+        if (this->IsComplete(glbl))
             return XactDenial::DENIED_COMPLETED;
         
         if (!datFlit.IsDAT())
@@ -265,7 +265,7 @@ namespace /*CHI::*/Xact  {
          || datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl
         )
         {
-            if (!datFlit.IsFromRequesterToHome(topo))
+            if (!datFlit.IsFromRequesterToHome(glbl))
                 return XactDenial::DENIED_DAT_NOT_FROM_RN_TO_HN;
 
             if (datFlit.flit.dat.TgtID() != this->first.flit.snp.SrcID())
@@ -296,9 +296,9 @@ namespace /*CHI::*/Xact  {
             }
 
             //
-            if (glbl)
+            if (glbl.CHECK_FIELD_MAPPING->enable)
             {
-                XactDenialEnum denial = glbl->CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
                 if (denial != XactDenial::ACCEPTED)
                     return denial;
             }
