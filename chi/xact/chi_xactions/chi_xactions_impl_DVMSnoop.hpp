@@ -44,6 +44,12 @@ namespace CHI {
 
             virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
 
+        protected:
+            virtual const FiredResponseFlit<config, conn>*  
+                                            GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept override;
+            virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
+                                            GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
+
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -144,6 +150,20 @@ namespace /*CHI::*/Xact {
     inline bool XactionDVMSnoop<config, conn>::IsComplete(const Global<config, conn>& glbl) const noexcept
     {
         return IsRequestComplete(glbl) && IsResponseComplete(glbl);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionDVMSnoop<config, conn>::GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> XactionDVMSnoop<config, conn>::GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        return std::nullopt;
     }
 
     template<FlitConfigurationConcept       config,

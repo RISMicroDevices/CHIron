@@ -41,6 +41,12 @@ namespace CHI {
 
             virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
         
+        protected:
+            virtual const FiredResponseFlit<config, conn>*  
+                                            GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept override;
+            virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
+                                            GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
+
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -174,6 +180,25 @@ namespace /*CHI::*/Xact {
     inline bool XactionIndependentStash<config, conn>::IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept
     {
         return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionIndependentStash<config, conn>::GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        return this->GetLastRSP({ Opcodes::RSP::Comp, Opcodes::RSP::StashDone, Opcodes::RSP::CompStashDone });
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> XactionIndependentStash<config, conn>::GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        const FiredResponseFlit<config, conn>* optSource = GetPrimaryTgtIDSourceNonREQ(glbl);
+
+        if (!optSource)
+            return std::nullopt;
+
+        return { optSource->flit.rsp.SrcID() };
     }
 
     template<FlitConfigurationConcept       config,

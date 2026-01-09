@@ -44,6 +44,12 @@ namespace CHI {
 
             virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
 
+        protected:
+            virtual const FiredResponseFlit<config, conn>*  
+                                            GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept override;
+            virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
+                                            GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
+
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -275,6 +281,48 @@ namespace /*CHI::*/Xact {
     inline bool XactionImmediateWrite<config, conn>::IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept
     {
         return IsDataComplete(glbl) && IsAckComplete(glbl);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionImmediateWrite<config, conn>::GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        size_t index = 0;
+        for (auto iter = this->subsequenceKeys.begin(); iter != this->subsequenceKeys.end(); iter++, index++)
+        {
+            if (iter->IsDenied())
+                continue;
+
+            if (!iter->IsRSP())
+                continue;
+
+            if (iter->opcode.rsp == Opcodes::RSP::DBIDResp)
+            {
+                // DBIDResp could be sent from DWT target, which was not the primary SAM target
+                if (this->subsequence[index].IsFromHome(glbl))
+                    return &(this->subsequence[index]);
+            }
+            else if (iter->opcode.rsp == Opcodes::RSP::DBIDRespOrd
+                  || iter->opcode.rsp == Opcodes::RSP::Comp
+                  || iter->opcode.rsp == Opcodes::RSP::CompDBIDResp)
+            {
+                return &(this->subsequence[index]);
+            }
+        }
+
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> XactionImmediateWrite<config, conn>::GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        const FiredResponseFlit<config, conn>* optSource = GetPrimaryTgtIDSourceNonREQ(glbl);
+
+        if (!optSource)
+            return std::nullopt;
+
+        return { optSource->flit.rsp.SrcID() };
     }
 
     template<FlitConfigurationConcept       config,

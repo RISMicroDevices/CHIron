@@ -2,6 +2,7 @@
 
 #include "includes.hpp"
 #include "chi_xactions_base.hpp"
+#include <optional>
 
 
 #if (!defined(CHI_ISSUE_B_ENABLE)  || !defined(__CHI__CHI_XACT_XACTIONS_B__IMPL_DATALESS)) \
@@ -42,6 +43,12 @@ namespace CHI {
             virtual bool                    IsComplete(const Global<config, conn>& glbl) const noexcept override;
 
             virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
+        
+        protected:
+            virtual const FiredResponseFlit<config, conn>*  
+                                            GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept override;
+            virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
+                                            GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
 
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -242,6 +249,26 @@ namespace /*CHI::*/Xact {
     inline bool XactionDataless<config, conn>::IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept
     {
         return IsAckComplete(glbl);
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionDataless<config, conn>::GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        return this->GetFirstRSP(
+            { Opcodes::RSP::Comp, Opcodes::RSP::CompPersist });
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> XactionDataless<config, conn>::GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        const FiredResponseFlit<config, conn>* optSource = GetPrimaryTgtIDSourceNonREQ(glbl);
+
+        if (!optSource)
+            return std::nullopt;
+
+        return { optSource->flit.rsp.SrcID() };
     }
 
     template<FlitConfigurationConcept       config,

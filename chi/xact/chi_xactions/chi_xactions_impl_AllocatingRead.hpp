@@ -43,6 +43,12 @@ namespace CHI {
             virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
 
         protected:
+            virtual const FiredResponseFlit<config, conn>*  
+                                            GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept override;
+            virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
+                                            GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
+
+        protected:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
@@ -215,6 +221,30 @@ namespace /*CHI::*/Xact {
     inline bool XactionAllocatingRead<config, conn>::IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept
     {
         return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionAllocatingRead<config, conn>::GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        return this->GetFirst(
+            { Opcodes::RSP::RespSepData, Opcodes::RSP::Comp }, 
+            { Opcodes::DAT::DataSepResp, Opcodes::DAT::CompData });
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> XactionAllocatingRead<config, conn>::GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept
+    {
+        const FiredResponseFlit<config, conn>* optSource = GetPrimaryTgtIDSourceNonREQ(glbl);
+
+        if (!optSource)
+            return std::nullopt;
+
+        if (optSource->IsRSP())
+            return { optSource->flit.rsp.SrcID() };
+        else
+            return { optSource->flit.dat.HomeNID() };
     }
 
     template<FlitConfigurationConcept       config,
