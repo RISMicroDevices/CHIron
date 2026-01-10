@@ -50,6 +50,38 @@ namespace CHI {
             inline constexpr XactScopeEnumBack  Subordinate ("Subordinate", 2);
         }
 
+        class ChannelTypeEnumBack {
+        public:
+            const char* name;
+            const int   value;
+
+        public:
+            inline constexpr ChannelTypeEnumBack(const char* name, const int value) noexcept
+            : name(name), value(value) { }
+
+        public:
+            inline constexpr operator int() const noexcept
+            { return value; }
+
+            inline constexpr operator const ChannelTypeEnumBack*() const noexcept
+            { return this; }
+
+            inline constexpr bool operator==(const ChannelTypeEnumBack& obj) const noexcept
+            { return value == obj.value; }
+
+            inline constexpr bool operator!=(const ChannelTypeEnumBack& obj) const noexcept
+            { return !(*this == obj); }
+        };
+
+        using ChannelTypeEnum = const ChannelTypeEnumBack*;
+
+        namespace ChannelType {
+            inline constexpr ChannelTypeEnumBack    REQ     ("REQ", 0);
+            inline constexpr ChannelTypeEnumBack    RSP     ("RSP", 1);
+            inline constexpr ChannelTypeEnumBack    DAT     ("DAT", 2);
+            inline constexpr ChannelTypeEnumBack    SNP     ("SNP", 3);
+        }
+
         class NodeTypeEnumBack {
         public:
             const char*         name;
