@@ -42,6 +42,9 @@ namespace CHI {
         public:
             bool            IsTX() const noexcept;
             bool            IsRX() const noexcept;
+
+        public:
+            virtual ChannelTypeEnum GetChannel() const noexcept = 0;
         };
 
         template<FlitConfigurationConcept       config,
@@ -83,6 +86,10 @@ namespace CHI {
             bool            IsRXREQ() const noexcept;
             bool            IsTXSNP() const noexcept;
             bool            IsRXSNP() const noexcept;
+
+        public:
+            virtual ChannelTypeEnum GetChannel() const noexcept override;
+            ChannelTypeEnum         GetChannelType() const noexcept;
 
         public:
             bool            IsToRequester(const Global<config, conn>&) const noexcept;
@@ -135,6 +142,10 @@ namespace CHI {
             bool            IsRXRSP() const noexcept;
             bool            IsTXDAT() const noexcept;
             bool            IsRXDAT() const noexcept;
+
+        public:
+            virtual ChannelTypeEnum GetChannel() const noexcept override;
+            ChannelTypeEnum         GetChannelType() const noexcept;
 
         public:
             bool            IsToRequester(const Global<config, conn>&) const noexcept;
@@ -285,6 +296,20 @@ namespace /*CHI::*/Xact {
     inline bool FiredRequestFlit<config, conn>::IsRXSNP() const noexcept
     {
         return this->IsRX() && IsSNP();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline ChannelTypeEnum FiredRequestFlit<config, conn>::GetChannel() const noexcept
+    {
+        return GetChannelType();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline ChannelTypeEnum FiredRequestFlit<config, conn>::GetChannelType() const noexcept
+    {
+        return IsREQ() ? ChannelType::REQ : ChannelType::SNP;
     }
 
     template<FlitConfigurationConcept       config,
@@ -700,6 +725,20 @@ namespace /*CHI::*/Xact {
     inline bool FiredResponseFlit<config, conn>::IsRXDAT() const noexcept
     {
         return this->IsRX() && IsDAT();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline ChannelTypeEnum FiredResponseFlit<config, conn>::GetChannel() const noexcept
+    {
+        return GetChannelType();
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline ChannelTypeEnum FiredResponseFlit<config, conn>::GetChannelType() const noexcept
+    {
+        return IsRSP() ? ChannelType::RSP : ChannelType::DAT;
     }
 
     template<FlitConfigurationConcept       config,
