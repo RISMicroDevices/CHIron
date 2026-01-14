@@ -49,7 +49,7 @@ namespace CHI {
             RequestFieldMappingTable    table;
 
         public:
-            XactDenialEnum      Check(const Flits::REQ<config, conn>&) noexcept;
+            XactDenialEnum      Check(const Flits::REQ<config, conn>&) const noexcept;
         };
 
         template<RSPFlitConfigurationConcept    config,
@@ -59,7 +59,7 @@ namespace CHI {
             ResponseFieldMappingTable   table;
 
         public:
-            XactDenialEnum      Check(const Flits::RSP<config, conn>&) noexcept;
+            XactDenialEnum      Check(const Flits::RSP<config, conn>&) const noexcept;
         };
 
         template<DATFlitConfigurationConcept    config,
@@ -69,7 +69,7 @@ namespace CHI {
             DataFieldMappingTable       table;
 
         public:
-            XactDenialEnum      Check(const Flits::DAT<config, conn>&) noexcept;
+            XactDenialEnum      Check(const Flits::DAT<config, conn>&) const noexcept;
         };
 
         template<SNPFlitConfigurationConcept    config,
@@ -79,7 +79,7 @@ namespace CHI {
             SnoopFieldMappingTable      table;
 
         public:
-            XactDenialEnum      Check(const Flits::SNP<config, conn>&) noexcept;
+            XactDenialEnum      Check(const Flits::SNP<config, conn>&) const noexcept;
         };
 
         template<FlitConfigurationConcept       config,
@@ -175,7 +175,7 @@ namespace /*CHI::*/Xact {
 
     template<REQFlitConfigurationConcept    config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RequestFieldMappingChecker<config, conn>::Check(const Flits::REQ<config, conn>& reqFlit) noexcept
+    inline XactDenialEnum RequestFieldMappingChecker<config, conn>::Check(const Flits::REQ<config, conn>& reqFlit) const noexcept
     {
         #define CHECK_REQ(field, denial) \
             if (!details::Check(mapping->field, reqFlit.field())) \
@@ -263,7 +263,7 @@ namespace /*CHI::*/Xact {
 
     template<RSPFlitConfigurationConcept    config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum ResponseFieldMappingChecker<config, conn>::Check(const Flits::RSP<config, conn>& rspFlit) noexcept
+    inline XactDenialEnum ResponseFieldMappingChecker<config, conn>::Check(const Flits::RSP<config, conn>& rspFlit) const noexcept
     {
         #define CHECK_RSP(field, denial) \
             if (!details::Check(mapping->field, rspFlit.field())) \
@@ -324,7 +324,7 @@ namespace /*CHI::*/Xact {
 
     template<DATFlitConfigurationConcept    config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum DataFieldMappingChecker<config, conn>::Check(const Flits::DAT<config, conn>& datFlit) noexcept
+    inline XactDenialEnum DataFieldMappingChecker<config, conn>::Check(const Flits::DAT<config, conn>& datFlit) const noexcept
     {
         #define CHECK_DAT(field, denial) \
             if (!details::Check(mapping->field, datFlit.field())) \
@@ -393,7 +393,7 @@ namespace /*CHI::*/Xact {
 
     template<SNPFlitConfigurationConcept    config,
              CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum SnoopFieldMappingChecker<config, conn>::Check(const Flits::SNP<config, conn>& snpFlit) noexcept
+    inline XactDenialEnum SnoopFieldMappingChecker<config, conn>::Check(const Flits::SNP<config, conn>& snpFlit) const noexcept
     {
         #define CHECK_SNP(field, denial) \
             if (!details::Check(mapping->field, snpFlit.field())) \
