@@ -48,6 +48,10 @@ namespace CHI {
             virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
                                             GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
 
+            virtual bool                    IsDMTPossible() const noexcept override;
+            virtual bool                    IsDCTPossible() const noexcept override;
+            virtual bool                    IsDWTPossible() const noexcept override;
+
         protected:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -245,6 +249,27 @@ namespace /*CHI::*/Xact {
             return { optSource->flit.rsp.SrcID() };
         else
             return { optSource->flit.dat.HomeNID() };
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionAllocatingRead<config, conn>::IsDMTPossible() const noexcept
+    {
+        return true;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionAllocatingRead<config, conn>::IsDCTPossible() const noexcept
+    {
+        return true;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionAllocatingRead<config, conn>::IsDWTPossible() const noexcept
+    {
+        return false;
     }
 
     template<FlitConfigurationConcept       config,

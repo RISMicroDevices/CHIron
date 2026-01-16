@@ -46,6 +46,10 @@ namespace CHI {
             virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
                                             GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
 
+            virtual bool                    IsDMTPossible() const noexcept override;
+            virtual bool                    IsDCTPossible() const noexcept override;
+            virtual bool                    IsDWTPossible() const noexcept override;
+
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -214,6 +218,27 @@ namespace /*CHI::*/Xact  {
     inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> XactionHomeSnoop<config, conn>::GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept
     {
         return std::nullopt;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionHomeSnoop<config, conn>::IsDMTPossible() const noexcept
+    {
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionHomeSnoop<config, conn>::IsDCTPossible() const noexcept
+    {
+        return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionHomeSnoop<config, conn>::IsDWTPossible() const noexcept
+    {
+        return false;
     }
 
     template<FlitConfigurationConcept       config,
