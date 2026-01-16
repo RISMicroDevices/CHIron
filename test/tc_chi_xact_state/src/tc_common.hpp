@@ -15,6 +15,9 @@
 template<class T>
 class TCPt {
 protected:
+    Xact::Global<config>                    glbl;
+
+protected:
     size_t* totalCount          = nullptr;
     size_t* errCountFail        = nullptr;
     size_t* errCountEnvError    = nullptr;
@@ -26,11 +29,13 @@ protected:
 protected:
     T*      prev                = nullptr;
 
-protected:
-    Xact::Topology  topo;
-
 public:
     virtual ~TCPt() noexcept = default;
+
+    TCPt() noexcept
+    {
+        glbl.CHECK_FIELD_MAPPING->enable = false;
+    }
 
     inline T* TotalCount(size_t* totalCount) noexcept
     {
@@ -58,7 +63,7 @@ public:
 
     inline T* Topology(Xact::Topology topo) noexcept
     {
-        this->topo = topo;
+        *this->glbl.TOPOLOGY = topo;
         return static_cast<T*>(this);
     }
 
