@@ -19,7 +19,7 @@ TCPtInitial* TCPtInitial::ForkREQ(std::string title, Flits::REQ<config>::opcode_
     forked->req.Addr() = addr;
 
     Xact::XactDenialEnum denial 
-        = forked->rnJoint.NextTXREQ(nullptr, 0, forked->topo, forked->req, &forked->xaction);
+        = forked->rnJoint.NextTXREQ(glbl, 0, forked->req, &forked->xaction);
     
     if (denial != Xact::XactDenial::ACCEPTED)
     {
