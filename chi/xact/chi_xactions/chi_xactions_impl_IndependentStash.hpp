@@ -221,6 +221,10 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline bool XactionIndependentStash<config, conn>::IsDWTPossible() const noexcept
+    {
+        return false;
+    }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
