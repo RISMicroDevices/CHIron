@@ -50,9 +50,15 @@ namespace CHI {
             virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
                                             GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
 
+        public:
             virtual bool                    IsDMTPossible() const noexcept override;
             virtual bool                    IsDCTPossible() const noexcept override;
             virtual bool                    IsDWTPossible() const noexcept override;
+
+            virtual const FiredResponseFlit<config, conn>*
+                                            GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept;
+            virtual const FiredResponseFlit<config, conn>*
+                                            GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept;
 
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -189,6 +195,20 @@ namespace /*CHI::*/Xact {
     inline bool XactionDVMSnoop<config, conn>::IsDWTPossible() const noexcept
     {
         return false;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionDVMSnoop<config, conn>::GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionDVMSnoop<config, conn>::GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    {
+        return nullptr;
     }
 
     template<FlitConfigurationConcept       config,

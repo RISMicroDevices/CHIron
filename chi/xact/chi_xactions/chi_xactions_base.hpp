@@ -258,6 +258,7 @@ namespace CHI {
             virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
                                                     GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept = 0;
 
+        public:
             virtual bool                            IsDMTPossible() const noexcept;
             virtual bool                            IsDCTPossible() const noexcept;
             virtual bool                            IsDWTPossible() const noexcept;
