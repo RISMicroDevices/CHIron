@@ -56,9 +56,14 @@ namespace CHI {
             virtual bool                    IsDWTPossible() const noexcept override;
 
             virtual const FiredResponseFlit<config, conn>*
-                                            GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept;
+                                            GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
             virtual const FiredResponseFlit<config, conn>*
-                                            GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept;
+                                            GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+
+            virtual const FiredResponseFlit<config, conn>*
+                                            GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config, conn>*
+                                            GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
 
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -207,6 +212,20 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline const FiredResponseFlit<config, conn>* XactionDVMSnoop<config, conn>::GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionDVMSnoop<config, conn>::GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionDVMSnoop<config, conn>::GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept
     {
         return nullptr;
     }
