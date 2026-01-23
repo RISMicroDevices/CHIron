@@ -1456,9 +1456,9 @@ namespace /*CHI::*/Xact {
         if (!optSource)
             return std::nullopt;
 
-        assert(optSource->IsDAT() && "DWT SrcID should come from DAT channel only");
+        assert(optSource->IsRSP() && "DWT SrcID should come from RSP channel only");
 
-        return { optSource->flit.dat.SrcID() };
+        return { optSource->flit.rsp.TgtID() };
     }
 
     template<FlitConfigurationConcept       config,
