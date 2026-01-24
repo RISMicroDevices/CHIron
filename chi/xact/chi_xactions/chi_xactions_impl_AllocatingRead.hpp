@@ -63,6 +63,11 @@ namespace CHI {
             const FiredResponseFlit<config, conn>*
                                             GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
 
+            const FiredResponseFlit<config, conn>*
+                                            GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
+            const FiredResponseFlit<config, conn>*
+                                            GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+
         protected:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;

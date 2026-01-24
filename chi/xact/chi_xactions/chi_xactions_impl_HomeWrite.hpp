@@ -64,6 +64,11 @@ namespace CHI {
             virtual const FiredResponseFlit<config, conn>*
                                             GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
 
+            virtual const FiredResponseFlit<config, conn>*
+                                            GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config, conn>*
+                                            GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -297,6 +302,25 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline const FiredResponseFlit<config, conn>* XactionHomeWrite<config, conn>::GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionHomeWrite<config, conn>::GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    {
+        // *NOTICE: The actual SrcID source is from ReturnNID of first REQ flit,
+        //          and DWT route was confirmed by first DBIDResp to RN.
+        //          The TgtID check of DBIDResp should be always guaranteed when DoDWT=1 regardless of
+        //          any topological-actual DWT happened.
+        return this->GetFirstRSPTo(glbl, XactScope::Requester,
+            { Opcodes::RSP::DBIDResp });
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionHomeWrite<config, conn>::GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept
     {
         return nullptr;
     }

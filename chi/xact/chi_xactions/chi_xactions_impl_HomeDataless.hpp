@@ -63,6 +63,11 @@ namespace CHI {
             virtual const FiredResponseFlit<config, conn>*
                                             GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
 
+            virtual const FiredResponseFlit<config, conn>*
+                                            GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config, conn>*
+                                            GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+
         public:
             virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
             virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
@@ -284,6 +289,20 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline const FiredResponseFlit<config, conn>* XactionHomeDataless<config, conn>::GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionHomeDataless<config, conn>::GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const FiredResponseFlit<config, conn>* XactionHomeDataless<config, conn>::GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept
     {
         return nullptr;
     }
