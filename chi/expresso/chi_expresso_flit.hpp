@@ -209,10 +209,10 @@ namespace CHI {
             KeyValueMap map;
 
         public:
-            inline void     Map(const Flits::REQ<config, conn>& reqFlit) noexcept;
-            inline void     Map(const Flits::SNP<config, conn>& snpFlit) noexcept;
-            inline void     Map(const Flits::RSP<config, conn>& rspFlit) noexcept;
-            inline void     Map(const Flits::DAT<config, conn>& datFlit) noexcept;
+            inline Mapper&  Map(const Flits::REQ<config, conn>& reqFlit) noexcept;
+            inline Mapper&  Map(const Flits::SNP<config, conn>& snpFlit) noexcept;
+            inline Mapper&  Map(const Flits::RSP<config, conn>& rspFlit) noexcept;
+            inline Mapper&  Map(const Flits::DAT<config, conn>& datFlit) noexcept;
 
         public:
             inline KeyValueMap&         Get() noexcept;
@@ -222,6 +222,26 @@ namespace CHI {
             inline void     MapIntegral(Key key, uint64_t value) noexcept;
             inline void     MapVector(Key key, size_t size, uint64_t* vec) noexcept;
         };
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn>
+        inline KeyValueMap Map(const Flits::REQ<config, conn>& reqFlit) noexcept
+        { return Mapper<config, conn>().Map(reqFlit).Get(); }
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn>
+        inline KeyValueMap Map(const Flits::SNP<config, conn>& snpFlit) noexcept
+        { return Mapper<config, conn>().Map(snpFlit).Get(); }
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn>
+        inline KeyValueMap Map(const Flits::RSP<config, conn>& rspFlit) noexcept
+        { return Mapper<config, conn>().Map(rspFlit).Get(); }
+
+        template<FlitConfigurationConcept       config,
+                 CHI::IOLevelConnectionConcept  conn>
+        inline KeyValueMap Map(const Flits::DAT<config, conn>& datFlit) noexcept
+        { return Mapper<config, conn>().Map(datFlit).Get(); }
 
 
         class Formatter {
@@ -1026,7 +1046,7 @@ namespace /*CHI::*/Expresso::Flit {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline void Mapper<config, conn>::Map(const Flits::REQ<config, conn>& reqFlit) noexcept
+    inline Mapper<config, conn>& Mapper<config, conn>::Map(const Flits::REQ<config, conn>& reqFlit) noexcept
     {
         MapIntegral(Keys::REQ::QoS              , reqFlit.QoS());
         MapIntegral(Keys::REQ::TgtID            , reqFlit.TgtID());
@@ -1076,11 +1096,13 @@ namespace /*CHI::*/Expresso::Flit {
 #endif
         if constexpr (Flits::REQ<config, conn>::hasRSVDC)
             MapIntegral(Keys::REQ::RSVDC            , reqFlit.RSVDC());
+
+        return *this;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline void Mapper<config, conn>::Map(const Flits::SNP<config, conn>& snpFlit) noexcept
+    inline Mapper<config, conn>& Mapper<config, conn>::Map(const Flits::SNP<config, conn>& snpFlit) noexcept
     {
         MapIntegral(Keys::SNP::QoS              , snpFlit.QoS());
         MapIntegral(Keys::SNP::SrcID            , snpFlit.SrcID());
@@ -1102,11 +1124,12 @@ namespace /*CHI::*/Expresso::Flit {
         if constexpr (Flits::SNP<config, conn>::hasMPAM)
             MapIntegral(Keys::SNP::MPAM,            snpFlit.MPAM());
 #endif
+        return *this;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline void Mapper<config, conn>::Map(const Flits::RSP<config, conn>& rspFlit) noexcept
+    inline Mapper<config, conn>& Mapper<config, conn>::Map(const Flits::RSP<config, conn>& rspFlit) noexcept
     {
         MapIntegral(Keys::RSP::QoS              , rspFlit.QoS());
         MapIntegral(Keys::RSP::TgtID            , rspFlit.TgtID());
@@ -1130,11 +1153,13 @@ namespace /*CHI::*/Expresso::Flit {
         MapIntegral(Keys::RSP::TagOp            , rspFlit.TagOp());
 #endif
         MapIntegral(Keys::RSP::TraceTag         , rspFlit.TraceTag());
+
+        return this;
     }
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline void Mapper<config, conn>::Map(const Flits::DAT<config, conn>& datFlit) noexcept
+    inline Mapper<config, conn>& Mapper<config, conn>::Map(const Flits::DAT<config, conn>& datFlit) noexcept
     {
         MapIntegral(Keys::DAT::QoS              , datFlit.QoS());
         MapIntegral(Keys::DAT::TgtID            , datFlit.TgtID());
@@ -1166,6 +1191,8 @@ namespace /*CHI::*/Expresso::Flit {
             MapIntegral(Keys::DAT::DataCheck        , datFlit.DataCheck());
         if constexpr (Flits::DAT<config, conn>::hasPoison)
             MapIntegral(Keys::DAT::Poison           , datFlit.Poison());
+
+        return *this;
     }
 
     template<FlitConfigurationConcept       config,
