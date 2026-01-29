@@ -392,6 +392,13 @@ namespace /*CHI::*/Xact {
 
             if (!this->NextREQDataID(datFlit))
                 return XactDenial::DENIED_DUPLICATED_DATAID;
+            
+            // check DMT consistency
+            if (auto optDMTTgtID = this->GetDMTTgtID(glbl))
+            {
+                if (datFlit.flit.dat.TgtID() != *optDMTTgtID)
+                    return XactDenial::DENIED_DMT_INCONSISTENT_TARGET;
+            }
 
             //
             if (glbl.CHECK_FIELD_MAPPING->enable)

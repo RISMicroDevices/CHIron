@@ -418,10 +418,15 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN_OR_RN;
 
                 if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.ReturnNID())
-                    return XactDenial::DENIED_TGTID_MISMATCH;
+                {
+                    if (rspFlit.flit.rsp.TgtID() == this->first.flit.req.SrcID())
+                        return XactDenial::DENIED_DWT_INOPERATIVENESS;
+
+                    return XactDenial::DENIED_DWT_TGTID_MISMATCH;
+                }
                     
                 if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.ReturnTxnID())
-                    return XactDenial::DENIED_TXNID_MISMATCH;
+                    return XactDenial::DENIED_DWT_TXNID_MISMATCH;
             }
             else
 #endif
@@ -507,32 +512,29 @@ namespace /*CHI::*/Xact {
 
                 if (!this->NextREQDataID(datFlit))
                     return XactDenial::DENIED_DUPLICATED_DATAID;
-
-                //
-                if (glbl.CHECK_FIELD_MAPPING->enable)
-                {
-                    XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
-                    if (denial != XactDenial::ACCEPTED)
-                        return denial;
-                }
-
-                return XactDenial::ACCEPTED;
             }
             else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::WriteDataCancel)
             {
                 if (this->HasDAT({ Opcodes::DAT::NonCopyBackWrData }))
                     return XactDenial::DENIED_WRITEDATACANCEL_AFTER_NCBWRDATA;
-
-                //
-                if (glbl.CHECK_FIELD_MAPPING->enable)
-                {
-                    XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
-                    if (denial != XactDenial::ACCEPTED)
-                        return denial;
-                }
-
-                return XactDenial::ACCEPTED;
             }
+
+            // check DWT consistency
+            if (auto optDWTSrcID = this->GetDWTSrcID(glbl))
+            {
+                if (datFlit.flit.dat.SrcID() != *optDWTSrcID)
+                    return XactDenial::DENIED_DWT_INCONSISTENT_SOURCE;
+            }
+
+            //
+            if (glbl.CHECK_FIELD_MAPPING->enable)
+            {
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING->Check(datFlit.flit.dat);
+                if (denial != XactDenial::ACCEPTED)
+                    return denial;
+            }
+
+            return XactDenial::ACCEPTED;
         }
 
         return XactDenial::DENIED_OPCODE;

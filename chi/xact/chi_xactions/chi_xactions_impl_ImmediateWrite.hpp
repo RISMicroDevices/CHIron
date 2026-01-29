@@ -647,6 +647,13 @@ namespace /*CHI::*/Xact {
                 if (!this->NextREQDataID(datFlit))
                     return XactDenial::DENIED_DUPLICATED_DATAID;
 
+                // check DMT consistency
+                if (auto optDMTTgtID = this->GetDMTTgtID(glbl))
+                {
+                    if (datFlit.flit.dat.TgtID() != *optDMTTgtID)
+                        return XactDenial::DENIED_DMT_INCONSISTENT_TARGET;
+                }
+
                 //
                 if (glbl.CHECK_FIELD_MAPPING->enable)
                 {
@@ -665,6 +672,9 @@ namespace /*CHI::*/Xact {
 
                 if (this->HasDAT({ Opcodes::DAT::WriteDataCancel }))
                     return XactDenial::DENIED_NCBWRDATACOMPACK_AFTER_WRITEDATACANCEL;
+
+                if (!this->first.flit.req.ExpCompAck())
+                    return XactDenial::DENIED_NCBWRDATACOMPACK_ON_NON_EXPCOMPACK;
 
                 if (!this->NextREQDataID(datFlit))
                     return XactDenial::DENIED_DUPLICATED_DATAID;
@@ -687,6 +697,13 @@ namespace /*CHI::*/Xact {
 
                 if (this->HasDAT({ Opcodes::DAT::NCBWrDataCompAck }))
                     return XactDenial::DENIED_WRITEDATACANCEL_AFTER_NCBWRDATACOMPACK;
+
+                // check DMT consistency
+                if (auto optDMTTgtID = this->GetDMTTgtID(glbl))
+                {
+                    if (datFlit.flit.dat.TgtID() != *optDMTTgtID)
+                        return XactDenial::DENIED_DMT_INCONSISTENT_TARGET;
+                }
 
                 //
                 if (glbl.CHECK_FIELD_MAPPING->enable)

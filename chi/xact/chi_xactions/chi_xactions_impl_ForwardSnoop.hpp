@@ -645,6 +645,13 @@ namespace /*CHI::*/Xact {
                 if (datFlit.flit.dat.Resp() != p->flit.dat.FwdState())
                     return XactDenial::DENIED_SNPRESPDATAFWDED_COMPDATA_FWDSTATE_MISMATCH;
             }
+
+            // check DCT consistency
+            if (auto optDCTTgtID = this->GetDCTTgtID(glbl))
+            {
+                if (datFlit.flit.dat.TgtID() != *optDCTTgtID)
+                    return XactDenial::DENIED_DCT_INCONSISTENT_TARGET;
+            }
             
             //
             if (glbl.CHECK_FIELD_MAPPING->enable)

@@ -507,6 +507,18 @@ namespace /*CHI::*/Xact {
 
             hasDBID = true;
 
+            // check DMT/DCT consistency
+            if (auto optDMTSrcID = this->GetDMTSrcID(glbl))
+            {
+                if (datFlit.flit.dat.SrcID() != *optDMTSrcID)
+                    return XactDenial::DENIED_DMT_INCONSISTENT_SOURCE;
+            }
+            else if (auto optDCTSrcID = this->GetDCTSrcID(glbl))
+            {
+                if (datFlit.flit.dat.SrcID() != *optDCTSrcID)
+                    return XactDenial::DENIED_DCT_INCONSISTENT_SOURCE;
+            }
+
             //
             if (glbl.CHECK_FIELD_MAPPING->enable)
             {
