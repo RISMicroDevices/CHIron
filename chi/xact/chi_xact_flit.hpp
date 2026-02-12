@@ -37,6 +37,9 @@ namespace CHI {
             bool            isTX;
 
         public:
+            Companion       companion;
+
+        public:
             FiredFlit(XactScopeEnum scope, bool isTX, uint64_t time) noexcept;
 
         public:
