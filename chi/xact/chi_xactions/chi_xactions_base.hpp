@@ -1633,7 +1633,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_CHANNEL;
 
         if (rspFlit.flit.rsp.Opcode() != Opcodes::RSP::RetryAck)
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_RSP_OPCODE;
 
         if (!rspFlit.IsFromHomeToRequester(glbl) && !rspFlit.IsFromSubordinateToHome(glbl))
             return XactDenial::DENIED_RSP_RETRYACK_ROUTE;
