@@ -106,7 +106,7 @@ namespace /*CHI::*/Xact {
          && this->first.flit.req.Opcode() != Opcodes::REQ::WriteNoSnpFull
         )
         {
-            this->firstDenial = XactDenial::DENIED_OPCODE;
+            this->firstDenial = XactDenial::DENIED_REQ_OPCODE;
             return;
         }
 
@@ -473,7 +473,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_OPCODE;
+        return XactDenial::DENIED_RSP_OPCODE;
     }
 
     template<FlitConfigurationConcept       config,
@@ -537,7 +537,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_OPCODE;
+        return XactDenial::DENIED_DAT_OPCODE;
     }
 }
 

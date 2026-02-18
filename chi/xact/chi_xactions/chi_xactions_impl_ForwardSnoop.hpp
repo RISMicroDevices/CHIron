@@ -103,7 +103,7 @@ namespace /*CHI::*/Xact {
          && this->first.flit.snp.Opcode() != Opcodes::SNP::SnpUniqueFwd
         ) [[unlikely]]
         {
-            this->firstDenial = XactDenial::DENIED_OPCODE;
+            this->firstDenial = XactDenial::DENIED_SNP_OPCODE;
             return;
         }
 
@@ -437,7 +437,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_OPCODE;
+        return XactDenial::DENIED_RSP_OPCODE;
     }
 
     template<FlitConfigurationConcept       config,
@@ -664,7 +664,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_OPCODE;
+        return XactDenial::DENIED_DAT_OPCODE;
     }
 }
 

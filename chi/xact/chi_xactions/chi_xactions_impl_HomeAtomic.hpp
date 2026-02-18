@@ -108,7 +108,7 @@ namespace /*CHI::*/Xact {
          && this->first.flit.req.Opcode() != Opcodes::REQ::AtomicCompare
         ) [[unlikely]]
         {
-            this->firstDenial = XactDenial::DENIED_OPCODE;
+            this->firstDenial = XactDenial::DENIED_REQ_OPCODE;
             return;
         }
 
@@ -384,7 +384,7 @@ namespace /*CHI::*/Xact {
         else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
         {
             if (!Opcodes::REQ::AtomicStore::Is(this->first.flit.req.Opcode()))
-                return XactDenial::DENIED_OPCODE;
+                return XactDenial::DENIED_RSP_OPCODE;
 
             if (!rspFlit.IsFromSubordinateToHome(glbl))
                 return XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN;
@@ -429,7 +429,7 @@ namespace /*CHI::*/Xact {
         else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
         {
             if (!Opcodes::REQ::AtomicStore::Is(this->first.flit.req.Opcode()))
-                return XactDenial::DENIED_OPCODE;
+                return XactDenial::DENIED_RSP_OPCODE;
 
             if (!rspFlit.IsFromSubordinateToHome(glbl))
                 return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
@@ -475,7 +475,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_OPCODE;
+        return XactDenial::DENIED_RSP_OPCODE;
     }
 
     template<FlitConfigurationConcept       config,
@@ -534,7 +534,7 @@ namespace /*CHI::*/Xact {
         else if (datFlit.flit.dat.Opcode() == Opcodes::DAT::CompData)
         {
             if (Opcodes::REQ::AtomicStore::Is(this->first.flit.req.Opcode()))
-                return XactDenial::DENIED_OPCODE;
+                return XactDenial::DENIED_DAT_OPCODE;
             
             if (!datFlit.IsFromSubordinateToHome(glbl))
                 return XactDenial::DENIED_DAT_NOT_FROM_SN_TO_HN;
@@ -570,7 +570,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_OPCODE;
+        return XactDenial::DENIED_DAT_OPCODE;
     }
 }
 
