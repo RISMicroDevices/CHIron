@@ -57,13 +57,17 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_DBID_NOT_EXIST               ("XACT_DENIED_DBID_NOT_EXIST",              0x00000000 |  8);
             inline constexpr XactDenialEnumBack DENIED_NESTING_SNP                  ("XACT_DENIED_NESTING_SNP",                 0x00000000 |  9);
 
-            inline constexpr XactDenialEnumBack DENIED_OPCODE                       ("XACT_DENIED_OPCODE",                      0x00010000 |  0);
+        //  inline constexpr XactDenialEnumBack DENIED_OPCODE                       ("XACT_DENIED_OPCODE",                      0x00010000 |  0);
             inline constexpr XactDenialEnumBack DENIED_REQ_OPCODE                   ("XACT_DENIED_REQ_OPCODE",                  0x00010000 |  1);
             inline constexpr XactDenialEnumBack DENIED_RSP_OPCODE                   ("XACT_DENIED_RSP_OPCODE",                  0x00010000 |  2);
             inline constexpr XactDenialEnumBack DENIED_DAT_OPCODE                   ("XACT_DENIED_DAT_OPCODE",                  0x00010000 |  3);
             inline constexpr XactDenialEnumBack DENIED_SNP_OPCODE                   ("XACT_DENIED_SNP_OPCODE",                  0x00010000 |  4);
-            inline constexpr XactDenialEnumBack DENIED_OPCODE_NOT_SUPPORTED         ("XACT_DENIED_OPCODE_NOT_SUPPORTED",        0x00010000 | 16);
-            inline constexpr XactDenialEnumBack DENIED_XACTION_NOT_SUPPORTED        ("XACT_DENIED_XACTION_NOT_SUPPORTED",       0x00010000 | 17);
+        //  inline constexpr XactDenialEnumBack DENIED_OPCODE_NOT_SUPPORTED         ("XACT_DENIED_OPCODE_NOT_SUPPORTED",        0x00010000 | 16);
+        //  inline constexpr XactDenialEnumBack DENIED_XACTION_NOT_SUPPORTED        ("XACT_DENIED_XACTION_NOT_SUPPORTED",       0x00010000 | 17);
+            inline constexpr XactDenialEnumBack DENIED_REQ_OPCODE_NOT_SUPPORTED     ("XACT_DENIED_REQ_OPCODE_NOT_SUPPORTED",    0x00010000 | 18);
+            inline constexpr XactDenialEnumBack DENIED_RSP_OPCODE_NOT_SUPPORTED     ("XACT_DENIED_RSP_OPCODE_NOT_SUPPORTED",    0x00010000 | 19);
+            inline constexpr XactDenialEnumBack DENIED_DAT_OPCODE_NOT_SUPPORTED     ("XACT_DENIED_DAT_OPCODE_NOT_SUPPORTED",    0x00010000 | 20);
+            inline constexpr XactDenialEnumBack DENIED_SNP_OPCODE_NOT_SUPPORTED     ("XACT_DENIED_SNP_OPCODE_NOT_SUPPORTED",    0x00010000 | 21);
 
             inline constexpr XactDenialEnumBack DENIED_REQ_NOT_TO_HN                ("XACT_DENIED_REQ_NOT_TO_HN",               0x00020000 |  0);
             inline constexpr XactDenialEnumBack DENIED_REQ_NOT_FROM_RN_TO_HN        ("XACT_DENIED_REQ_NOT_FROM_RN_TO_HN",       0x00020000 |  1);
