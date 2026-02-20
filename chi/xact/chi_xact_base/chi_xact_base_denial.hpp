@@ -95,7 +95,7 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_SNP_NOT_FROM_HN_TO_RN        ("XACT_DENIED_SNP_NOT_FROM_HN_TO_RN",       0x00020000 | 23);
             inline constexpr XactDenialEnumBack DENIED_RSP_RETRYACK_ROUTE           ("XACT_DENIED_RSP_RETRYACK_ROUTE",          0x00020000 | 24);
 
-            inline constexpr XactDenialEnumBack DENIED_TXNID_MISMATCH               ("XACT_DENIED_TXNID_MISMATCH",              0x00040000 |  1);
+        //  inline constexpr XactDenialEnumBack DENIED_TXNID_MISMATCH               ("XACT_DENIED_TXNID_MISMATCH",              0x00040000 |  1);
             inline constexpr XactDenialEnumBack DENIED_DBID_MISMATCH                ("XACT_DENIED_DBID_MISMATCH",               0x00040000 |  2);
             inline constexpr XactDenialEnumBack DENIED_TGTID_MISMATCH               ("XACT_DENIED_TGTID_MISMATCH",              0x00040000 |  3);
             inline constexpr XactDenialEnumBack DENIED_SRCID_MISMATCH               ("XACT_DENIED_SRCID_MISMATCH",              0x00040000 |  4);
@@ -103,6 +103,16 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_FWDTXNID_MISMATCH            ("XACT_DENIED_FWDTXNID_MISMATCH",           0x00040000 |  6);
             inline constexpr XactDenialEnumBack DENIED_HOMENID_MISMATCH             ("XACT_DENIED_HOMENID_MISMATCH",            0x00040000 |  7);
             inline constexpr XactDenialEnumBack DENIED_PGROUPID_MISMATCH            ("XACT_DENIED_PGROUPID_MISMATCH",           0x00040000 |  8);
+
+            inline constexpr XactDenialEnumBack DENIED_RSP_TXNID_MISMATCHING_REQ    ("XACT_DENIED_RSP_TXNID_MISMATCHING_REQ",   0x00040000 |  9);
+            inline constexpr XactDenialEnumBack DENIED_DAT_TXNID_MISMATCHING_REQ    ("XACT_DENIED_DAT_TXNID_MISMATCHING_REQ",   0x00040000 | 10);
+            inline constexpr XactDenialEnumBack DENIED_RSP_TXNID_MISMATCHING_DBID   ("XACT_DENIED_RSP_TXNID_MISMATCHING_DBID",  0x00040000 | 11);
+            inline constexpr XactDenialEnumBack DENIED_DAT_TXNID_MISMATCHING_DBID   ("XACT_DENIED_DAT_TXNID_MISMATCHING_DBID",  0x00040000 | 12);
+            inline constexpr XactDenialEnumBack DENIED_RSP_TXNID_MISMATCHING_SNP    ("XACT_DENIED_RSP_TXNID_MISMATCHING_SNP",   0x00040000 | 13);
+            inline constexpr XactDenialEnumBack DENIED_DAT_TXNID_MISMATCHING_SNP    ("XACT_DENIED_DAT_TXNID_MISMATCHING_SNP",   0x00040000 | 14);
+            inline constexpr XactDenialEnumBack DENIED_SNP_TXNID_MISMATCHING_SNP    ("XACT_DENIED_SNP_TXNID_MISMATCHING_SNP",   0x00040000 | 15);
+            inline constexpr XactDenialEnumBack DENIED_DAT_TXNID_MISMATCHING_DMT    ("XACT_DENIED_DAT_TXNID_MISMATCHING_DMT",   0x00040000 | 16);
+            inline constexpr XactDenialEnumBack DENIED_DAT_TXNID_MISMATCHING_DCT    ("XACT_DENIED_DAT_TXNID_MISMATCHING_DCT",   0x00040000 | 17);
 
             inline constexpr XactDenialEnumBack DENIED_SECOND_RETRY                 ("XACT_DENIED_SECOND_RETRY",                0x000A0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_SECOND_PCRD                  ("XACT_DENIED_SECOND_PCRD",                 0x000A0000 |  1);
