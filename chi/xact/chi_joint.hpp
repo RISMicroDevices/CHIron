@@ -1240,7 +1240,7 @@ namespace /*CHI::*/Xact {
             reqDecoder.DecodeRNF(reqFlit.Opcode());
 
         if (!opcodeInfo.IsValid()) // unknown opcode
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_REQ_OPCODE;
 
         //
         if (reqFlit.AllowRetry() == 0)
@@ -1276,7 +1276,7 @@ namespace /*CHI::*/Xact {
                 opcodeInfo.GetCompanion()(glbl, firedReqFlit, firstXaction);
 
             if (!retryXaction) // unsupported opcode transaction
-                return XactDenial::DENIED_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
 
             if (theXaction)
                 *theXaction = retryXaction;
@@ -1340,7 +1340,7 @@ namespace /*CHI::*/Xact {
             xaction = opcodeInfo.GetCompanion()(glbl, firedReqFlit, nullptr);
 
             if (!xaction) // unsupported opcode transaction
-                return XactDenial::DENIED_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
 
             if (theXaction)
                 *theXaction = xaction;
@@ -1386,13 +1386,13 @@ namespace /*CHI::*/Xact {
             snpDecoder.DecodeRNF(snpFlit.Opcode());
         
         if (!opcodeInfo.IsValid()) // unknown opcode
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_SNP_OPCODE;
         
         std::shared_ptr<Xaction<config, conn>> xaction =
             opcodeInfo.GetCompanion()(glbl, firedSnpFlit, nullptr);
 
         if (!xaction) // unsupported opcode transaction
-            return XactDenial::DENIED_XACTION_NOT_SUPPORTED;
+            return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
         
         if (theXaction)
             *theXaction = xaction;
@@ -1477,7 +1477,7 @@ namespace /*CHI::*/Xact {
                 return denial;
         }
         else
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_RSP_OPCODE;
 
         if (xaction->GetFirst().IsREQ())
         {
@@ -2579,7 +2579,7 @@ namespace /*CHI::*/Xact {
             reqDecoder.DecodeSNF(reqFlit.Opcode());
 
         if (!opcodeInfo.IsValid()) // unknown opcode
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_REQ_OPCODE;
 
         //
         if (reqFlit.AllowRetry() == 0)
@@ -2603,7 +2603,7 @@ namespace /*CHI::*/Xact {
             xaction = opcodeInfo.GetCompanion()(glbl, firedReqFlit, nullptr);
 
             if (!xaction) // unsupported opcode transactions
-                return XactDenial::DENIED_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
 
             if (theXaction)
                 *theXaction = xaction;
