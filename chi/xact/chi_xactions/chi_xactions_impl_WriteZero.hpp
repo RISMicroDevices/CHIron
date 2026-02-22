@@ -310,7 +310,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
             if (this->HasRSP({ Opcodes::RSP::Comp }))
                 return XactDenial::DENIED_COMPDBIDRESP_AFTER_COMP;
@@ -337,7 +337,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
             if (this->HasRSP({ Opcodes::RSP::Comp }))
                 return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -365,7 +365,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
             if (this->HasRSP({ Opcodes::RSP::DBIDResp, Opcodes::RSP::DBIDRespOrd }))
                 return XactDenial::DENIED_DBIDRESP_AFTER_DBIDRESP;

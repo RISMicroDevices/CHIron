@@ -343,7 +343,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
             if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RespSepData)
             {
@@ -418,7 +418,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_COMPACK_BEFORE_DBID;
 
             if (rspFlit.flit.rsp.TxnID() != *optDBID)
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_DBID;
 
             if (glbl.CHECK_FIELD_MAPPING->enable)
             {
@@ -457,7 +457,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (datFlit.flit.dat.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_DAT_TXNID_MISMATCHING_REQ;
 
             if (datFlit.flit.dat.Opcode() == Opcodes::DAT::CompData)
             {

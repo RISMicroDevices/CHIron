@@ -322,7 +322,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
             if (this->first.flit.req.Order() == 0)
                 return XactDenial::DENIED_READRECEIPT_ON_NO_ORDER;
@@ -367,12 +367,12 @@ namespace /*CHI::*/Xact {
             if (datFlit.flit.dat.TgtID() == this->first.flit.req.SrcID())
             {
                 if (datFlit.flit.dat.TxnID() != this->first.flit.req.TxnID())
-                    return XactDenial::DENIED_TXNID_MISMATCH;
+                    return XactDenial::DENIED_DAT_TXNID_MISMATCHING_REQ;
             }
             else if (datFlit.flit.dat.TgtID() == this->first.flit.req.ReturnNID())
             {
                 if (datFlit.flit.dat.TxnID() != this->first.flit.req.ReturnTxnID())
-                    return XactDenial::DENIED_TXNID_MISMATCH;
+                    return XactDenial::DENIED_DAT_TXNID_MISMATCHING_DMT;
             }
             else
                 return XactDenial::DENIED_DAT_NOT_TO_HN_OR_RN;

@@ -1648,7 +1648,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_TGTID_MISMATCH;
 
         if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-            return XactDenial::DENIED_TXNID_MISMATCH;
+            return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
         //
         if (glbl.CHECK_FIELD_MAPPING->enable)

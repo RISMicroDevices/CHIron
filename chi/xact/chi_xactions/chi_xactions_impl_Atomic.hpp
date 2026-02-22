@@ -341,7 +341,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
             const FiredResponseFlit<config, conn>* optDBIDSource = this->GetDBIDSource();
 
@@ -397,7 +397,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
             const FiredResponseFlit<config, conn>* optDBIDSource = this->GetDBIDSource();
 
@@ -442,7 +442,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
             const FiredResponseFlit<config, conn>* optDBIDSource = this->GetDBIDSource();
 
@@ -522,7 +522,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (datFlit.flit.dat.TxnID() != optDBIDSource->flit.rsp.DBID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_DAT_TXNID_MISMATCHING_DBID;
 
             if (this->HasDAT({ Opcodes::DAT::NonCopyBackWrData }))
                 return XactDenial::DENIED_NCBWRDATA_AFTER_NCBWRDATA;
@@ -549,7 +549,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (datFlit.flit.dat.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_DAT_TXNID_MISMATCHING_REQ;
 
             if (this->HasDAT({ Opcodes::DAT::CompData }))
                 return XactDenial::DENIED_COMPDATA_AFTER_COMPDATA;

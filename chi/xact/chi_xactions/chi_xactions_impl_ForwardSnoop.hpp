@@ -344,7 +344,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.snp.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_SNP;
 
             if (auto p = this->GetLastRSP({
                     Opcodes::RSP::SnpResp,
@@ -461,7 +461,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
             if (datFlit.flit.dat.TxnID() != this->first.flit.snp.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_DAT_TXNID_MISMATCHING_SNP;
 
             if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespData)
             {

@@ -389,7 +389,7 @@ namespace /*CHI::*/Xact {
                         return XactDenial::DENIED_TGTID_MISMATCH;
                     
                     if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                        return XactDenial::DENIED_TXNID_MISMATCH;
+                        return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
                     //
                     if (glbl.CHECK_FIELD_MAPPING->enable)
@@ -420,7 +420,7 @@ namespace /*CHI::*/Xact {
                         return XactDenial::DENIED_TGTID_MISMATCH;
                     
                     if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                        return XactDenial::DENIED_TXNID_MISMATCH;
+                        return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
                     hasDBID = true;
                     firstDBID = true;
@@ -451,7 +451,7 @@ namespace /*CHI::*/Xact {
                         return XactDenial::DENIED_TGTID_MISMATCH;
 
                     if (rspFlit.flit.rsp.TxnID() != lastComp->flit.rsp.DBID())
-                        return XactDenial::DENIED_TXNID_MISMATCH;
+                        return XactDenial::DENIED_RSP_TXNID_MISMATCHING_DBID;
 
                     //
                     if (glbl.CHECK_FIELD_MAPPING->enable)
@@ -487,7 +487,7 @@ namespace /*CHI::*/Xact {
                         return XactDenial::DENIED_TGTID_MISMATCH;
                     
                     if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                        return XactDenial::DENIED_TXNID_MISMATCH;
+                        return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
                     
                     if (rspFlit.flit.rsp.PGroupID() != this->first.flit.req.PGroupID())
                         return XactDenial::DENIED_PGROUPID_MISMATCH;
@@ -517,7 +517,7 @@ namespace /*CHI::*/Xact {
                         return XactDenial::DENIED_TGTID_MISMATCH;
                     
                     if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                        return XactDenial::DENIED_TXNID_MISMATCH;
+                        return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
                     //
                     if (glbl.CHECK_FIELD_MAPPING->enable)

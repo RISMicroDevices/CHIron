@@ -264,11 +264,11 @@ namespace /*CHI::*/Xact {
             if (!rspFlit.IsFromRequesterToHome(glbl))
                 return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
-            if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
+            if (rspFlit.flit.rsp.TgtID() != this->first.flit.snp.SrcID())
                 return XactDenial::DENIED_TGTID_MISMATCH;
 
-            if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+            if (rspFlit.flit.rsp.TxnID() != this->first.flit.snp.TxnID())
+                return XactDenial::DENIED_SNP_TXNID_MISMATCHING_SNP;
 
             if (!this->IsRequestComplete(glbl))
                 return XactDenial::DENIED_SNPRESP_BEFORE_ALL_SNPDVMOP;
@@ -334,7 +334,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_SRCID_MISMATCH;
 
             if (snpFlit.flit.snp.TxnID() != this->first.flit.snp.TxnID())
-                return XactDenial::DENIED_TXNID_MISMATCH;
+                return XactDenial::DENIED_SNP_TXNID_MISMATCHING_SNP;
 
             if ((snpFlit.flit.snp.Addr() & 0x1) == (this->first.flit.snp.Addr() & 0x1))
                 return XactDenial::DENIED_DUPLICATED_SNPDVMOP;
