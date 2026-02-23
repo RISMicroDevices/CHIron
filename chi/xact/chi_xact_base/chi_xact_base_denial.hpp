@@ -96,7 +96,7 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_RSP_RETRYACK_ROUTE           ("XACT_DENIED_RSP_RETRYACK_ROUTE",          0x00020000 | 24);
 
         //  inline constexpr XactDenialEnumBack DENIED_TXNID_MISMATCH               ("XACT_DENIED_TXNID_MISMATCH",              0x00040000 |  1);
-            inline constexpr XactDenialEnumBack DENIED_DBID_MISMATCH                ("XACT_DENIED_DBID_MISMATCH",               0x00040000 |  2);
+        //  inline constexpr XactDenialEnumBack DENIED_DBID_MISMATCH                ("XACT_DENIED_DBID_MISMATCH",               0x00040000 |  2);
             inline constexpr XactDenialEnumBack DENIED_TGTID_MISMATCH               ("XACT_DENIED_TGTID_MISMATCH",              0x00040000 |  3);
             inline constexpr XactDenialEnumBack DENIED_SRCID_MISMATCH               ("XACT_DENIED_SRCID_MISMATCH",              0x00040000 |  4);
             inline constexpr XactDenialEnumBack DENIED_FWDNID_MISMATCH              ("XACT_DENIED_FWDNID_MISMATCH",             0x00040000 |  5);
@@ -113,6 +113,9 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_SNP_TXNID_MISMATCHING_SNP    ("XACT_DENIED_SNP_TXNID_MISMATCHING_SNP",   0x00040000 | 15);
             inline constexpr XactDenialEnumBack DENIED_DAT_TXNID_MISMATCHING_DMT    ("XACT_DENIED_DAT_TXNID_MISMATCHING_DMT",   0x00040000 | 16);
             inline constexpr XactDenialEnumBack DENIED_DAT_TXNID_MISMATCHING_DCT    ("XACT_DENIED_DAT_TXNID_MISMATCHING_DCT",   0x00040000 | 17);
+
+            inline constexpr XactDenialEnumBack DENIED_RSP_DBID_MISMATCH            ("XACT_DENIED_RSP_DBID_MISMATCH",           0x00040000 | 18);
+            inline constexpr XactDenialEnumBack DENIED_DAT_DBID_MISMATCH            ("XACT_DENIED_DAT_DBID_MISMATCH",           0x00040000 | 19);
 
             inline constexpr XactDenialEnumBack DENIED_SECOND_RETRY                 ("XACT_DENIED_SECOND_RETRY",                0x000A0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_SECOND_PCRD                  ("XACT_DENIED_SECOND_PCRD",                 0x000A0000 |  1);
