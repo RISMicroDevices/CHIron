@@ -378,7 +378,7 @@ namespace /*CHI::*/Xact {
             if (optDBID)
             {
                 if (rspFlit.flit.rsp.DBID() != *optDBID)
-                    return XactDenial::DENIED_DBID_MISMATCH;
+                    return XactDenial::DENIED_RSP_DBID_MISMATCH;
             }
             else
                 firstDBID = true;
@@ -500,7 +500,7 @@ namespace /*CHI::*/Xact {
             if (optDBID)
             {
                 if (datFlit.flit.dat.DBID() != *optDBID)
-                    return XactDenial::DENIED_DBID_MISMATCH;
+                    return XactDenial::DENIED_DAT_DBID_MISMATCH;
             }
             else
                 firstDBID = true;

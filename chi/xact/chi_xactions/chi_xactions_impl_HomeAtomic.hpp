@@ -355,7 +355,7 @@ namespace /*CHI::*/Xact {
                         "DBID source on RXRSP must be Comp in Home Atomic transactions");
 
                     if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
-                        return XactDenial::DENIED_DBID_MISMATCH;
+                        return XactDenial::DENIED_RSP_DBID_MISMATCH;
                 }
                 else
                 {
@@ -363,7 +363,7 @@ namespace /*CHI::*/Xact {
                         "DBID source on RXDAT must be CompData in Home Atomic transactions");
 
                     if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.dat.DBID())
-                        return XactDenial::DENIED_DBID_MISMATCH;
+                        return XactDenial::DENIED_RSP_DBID_MISMATCH;
                 }
             }
             else
@@ -409,7 +409,7 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP;
 
                 if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
-                    return XactDenial::DENIED_DBID_MISMATCH;
+                    return XactDenial::DENIED_RSP_DBID_MISMATCH;
             }
             else
                 firstDBID = true;
@@ -457,7 +457,7 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_COMPDBIDRESP_AFTER_DBIDRESP;
 
                 if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
-                    return XactDenial::DENIED_DBID_MISMATCH;
+                    return XactDenial::DENIED_RSP_DBID_MISMATCH;
             }
             else
                 firstDBID = true;
@@ -552,7 +552,7 @@ namespace /*CHI::*/Xact {
             if (optDBID)
             {
                 if (datFlit.flit.dat.DBID() != *optDBID)
-                    return XactDenial::DENIED_DBID_MISMATCH;
+                    return XactDenial::DENIED_DAT_DBID_MISMATCH;
             }
             else
                 firstDBID = true;

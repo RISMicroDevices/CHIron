@@ -624,7 +624,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_FWDTXNID_MISMATCH;
 
             if (datFlit.flit.dat.DBID() != this->first.flit.snp.TxnID())
-                return XactDenial::DENIED_DBID_MISMATCH;
+                return XactDenial::DENIED_DAT_DBID_MISMATCH;
 
             if (datFlit.flit.dat.HomeNID() != this->first.flit.snp.SrcID())
                 return XactDenial::DENIED_HOMENID_MISMATCH;
