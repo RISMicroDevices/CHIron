@@ -341,7 +341,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.snp.SrcID())
-                return XactDenial::DENIED_TGTID_MISMATCH;
+                return XactDenial::DENIED_RSP_TGTID_MISMATCHING_SNP;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.snp.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_SNP;
@@ -458,7 +458,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_DAT_NOT_FROM_RN_TO_HN;
 
             if (datFlit.flit.dat.TgtID() != this->first.flit.snp.SrcID())
-                return XactDenial::DENIED_TGTID_MISMATCH;
+                return XactDenial::DENIED_DAT_TGTID_MISMATCHING_SNP;
 
             if (datFlit.flit.dat.TxnID() != this->first.flit.snp.TxnID())
                 return XactDenial::DENIED_DAT_TXNID_MISMATCHING_SNP;

@@ -372,7 +372,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
-                return XactDenial::DENIED_TGTID_MISMATCH;
+                return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
@@ -484,7 +484,7 @@ namespace /*CHI::*/Xact {
                 "DBID never comes from DAT channel in CopyBack Write transactions");
 
             if (datFlit.flit.dat.TgtID() != optDBIDSource->flit.rsp.SrcID())
-                return XactDenial::DENIED_TGTID_MISMATCH;
+                return XactDenial::DENIED_DAT_TGTID_MISMATCHING_RSP;
 
             if (datFlit.flit.dat.TxnID() != optDBIDSource->flit.rsp.DBID())
                 return XactDenial::DENIED_DAT_TXNID_MISMATCHING_DBID;

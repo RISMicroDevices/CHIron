@@ -265,7 +265,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.snp.SrcID())
-                return XactDenial::DENIED_TGTID_MISMATCH;
+                return XactDenial::DENIED_RSP_TGTID_MISMATCHING_SNP;
 
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.snp.TxnID())
                 return XactDenial::DENIED_SNP_TXNID_MISMATCHING_SNP;
