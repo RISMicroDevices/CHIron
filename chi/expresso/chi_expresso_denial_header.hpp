@@ -1,0 +1,7 @@
+#pragma once
+
+#ifndef __CHI__CHI_EXPRESSO_DENIAL_HEADER
+#define __CHI__CHI_EXPRESSO_DENIAL_HEADER
+
+
+#endif // __CHI__CHI_EXPRESSO_DENIAL_HEADER
