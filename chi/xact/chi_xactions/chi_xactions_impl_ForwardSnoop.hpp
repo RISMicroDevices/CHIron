@@ -618,10 +618,10 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_DAT_NOT_FROM_RN_TO_RN;
 
             if (datFlit.flit.dat.TgtID() != this->first.flit.snp.FwdNID())
-                return XactDenial::DENIED_FWDNID_MISMATCH;
+                return XactDenial::DENIED_DAT_TGTID_MISMATCHING_DCT;
 
             if (datFlit.flit.dat.TxnID() != this->first.flit.snp.FwdTxnID())
-                return XactDenial::DENIED_FWDTXNID_MISMATCH;
+                return XactDenial::DENIED_DAT_TXNID_MISMATCHING_DCT;
 
             if (datFlit.flit.dat.DBID() != this->first.flit.snp.TxnID())
                 return XactDenial::DENIED_DAT_DBID_MISMATCH;
