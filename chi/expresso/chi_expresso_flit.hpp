@@ -115,7 +115,22 @@ namespace CHI {
             inline constexpr bool operator!=(const KeyIterator& obj) const noexcept { return current != obj.current; }
         };
 
+        class KeyIteration {
+        protected:
+            KeyIterator iterBegin;
+            KeyIterator iterEnd;
+
+        public:
+            inline constexpr KeyIteration(KeyIterator iterBegin, KeyIterator iterEnd) noexcept
+            : iterBegin(iterBegin), iterEnd(iterEnd) {}
+
+        public:
+            inline constexpr KeyIterator begin() const noexcept { return iterBegin; };
+            inline constexpr KeyIterator end() const noexcept { return iterEnd; };
+        };
+
         enum class ValueType {
+            Empty,
             Integral,
             Vector
         };
@@ -129,6 +144,7 @@ namespace CHI {
             };
 
         public:
+            inline Value() noexcept;
             inline Value(ValueType type) noexcept;
             inline Value(const Value& obj) noexcept;
             inline Value(Value&& obj) noexcept;
@@ -170,7 +186,7 @@ namespace CHI {
         class ValueVector : public Value {
         public:
             inline ValueVector(size_t size) noexcept;
-            inline ValueVector(size_t size, uint64_t* array) noexcept;
+            inline ValueVector(size_t size, const uint64_t* array) noexcept;
             inline ValueVector(const std::vector<uint64_t>& vec) noexcept;
             inline ValueVector(std::vector<uint64_t>&& vec) noexcept;
             inline ValueVector(const ValueVector& obj) noexcept;
@@ -220,7 +236,7 @@ namespace CHI {
 
         protected:
             inline void     MapIntegral(Key key, uint64_t value) noexcept;
-            inline void     MapVector(Key key, size_t size, uint64_t* vec) noexcept;
+            inline void     MapVector(Key key, size_t size, const uint64_t* vec) noexcept;
         };
 
         template<FlitConfigurationConcept       config,
@@ -412,7 +428,6 @@ namespace CHI {
         
         // *NOTICE: Formatter is not responsible for any value checking,
         //          which should be done before being added into KeyValueMap.
-        template<FlitConfigurationConcept       config>
         class DefaultFormatter : public virtual Formatter {
             /*
             *NOTICE: The Default Plain Formatter provides three parameters,
@@ -539,12 +554,11 @@ namespace CHI {
             inline virtual std::string FormatSNPMPAM(const KeyValueMap&, const format_func&) const override;
         };
 
-        template<FlitConfigurationConcept       config>
-        using PlainFormatter = DefaultFormatter<config>;
+        using PlainFormatter = DefaultFormatter;
 
 
-        template<FlitConfigurationConcept       config>
-        class DecodingFormatter : public virtual PlainFormatter<config> {
+        template<FlitConfigurationConcept config = FlitConfiguration<>>
+        class DecodingFormatter : public virtual PlainFormatter {
             /*
             *NOTICE: The Default Plain Formatter provides three parameters,
                      exceptions might be thrown with formatting string with more than three parameters.
@@ -564,10 +578,10 @@ namespace CHI {
                     ...
             */
         protected:
-            REQOpcodeDecoder<config> reqDecoder;
-            SNPOpcodeDecoder<config> snpDecoder;
-            RSPOpcodeDecoder<config> rspDecoder;
-            DATOpcodeDecoder<config> datDecoder;
+            REQOpcodeDecoder<Flits::REQ<config>> reqDecoder;
+            SNPOpcodeDecoder<Flits::SNP<config>> snpDecoder;
+            RSPOpcodeDecoder<Flits::RSP<config>> rspDecoder;
+            DATOpcodeDecoder<Flits::DAT<config>> datDecoder;
 
         protected:
             template<Key key, typename Tflit>
@@ -675,6 +689,8 @@ namespace CHI {
 
                 inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
                 inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
+
+                inline constexpr KeyIteration iteration() { return KeyIteration(begin(), end()); };
             }
 
             namespace RSP {
@@ -698,6 +714,8 @@ namespace CHI {
 
                 inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
                 inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
+
+                inline constexpr KeyIteration iteration() { return KeyIteration(begin(), end()); };
             }
 
             namespace DAT {
@@ -728,6 +746,8 @@ namespace CHI {
 
                 inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
                 inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
+
+                inline constexpr KeyIteration iteration() { return KeyIteration(begin(), end()); };
             }
 
             namespace SNP {
@@ -750,10 +770,202 @@ namespace CHI {
 
                 inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
                 inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
+
+                inline constexpr KeyIteration iteration() { return KeyIteration(begin(), end()); };
             }
 
             #undef _FMTCALL
         }
+
+
+        class Filter {
+        public:
+            inline virtual bool IsAccepted(Key key, const KeyValueMap& map) const noexcept = 0;
+        };
+
+        class NoFilter : public Filter {
+        public:
+            inline virtual constexpr bool IsAccepted(Key, const KeyValueMap&) const noexcept override { return true; }
+        };
+
+        class ListFilter : public Filter {
+        protected:
+            std::unordered_set<Key>                     filter          = { };
+            bool                                        filterBlacklist = false;
+
+        public:
+            inline void SetFilterAsBlacklist() noexcept;
+            inline void SetFilterAsWhitelist() noexcept;
+            inline bool IsFilterBlacklist() const noexcept;
+            inline bool IsFilterWhitelist() const noexcept;
+
+            inline void ClearFilter() noexcept;
+            inline void ClearFilter(Key key) noexcept;
+            inline void ClearFilter(std::initializer_list<Key> keys) noexcept;
+            inline void ClearFilter(KeyCategory category) noexcept;
+
+            inline void SetFilter(Key key) noexcept;
+            inline void SetFilter(std::initializer_list<Key> keys) noexcept;
+
+            inline bool IsAccepted(Key key, const KeyValueMap& map) const noexcept override;
+        };
+
+        class FormatterProvider {
+        public:
+            inline virtual std::shared_ptr<Formatter> Get(Key key, const KeyValueMap& map) const noexcept = 0;
+        };
+
+        class NoFormatterProvider : public FormatterProvider {
+        public:
+            inline virtual std::shared_ptr<Formatter> Get(Key key, const KeyValueMap& map) const noexcept override { return {}; };
+        };
+
+        class ReferenceFormatterProvider : public FormatterProvider {
+        public:
+            std::shared_ptr<Formatter>      formatter;
+
+        public:
+            inline ReferenceFormatterProvider() noexcept;
+            inline ReferenceFormatterProvider(std::shared_ptr<Formatter>) noexcept;
+
+        public:
+            inline virtual std::shared_ptr<Formatter> Get(Key key, const KeyValueMap& map) const noexcept override;
+        };
+
+        class DefaultFormatterProvider : public ReferenceFormatterProvider {
+        public:
+            inline DefaultFormatterProvider() noexcept : ReferenceFormatterProvider(std::make_shared<DefaultFormatter>()) {};
+        };
+
+        class OverridableFormatterProvider : public FormatterProvider {
+        protected:
+            class FormatterOverride {
+            public:
+                std::shared_ptr<Formatter>                      formatter;
+                std::function<bool(const KeyValueMap&, Key)>    predicate;
+            };
+
+        protected:
+            std::shared_ptr<Formatter>                  formatter;
+            std::unordered_map<Key, FormatterOverride>  formatterOverrides;
+
+        public:
+            inline OverridableFormatterProvider() noexcept;
+            inline OverridableFormatterProvider(std::shared_ptr<Formatter> defaultFormatter) noexcept;
+
+        public:
+            inline void SetDefault(std::shared_ptr<Formatter> formatter) noexcept;
+            inline std::shared_ptr<Formatter> GetDefault() const noexcept;
+
+            inline void SetOverride(Key key, std::shared_ptr<Formatter> formatter) noexcept;
+            inline void SetOverride(Key key, std::shared_ptr<Formatter> formatter, std::function<bool(const KeyValueMap&, Key)> predicate) noexcept;
+            inline void SetOverride(std::initializer_list<Key> keys, std::shared_ptr<Formatter> formatter) noexcept;
+            inline void SetOverride(std::initializer_list<Key> keys, std::shared_ptr<Formatter> formatter, std::function<bool(const KeyValueMap&, Key)> predicate) noexcept;
+
+            inline void ClearOverride(Key key) noexcept;
+            inline void ClearOverride(std::initializer_list<Key> keys) noexcept;
+            inline void ClearOverride() noexcept;
+
+        public:
+            inline virtual std::shared_ptr<Formatter> Get(Key key, const KeyValueMap& map) const noexcept override;
+        };
+
+        class FormatModifier {
+        public:
+            inline virtual std::string Modify(Key key, const KeyValueMap& map, const std::string& formatted) const noexcept = 0;
+        };
+
+        class NoFormatModifier : public FormatModifier {
+        public:
+            inline virtual constexpr std::string Modify(Key, const KeyValueMap&, const std::string& formatted) const noexcept override { return formatted; }
+        };
+
+        class FunctionalFormatModifier : public FormatModifier {
+        public:
+            using ModifierFunction = std::function<std::string(Key key, const KeyValueMap&, const std::string&)>;
+
+            inline static std::string _Default(Key, const KeyValueMap&, const std::string&) noexcept;
+
+        public:
+            ModifierFunction    modifier;
+
+        public:
+            inline FunctionalFormatModifier() noexcept;
+            inline FunctionalFormatModifier(ModifierFunction modifier) noexcept;
+
+        public:
+            inline virtual std::string Modify(Key key, const KeyValueMap& map, const std::string& formatted) const noexcept override;
+        };
+
+        class Printer {
+        protected:
+            std::shared_ptr<FormatterProvider>          formatter;
+            std::shared_ptr<FormatModifier>             modifier;
+            std::shared_ptr<Filter>                     filter;
+
+        public:
+            inline Printer() noexcept;
+            inline Printer(std::shared_ptr<FormatterProvider> formatter,
+                           std::shared_ptr<FormatModifier>    modifier = std::make_shared<NoFormatModifier>(),
+                           std::shared_ptr<Filter>            filter   = std::make_shared<NoFilter>()) noexcept;
+
+        public:
+            inline std::shared_ptr<FormatterProvider> GetFormatter() const noexcept;
+            inline void SetFormatter(std::shared_ptr<FormatterProvider> formatter) noexcept;
+
+            inline std::shared_ptr<FormatModifier> GetModifier() const noexcept;
+            inline void SetModifier(std::shared_ptr<FormatModifier> modifier) noexcept;
+
+            inline std::shared_ptr<Filter> GetFilter() const noexcept;
+            inline void SetFilter(std::shared_ptr<Filter> filter) noexcept;
+
+        public:
+            template<FlitConfigurationConcept       config,
+                     CHI::IOLevelConnectionConcept  conn>
+            inline bool PrintFlit(std::ostream&, const Flits::REQ<config, conn>&) const;
+
+            template<FlitConfigurationConcept       config,
+                     CHI::IOLevelConnectionConcept  conn>
+            inline bool PrintFlit(std::ostream&, const Flits::SNP<config, conn>&) const;
+
+            template<FlitConfigurationConcept       config,
+                     CHI::IOLevelConnectionConcept  conn>
+            inline bool PrintFlit(std::ostream&, const Flits::RSP<config, conn>&) const;
+            
+            template<FlitConfigurationConcept       config,
+                     CHI::IOLevelConnectionConcept  conn>
+            inline bool PrintFlit(std::ostream&, const Flits::DAT<config, conn>&) const;
+
+        public:
+            inline virtual bool PrintREQ(std::ostream&, const KeyValueMap&) const;
+            inline virtual bool PrintSNP(std::ostream&, const KeyValueMap&) const;
+            inline virtual bool PrintRSP(std::ostream&, const KeyValueMap&) const;
+            inline virtual bool PrintDAT(std::ostream&, const KeyValueMap&) const;
+
+        protected:
+            inline virtual bool Print(const KeyIteration&, std::ostream&, const KeyValueMap&) const = 0;
+        };
+
+        class DefaultPrinter : public Printer {
+        public:
+            public:
+            static constexpr const char* DEFAULT_FORMAT     = "{} = {} ({:#x})";
+            static constexpr const char* DEFAULT_SEPERATOR  = ", ";
+
+            format_func         format      = [](auto) { return DEFAULT_FORMAT; };
+            std::string         seperator   = DEFAULT_SEPERATOR; 
+
+        public:
+            inline DefaultPrinter() noexcept;
+            inline DefaultPrinter(std::shared_ptr<FormatterProvider> formatter,
+                                  std::shared_ptr<FormatModifier>    modifier = std::make_shared<NoFormatModifier>(),
+                                  std::shared_ptr<Filter>            filter   = std::make_shared<NoFilter>()) noexcept;
+
+        protected:
+            inline virtual bool Print(const KeyIteration&, std::ostream&, const KeyValueMap&) const override;
+        };
+
+        using PlainPrinter = DefaultPrinter;
     }
 /*
 }
@@ -777,6 +989,10 @@ namespace /*CHI::*/Expresso::Flit {
 
 // Implementation of: class Value
 namespace /*CHI::*/Expresso::Flit {
+
+    inline Value::Value() noexcept
+        : type(ValueType::Empty)
+    { }
 
     inline Value::Value(ValueType type) noexcept
         : type(type)
@@ -937,7 +1153,7 @@ namespace /*CHI::*/Expresso::Flit {
             this->vector->push_back(0);
     }
 
-    inline ValueVector::ValueVector(size_t size, uint64_t* array) noexcept
+    inline ValueVector::ValueVector(size_t size, const uint64_t* array) noexcept
         : Value(ValueType::Vector)
     {
         this->vector->reserve(size);
@@ -1065,6 +1281,7 @@ namespace /*CHI::*/Expresso::Flit {
         MapIntegral(Keys::REQ::ReturnTxnID      , reqFlit.ReturnTxnID());
         MapIntegral(Keys::REQ::StashLPIDValid   , reqFlit.StashLPIDValid());
         MapIntegral(Keys::REQ::StashLPID        , reqFlit.StashLPID());
+        MapIntegral(Keys::REQ::Opcode           , reqFlit.Opcode());
         MapIntegral(Keys::REQ::Size             , reqFlit.Size());
         MapIntegral(Keys::REQ::Addr             , reqFlit.Addr());
         MapIntegral(Keys::REQ::NS               , reqFlit.NS());
@@ -1197,6 +1414,20 @@ namespace /*CHI::*/Expresso::Flit {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
+    inline KeyValueMap& Mapper<config, conn>::Get() noexcept
+    {
+        return map;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline const KeyValueMap& Mapper<config, conn>::Get() const noexcept
+    {
+        return map;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
     inline void Mapper<config, conn>::MapIntegral(Key key, uint64_t value) noexcept
     {
         map[key] = ValueIntegral(value);
@@ -1204,7 +1435,7 @@ namespace /*CHI::*/Expresso::Flit {
 
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
-    inline void Mapper<config, conn>::MapVector(Key key, size_t size, uint64_t* vec) noexcept
+    inline void Mapper<config, conn>::MapVector(Key key, size_t size, const uint64_t* vec) noexcept
     {
         map[key] = ValueVector(size, vec);
     }
@@ -1572,8 +1803,7 @@ namespace /*CHI::*/Expresso::Flit {
 // Implementation of: class DefaultFormatter
 namespace /*CHI::*/Expresso::Flit {
 
-    template<FlitConfigurationConcept config>
-    inline bool DefaultFormatter<config>::ExtractIntegral(const KeyValueMap& kv, Key key, uint64_t* dst) const
+    inline bool DefaultFormatter::ExtractIntegral(const KeyValueMap& kv, Key key, uint64_t* dst) const
     {
         auto iter = kv.find(key);
 
@@ -1589,8 +1819,7 @@ namespace /*CHI::*/Expresso::Flit {
         return true;
     }
 
-    template<FlitConfigurationConcept config>
-    inline bool DefaultFormatter<config>::ExtractVector(const KeyValueMap& kv, Key key, const std::vector<uint64_t>** dst) const
+    inline bool DefaultFormatter::ExtractVector(const KeyValueMap& kv, Key key, const std::vector<uint64_t>** dst) const
     {
         auto iter = kv.find(key);
 
@@ -1606,8 +1835,7 @@ namespace /*CHI::*/Expresso::Flit {
         return true;
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::_FormatNonDecodingIntegral(const KeyValueMap& kv, Key key, const format_func& fmt) const
+    inline std::string DefaultFormatter::_FormatNonDecodingIntegral(const KeyValueMap& kv, Key key, const format_func& fmt) const
     {
         uint64_t integral;
 
@@ -1617,8 +1845,7 @@ namespace /*CHI::*/Expresso::Flit {
         return std::vformat(fmt(key), std::make_format_args(key->canonicalName, integral, integral));
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::_FormatNonDecodingVector(const KeyValueMap& kv, Key key, const format_func& fmt) const
+    inline std::string DefaultFormatter::_FormatNonDecodingVector(const KeyValueMap& kv, Key key, const format_func& fmt) const
     {
         const std::vector<uint64_t>* vector;
 
@@ -1635,554 +1862,462 @@ namespace /*CHI::*/Expresso::Flit {
         return std::vformat(fmt(key), std::make_format_args(key->canonicalName, dataStr, bitCount));
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQQoS(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQQoS(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::QoS, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQTgtID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQTgtID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::TgtID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQSrcID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQSrcID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::SrcID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQTxnID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQTxnID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::TxnID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQReturnNID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQReturnNID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::ReturnNID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQStashNID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQStashNID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::StashNID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQSLCRepHint(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQSLCRepHint(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::SLCRepHint, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQStashNIDValid(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQStashNIDValid(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::StashNIDValid, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQEndian(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQEndian(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::Endian, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQDeep(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQDeep(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::Deep, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQReturnTxnID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQReturnTxnID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::ReturnTxnID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQStashLPIDValid(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQStashLPIDValid(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::StashLPIDValid, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQStashLPID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQStashLPID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::StashLPID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQOpcode(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::Opcode, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQSize(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQSize(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::Size, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQAddr(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQAddr(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::Addr, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQNS(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQNS(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::NS, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQLikelyShared(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQLikelyShared(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::LikelyShared, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQAllowRetry(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQAllowRetry(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::AllowRetry, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQOrder(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQOrder(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::Order, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQPCrdType(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQPCrdType(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::PCrdType, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQMemAttr(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQMemAttr(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::MemAttr, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQSnpAttr(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQSnpAttr(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::SnpAttr, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQDoDWT(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQDoDWT(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::DoDWT, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQLPID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQLPID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::LPID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQPGroupID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQPGroupID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::PGroupID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQStashGroupID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQStashGroupID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::StashGroupID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQTagGroupID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQTagGroupID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::TagGroupID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQExcl(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQExcl(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::Excl, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQSnoopMe(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQSnoopMe(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::SnoopMe, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQExpCompAck(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQExpCompAck(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::ExpCompAck, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQTagOp(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQTagOp(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::TagOp, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQTraceTag(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQTraceTag(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::TraceTag, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQMPAM(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQMPAM(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::MPAM, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatREQRSVDC(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatREQRSVDC(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::REQ::RSVDC, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPQoS(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPQoS(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::QoS, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPTgtID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPTgtID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::TgtID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPSrcID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPSrcID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::SrcID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPTxnID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPTxnID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::TxnID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPOpcode(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::Opcode, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPRespErr(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPRespErr(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::RespErr, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPResp(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPResp(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::Resp, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPFwdState(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPFwdState(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::FwdState, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPDataPull(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPDataPull(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::DataPull, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPCBusy(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPCBusy(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::CBusy, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPDBID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPDBID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::DBID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPPGroupID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPPGroupID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::PGroupID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPStashGroupID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPStashGroupID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::StashGroupID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPTagGroupID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPTagGroupID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::TagGroupID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPPCrdType(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPPCrdType(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::PCrdType, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPTagOp(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPTagOp(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::TagOp, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatRSPTraceTag(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatRSPTraceTag(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::RSP::TraceTag, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATQoS(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATQoS(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::QoS, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATTgtID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATTgtID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::TgtID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATSrcID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATSrcID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::SrcID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATTxnID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATTxnID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::TxnID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATHomeNID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATHomeNID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::HomeNID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATOpcode(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::Opcode, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATRespErr(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATRespErr(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::RespErr, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATResp(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATResp(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::Resp, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATFwdState(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATFwdState(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::FwdState, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATDataPull(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATDataPull(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::DataPull, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATDataSource(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATDataSource(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::DataSource, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATCBusy(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATCBusy(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::CBusy, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATDBID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATDBID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::DBID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATCCID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATCCID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::CCID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATDataID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATDataID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::DataID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATTagOp(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATTagOp(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::TagOp, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATTag(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATTag(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::Tag, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATTU(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATTU(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::TU, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATTraceTag(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATTraceTag(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::TraceTag, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATRSVDC(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATRSVDC(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::RSVDC, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATBE(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATBE(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::BE, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATData(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATData(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingVector(kv, Keys::DAT::Data, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATDataCheck(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATDataCheck(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::DataCheck, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatDATPoison(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatDATPoison(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::DAT::Poison, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPQoS(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPQoS(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::QoS, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPSrcID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPSrcID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::SrcID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPTxnID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPTxnID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::TxnID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPFwdTxnID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPFwdTxnID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::FwdTxnID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPFwdNID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPFwdNID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::FwdNID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPStashLPIDValid(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPStashLPIDValid(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::StashLPIDValid, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPStashLPID(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPStashLPID(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::StashLPID, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPVMIDExt(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPVMIDExt(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::VMIDExt, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPOpcode(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPOpcode(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::Opcode, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPAddr(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPAddr(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::Addr, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPNS(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPNS(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::NS, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPDoNotGoToSD(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPDoNotGoToSD(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::DoNotGoToSD, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPDoNotDataPull(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPDoNotDataPull(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::DoNotDataPull, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPRetToSrc(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPRetToSrc(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::RetToSrc, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPTraceTag(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPTraceTag(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::TraceTag, fmt);
     }
 
-    template<FlitConfigurationConcept config>
-    inline std::string DefaultFormatter<config>::FormatSNPMPAM(const KeyValueMap& kv, const format_func& fmt) const
+    inline std::string DefaultFormatter::FormatSNPMPAM(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::MPAM, fmt);
     }
@@ -2205,31 +2340,33 @@ namespace /*CHI::*/Expresso::Flit {
         if (!opcodeInfo.IsValid())
             return std::vformat(fmt(key), std::make_format_args(key->canonicalName, "<Unknown>", intOpcode));
 
-        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, opcodeInfo.GetName(), intOpcode));
+        std::string opcodeName = opcodeInfo.GetName();
+
+        return std::vformat(fmt(key), std::make_format_args(key->canonicalName, opcodeName, intOpcode));
     }
 
     template<FlitConfigurationConcept config>
     inline std::string DecodingFormatter<config>::FormatREQOpcode(const KeyValueMap& kv, const format_func& fmt) const
     {
-        return _FormatDecodingOpcode<Keys::REQ::Opcode>(reqDecoder, kv, fmt);
+        return _FormatDecodingOpcode<Keys::REQ::Opcode>(&reqDecoder, kv, fmt);
     }
 
     template<FlitConfigurationConcept config>
     inline std::string DecodingFormatter<config>::FormatRSPOpcode(const KeyValueMap& kv, const format_func& fmt) const
     {
-        return _FormatDecodingOpcode<Keys::RSP::Opcode>(rspDecoder, kv, fmt);
+        return _FormatDecodingOpcode<Keys::RSP::Opcode>(&rspDecoder, kv, fmt);
     }
 
     template<FlitConfigurationConcept config>
     inline std::string DecodingFormatter<config>::FormatDATOpcode(const KeyValueMap& kv, const format_func& fmt) const
     {
-        return _FormatDecodingOpcode<Keys::DAT::Opcode>(datDecoder, kv, fmt);
+        return _FormatDecodingOpcode<Keys::DAT::Opcode>(&datDecoder, kv, fmt);
     }
 
     template<FlitConfigurationConcept config>
     inline std::string DecodingFormatter<config>::FormatSNPOpcode(const KeyValueMap& kv, const format_func& fmt) const
     {
-        return _FormatDecodingOpcode<Keys::SNP::Opcode>(snpDecoder, kv, fmt);
+        return _FormatDecodingOpcode<Keys::SNP::Opcode>(&snpDecoder, kv, fmt);
     }
 
     template<FlitConfigurationConcept config>
@@ -2480,6 +2617,326 @@ namespace /*CHI::*/Expresso::Flit {
     inline std::string DecodingFormatter<config>::FormatDATRespErr(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatDecodingRespErr<Keys::DAT::RespErr>(kv, fmt);
+    }
+}
+
+
+// Implementation of: class ListFilter
+namespace /*CHI::*/Expresso::Flit {
+
+    inline void ListFilter::SetFilterAsBlacklist() noexcept
+    {
+        filterBlacklist = true;
+    }
+
+    inline void ListFilter::SetFilterAsWhitelist() noexcept
+    {
+        filterBlacklist = false;
+    }
+
+    inline bool ListFilter::IsFilterBlacklist() const noexcept
+    {
+        return filterBlacklist;
+    }
+
+    inline bool ListFilter::IsFilterWhitelist() const noexcept
+    {
+        return !filterBlacklist;
+    }
+
+    inline void ListFilter::ClearFilter() noexcept
+    {
+        filter.clear();
+    }
+
+    inline void ListFilter::ClearFilter(Key key) noexcept
+    {
+        filter.erase(key);
+    }
+
+    inline void ListFilter::ClearFilter(std::initializer_list<Key> keys) noexcept
+    {
+        for (Key key : keys)
+            ClearFilter(key);
+    }
+
+    inline void ListFilter::ClearFilter(KeyCategory category) noexcept
+    {
+        auto iter = filter.begin();
+        while (iter != filter.end())
+        {
+            if ((*iter)->category == category)
+                iter = filter.erase(iter);
+            else
+                iter++;
+        }
+    }
+
+    inline void ListFilter::SetFilter(Key key) noexcept
+    {
+        filter.insert(key);
+    }
+
+    inline void ListFilter::SetFilter(std::initializer_list<Key> keys) noexcept
+    {
+        for (Key key : keys)
+            SetFilter(key);
+    }
+
+    inline bool ListFilter::IsAccepted(Key key, const KeyValueMap& map) const noexcept
+    {
+        return filter.contains(key) ^ filterBlacklist;
+    }
+}
+
+// Implementation of: class ReferenceFormatterProvider
+namespace /*CHI::*/Expresso::Flit {
+
+    inline ReferenceFormatterProvider::ReferenceFormatterProvider() noexcept
+        : formatter ()
+    { }
+
+    inline ReferenceFormatterProvider::ReferenceFormatterProvider(std::shared_ptr<Formatter> formatter) noexcept
+        : formatter (formatter)
+    { }
+
+    inline std::shared_ptr<Formatter> ReferenceFormatterProvider::Get(Key key, const KeyValueMap& kv) const noexcept
+    {
+        return formatter;
+    }
+}
+
+// Implementation of: class OverridableFormatterProvider
+namespace /*CHI::*/Expresso::Flit {
+
+    inline OverridableFormatterProvider::OverridableFormatterProvider() noexcept
+        : formatter             ()
+        , formatterOverrides    ()
+    { }
+
+    inline OverridableFormatterProvider::OverridableFormatterProvider(std::shared_ptr<Formatter> defaultFormatter) noexcept
+        : formatter             (defaultFormatter)
+        , formatterOverrides    ()
+    { }
+
+    inline void OverridableFormatterProvider::SetDefault(std::shared_ptr<Formatter> formatter) noexcept
+    {
+        this->formatter = formatter;
+    }
+
+    inline std::shared_ptr<Formatter> OverridableFormatterProvider::GetDefault() const noexcept
+    {
+        return formatter;
+    }
+
+    inline void OverridableFormatterProvider::SetOverride(Key key, std::shared_ptr<Formatter> formatter) noexcept
+    {
+        SetOverride(key, formatter, [](auto, auto) { return true; });
+    }
+
+    inline void OverridableFormatterProvider::SetOverride(Key key, std::shared_ptr<Formatter> formatter, std::function<bool(const KeyValueMap&, Key)> predicate) noexcept
+    {
+        formatterOverrides[key] = { .formatter = formatter, .predicate = predicate };
+    }
+
+    inline void OverridableFormatterProvider::SetOverride(std::initializer_list<Key> keys, std::shared_ptr<Formatter> formatter) noexcept
+    {
+        for (Key key : keys)
+            SetOverride(key, formatter);
+    }
+
+    inline void OverridableFormatterProvider::SetOverride(std::initializer_list<Key> keys, std::shared_ptr<Formatter> formatter, std::function<bool(const KeyValueMap&, Key)> predicate) noexcept
+    {
+        for (Key key : keys)
+            SetOverride(key, formatter, predicate);
+    }
+
+    inline void OverridableFormatterProvider::ClearOverride(Key key) noexcept
+    {
+        formatterOverrides.erase(key);
+    }
+
+    inline void OverridableFormatterProvider::ClearOverride(std::initializer_list<Key> keys) noexcept
+    {
+        for (Key key : keys)
+            ClearOverride(key);
+    }
+
+    inline void OverridableFormatterProvider::ClearOverride() noexcept
+    {
+        formatterOverrides.clear();
+    }
+
+    inline std::shared_ptr<Formatter> OverridableFormatterProvider::Get(Key key, const KeyValueMap& kv) const noexcept
+    {
+        auto iter = formatterOverrides.find(key);
+
+        if (iter != formatterOverrides.end() && iter->second.predicate(kv, key))
+            return iter->second.formatter;
+
+        return formatter;
+    }
+}
+
+// Implementation of: class FunctionalFormatModifier
+namespace /*CHI::*/Expresso::Flit {
+
+    inline std::string FunctionalFormatModifier::_Default(Key, const KeyValueMap&, const std::string& str) noexcept
+    {
+        return str;
+    }
+
+    inline FunctionalFormatModifier::FunctionalFormatModifier() noexcept
+        : modifier  (_Default)
+    { }
+
+    inline FunctionalFormatModifier::FunctionalFormatModifier(ModifierFunction modifier) noexcept
+        : modifier  (modifier)
+    { }
+
+    inline std::string FunctionalFormatModifier::Modify(Key key, const KeyValueMap& kv, const std::string& formatted) const noexcept
+    {
+        return modifier(key, kv, formatted);
+    }
+}
+
+// Implementation of: class Printer
+namespace /*CHI::*/Expresso::Flit {
+
+    inline Printer::Printer() noexcept
+        : Printer(std::shared_ptr<FormatterProvider>())
+    { }
+
+    inline Printer::Printer(std::shared_ptr<FormatterProvider> formatter,
+                            std::shared_ptr<FormatModifier>    modifier,
+                            std::shared_ptr<Filter>            filter) noexcept
+        : formatter (formatter)
+        , modifier  (modifier)
+        , filter    (filter)
+    { }
+
+    inline std::shared_ptr<FormatterProvider> Printer::GetFormatter() const noexcept
+    {
+        return formatter;
+    }
+
+    inline void Printer::SetFormatter(std::shared_ptr<FormatterProvider> formatter) noexcept
+    {
+        this->formatter = formatter;
+    }
+
+    inline std::shared_ptr<FormatModifier> Printer::GetModifier() const noexcept
+    {
+        return modifier;
+    }
+
+    inline void Printer::SetModifier(std::shared_ptr<FormatModifier> modifier) noexcept
+    {
+        this->modifier = modifier;
+    }
+
+    inline std::shared_ptr<Filter> Printer::GetFilter() const noexcept
+    {
+        return filter;
+    }
+
+    inline void Printer::SetFilter(std::shared_ptr<Filter> filter) noexcept
+    {
+        this->filter = filter;
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Printer::PrintFlit(std::ostream& os, const Flits::REQ<config, conn>& reqFlit) const
+    {
+        return PrintREQ(os, Map(reqFlit));
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Printer::PrintFlit(std::ostream& os, const Flits::SNP<config, conn>& snpFlit) const
+    {
+        return PrintSNP(os, Map(snpFlit));
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Printer::PrintFlit(std::ostream& os, const Flits::RSP<config, conn>& rspFlit) const
+    {
+        return PrintRSP(os, Map(rspFlit));
+    }
+
+    template<FlitConfigurationConcept       config,
+             CHI::IOLevelConnectionConcept  conn>
+    inline bool Printer::PrintFlit(std::ostream& os, const Flits::DAT<config, conn>& datFlit) const
+    {
+        return PrintDAT(os, Map(datFlit));
+    }
+
+    inline bool Printer::PrintREQ(std::ostream& os, const KeyValueMap& kv) const
+    {
+        return Print(Keys::REQ::iteration(), os, kv);
+    }
+
+    inline bool Printer::PrintSNP(std::ostream& os, const KeyValueMap& kv) const
+    {
+        return Print(Keys::SNP::iteration(), os, kv);
+    }
+
+    inline bool Printer::PrintRSP(std::ostream& os, const KeyValueMap& kv) const
+    {
+        return Print(Keys::RSP::iteration(), os, kv);
+    }
+
+    inline bool Printer::PrintDAT(std::ostream& os, const KeyValueMap& kv) const
+    {
+        return Print(Keys::DAT::iteration(), os, kv);
+    }
+}
+
+// Implementation of: class DefaultPrinter
+namespace /*CHI::*/Expresso::Flit {
+
+    inline DefaultPrinter::DefaultPrinter() noexcept
+        : Printer   (std::make_shared<DefaultFormatterProvider>())
+    { }
+
+    inline DefaultPrinter::DefaultPrinter(std::shared_ptr<FormatterProvider> formatter,
+                                          std::shared_ptr<FormatModifier>    modifier,
+                                          std::shared_ptr<Filter>            filter) noexcept
+        : Printer   (formatter, modifier, filter)
+    { }
+
+    inline bool DefaultPrinter::Print(const KeyIteration& iters, std::ostream& os, const KeyValueMap& kv) const
+    {
+        if (!this->formatter)
+            return false;
+
+        for (auto iter = iters.begin(); iter != iters.end(); iter++)
+        {
+            if (this->filter && !this->filter->IsAccepted(*iter, kv))
+                continue;
+
+            const auto& formatter = this->formatter->Get(*iter, kv);
+
+            if (!formatter)
+                return false;
+
+            std::string formatted = formatter->Format(kv, *iter, format(*iter));
+
+            if (formatted.empty())
+                continue;
+
+            if (iter != iters.begin())
+                os << seperator;
+
+            if (this->modifier)
+                formatted = this->modifier->Modify(*iter, kv, formatted);
+
+            os << formatted;
+        }
+
+        return true;
     }
 }
 

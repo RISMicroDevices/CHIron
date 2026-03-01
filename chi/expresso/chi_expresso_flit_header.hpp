@@ -7,6 +7,7 @@
 #include <iterator>             // IWYU pragma: export
 #include <vector>               // IWYU pragma: export
 #include <unordered_map>        // IWYU pragma: export
+#include <unordered_set>        // IWYU pragma: export
 #include <functional>           // IWYU pragma: export
 #include <iterator>             // IWYU pragma: export
 #include <utility>              // IWYU pragma: export
@@ -14,5 +15,7 @@
 #include <type_traits>          // IWYU pragma: export
 #include <sstream>              // IWYU pragma: export
 #include <iomanip>              // IWYU pragma: export
+#include <memory>               // IWYU pragma: export
+#include <initializer_list>     // IWYU pragma: export
 
 #endif // __CHI__CHI_EXPRESSO_FLIT_HEADER
