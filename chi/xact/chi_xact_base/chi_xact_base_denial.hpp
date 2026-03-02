@@ -101,7 +101,7 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_SRCID_MISMATCH               ("XACT_DENIED_SRCID_MISMATCH",              0x00040000 |  4);
         //  inline constexpr XactDenialEnumBack DENIED_FWDNID_MISMATCH              ("XACT_DENIED_FWDNID_MISMATCH",             0x00040000 |  5);
         //  inline constexpr XactDenialEnumBack DENIED_FWDTXNID_MISMATCH            ("XACT_DENIED_FWDTXNID_MISMATCH",           0x00040000 |  6);
-            inline constexpr XactDenialEnumBack DENIED_HOMENID_MISMATCH             ("XACT_DENIED_HOMENID_MISMATCH",            0x00040000 |  7);
+        //  inline constexpr XactDenialEnumBack DENIED_HOMENID_MISMATCH             ("XACT_DENIED_HOMENID_MISMATCH",            0x00040000 |  7);
             inline constexpr XactDenialEnumBack DENIED_PGROUPID_MISMATCH            ("XACT_DENIED_PGROUPID_MISMATCH",           0x00040000 |  8);
 
             inline constexpr XactDenialEnumBack DENIED_RSP_TXNID_MISMATCHING_REQ    ("XACT_DENIED_RSP_TXNID_MISMATCHING_REQ",   0x00040000 |  9);
@@ -124,6 +124,8 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_RSP_TGTID_MISMATCHING_SNP    ("XACT_DENIED_RSP_TGTID_MISMATCHING_SNP",   0x00040000 | 24);
             inline constexpr XactDenialEnumBack DENIED_DAT_TGTID_MISMATCHING_SNP    ("XACT_DENIED_DAT_TGTID_MISMATCHING_SNP",   0x00040000 | 25);
             inline constexpr XactDenialEnumBack DENIED_DAT_TGTID_MISMATCHING_DCT    ("XACT_DENIED_DAT_TGTID_MISMATCHING_DCT",   0x00040000 | 26);
+
+            inline constexpr XactDenialEnumBack DENIED_DAT_HOMENID_MISMATCHING_SNP  ("XACT_DENIED_DAT_HOMENID_MISMATCHING_SNP", 0x00040000 | 30);
 
             inline constexpr XactDenialEnumBack DENIED_SECOND_RETRY                 ("XACT_DENIED_SECOND_RETRY",                0x000A0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_SECOND_PCRD                  ("XACT_DENIED_SECOND_PCRD",                 0x000A0000 |  1);
