@@ -627,7 +627,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_DAT_DBID_MISMATCH;
 
             if (datFlit.flit.dat.HomeNID() != this->first.flit.snp.SrcID())
-                return XactDenial::DENIED_HOMENID_MISMATCH;
+                return XactDenial::DENIED_DAT_HOMENID_MISMATCHING_SNP;
 
             if (!this->NextSNPDataID(datFlit, {
                 Opcodes::DAT::CompData
