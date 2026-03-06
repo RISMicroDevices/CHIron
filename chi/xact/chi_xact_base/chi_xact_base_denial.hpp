@@ -50,12 +50,31 @@ namespace CHI {
             inline constexpr XactDenialEnumBack ACCEPTED                            ("XACT_ACCEPTED",                           0x00000000 |  0);
             inline constexpr XactDenialEnumBack DENIED_COMPLETED                    ("XACT_DENIED_COMPLETED",                   0x00000000 |  1);
             inline constexpr XactDenialEnumBack DENIED_SCOPE                        ("XACT_DENIED_SCOPE",                       0x00000000 |  2);
-            inline constexpr XactDenialEnumBack DENIED_CHANNEL                      ("XACT_DENIED_CHANNEL",                     0x00000000 |  3);
+        //  inline constexpr XactDenialEnumBack DENIED_CHANNEL                      ("XACT_DENIED_CHANNEL",                     0x00000000 |  3);
             inline constexpr XactDenialEnumBack DENIED_TXNID_IN_USE                 ("XACT_DENIED_TXNID_IN_USE",                0x00000000 |  5);
             inline constexpr XactDenialEnumBack DENIED_TXNID_NOT_EXIST              ("XACT_DENIED_TXNID_NOT_EXIST",             0x00000000 |  6);
             inline constexpr XactDenialEnumBack DENIED_DBID_IN_USE                  ("XACT_DENIED_DBID_IN_USE",                 0x00000000 |  7);
             inline constexpr XactDenialEnumBack DENIED_DBID_NOT_EXIST               ("XACT_DENIED_DBID_NOT_EXIST",              0x00000000 |  8);
             inline constexpr XactDenialEnumBack DENIED_NESTING_SNP                  ("XACT_DENIED_NESTING_SNP",                 0x00000000 |  9);
+
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_TXREQ                ("XACT_DENIED_CHANNEL_TXREQ",               0x00000000 | 32);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_RXREQ                ("XACT_DENIED_CHANNEL_RXREQ",               0x00000000 | 33);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_TXSNP                ("XACT_DENIED_CHANNEL_TXSNP",               0x00000000 | 34);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_RXSNP                ("XACT_DENIED_CHANNEL_RXSNP",               0x00000000 | 35);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_TXRSP                ("XACT_DENIED_CHANNEL_TXRSP",               0x00000000 | 36);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_RXRSP                ("XACT_DENIED_CHANNEL_RXRSP",               0x00000000 | 37);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_TXDAT                ("XACT_DENIED_CHANNEL_TXDAT",               0x00000000 | 38);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_RXDAT                ("XACT_DENIED_CHANNEL_RXDAT",               0x00000000 | 39);
+
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_NOT_REQ              ("XACT_DENIED_CHANNEL_NOT_REQ",             0x00000000 | 40);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_NOT_SNP              ("XACT_DENIED_CHANNEL_NOT_SNP",             0x00000000 | 41);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_NOT_RSP              ("XACT_DENIED_CHANNEL_NOT_RSP",             0x00000000 | 42);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_NOT_DAT              ("XACT_DENIED_CHANNEL_NOT_DAT",             0x00000000 | 43);
+
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_REQ                  ("XACT_DENIED_CHANNEL_REQ",                 0x00000000 | 44);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_SNP                  ("XACT_DENIED_CHANNEL_SNP",                 0x00000000 | 45);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_RSP                  ("XACT_DENIED_CHANNEL_RSP",                 0x00000000 | 46);
+            inline constexpr XactDenialEnumBack DENIED_CHANNEL_DAT                  ("XACT_DENIED_CHANNEL_DAT",                 0x00000000 | 47);
 
         //  inline constexpr XactDenialEnumBack DENIED_OPCODE                       ("XACT_DENIED_OPCODE",                      0x00010000 |  0);
             inline constexpr XactDenialEnumBack DENIED_REQ_OPCODE                   ("XACT_DENIED_REQ_OPCODE",                  0x00010000 |  1);
@@ -131,6 +150,7 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_SECOND_PCRD                  ("XACT_DENIED_SECOND_PCRD",                 0x000A0000 |  1);
             inline constexpr XactDenialEnumBack DENIED_PCRD_NO_RETRY                ("XACT_DENIED_PCRD_NO_RETRY",               0x000A0000 |  2);
             inline constexpr XactDenialEnumBack DENIED_PCRD_TYPE_MISMATCH           ("XACT_DENIED_PCRD_TYPE_MISMATCH",          0x000A0000 |  3);
+            inline constexpr XactDenialEnumBack DENIED_PCRD_CHANNEL_NOT_RSP         ("XACT_DENIED_PCRD_CHANNEL_NOT_RSP",        0x000A0000 |  4);
 
             inline constexpr XactDenialEnumBack DENIED_RESPSEPDATA_AFTER_COMPDATA   ("XACT_DENIED_RESPSEPDATA_AFTER_COMPDATA",  0x000B0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_RESPSEPDATA_AFTER_COMP       ("XACT_DENIED_RESPSEPDATA_AFTER_COMP",      0x000B0000 |  1);
