@@ -96,7 +96,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsREQ())
         {
-            this->firstDenial = XactDenial::DENIED_CHANNEL;
+            this->firstDenial = XactDenial::DENIED_CHANNEL_NOT_REQ;
             return;
         }
 
@@ -315,7 +315,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_COMPLETED;
 
         if (!rspFlit.IsRSP())
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_RSP;
 
         if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RetryAck)
             return this->NextRetryAckNoRecord(glbl, rspFlit);
@@ -453,7 +453,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum XactionHomeDataless<config, conn>::NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
-        return XactDenial::DENIED_CHANNEL;
+        return XactDenial::DENIED_CHANNEL_DAT;
     }
 }
 

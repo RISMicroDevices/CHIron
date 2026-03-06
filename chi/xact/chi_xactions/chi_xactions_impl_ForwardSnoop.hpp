@@ -90,7 +90,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsSNP())
         {
-            this->firstDenial = XactDenial::DENIED_CHANNEL;
+            this->firstDenial = XactDenial::DENIED_CHANNEL_NOT_SNP;
             return;
         }
 
@@ -332,7 +332,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_COMPLETED;
 
         if (!rspFlit.IsRSP())
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_RSP;
 
         if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp
          || rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpRespFwded)
@@ -448,7 +448,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_COMPLETED;
 
         if (!datFlit.IsDAT())
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_DAT;
 
         if (datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespData
          || datFlit.flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl

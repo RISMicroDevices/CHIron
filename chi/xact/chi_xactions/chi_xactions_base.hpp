@@ -1549,7 +1549,7 @@ namespace /*CHI::*/Xact {
         firstDBID = false;
 
         if (!rspFlit.IsRSP()) [[unlikely]]
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_RSP;
 
         XactDenialEnum denial = NextRSPNoRecord(glbl, rspFlit, hasDBID, firstDBID);
 
@@ -1567,7 +1567,7 @@ namespace /*CHI::*/Xact {
         firstDBID = false;
 
         if (!datFlit.IsDAT()) [[unlikely]]
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_DAT;
 
         XactDenialEnum denial = NextDATNoRecord(glbl, datFlit, hasDBID, firstDBID);
 
@@ -1630,7 +1630,7 @@ namespace /*CHI::*/Xact {
     inline XactDenialEnum Xaction<config, conn>::NextRetryAckNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit) noexcept
     {
         if (!rspFlit.IsRSP())
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_RSP;
 
         if (rspFlit.flit.rsp.Opcode() != Opcodes::RSP::RetryAck)
             return XactDenial::DENIED_RSP_OPCODE;
@@ -1669,10 +1669,10 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_RETRY_DIFF_XACT_TYPE;
 
         if (!pCrdFlit.IsRSP())
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_PCRD_CHANNEL_NOT_RSP;
 
         if (!xaction->GetFirst().IsREQ())
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_REQ;
 
         auto retryAck = GetRetryAck();
         if (!retryAck)

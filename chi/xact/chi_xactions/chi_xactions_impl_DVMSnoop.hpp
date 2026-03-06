@@ -98,7 +98,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsSNP())
         {
-            this->firstDenial = XactDenial::DENIED_CHANNEL;
+            this->firstDenial = XactDenial::DENIED_CHANNEL_NOT_SNP;
             return;
         }
 
@@ -257,7 +257,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_COMPLETED;
 
         if (!rspFlit.IsRSP())
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_RSP;
 
         if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
         {
@@ -294,7 +294,7 @@ namespace /*CHI::*/Xact {
              CHI::IOLevelConnectionConcept  conn>
     inline XactDenialEnum XactionDVMSnoop<config, conn>::NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
-        return XactDenial::DENIED_CHANNEL;
+        return XactDenial::DENIED_CHANNEL_DAT;
     }
 
     template<FlitConfigurationConcept       config,
@@ -302,7 +302,7 @@ namespace /*CHI::*/Xact {
     inline XactDenialEnum XactionDVMSnoop<config, conn>::NextSNP(const Global<config, conn>& glbl, const FiredRequestFlit<config, conn>& snpFlit) noexcept
     {
         if (!snpFlit.IsSNP()) [[unlikely]]
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_SNP;
 
         XactDenialEnum denial = NextSNPNoRecord(glbl, snpFlit);
 

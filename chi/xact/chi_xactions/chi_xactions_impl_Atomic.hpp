@@ -96,7 +96,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsREQ())
         {
-            this->firstDenial = XactDenial::DENIED_CHANNEL;
+            this->firstDenial = XactDenial::DENIED_CHANNEL_NOT_REQ;
             return;
         }
 
@@ -323,7 +323,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_COMPLETED;
 
         if (!rspFlit.IsRSP())
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_RSP;
         
         if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RetryAck)
             return this->NextRetryAckNoRecord(glbl, rspFlit);
@@ -490,7 +490,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_COMPLETED;
 
         if (!datFlit.IsDAT())
-            return XactDenial::DENIED_CHANNEL;
+            return XactDenial::DENIED_CHANNEL_NOT_DAT;
 
         if (datFlit.flit.dat.Opcode() == Opcodes::DAT::NonCopyBackWrData)
         {
