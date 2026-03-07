@@ -994,7 +994,7 @@ namespace /*CHI::*/Xact {
         const Flits::REQ<config, conn>&         reqFlit,
         std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
-        return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL, 
+        return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_TXREQ, 
             FiredRequestFlit<config, conn>(GetActiveScope(), true, time, reqFlit));
     }
 
@@ -1006,7 +1006,7 @@ namespace /*CHI::*/Xact {
         const Flits::REQ<config, conn>&         reqFlit,
         std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
-        return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL,
+        return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_RXREQ,
             FiredRequestFlit<config, conn>(GetActiveScope(), false, time, reqFlit));
     }
 
@@ -1019,7 +1019,7 @@ namespace /*CHI::*/Xact {
         const Flits::REQ<config, conn>::srcid_t snpTgtId,
         std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
-        return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL,
+        return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_TXSNP,
             FiredRequestFlit<config, conn>(GetActiveScope(), true, time, snpFlit, snpTgtId));
     }
 
@@ -1032,7 +1032,7 @@ namespace /*CHI::*/Xact {
         const Flits::REQ<config, conn>::srcid_t snpTgtId,
         std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
-        return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL,
+        return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_RXSNP,
             FiredRequestFlit<config, conn>(GetActiveScope(), false, time, snpFlit, snpTgtId));
     }
 
@@ -1044,7 +1044,7 @@ namespace /*CHI::*/Xact {
         const Flits::RSP<config, conn>&         rspFlit,
         std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
-        return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL,
+        return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_TXRSP,
             FiredResponseFlit<config, conn>(GetActiveScope(), true, time, rspFlit));
     }
 
@@ -1056,7 +1056,7 @@ namespace /*CHI::*/Xact {
         const Flits::RSP<config, conn>&         rspFlit,
         std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
-        return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL,
+        return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_RXRSP,
             FiredResponseFlit<config, conn>(GetActiveScope(), false, time, rspFlit));
     }
 
@@ -1068,7 +1068,7 @@ namespace /*CHI::*/Xact {
         const Flits::DAT<config, conn>&         datFlit,
         std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
-        return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL,
+        return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_TXDAT,
             FiredResponseFlit<config, conn>(GetActiveScope(), true, time, datFlit));
     }
 
@@ -1080,7 +1080,7 @@ namespace /*CHI::*/Xact {
         const Flits::DAT<config, conn>&         datFlit,
         std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
     {
-        return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL,
+        return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_RXDAT,
             FiredResponseFlit<config, conn>(GetActiveScope(), false, time, datFlit));
     }
 }
