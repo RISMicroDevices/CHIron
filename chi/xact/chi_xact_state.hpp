@@ -608,13 +608,13 @@ namespace /*CHI::*/Xact {
             reqDecoder.Decode(flit.Opcode());
 
         if (!opcodeInfo.IsValid()) // unknown opcode
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_REQ_OPCODE;
 
         //
         const details::RNCohTrans* trans = opcodeInfo.GetCompanion();
 
         if (!trans)
-                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+            return XactDenial::DENIED_UNSUPPORTED_FEATURE;
 
         //
         const std::pair<CacheState, bool> initialState = EvaluateWithSeer(addr);
