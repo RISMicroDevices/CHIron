@@ -748,12 +748,12 @@ namespace CHI {
 #endif
             };
             union {
-            as_pointer_if_t<conn::connectedIO, lpid_t>              _LPID;
 #ifdef CHI_ISSUE_EB_ENABLE
             as_pointer_if_t<conn::connectedIO, pgroupid_t>          _PGroupID;
             as_pointer_if_t<conn::connectedIO, stashgroupid_t>      _StashGroupID;
             as_pointer_if_t<conn::connectedIO, taggroupid_t>        _TagGroupID;
 #endif
+            as_pointer_if_t<conn::connectedIO, lpid_t>              _LPID;
             };
             union {
             as_pointer_if_t<conn::connectedIO, excl_t>              _Excl;
