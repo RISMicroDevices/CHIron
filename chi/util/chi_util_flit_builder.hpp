@@ -250,11 +250,11 @@ namespace CHI {
         public:
             constexpr REQ<config>::qos_t                QoS() const noexcept requires is_field_applicable<T->fields->QoS>;
             consteval REQFlitBuilder<T, config, NextREQFlitBuildability<T, able, REQFlitField::QoS>()>
-                                                        QoS(REQ<config>::qos_t qos) noexcept requires is_field_applicable<T->fields->QoS>;
+                                                        QoS(REQ<config>::qos_t qos) const noexcept requires is_field_applicable<T->fields->QoS>;
             constexpr REQFlitBuilder<T, config, NextREQFlitBuildability<T, able, REQFlitField::QoS>()>&
                                                         SetQoS(REQ<config>::qos_t qos) noexcept requires is_field_applicable<T->fields->QoS>;
 
-            
+            // TODO
             
             consteval REQ<config>                       Eval() const noexcept requires is_buildable<able>;
             constexpr REQ<config>                       Build() const noexcept requires is_buildable<able>;
@@ -262,6 +262,84 @@ namespace CHI {
         
         template<REQBuildTargetEnum T, REQFlitConfigurationConcept config>
         consteval REQFlitBuilder<T, config, MakeREQFlitBuildability<T, config>()> MakeREQFlitBuilder() noexcept;
+
+        // patching common field writes
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::returnnid_t PCFReturnNIDFromStashNID(typename REQ<config>::returnnid_t, typename REQ<config>::stashnid_t) noexcept;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::returnnid_t PCFReturnNIDFromSLCRepHint(typename REQ<config>::returnnid_t, typename REQ<config>::slcrephint_t) noexcept;
+#endif
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::stashnidvalid_t PCFStashNIDValidFromEndian(typename REQ<config>::stashnidvalid_t, typename REQ<config>::endian_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::stashnidvalid_t PCFStashNIDValidFromDeep(typename REQ<config>::stashnidvalid_t, typename REQ<config>::deep_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::returntxnid_t PCFReturnTxnIDFromStashLPIDValid(typename REQ<config>::returntxnid_t, typename REQ<config>::stashlpidvalid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::returntxnid_t PCFReturnTxnIDFromStashLPID(typename REQ<config>::returntxnid_t, typename REQ<config>::stashlpid_t) noexcept;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::snpattr_t PCFSnpAttrFromDoDWT(typename REQ<config>::snpattr_t, typename REQ<config>::dodwt_t) noexcept;
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::pgroupid_t PCFPGroupIDFromStashGroupID(typename REQ<config>::pgroupid_t, typename REQ<config>::stashgroupid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::pgroupid_t PCFPGroupIDFromTagGroupID(typename REQ<config>::pgroupid_t, typename REQ<config>::taggroupid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::pgroupid_t PCFPGroupIDFromLPID(typename REQ<config>::pgroupid_t, typename REQ<config>::lpid_t) noexcept;
+#endif
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::excl_t PCFExclFromSnoopMe(typename REQ<config>::excl_t, typename REQ<config>::snoopme_t) noexcept;
+    
+        // patching common field reads
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::stashnid_t PCFReturnNIDToStashNID(typename REQ<config>::returnnid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::slcrephint_t PCFReturnNIDToSLCRepHint(typename REQ<config>::returnnid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::endian_t PCFStashNIDValidToEndian(typename REQ<config>::stashnidvalid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::deep_t PCFStashNIDValidToDeep(typename REQ<config>::stashnidvalid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::stashlpidvalid_t PCFReturnTxnIDToStashLPIDValid(typename REQ<config>::returntxnid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::stashlpid_t PCFReturnTxnIDToStashLPID(typename REQ<config>::returntxnid_t) noexcept;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::dodwt_t PCFSnpAttrToDoDWT(typename REQ<config>::snpattr_t) noexcept;
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::stashgroupid_t PCFPGroupIDToStashGroupID(typename REQ<config>::pgroupid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::taggroupid_t PCFPGroupIDToTagGroupID(typename REQ<config>::pgroupid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::lpid_t PCFPGroupIDToLPID(typename REQ<config>::pgroupid_t) noexcept;
+#endif
+
+        template<REQFlitConfigurationConcept config>
+        consteval typename REQ<config>::snoopme_t PCFExclToSnoopMe(typename REQ<config>::excl_t) noexcept;
     }
 
 /*
@@ -346,18 +424,87 @@ namespace /*CHI::*/Flits {
 }
 
 
+// Implementation of common field patching functions
+namespace /*CHI::*/Flits {
+
+    #define _PCF(src, srcVal, dst, dstVal) \
+        (  (uint64_t(dstVal) & ~(((0x1ULL << REQ<config>::src##_WIDTH) - 1) << (REQ<config>::src##_LSB - REQ<config>::dst##_LSB))) \
+        | ((uint64_t(srcVal) & ((0x1ULL << REQ<config>::src##_WIDTH) - 1)) << (REQ<config>::src##_LSB - REQ<config>::dst##_LSB)))
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::returnnid_t PCFReturnNIDFromStashNID(typename REQ<config>::returnnid_t dst, typename REQ<config>::stashnid_t src) noexcept
+    { return _PCF(STASHNID, src, RETURNNID, dst); }
+
+#ifdef CHI_ISSUE_EB_ENABLE
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::returnnid_t PCFReturnNIDFromSLCRepHint(typename REQ<config>::returnnid_t dst, typename REQ<config>::slcrephint_t src) noexcept
+    { return _PCF(SLCREPHINT, src, RETURNNID, dst); }
+#endif
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::stashnidvalid_t PCFStashNIDValidFromEndian(typename REQ<config>::stashnidvalid_t dst, typename REQ<config>::endian_t src) noexcept
+    { return _PCF(ENDIAN, src, STASHNIDVALID, dst); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::stashnidvalid_t PCFStashNIDValidFromDeep(typename REQ<config>::stashnidvalid_t dst, typename REQ<config>::deep_t src) noexcept
+    { return _PCF(DEEP, src, STASHNIDVALID, dst); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::returntxnid_t PCFReturnTxnIDFromStashLPIDValid(typename REQ<config>::returntxnid_t dst, typename REQ<config>::stashlpidvalid_t src) noexcept
+    { return _PCF(STASHLPIDVALID, src, RETURNTXNID, dst); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::returntxnid_t PCFReturnTxnIDFromStashLPID(typename REQ<config>::returntxnid_t dst, typename REQ<config>::stashlpid_t src) noexcept
+    { return _PCF(STASHLPID, src, RETURNTXNID, dst); }
+
+#ifdef CHI_ISSUE_EB_ENABLE
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::snpattr_t PCFSnpAttrFromDoDWT(typename REQ<config>::snpattr_t dst, typename REQ<config>::dodwt_t src) noexcept
+    { return _PCF(DODWT, src, SNPATTR, dst); }
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::pgroupid_t PCFPGroupIDFromStashGroupID(typename REQ<config>::pgroupid_t dst, typename REQ<config>::stashgroupid_t src) noexcept
+    { return _PCF(STASHGROUPID, src, PGROUPID, dst); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::pgroupid_t PCFPGroupIDFromTagGroupID(typename REQ<config>::pgroupid_t dst, typename REQ<config>::taggroupid_t src) noexcept
+    { return _PCF(TAGGROUPID, src, PGROUPID, dst); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::pgroupid_t PCFPGroupIDFromLPID(typename REQ<config>::pgroupid_t dst, typename REQ<config>::lpid_t src) noexcept
+    { return _PCF(LPID, src, PGROUPID, dst); }
+#endif
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::excl_t PCFExclFromSnoopMe(typename REQ<config>::excl_t dst, typename REQ<config>::snoopme_t src) noexcept
+    { return _PCF(SNOOPME, src, EXCL, dst); }    
+
+    #undef _PCF
+}
+
+
 // Implementation of: class REQFlitBuilder
 namespace /*CHI::*/Flits {
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, REQFlitBuildability able>
     inline constexpr REQFlitBuilder<T, config, able>::REQFlitBuilder() noexcept
     {
+        REQ<config> flit = { 0 };
+
+#define _INIT_IF(field) \
+        if constexpr (HasDefaultFieldValue<T->fields->field>())
+
 #define _FIELD_INIT(field) \
-        if constexpr (HasDefaultFieldValue<T->fields->field>()) flit.field() = GetDefaultFieldValue<T->fields->field>();
+        _INIT_IF(field) flit.field() = GetDefaultFieldValue<T->fields->field>();
+
+#define _FIELD_INIT_PCF(field, dst) \
+        _INIT_IF(field) flit.dst() = PCF##dst##From##field <config>(flit.dst(), GetDefaultFieldValue<T->fields->field>());
 
 #define _FIELD_INIT_OPT(field) \
         if constexpr (REQ<config>::has##field) \
-            if constexpr (HasDefaultFieldValue<T->fields->field>()) flit.field() = GetDefaultFieldValue<T->fields->field>();
+            _INIT_IF(field) flit.field() = GetDefaultFieldValue<T->fields->field>();
 
         flit.Opcode() = T->opcode;
 
@@ -366,18 +513,19 @@ namespace /*CHI::*/Flits {
         _FIELD_INIT(SrcID           );
         _FIELD_INIT(TxnID           );
         _FIELD_INIT(ReturnNID       );
-        _FIELD_INIT(StashNID        );
+    //  _FIELD_INIT(StashNID        );
+        _FIELD_INIT_PCF(StashNID        , ReturnNID);
 #ifdef CHI_ISSUE_EB_ENABLE
-        _FIELD_INIT(SLCRepHint)
+        _FIELD_INIT_PCF(SLCRepHint      , ReturnNID);
 #endif
         _FIELD_INIT(StashNIDValid   );
-        _FIELD_INIT(Endian          );
+        _FIELD_INIT_PCF(Endian          , StashNIDValid);
 #ifdef CHI_ISSUE_EB_ENABLE
-        _FIELD_INIT(Deep            );
+        _FIELD_INIT_PCF(Deep            , StashNIDValid);
 #endif
         _FIELD_INIT(ReturnTxnID     );
-        _FIELD_INIT(StashLPIDValid  );
-        _FIELD_INIT(StashLPID       );
+        _FIELD_INIT_PCF(StashLPIDValid  , ReturnTxnID);
+        _FIELD_INIT_PCF(StashLPID       , ReturnTxnID);
         _FIELD_INIT(Opcode          );
         _FIELD_INIT(Size            );
         _FIELD_INIT(Addr            );
@@ -390,16 +538,19 @@ namespace /*CHI::*/Flits {
         flit.MemAttr() = GetDefaultMemAttrValue<T>();
         _FIELD_INIT(SnpAttr         );
 #ifdef CHI_ISSUE_EB_ENABLE
-        _FIELD_INIT(DoDWT           );
+        _FIELD_INIT_PCF(DoDWT           , SnpAttr);
 #endif
-        _FIELD_INIT(LPID            );
 #ifdef CHI_ISSUE_EB_ENABLE
         _FIELD_INIT(PGroupID        );
-        _FIELD_INIT(StashGroupID    );
-        _FIELD_INIT(TagGroupID      );
+        _FIELD_INIT_PCF(StashGroupID    , PGroupID);
+        _FIELD_INIT_PCF(TagGroupID      , PGroupID);
+        _FIELD_INIT_PCF(LPID            , PGroupID);
+#endif
+#ifdef CHI_ISSUE_B_ENABLE
+        _FIELD_INIT(LPID            );
 #endif
         _FIELD_INIT(Excl            );
-        _FIELD_INIT(SnoopMe         );
+        _FIELD_INIT_PCF(SnoopMe         , Excl);
         _FIELD_INIT(ExpCompAck      );
 #ifdef CHI_ISSUE_EB_ENABLE
         _FIELD_INIT(TagOp           );
@@ -410,8 +561,12 @@ namespace /*CHI::*/Flits {
 #endif
         _FIELD_INIT_OPT(RSVDC);
 
+#undef _INIT_IF
 #undef _FIELD_INIT
+#undef _FIELD_INIT_PCF
 #undef _FIELD_INIT_OPT
+
+        this->flit = flit;
     }
 
     // TODO
