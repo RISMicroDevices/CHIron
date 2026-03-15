@@ -238,6 +238,9 @@ namespace CHI {
         template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, REQFlitBuildability able = MakeREQFlitBuildability<T, config>()>
         class REQFlitBuilder
         {
+            template<REQBuildTargetEnum thatT, REQFlitConfigurationConcept thatConfig, REQFlitBuildability thatAble>
+            friend class REQFlitBuilder;
+
         protected:
             REQ<config>     flit    = { 0 };
 
@@ -250,14 +253,17 @@ namespace CHI {
         public:
             constexpr REQ<config>::qos_t                QoS() const noexcept requires is_field_applicable<T->fields->QoS>;
             consteval REQFlitBuilder<T, config, NextREQFlitBuildability<T, able, REQFlitField::QoS>()>
-                                                        QoS(REQ<config>::qos_t qos) const noexcept requires is_field_applicable<T->fields->QoS>;
+                                                        QoS(typename REQ<config>::qos_t qos) const noexcept requires is_field_applicable<T->fields->QoS>;
             constexpr REQFlitBuilder<T, config, NextREQFlitBuildability<T, able, REQFlitField::QoS>()>&
-                                                        SetQoS(REQ<config>::qos_t qos) noexcept requires is_field_applicable<T->fields->QoS>;
+                                                        SetQoS(typename REQ<config>::qos_t qos) noexcept requires is_field_applicable<T->fields->QoS>;
 
             // TODO
             
             consteval REQ<config>                       Eval() const noexcept requires is_buildable<able>;
             constexpr REQ<config>                       Build() const noexcept requires is_buildable<able>;
+
+            consteval REQ<config>                       EvalPartial() const noexcept;
+            constexpr REQ<config>                       BuildPartial() const noexcept;
         };
         
         template<REQBuildTargetEnum T, REQFlitConfigurationConcept config>
@@ -569,6 +575,30 @@ namespace /*CHI::*/Flits {
         this->flit = flit;
     }
 
+    template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, REQFlitBuildability able>
+    template<REQFlitBuildability nextAble>
+    inline constexpr REQFlitBuilder<T, config, able>::REQFlitBuilder(const REQFlitBuilder<T, config, nextAble>& obj) noexcept
+    {
+        this->flit = obj.flit;
+    }
+
+    template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, REQFlitBuildability able>
+    inline consteval REQFlitBuilder<T, config, NextREQFlitBuildability<T, able, REQFlitField::QoS>()>
+            REQFlitBuilder<T, config, able>::QoS(typename REQ<config>::qos_t qos) const noexcept requires is_field_applicable<T->fields->QoS>
+    {
+        auto builder = REQFlitBuilder<T, config, NextREQFlitBuildability<T, able, REQFlitField::QoS>()>(*this);
+        builder.flit.QoS() = qos;
+        return builder;
+    }
+
+    template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, REQFlitBuildability able>
+    inline constexpr REQFlitBuilder<T, config, NextREQFlitBuildability<T, able, REQFlitField::QoS>()>&
+            REQFlitBuilder<T, config, able>::SetQoS(typename REQ<config>::qos_t qos) noexcept requires is_field_applicable<T->fields->QoS>
+    {
+        this->flit.QoS() = qos;
+        return *reinterpret_cast<REQFlitBuilder<T, config, NextREQFlitBuildability<T, able, REQFlitField::QoS>()>*>(this);
+    }
+
     // TODO
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, REQFlitBuildability able>
@@ -579,6 +609,18 @@ namespace /*CHI::*/Flits {
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, REQFlitBuildability able>
     inline constexpr REQ<config> REQFlitBuilder<T, config, able>::Build() const noexcept requires is_buildable<able>
+    {
+        return flit;
+    }
+
+    template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, REQFlitBuildability able>
+    inline consteval REQ<config> REQFlitBuilder<T, config, able>::EvalPartial() const noexcept
+    {
+        return flit;
+    }
+
+    template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, REQFlitBuildability able>
+    inline constexpr REQ<config> REQFlitBuilder<T, config, able>::BuildPartial() const noexcept
     {
         return flit;
     }
