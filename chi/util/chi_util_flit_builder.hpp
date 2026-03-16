@@ -311,41 +311,43 @@ namespace CHI {
     
         // patching common field reads
         template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::stashnid_t PCFReturnNIDToStashNID(typename REQ<config>::returnnid_t) noexcept;
-
-        template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::slcrephint_t PCFReturnNIDToSLCRepHint(typename REQ<config>::returnnid_t) noexcept;
-
-        template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::endian_t PCFStashNIDValidToEndian(typename REQ<config>::stashnidvalid_t) noexcept;
-
-        template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::deep_t PCFStashNIDValidToDeep(typename REQ<config>::stashnidvalid_t) noexcept;
-
-        template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::stashlpidvalid_t PCFReturnTxnIDToStashLPIDValid(typename REQ<config>::returntxnid_t) noexcept;
-
-        template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::stashlpid_t PCFReturnTxnIDToStashLPID(typename REQ<config>::returntxnid_t) noexcept;
+        constexpr typename REQ<config>::stashnid_t PCFReturnNIDToStashNID(typename REQ<config>::returnnid_t) noexcept;
 
 #ifdef CHI_ISSUE_EB_ENABLE
         template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::dodwt_t PCFSnpAttrToDoDWT(typename REQ<config>::snpattr_t) noexcept;
+        constexpr typename REQ<config>::slcrephint_t PCFReturnNIDToSLCRepHint(typename REQ<config>::returnnid_t) noexcept;
+#endif
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::endian_t PCFStashNIDValidToEndian(typename REQ<config>::stashnidvalid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::deep_t PCFStashNIDValidToDeep(typename REQ<config>::stashnidvalid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::stashlpidvalid_t PCFReturnTxnIDToStashLPIDValid(typename REQ<config>::returntxnid_t) noexcept;
+
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::stashlpid_t PCFReturnTxnIDToStashLPID(typename REQ<config>::returntxnid_t) noexcept;
+
+#ifdef CHI_ISSUE_EB_ENABLE
+        template<REQFlitConfigurationConcept config>
+        constexpr typename REQ<config>::dodwt_t PCFSnpAttrToDoDWT(typename REQ<config>::snpattr_t) noexcept;
 #endif
 
 #ifdef CHI_ISSUE_EB_ENABLE
         template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::stashgroupid_t PCFPGroupIDToStashGroupID(typename REQ<config>::pgroupid_t) noexcept;
+        constexpr typename REQ<config>::stashgroupid_t PCFPGroupIDToStashGroupID(typename REQ<config>::pgroupid_t) noexcept;
 
         template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::taggroupid_t PCFPGroupIDToTagGroupID(typename REQ<config>::pgroupid_t) noexcept;
+        constexpr typename REQ<config>::taggroupid_t PCFPGroupIDToTagGroupID(typename REQ<config>::pgroupid_t) noexcept;
 
         template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::lpid_t PCFPGroupIDToLPID(typename REQ<config>::pgroupid_t) noexcept;
+        constexpr typename REQ<config>::lpid_t PCFPGroupIDToLPID(typename REQ<config>::pgroupid_t) noexcept;
 #endif
 
         template<REQFlitConfigurationConcept config>
-        consteval typename REQ<config>::snoopme_t PCFExclToSnoopMe(typename REQ<config>::excl_t) noexcept;
+        constexpr typename REQ<config>::snoopme_t PCFExclToSnoopMe(typename REQ<config>::excl_t) noexcept;
     }
 
 /*
@@ -430,64 +432,124 @@ namespace /*CHI::*/Flits {
 }
 
 
-// Implementation of common field patching functions
+// Implementation of common field patching write functions
 namespace /*CHI::*/Flits {
 
-    #define _PCF(src, srcVal, dst, dstVal) \
+    #define _PCF_WRITE(src, srcVal, dst, dstVal) \
         (  (uint64_t(dstVal) & ~(((0x1ULL << REQ<config>::src##_WIDTH) - 1) << (REQ<config>::src##_LSB - REQ<config>::dst##_LSB))) \
         | ((uint64_t(srcVal) & ((0x1ULL << REQ<config>::src##_WIDTH) - 1)) << (REQ<config>::src##_LSB - REQ<config>::dst##_LSB)))
 
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::returnnid_t PCFReturnNIDFromStashNID(typename REQ<config>::returnnid_t dst, typename REQ<config>::stashnid_t src) noexcept
-    { return _PCF(STASHNID, src, RETURNNID, dst); }
+    { return _PCF_WRITE(STASHNID, src, RETURNNID, dst); }
 
 #ifdef CHI_ISSUE_EB_ENABLE
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::returnnid_t PCFReturnNIDFromSLCRepHint(typename REQ<config>::returnnid_t dst, typename REQ<config>::slcrephint_t src) noexcept
-    { return _PCF(SLCREPHINT, src, RETURNNID, dst); }
+    { return _PCF_WRITE(SLCREPHINT, src, RETURNNID, dst); }
 #endif
 
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::stashnidvalid_t PCFStashNIDValidFromEndian(typename REQ<config>::stashnidvalid_t dst, typename REQ<config>::endian_t src) noexcept
-    { return _PCF(ENDIAN, src, STASHNIDVALID, dst); }
+    { return _PCF_WRITE(ENDIAN, src, STASHNIDVALID, dst); }
 
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::stashnidvalid_t PCFStashNIDValidFromDeep(typename REQ<config>::stashnidvalid_t dst, typename REQ<config>::deep_t src) noexcept
-    { return _PCF(DEEP, src, STASHNIDVALID, dst); }
+    { return _PCF_WRITE(DEEP, src, STASHNIDVALID, dst); }
 
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::returntxnid_t PCFReturnTxnIDFromStashLPIDValid(typename REQ<config>::returntxnid_t dst, typename REQ<config>::stashlpidvalid_t src) noexcept
-    { return _PCF(STASHLPIDVALID, src, RETURNTXNID, dst); }
+    { return _PCF_WRITE(STASHLPIDVALID, src, RETURNTXNID, dst); }
 
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::returntxnid_t PCFReturnTxnIDFromStashLPID(typename REQ<config>::returntxnid_t dst, typename REQ<config>::stashlpid_t src) noexcept
-    { return _PCF(STASHLPID, src, RETURNTXNID, dst); }
+    { return _PCF_WRITE(STASHLPID, src, RETURNTXNID, dst); }
 
 #ifdef CHI_ISSUE_EB_ENABLE
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::snpattr_t PCFSnpAttrFromDoDWT(typename REQ<config>::snpattr_t dst, typename REQ<config>::dodwt_t src) noexcept
-    { return _PCF(DODWT, src, SNPATTR, dst); }
+    { return _PCF_WRITE(DODWT, src, SNPATTR, dst); }
 #endif
 
 #ifdef CHI_ISSUE_EB_ENABLE
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::pgroupid_t PCFPGroupIDFromStashGroupID(typename REQ<config>::pgroupid_t dst, typename REQ<config>::stashgroupid_t src) noexcept
-    { return _PCF(STASHGROUPID, src, PGROUPID, dst); }
+    { return _PCF_WRITE(STASHGROUPID, src, PGROUPID, dst); }
 
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::pgroupid_t PCFPGroupIDFromTagGroupID(typename REQ<config>::pgroupid_t dst, typename REQ<config>::taggroupid_t src) noexcept
-    { return _PCF(TAGGROUPID, src, PGROUPID, dst); }
+    { return _PCF_WRITE(TAGGROUPID, src, PGROUPID, dst); }
 
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::pgroupid_t PCFPGroupIDFromLPID(typename REQ<config>::pgroupid_t dst, typename REQ<config>::lpid_t src) noexcept
-    { return _PCF(LPID, src, PGROUPID, dst); }
+    { return _PCF_WRITE(LPID, src, PGROUPID, dst); }
 #endif
 
     template<REQFlitConfigurationConcept config>
     inline constexpr typename REQ<config>::excl_t PCFExclFromSnoopMe(typename REQ<config>::excl_t dst, typename REQ<config>::snoopme_t src) noexcept
-    { return _PCF(SNOOPME, src, EXCL, dst); }    
+    { return _PCF_WRITE(SNOOPME, src, EXCL, dst); }    
 
-    #undef _PCF
+    #undef _PCF_WRITE
+}
+
+// Implementation of common field patching read functions
+namespace /*CHI::*/Flits {
+
+#define _PCF_READ(dst, src, srcVal) \
+    ((uint64_t(srcVal) & (((1ULL << REQ<config>::dst##_WIDTH) - 1) << (REQ<config>::dst##_LSB - REQ<config>::src##_LSB))) \
+        >> (REQ<config>::dst##_LSB - REQ<config>::src##_LSB))
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::stashnid_t PCFReturnNIDToStashNID(typename REQ<config>::returnnid_t src) noexcept
+    { return _PCF_READ(STASHNID, RETURNNID, src); }
+
+#ifdef CHI_ISSUE_EB_ENABLE
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::slcrephint_t PCFReturnNIDToSLCRepHint(typename REQ<config>::returnnid_t src) noexcept
+    { return _PCF_READ(SLCREPHINT, RETURNNID, src); }
+#endif
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::endian_t PCFStashNIDValidToEndian(typename REQ<config>::stashnidvalid_t src) noexcept
+    { return _PCF_READ(ENDIAN, STASHNIDVALID, src); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::deep_t PCFStashNIDValidToDeep(typename REQ<config>::stashnidvalid_t src) noexcept
+    { return _PCF_READ(DEEP, STASHNIDVALID, src); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::stashlpidvalid_t PCFReturnTxnIDToStashLPIDValid(typename REQ<config>::returntxnid_t src) noexcept
+    { return _PCF_READ(STASHLPIDVALID, RETURNTXNID, src); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::stashlpid_t PCFReturnTxnIDToStashLPID(typename REQ<config>::returntxnid_t src) noexcept
+    { return _PCF_READ(STASHLPID, RETURNTXNID, src); }
+
+#ifdef CHI_ISSUE_EB_ENABLE
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::dodwt_t PCFSnpAttrToDoDWT(typename REQ<config>::snpattr_t src) noexcept
+    { return _PCF_READ(DODWT, SNPATTR, src); }
+#endif
+
+#ifdef CHI_ISSUE_EB_ENABLE
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::stashgroupid_t PCFPGroupIDToStashGroupID(typename REQ<config>::pgroupid_t src) noexcept
+    { return _PCF_READ(STASHGROUPID, PGROUPID, src); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::taggroupid_t PCFPGroupIDToTagGroupID(typename REQ<config>::pgroupid_t src) noexcept
+    { return _PCF_READ(TAGGROUPID, PGROUPID, src); }
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::lpid_t PCFPGroupIDToLPID(typename REQ<config>::pgroupid_t src) noexcept
+    { return _PCF_READ(LPID, PGROUPID, src); }
+#endif
+
+    template<REQFlitConfigurationConcept config>
+    inline constexpr typename REQ<config>::snoopme_t PCFExclToSnoopMe(typename REQ<config>::excl_t src) noexcept
+    { return _PCF_READ(SNOOPME, EXCL, src); }
+
+#undef _PCF_READ
 }
 
 
