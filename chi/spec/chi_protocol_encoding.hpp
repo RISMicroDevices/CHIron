@@ -2038,7 +2038,7 @@ namespace CHI {
         constexpr type  Cacheable       = 0b0100;       // Cacheable bit.
         constexpr type  Allocate        = 0b1000;       // Allocate hint bit.
 
-        // MemAttr field encodings
+        // MemAttr field bit encodings
         constexpr type  EWAPermitted            = 0b0001;
         constexpr type  EWANotPermitted         = 0b0000;
 
@@ -2074,6 +2074,14 @@ namespace CHI {
 
         inline constexpr MemAttrEnum ToEnum(MemAttr memAttr) noexcept;
         inline constexpr bool IsValid(MemAttr memAttr) noexcept;
+
+        // MemAttr field value encodings
+        constexpr type  Device_nEWA                 = Enum::Device_nEWA.value;
+        constexpr type  Device_EWA                  = Enum::Device_EWA.value;
+        constexpr type  NonCacheable_NonBufferable  = Enum::NonCacheable_NonBufferable.value;
+        constexpr type  NonCacheable_Bufferable     = Enum::NonCacheable_Bufferable.value;
+        constexpr type  WriteBack_NoAllocate        = Enum::WriteBack_NoAllocate.value;
+        constexpr type  WriteBack_Allocate          = Enum::WriteBack_Allocate.value;
     };
 
 
