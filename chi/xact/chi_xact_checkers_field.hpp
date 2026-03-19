@@ -193,7 +193,7 @@ namespace /*CHI::*/Xact {
         RequestFieldMapping mapping = table.Get(reqFlit.Opcode());
 
         if (!mapping)
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_REQ_OPCODE;
 
         CHECK_REQ   (QoS            , QOS           );
         CHECK_REQ   (TgtID          , TGTID         );
@@ -281,7 +281,7 @@ namespace /*CHI::*/Xact {
         ResponseFieldMapping mapping = table.Get(rspFlit.Opcode());
 
         if (!mapping)
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_RSP_OPCODE;
 
         CHECK_RSP   (QoS            , QOS           );
         CHECK_RSP   (TgtID          , TGTID         );
@@ -346,7 +346,7 @@ namespace /*CHI::*/Xact {
         DataFieldMapping mapping = table.Get(datFlit.Opcode());
 
         if (!mapping)
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_DAT_OPCODE;
 
         CHECK_DAT   (QoS            , QOS           );
         CHECK_DAT   (TgtID          , TGTID         );
@@ -411,7 +411,7 @@ namespace /*CHI::*/Xact {
         SnoopFieldMapping mapping = table.Get(snpFlit.Opcode());
 
         if (!mapping)
-            return XactDenial::DENIED_OPCODE;
+            return XactDenial::DENIED_SNP_OPCODE;
 
         CHECK_SNP   (QoS            , QOS           );
         CHECK_SNP   (SrcID          , SRCID         );
