@@ -377,8 +377,8 @@ namespace CHI {
             consteval REQ<config>                       Eval() const noexcept requires details::is_buildable<able>;
             constexpr REQ<config>                       Build() const noexcept requires details::is_buildable<able>;
 
-            consteval REQ<config>                       EvalPartial() const noexcept;
-            constexpr REQ<config>                       BuildPartial() const noexcept;
+            consteval REQ<config>                       EvalUnsafe() const noexcept;
+            constexpr REQ<config>                       BuildUnsafe() const noexcept;
         };
 
         template<REQBuildTargetEnum T, REQFlitConfigurationConcept config>
@@ -1338,13 +1338,13 @@ namespace /*CHI::*/Flits {
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
-    inline consteval REQ<config> REQFlitBuilder<T, config, able>::EvalPartial() const noexcept
+    inline consteval REQ<config> REQFlitBuilder<T, config, able>::EvalUnsafe() const noexcept
     {
         return flit;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
-    inline constexpr REQ<config> REQFlitBuilder<T, config, able>::BuildPartial() const noexcept
+    inline constexpr REQ<config> REQFlitBuilder<T, config, able>::BuildUnsafe() const noexcept
     {
         return flit;
     }
