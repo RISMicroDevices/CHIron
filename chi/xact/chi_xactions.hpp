@@ -3,6 +3,9 @@
 //#ifndef __CHI__CHI_XACT_XACTIONS
 //#define __CHI__CHI_XACT_XACTIONS
 
+#ifndef CHI_XACT_XACTIONS__STANDALONE
+#endif
+
 #include "chi_xactions/chi_xactions_base.hpp"       // IWYU pragma: keep
 #include "chi_xactions/chi_xactions_impl.hpp"       // IWYU pragma: keep
 
