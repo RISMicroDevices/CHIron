@@ -1508,9 +1508,9 @@ namespace CHI {
             as_pointer_if_t<conn::connectedIO, resperr_t>           _RespErr;
             as_pointer_if_t<conn::connectedIO, resp_t>              _Resp;
             union {
+            as_pointer_if_t<conn::connectedIO, datasource_t>        _DataSource;
             as_pointer_if_t<conn::connectedIO, fwdstate_t>          _FwdState;
             as_pointer_if_t<conn::connectedIO, datapull_t>          _DataPull;
-            as_pointer_if_t<conn::connectedIO, datasource_t>        _DataSource;
             };
 #ifdef CHI_ISSUE_EB_ENABLE
             as_pointer_if_t<conn::connectedIO, cbusy_t>             _CBusy;
