@@ -504,7 +504,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetQoS(typename REQ<config>::qos_t qos) noexcept requires is_field_applicable<T->fields->QoS>
     {
         this->flit.QoS() = qos;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::QoS>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -527,7 +527,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetTgtID(typename REQ<config>::tgtid_t tgtID) noexcept requires is_field_applicable<T->fields->TgtID>
     {
         this->flit.TgtID() = tgtID;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::TgtID>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -550,7 +550,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetSrcID(typename REQ<config>::srcid_t srcID) noexcept requires is_field_applicable<T->fields->SrcID>
     {
         this->flit.SrcID() = srcID;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::SrcID>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -573,7 +573,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetTxnID(typename REQ<config>::txnid_t txnID) noexcept requires is_field_applicable<T->fields->TxnID>
     {
         this->flit.TxnID() = txnID;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::TxnID>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -596,7 +596,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetReturnNID(typename REQ<config>::returnnid_t returnNID) noexcept requires is_field_applicable<T->fields->ReturnNID>
     {
         this->flit.ReturnNID() = returnNID;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::ReturnNID>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -619,7 +619,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetStashNID(typename REQ<config>::stashnid_t stashNID) noexcept requires is_field_applicable<T->fields->StashNID>
     {
         this->flit.ReturnNID() = details::PCFReturnNIDFromStashNID<config>(this->flit.ReturnNID(), stashNID);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::StashNID>()>*>(this);
+        return *this;
     }
 
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -643,7 +643,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetSLCRepHint(typename REQ<config>::slcrephint_t slcRepHint) noexcept requires is_field_applicable<T->fields->SLCRepHint>
     {
         this->flit.ReturnNID() = details::PCFReturnNIDFromSLCRepHint<config>(this->flit.ReturnNID(), slcRepHint);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::SLCRepHint>()>*>(this);
+        return *this;
     }
 #endif
 
@@ -667,7 +667,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetStashNIDValid(typename REQ<config>::stashnidvalid_t stashNIDValid) noexcept requires is_field_applicable<T->fields->StashNIDValid>
     {
         this->flit.StashNIDValid() = stashNIDValid;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::StashNIDValid>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -690,7 +690,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetEndian(typename REQ<config>::endian_t endian) noexcept requires is_field_applicable<T->fields->Endian>
     {
         this->flit.StashNIDValid() = details::PCFStashNIDValidFromEndian<config>(this->flit.StashNIDValid(), endian);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::Endian>()>*>(this);
+        return *this;
     }
 
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -714,7 +714,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetDeep(typename REQ<config>::deep_t deep) noexcept requires is_field_applicable<T->fields->Deep>
     {
         this->flit.StashNIDValid() = details::PCFStashNIDValidFromDeep<config>(this->flit.StashNIDValid(), deep);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::Deep>()>*>(this);
+        return *this;
     }
 #endif
 
@@ -738,7 +738,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetReturnTxnID(typename REQ<config>::returntxnid_t returnTxnID) noexcept requires is_field_applicable<T->fields->ReturnTxnID>
     {
         this->flit.ReturnTxnID() = returnTxnID;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::ReturnTxnID>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -761,7 +761,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetStashLPIDValid(typename REQ<config>::stashlpidvalid_t stashLPIDValid) noexcept requires is_field_applicable<T->fields->StashLPIDValid>
     {
         this->flit.ReturnTxnID() = details::PCFReturnTxnIDFromStashLPIDValid<config>(this->flit.ReturnTxnID(), stashLPIDValid);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::StashLPIDValid>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -784,7 +784,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetStashLPID(typename REQ<config>::stashlpid_t stashLPID) noexcept requires is_field_applicable<T->fields->StashLPID>
     {
         this->flit.ReturnTxnID() = details::PCFReturnTxnIDFromStashLPID<config>(this->flit.ReturnTxnID(), stashLPID);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::StashLPID>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -807,7 +807,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetOpcode(typename REQ<config>::opcode_t opcode) noexcept requires is_field_applicable<T->fields->Opcode>
     {
         this->flit.Opcode() = opcode;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::Opcode>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -830,7 +830,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetSize(typename REQ<config>::ssize_t size) noexcept requires is_field_applicable<T->fields->Size>
     {
         this->flit.Size() = size;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::Size>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -853,7 +853,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetAddr(typename REQ<config>::addr_t addr) noexcept requires is_field_applicable<T->fields->Addr>
     {
         this->flit.Addr() = addr;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::Addr>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -876,7 +876,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetNS(typename REQ<config>::ns_t ns) noexcept requires is_field_applicable<T->fields->NS>
     {
         this->flit.NS() = ns;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::NS>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -899,7 +899,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetLikelyShared(typename REQ<config>::likelyshared_t likelyShared) noexcept requires is_field_applicable<T->fields->LikelyShared>
     {
         this->flit.LikelyShared() = likelyShared;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::LikelyShared>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -922,7 +922,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetAllowRetry(typename REQ<config>::allowretry_t allowRetry) noexcept requires is_field_applicable<T->fields->AllowRetry>
     {
         this->flit.AllowRetry() = allowRetry;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::AllowRetry>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -945,7 +945,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetOrder(typename REQ<config>::order_t order) noexcept requires is_field_applicable<T->fields->Order>
     {
         this->flit.Order() = order;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::Order>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -968,7 +968,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetPCrdType(typename REQ<config>::pcrdtype_t pCrdType) noexcept requires is_field_applicable<T->fields->PCrdType>
     {
         this->flit.PCrdType() = pCrdType;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::PCrdType>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -991,7 +991,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetMemAttr(typename REQ<config>::memattr_t memAttr) noexcept requires is_memattr_applicable<T>
     {
         this->flit.MemAttr() = memAttr;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::MemAttr>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -1014,7 +1014,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetSnpAttr(typename REQ<config>::snpattr_t snpAttr) noexcept requires is_field_applicable<T->fields->SnpAttr>
     {
         this->flit.SnpAttr() = snpAttr;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::SnpAttr>()>*>(this);
+        return *this;
     }
 
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1038,7 +1038,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetDoDWT(typename REQ<config>::dodwt_t doDWT) noexcept requires is_field_applicable<T->fields->DoDWT>
     {
         this->flit.SnpAttr() = details::PCFSnpAttrFromDoDWT<config>(this->flit.SnpAttr(), doDWT);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::DoDWT>()>*>(this);
+        return *this;
     }
 #endif
 
@@ -1063,7 +1063,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetPGroupID(typename REQ<config>::pgroupid_t pGroupID) noexcept requires is_field_applicable<T->fields->PGroupID>
     {
         this->flit.PGroupID() = pGroupID;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::PGroupID>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -1086,7 +1086,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetStashGroupID(typename REQ<config>::stashgroupid_t stashGroupID) noexcept requires is_field_applicable<T->fields->StashGroupID>
     {
         this->flit.PGroupID() = details::PCFPGroupIDFromStashGroupID<config>(this->flit.PGroupID(), stashGroupID);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::StashGroupID>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -1109,7 +1109,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetTagGroupID(typename REQ<config>::taggroupid_t tagGroupID) noexcept requires is_field_applicable<T->fields->TagGroupID>
     {
         this->flit.PGroupID() = details::PCFPGroupIDFromTagGroupID<config>(this->flit.PGroupID(), tagGroupID);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::TagGroupID>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -1132,7 +1132,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetLPID(typename REQ<config>::lpid_t lpid) noexcept requires is_field_applicable<T->fields->LPID>
     {
         this->flit.PGroupID() = details::PCFPGroupIDFromLPID<config>(this->flit.PGroupID(), lpid);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::LPID>()>*>(this);
+        return *this;
     }
 
 #else
@@ -1156,7 +1156,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetLPID(typename REQ<config>::lpid_t lpid) noexcept requires is_field_applicable<T->fields->LPID>
     {
         this->flit.LPID() = lpid;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::LPID>()>*>(this);
+        return *this;
     }
 #endif
 
@@ -1180,7 +1180,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetExcl(typename REQ<config>::excl_t excl) noexcept requires is_field_applicable<T->fields->Excl>
     {
         this->flit.Excl() = excl;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::Excl>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -1203,7 +1203,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetSnoopMe(typename REQ<config>::snoopme_t snoopMe) noexcept requires is_field_applicable<T->fields->SnoopMe>
     {
         this->flit.Excl() = details::PCFExclFromSnoopMe<config>(this->flit.Excl(), snoopMe);
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::SnoopMe>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
@@ -1226,7 +1226,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetExpCompAck(typename REQ<config>::expcompack_t expCompAck) noexcept requires is_field_applicable<T->fields->ExpCompAck>
     {
         this->flit.ExpCompAck() = expCompAck;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::ExpCompAck>()>*>(this);
+        return *this;
     }
 
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1250,7 +1250,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetTagOp(typename REQ<config>::tagop_t tagOp) noexcept requires is_field_applicable<T->fields->TagOp>
     {
         this->flit.TagOp() = tagOp;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::TagOp>()>*>(this);
+        return *this;
     }
 #endif
 
@@ -1274,7 +1274,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetTraceTag(typename REQ<config>::tracetag_t traceTag) noexcept requires is_field_applicable<T->fields->TraceTag>
     {
         this->flit.TraceTag() = traceTag;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::TraceTag>()>*>(this);
+        return *this;
     }
 
 #ifdef CHI_ISSUE_EB_ENABLE
@@ -1298,7 +1298,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetMPAM(typename REQ<config>::mpam_t mpam) noexcept requires is_field_applicable<T->fields->MPAM> && has_mpam<REQ<config>>
     {
         this->flit.MPAM() = mpam;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::MPAM>()>*>(this);
+        return *this;
     }
 #endif
 
@@ -1322,7 +1322,7 @@ namespace /*CHI::*/Flits {
             REQFlitBuilder<T, config, able>::SetRSVDC(typename REQ<config>::rsvdc_t rsvdc) noexcept requires is_field_applicable<T->fields->RSVDC> && has_rsvdc<REQ<config>>
     {
         this->flit.RSVDC() = rsvdc;
-        return *reinterpret_cast<REQFlitBuilder<T, config, details::NextREQFlitBuildability<T, able, details::REQFlitField::RSVDC>()>*>(this);
+        return *this;
     }
 
     template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
