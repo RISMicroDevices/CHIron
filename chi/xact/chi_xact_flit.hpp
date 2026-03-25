@@ -345,12 +345,12 @@ namespace /*CHI::*/Xact {
 
                 if (this->IsTXREQ())
                 {
-                    if (glbl.SAM_SCOPE->enable)
+                    if (glbl.SAM_SCOPE.enable)
                     {
-                        switch (glbl.SAM_SCOPE->Get(flit.req.SrcID())->value)
+                        switch (glbl.SAM_SCOPE.Get(flit.req.SrcID()).value)
                         {
                             case SAMScope::AfterSAM:
-                                return glbl.TOPOLOGY->IsHome(flit.req.TgtID());
+                                return glbl.TOPOLOGY.IsHome(flit.req.TgtID());
 
                             case SAMScope::BeforeSAM:
                                 return true; // Do not check TgtID of TXREQ before SAM
@@ -369,12 +369,12 @@ namespace /*CHI::*/Xact {
                 
                 if (this->IsRXREQ())
                 {
-                    if (glbl.SAM_SCOPE->enable)
+                    if (glbl.SAM_SCOPE.enable)
                     {
-                        switch (glbl.SAM_SCOPE->Get(flit.req.SrcID())->value)
+                        switch (glbl.SAM_SCOPE.Get(flit.req.SrcID())->value)
                         {
                             case SAMScope::AfterSAM:
-                                return glbl.TOPOLOGY->IsHome(flit.req.TgtID());
+                                return glbl.TOPOLOGY.IsHome(flit.req.TgtID());
 
                             case SAMScope::BeforeSAM:
                                 return true; // Do not check TgtID of RXREQ before SAM
@@ -407,10 +407,10 @@ namespace /*CHI::*/Xact {
 
                 if (this->IsTXREQ())
                 {
-                    if (glbl.SAM_SCOPE->enable)
+                    if (glbl.SAM_SCOPE.enable)
                     {
                         case SAMScope::AfterSAM:
-                            return glbl.TOPOLOGY->IsSubordinate(flit.req.TgtID());
+                            return glbl.TOPOLOGY.IsSubordinate(flit.req.TgtID());
 
                         case SAMScope::BeforeSAM:
                             return flit.req.Opcode() == Opcodes::REQ::PrefetchTgt; // Do not check TgtID of TXREQ before SAM
@@ -428,12 +428,12 @@ namespace /*CHI::*/Xact {
 
                 if (this->IsTXREQ())
                 {
-                    if (glbl.SAM_SCOPE->enable)
+                    if (glbl.SAM_SCOPE.enable)
                     {
-                        switch (glbl.SAM_SCOPE->Get(flit.req.SrcID())->value)
+                        switch (glbl.SAM_SCOPE.Get(flit.req.SrcID())->value)
                         {
                             case SAMScope::AfterSAM:
-                                return glbl.TOPOLOGY->IsSubordinate(flit.req.TgtID());
+                                return glbl.TOPOLOGY.IsSubordinate(flit.req.TgtID());
 
                             case SAMScope::BeforeSAM:
                                 return flit.req.Opcode() != Opcodes::REQ::PrefetchTgt; // Do not check TgtID of TXREQ before SAM
@@ -452,12 +452,12 @@ namespace /*CHI::*/Xact {
 
                 if (this->IsRXREQ())
                 {
-                    if (glbl.SAM_SCOPE->enable)
+                    if (glbl.SAM_SCOPE.enable)
                     {
-                        switch (glbl.SAM_SCOPE->Get(flit.req.SrcID())->value)
+                        switch (glbl.SAM_SCOPE.Get(flit.req.SrcID())->value)
                         {
                             case SAMScope::AfterSAM:
-                                return glbl.TOPOLOGY->IsSubordinate(flit.req.TgtID());
+                                return glbl.TOPOLOGY.IsSubordinate(flit.req.TgtID());
 
                             case SAMScope::BeforeSAM:
                                 return true; // Do not check TgtID of RXREQ before SAM
@@ -755,8 +755,8 @@ namespace /*CHI::*/Xact {
                     || IsToRequesterDCT(glbl);
 
             case XactScope::Home:
-                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID())
-                    || this->IsTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY.IsRequester(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.TgtID());
 
             case XactScope::Subordinate:
                 return IsToRequesterDMT(glbl)
@@ -779,15 +779,15 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXRSP() && glbl.TOPOLOGY->IsHome(flit.rsp.TgtID()) 
-                    || this->IsTXDAT() && glbl.TOPOLOGY->IsHome(flit.dat.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY.IsHome(flit.rsp.TgtID()) 
+                    || this->IsTXDAT() && glbl.TOPOLOGY.IsHome(flit.dat.TgtID());
 
             case XactScope::Home:
                 return this->IsRX();
 
             case XactScope::Subordinate:
-                return this->IsTXRSP() && glbl.TOPOLOGY->IsHome(flit.rsp.TgtID())
-                    || this->IsTXDAT() && glbl.TOPOLOGY->IsHome(flit.dat.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY.IsHome(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY.IsHome(flit.dat.TgtID());
 
             [[unlikely]] default:
                 return false;
@@ -809,8 +809,8 @@ namespace /*CHI::*/Xact {
 #endif
 
             case XactScope::Home:
-                return this->IsTXRSP() && glbl.TOPOLOGY->IsSubordinate(flit.rsp.TgtID())
-                    || this->IsTXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY.IsSubordinate(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY.IsSubordinate(flit.dat.TgtID());
 
             case XactScope::Subordinate:
                 return this->IsRX();
@@ -827,10 +827,10 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID())
-                    || this->IsTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID())
-                    || this->IsRXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.SrcID())
-                    || this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
+                return this->IsTXRSP() && glbl.TOPOLOGY.IsRequester(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.TgtID())
+                    || this->IsRXRSP() && glbl.TOPOLOGY.IsRequester(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.SrcID());
 
             case XactScope::Home:
                 return false;
@@ -850,13 +850,13 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY.IsSubordinate(flit.dat.SrcID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID());
+                return this->IsTXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.TgtID());
 
             [[unlikely]] default:
                 return false;
@@ -871,13 +871,13 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXRSP() && glbl.TOPOLOGY->IsSubordinate(flit.rsp.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY.IsSubordinate(flit.rsp.SrcID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY.IsRequester(flit.rsp.TgtID());
 
             [[unlikely]] default:
                 return false;
@@ -893,13 +893,13 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.TgtID());
+                return this->IsTXDAT() && glbl.TOPOLOGY.IsSubordinate(flit.dat.TgtID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.SrcID());
 
             [[unlikely]] default:
                 return false;
@@ -918,8 +918,8 @@ namespace /*CHI::*/Xact {
                     || IsFromRequesterDCT(glbl);
 
             case XactScope::Home:
-                return this->IsRXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.SrcID())
-                    || this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY.IsRequester(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.SrcID());
 
             case XactScope::Subordinate:
                 return IsFromRequesterDWT(glbl);
@@ -936,14 +936,14 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXRSP() && glbl.TOPOLOGY->IsHome(flit.rsp.SrcID())
-                    || this->IsRXDAT() && glbl.TOPOLOGY->IsHome(flit.dat.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY.IsHome(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY.IsHome(flit.dat.SrcID());
 
             case XactScope::Home:
                 return this->IsTX();
 
             case XactScope::Subordinate:
-                return this->IsRXDAT() && glbl.TOPOLOGY->IsHome(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY.IsHome(flit.dat.SrcID());
 
             [[unlikely]] default:
                 return false;
@@ -965,8 +965,8 @@ namespace /*CHI::*/Xact {
 #endif
 
             case XactScope::Home:
-                return this->IsRXRSP() && glbl.TOPOLOGY->IsSubordinate(flit.rsp.SrcID())
-                    || this->IsRXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY.IsSubordinate(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY.IsSubordinate(flit.dat.SrcID());
 
             case XactScope::Subordinate:
                 return this->IsTX();
@@ -983,10 +983,10 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID())
-                    || this->IsTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID())
-                    || this->IsRXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.SrcID())
-                    || this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
+                return this->IsTXRSP() && glbl.TOPOLOGY.IsRequester(flit.rsp.TgtID())
+                    || this->IsTXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.TgtID())
+                    || this->IsRXRSP() && glbl.TOPOLOGY.IsRequester(flit.rsp.SrcID())
+                    || this->IsRXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.SrcID());
 
             case XactScope::Home:
                 return false;
@@ -1006,13 +1006,13 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY.IsSubordinate(flit.dat.SrcID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->isTXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.TgtID());
+                return this->isTXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.TgtID());
 
             [[unlikely]] default:
                 return false;   
@@ -1027,13 +1027,13 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsTXDAT() && glbl.TOPOLOGY->IsSubordinate(flit.dat.TgtID());
+                return this->IsTXDAT() && glbl.TOPOLOGY.IsSubordinate(flit.dat.TgtID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsRXDAT() && glbl.TOPOLOGY->IsRequester(flit.dat.SrcID());
+                return this->IsRXDAT() && glbl.TOPOLOGY.IsRequester(flit.dat.SrcID());
 
             [[unlikely]] default:
                 return false;
@@ -1049,13 +1049,13 @@ namespace /*CHI::*/Xact {
         switch (*this->scope)
         {
             case XactScope::Requester:
-                return this->IsRXRSP() && glbl.TOPOLOGY->IsSubordinate(flit.rsp.SrcID());
+                return this->IsRXRSP() && glbl.TOPOLOGY.IsSubordinate(flit.rsp.SrcID());
 
             case XactScope::Home:
                 return false;
 
             case XactScope::Subordinate:
-                return this->IsTXRSP() && glbl.TOPOLOGY->IsRequester(flit.rsp.TgtID());
+                return this->IsTXRSP() && glbl.TOPOLOGY.IsRequester(flit.rsp.TgtID());
 
             [[unlikely]] default:
                 return false;

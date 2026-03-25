@@ -89,13 +89,13 @@ namespace CHI {
             /*
             Topology of nodes, providing node IDs and types.
             */
-            std::shared_ptr<GlobalTopology>
+            GlobalTopology
                 TOPOLOGY;
 
             /*
             Enable Controls and Checkers of Flit Field Checking.
             */
-            std::shared_ptr<GlobalCheckFieldMapping<config, conn>>
+            GlobalCheckFieldMapping<config, conn>
                 CHECK_FIELD_MAPPING;
 
             /*
@@ -105,7 +105,7 @@ namespace CHI {
             SAMs were applied to outgoing requests of Request Nodes and Home Nodes, targeting either Home Nodes 
             or Subordinate Nodes.
             */
-            std::shared_ptr<GlobalSAMScope>
+            GlobalSAMScope
                 SAM_SCOPE;
 
         public:
@@ -188,9 +188,9 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept       config,
              CHI::IOLevelConnectionConcept  conn>
     inline Global<config, conn>::Global() noexcept
-        : TOPOLOGY              (std::make_shared<GlobalTopology>())
-        , CHECK_FIELD_MAPPING   (std::make_shared<GlobalCheckFieldMapping<config, conn>>())
-        , SAM_SCOPE             (std::make_shared<GlobalSAMScope>())
+        : TOPOLOGY              (GlobalTopology())
+        , CHECK_FIELD_MAPPING   (GlobalCheckFieldMapping<config, conn>())
+        , SAM_SCOPE             (GlobalSAMScope())
     { }
 }
 

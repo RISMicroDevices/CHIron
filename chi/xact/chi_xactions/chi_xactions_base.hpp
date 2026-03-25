@@ -1297,10 +1297,10 @@ namespace /*CHI::*/Xact {
         if (!this->first.IsREQ())
             return false;
 
-        if (!glbl.SAM_SCOPE->enable)
+        if (!glbl.SAM_SCOPE.enable)
             return true;
 
-        switch (glbl.SAM_SCOPE->Get(this->first.flit.req.SrcID())->value)
+        switch (glbl.SAM_SCOPE.Get(this->first.flit.req.SrcID())->value)
         {
             case SAMScope::AfterSAM:
                 return true;
@@ -1651,9 +1651,9 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
         //
-        if (glbl.CHECK_FIELD_MAPPING->enable)
+        if (glbl.CHECK_FIELD_MAPPING.enable)
         {
-            XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING->Check(rspFlit.flit.rsp);
+            XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(rspFlit.flit.rsp);
             if (denial != XactDenial::ACCEPTED)
                 return denial;
         }
@@ -1682,10 +1682,10 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_PCRD_TYPE_MISMATCH;
 
         // Check Fields Difference of retried request
-        if (glbl.CHECK_FIELD_MAPPING->enable)
+        if (glbl.CHECK_FIELD_MAPPING.enable)
         {
             RequestFieldMapping fields 
-                = glbl.CHECK_FIELD_MAPPING->REQ.checker.table.Get(this->first.flit.req.Opcode());
+                = glbl.CHECK_FIELD_MAPPING.REQ.checker.table.Get(this->first.flit.req.Opcode());
 
             if (fields)
             {

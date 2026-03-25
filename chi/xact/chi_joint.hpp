@@ -1886,9 +1886,9 @@ namespace /*CHI::*/Xact {
             iterPCreditList->second.push_back(firedRspFlit);
 
             //
-            if (glbl.CHECK_FIELD_MAPPING->enable)
+            if (glbl.CHECK_FIELD_MAPPING.enable)
             {
-                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING->Check(rspFlit);
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(rspFlit);
                 if (denial != XactDenial::ACCEPTED)
                     return this->ResponseDeniedByJoint(denial, firedRspFlit);
             }
@@ -2945,9 +2945,9 @@ namespace /*CHI::*/Xact {
             iterPCreditList->second.push_back(firedRspFlit);
 
             //
-            if (glbl.CHECK_FIELD_MAPPING->enable)
+            if (glbl.CHECK_FIELD_MAPPING.enable)
             {
-                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING->Check(rspFlit);
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(rspFlit);
                 if (denial != XactDenial::ACCEPTED)
                     return this->ResponseDeniedByJoint(denial, firedRspFlit);
             }
