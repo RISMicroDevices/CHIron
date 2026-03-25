@@ -56,6 +56,7 @@ namespace CHI {
             Channel             GetChannel() const noexcept;
             _Topcode            GetOpcode() const noexcept;
             const char*         GetName() const noexcept;
+            const char*         GetName(const char* whenInvalid) const noexcept;
 
             void                SetCompanion(const _Tcompanion& companion) noexcept;
             _Tcompanion&        GetCompanion() noexcept;
@@ -233,10 +234,19 @@ namespace CHI {
             REQ flit opcode decoder
             */
             template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
-            class Decoder : public DecoderBase<_Tflit, _Tcompanion> {
+            class DecoderBaseREQ : public DecoderBase<_Tflit, _Tcompanion> {
             public:
-                Decoder() noexcept;
-                virtual ~Decoder() noexcept;
+                DecoderBaseREQ() noexcept;
+                virtual ~DecoderBaseREQ() noexcept;
+            };
+
+            template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+            class Decoder : public DecoderBaseREQ<_Tflit, _Tcompanion> { };
+
+            template<Flits::FlitOpcodeFormatConcept _Tflit>
+            class Decoder<_Tflit, std::monostate> : public DecoderBaseREQ<_Tflit, std::monostate> {
+            public:
+                inline static const Decoder<_Tflit, std::monostate> INSTANCE = Decoder<_Tflit, std::monostate>();
             };
         }
 
@@ -250,10 +260,19 @@ namespace CHI {
             SNP flit opcode decoder
             */
             template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
-            class Decoder : public DecoderBase<_Tflit, _Tcompanion> {
+            class DecoderBaseSNP : public DecoderBase<_Tflit, _Tcompanion> {
             public:
-                Decoder() noexcept;
-                virtual ~Decoder() noexcept;
+                DecoderBaseSNP() noexcept;
+                virtual ~DecoderBaseSNP() noexcept;
+            };
+
+            template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+            class Decoder : public DecoderBaseSNP<_Tflit, _Tcompanion> { };
+
+            template<Flits::FlitOpcodeFormatConcept _Tflit>
+            class Decoder<_Tflit, std::monostate> : public DecoderBaseSNP<_Tflit, std::monostate> {
+            public:
+                inline static const Decoder<_Tflit, std::monostate> INSTANCE = Decoder<_Tflit, std::monostate>();
             };
         }
 
@@ -267,10 +286,19 @@ namespace CHI {
             DAT flit opcode decoder
             */
             template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
-            class Decoder : public DecoderBase<_Tflit, _Tcompanion> {
+            class DecoderBaseDAT : public DecoderBase<_Tflit, _Tcompanion> {
             public:
-                Decoder() noexcept;
-                virtual ~Decoder() noexcept;
+                DecoderBaseDAT() noexcept;
+                virtual ~DecoderBaseDAT() noexcept;
+            };
+
+            template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+            class Decoder : public DecoderBaseDAT<_Tflit, _Tcompanion> { };
+
+            template<Flits::FlitOpcodeFormatConcept _Tflit>
+            class Decoder<_Tflit, std::monostate> : public DecoderBaseDAT<_Tflit, std::monostate> {
+            public:
+                inline static const Decoder<_Tflit, std::monostate> INSTANCE = Decoder<_Tflit, std::monostate>();
             };
         }
 
@@ -284,10 +312,19 @@ namespace CHI {
             RSP flit opcode decoder
             */
             template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
-            class Decoder : public DecoderBase<_Tflit, _Tcompanion> {
+            class DecoderBaseRSP : public DecoderBase<_Tflit, _Tcompanion> {
             public:
-                Decoder() noexcept;
-                virtual ~Decoder() noexcept;
+                DecoderBaseRSP() noexcept;
+                virtual ~DecoderBaseRSP() noexcept;
+            };
+
+            template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+            class Decoder : public DecoderBaseRSP<_Tflit, _Tcompanion> { };
+
+            template<Flits::FlitOpcodeFormatConcept _Tflit>
+            class Decoder<_Tflit, std::monostate> : public DecoderBaseRSP<_Tflit, std::monostate> {
+            public:
+                inline static const Decoder<_Tflit, std::monostate> INSTANCE = Decoder<_Tflit, std::monostate>();
             };
         }
 
@@ -364,6 +401,12 @@ namespace CHI {
         inline const char* OpcodeInfo<_Topcode, _Tcompanion>::GetName() const noexcept
         {
             return name;
+        }
+
+        template<class _Topcode, class _Tcompanion>
+        inline const char* OpcodeInfo<_Topcode, _Tcompanion>::GetName(const char* whenInvalid) const noexcept
+        {
+            return IsValid() ? name : whenInvalid;
         }
 
         template<class _Topcode, class _Tcompanion>
@@ -698,11 +741,11 @@ namespace CHI {
             this->mask_##target[name] = true
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
-        inline Decoder<_Tflit, _Tcompanion>::~Decoder() noexcept
+        inline DecoderBaseREQ<_Tflit, _Tcompanion>::~DecoderBaseREQ() noexcept
         {}
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
-        inline Decoder<_Tflit, _Tcompanion>::Decoder() noexcept
+        inline DecoderBaseREQ<_Tflit, _Tcompanion>::DecoderBaseREQ() noexcept
         {
             OPCODE_INFO_SET(ReqLCrdReturn);                     // 0x00
             OPCODE_INFO_SET(ReadShared);                        // 0x01
@@ -1402,11 +1445,11 @@ namespace CHI {
             this->mask_##target[name] = true
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
-        inline Decoder<_Tflit, _Tcompanion>::~Decoder() noexcept
+        inline DecoderBaseSNP<_Tflit, _Tcompanion>::~DecoderBaseSNP() noexcept
         { }
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
-        inline Decoder<_Tflit, _Tcompanion>::Decoder() noexcept
+        inline DecoderBaseSNP<_Tflit, _Tcompanion>::DecoderBaseSNP() noexcept
         {
             OPCODE_INFO_SET(SnpLCrdReturn);                     // 0x00
             OPCODE_INFO_SET(SnpShared);                         // 0x01
@@ -1566,11 +1609,11 @@ namespace CHI {
             this->mask_##target[name] = true
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
-        inline Decoder<_Tflit, _Tcompanion>::~Decoder() noexcept
+        inline DecoderBaseDAT<_Tflit, _Tcompanion>::~DecoderBaseDAT() noexcept
         { }
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
-        inline Decoder<_Tflit, _Tcompanion>::Decoder() noexcept
+        inline DecoderBaseDAT<_Tflit, _Tcompanion>::DecoderBaseDAT() noexcept
         {
             OPCODE_INFO_SET(DataLCrdReturn);                    // 0x00
             OPCODE_INFO_SET(SnpRespData);                       // 0x01
@@ -1763,11 +1806,11 @@ namespace CHI {
             this->mask_##target[name] = true
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
-        inline Decoder<_Tflit, _Tcompanion>::~Decoder() noexcept
+        inline DecoderBaseRSP<_Tflit, _Tcompanion>::~DecoderBaseRSP() noexcept
         { }
 
         template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
-        inline Decoder<_Tflit, _Tcompanion>::Decoder() noexcept
+        inline DecoderBaseRSP<_Tflit, _Tcompanion>::DecoderBaseRSP() noexcept
         {
             OPCODE_INFO_SET(RespLCrdReturn);                    // 0x00
             OPCODE_INFO_SET(SnpResp);                           // 0x01
