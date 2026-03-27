@@ -48,8 +48,8 @@ namespace CHI {
             inline constexpr XactDenialEnumBack NOT_INITIALIZED                     ("XACT_NOT_INITIALIZED",                    0xFFFF0000 |  0);
 
             inline constexpr XactDenialEnumBack ACCEPTED                            ("XACT_ACCEPTED",                           0x00000000 |  0);
-            inline constexpr XactDenialEnumBack DENIED_COMPLETED                    ("XACT_DENIED_COMPLETED",                   0x00000000 |  1);
-            inline constexpr XactDenialEnumBack DENIED_SCOPE                        ("XACT_DENIED_SCOPE",                       0x00000000 |  2);
+        //  inline constexpr XactDenialEnumBack DENIED_COMPLETED                    ("XACT_DENIED_COMPLETED",                   0x00000000 |  1);
+        //  inline constexpr XactDenialEnumBack DENIED_SCOPE                        ("XACT_DENIED_SCOPE",                       0x00000000 |  2);
         //  inline constexpr XactDenialEnumBack DENIED_CHANNEL                      ("XACT_DENIED_CHANNEL",                     0x00000000 |  3);
             inline constexpr XactDenialEnumBack DENIED_TXNID_IN_USE                 ("XACT_DENIED_TXNID_IN_USE",                0x00000000 |  5);
             inline constexpr XactDenialEnumBack DENIED_TXNID_NOT_EXIST              ("XACT_DENIED_TXNID_NOT_EXIST",             0x00000000 |  6);
@@ -75,6 +75,10 @@ namespace CHI {
             inline constexpr XactDenialEnumBack DENIED_CHANNEL_SNP                  ("XACT_DENIED_CHANNEL_SNP",                 0x00000000 | 45);
             inline constexpr XactDenialEnumBack DENIED_CHANNEL_RSP                  ("XACT_DENIED_CHANNEL_RSP",                 0x00000000 | 46);
             inline constexpr XactDenialEnumBack DENIED_CHANNEL_DAT                  ("XACT_DENIED_CHANNEL_DAT",                 0x00000000 | 47);
+
+            inline constexpr XactDenialEnumBack DENIED_COMPLETED_RSP                ("XACT_DENIED_COMPLETED_RSP",               0x00000000 | 48);
+            inline constexpr XactDenialEnumBack DENIED_COMPLETED_DAT                ("XACT_DENIED_COMPLETED_DAT",               0x00000000 | 49);
+            inline constexpr XactDenialEnumBack DENIED_COMPLETED_SNP                ("XACT_DENIED_COMPLETED_SNP",               0x00000000 | 50);
 
         //  inline constexpr XactDenialEnumBack DENIED_OPCODE                       ("XACT_DENIED_OPCODE",                      0x00010000 |  0);
             inline constexpr XactDenialEnumBack DENIED_REQ_OPCODE                   ("XACT_DENIED_REQ_OPCODE",                  0x00010000 |  1);

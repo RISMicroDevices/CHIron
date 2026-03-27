@@ -304,7 +304,7 @@ namespace /*CHI::*/Xact  {
     inline XactDenialEnum XactionHomeSnoop<config, conn>::NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(glbl))
-            return XactDenial::DENIED_COMPLETED;
+            return XactDenial::DENIED_COMPLETED_RSP;
 
         if (!rspFlit.IsRSP())
             return XactDenial::DENIED_CHANNEL_NOT_RSP;
@@ -358,7 +358,7 @@ namespace /*CHI::*/Xact  {
     inline XactDenialEnum XactionHomeSnoop<config, conn>::NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(glbl))
-            return XactDenial::DENIED_COMPLETED;
+            return XactDenial::DENIED_COMPLETED_DAT;
         
         if (!datFlit.IsDAT())
             return XactDenial::DENIED_CHANNEL_NOT_DAT;
