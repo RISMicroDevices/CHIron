@@ -1535,7 +1535,7 @@ namespace /*CHI::*/Xact {
         if (reqFlit.AllowRetry() == 0)
         {
             if (txTransactions.contains(key))
-                return this->RequestDeniedByJoint(XactDenial::DENIED_TXNID_IN_USE, firedReqFlit, txTransactions[key]);
+                return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_TXNID_IN_USE, firedReqFlit, txTransactions[key]);
 
             // iterate and compare retry transactions
             // TODO: simplified retry mapping by TxnID, temporary workaround for KunminghuV2
@@ -1622,7 +1622,7 @@ namespace /*CHI::*/Xact {
         else
         {
             if (txTransactions.contains(key))
-                return this->RequestDeniedByJoint(XactDenial::DENIED_TXNID_IN_USE, firedReqFlit, txTransactions[key]);
+                return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_TXNID_IN_USE, firedReqFlit, txTransactions[key]);
 
             std::shared_ptr<Xaction<config, conn>> xaction;
 
@@ -1669,7 +1669,7 @@ namespace /*CHI::*/Xact {
 
         //
         if (rxTransactions.contains(key))
-            return this->RequestDeniedByJoint(XactDenial::DENIED_TXNID_IN_USE, firedSnpFlit, rxTransactions[key]);
+            return this->RequestDeniedByJoint(XactDenial::DENIED_SNP_TXNID_IN_USE, firedSnpFlit, rxTransactions[key]);
 
         const Opcodes::OpcodeInfo<typename Flits::SNP<config>::opcode_t, GetXaction>& opcodeInfo =
             snpDecoder.DecodeRNF(snpFlit.Opcode());
@@ -1726,7 +1726,7 @@ namespace /*CHI::*/Xact {
 
             auto xactionIter = txDBIDTransactions.find(key);
             if (xactionIter == txDBIDTransactions.end())
-                return this->ResponseDeniedByJoint(XactDenial::DENIED_TXNID_NOT_EXIST, firedRspFlit);
+                return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_TXNID_NOT_EXIST, firedRspFlit);
 
             xaction = xactionIter->second;
 
@@ -1751,7 +1751,7 @@ namespace /*CHI::*/Xact {
 
             auto xactionIter = rxTransactions.find(key);
             if (xactionIter == rxTransactions.end())
-                return this->ResponseDeniedByJoint(XactDenial::DENIED_TXNID_NOT_EXIST, firedRspFlit);
+                return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_TXNID_NOT_EXIST, firedRspFlit);
 
             xaction = xactionIter->second;
 
@@ -1908,7 +1908,7 @@ namespace /*CHI::*/Xact {
 
         auto xactionIter = txTransactions.find(key);
         if (xactionIter == txTransactions.end())
-            return this->ResponseDeniedByJoint(XactDenial::DENIED_TXNID_NOT_EXIST, firedRspFlit);
+            return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_TXNID_NOT_EXIST, firedRspFlit);
 
         xaction = xactionIter->second;
 
@@ -2172,7 +2172,7 @@ namespace /*CHI::*/Xact {
 
             auto xactionIter = rxTransactions.find(key);
             if (xactionIter == rxTransactions.end())
-                return this->ResponseDeniedByJoint(XactDenial::DENIED_TXNID_NOT_EXIST, firedDatFlit);
+                return this->ResponseDeniedByJoint(XactDenial::DENIED_DAT_TXNID_NOT_EXIST, firedDatFlit);
 
             xaction = xactionIter->second;
 
@@ -2196,7 +2196,7 @@ namespace /*CHI::*/Xact {
 
             auto xactionIter = txDBIDTransactions.find(key);
             if (xactionIter == txDBIDTransactions.end())
-                return this->ResponseDeniedByJoint(XactDenial::DENIED_TXNID_NOT_EXIST, firedDatFlit);
+                return this->ResponseDeniedByJoint(XactDenial::DENIED_DAT_TXNID_NOT_EXIST, firedDatFlit);
 
             xaction = xactionIter->second;
 
@@ -2377,7 +2377,7 @@ namespace /*CHI::*/Xact {
 
         auto xactionIter = txTransactions.find(key);
         if (xactionIter == txTransactions.end())
-            return this->ResponseDeniedByJoint(XactDenial::DENIED_TXNID_NOT_EXIST, firedDatFlit);
+            return this->ResponseDeniedByJoint(XactDenial::DENIED_DAT_TXNID_NOT_EXIST, firedDatFlit);
 
         xaction = xactionIter->second;
 
@@ -2881,7 +2881,7 @@ namespace /*CHI::*/Xact {
         if (reqFlit.AllowRetry() == 0)
         {
             if (rxTransactions.contains(key))
-                return this->RequestDeniedByJoint(XactDenial::DENIED_TXNID_IN_USE, firedReqFlit, rxTransactions[key]);
+                return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_TXNID_IN_USE, firedReqFlit, rxTransactions[key]);
         
             // iterate and compare retry transactions
 
@@ -2892,7 +2892,7 @@ namespace /*CHI::*/Xact {
         else
         {
             if (rxTransactions.contains(key))
-                return this->RequestDeniedByJoint(XactDenial::DENIED_TXNID_IN_USE, firedReqFlit, rxTransactions[key]);
+                return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_TXNID_IN_USE, firedReqFlit, rxTransactions[key]);
 
             std::shared_ptr<Xaction<config, conn>> xaction;
 
@@ -2967,7 +2967,7 @@ namespace /*CHI::*/Xact {
 
         auto xactionIter = rxTransactions.find(key);
         if (xactionIter == rxTransactions.end())
-            return this->ResponseDeniedByJoint(XactDenial::DENIED_TXNID_NOT_EXIST, firedRspFlit);
+            return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_TXNID_NOT_EXIST, firedRspFlit);
 
         xaction = xactionIter->second;
 
@@ -3162,7 +3162,7 @@ namespace /*CHI::*/Xact {
 
         auto xactionIter = rxTransactions.find(key);
         if (xactionIter == rxTransactions.end())
-            return this->ResponseDeniedByJoint(XactDenial::DENIED_TXNID_NOT_EXIST, firedDatFlit);
+            return this->ResponseDeniedByJoint(XactDenial::DENIED_DAT_TXNID_NOT_EXIST, firedDatFlit);
 
         xaction = xactionIter->second;
 
@@ -3306,7 +3306,7 @@ namespace /*CHI::*/Xact {
 
         auto xactionIter = rxDBIDTransactions.find(key);
         if (xactionIter == rxDBIDTransactions.end())
-            return this->ResponseDeniedByJoint(XactDenial::DENIED_TXNID_NOT_EXIST, firedDatFlit);
+            return this->ResponseDeniedByJoint(XactDenial::DENIED_DAT_TXNID_NOT_EXIST, firedDatFlit);
 
         xaction = xactionIter->second;
 
