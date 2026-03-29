@@ -53,8 +53,8 @@ namespace CHI {
         //  inline constexpr XactDenialEnumBack DENIED_CHANNEL                      ("XACT_DENIED_CHANNEL",                     0x00000000 |  3);
         //  inline constexpr XactDenialEnumBack DENIED_TXNID_IN_USE                 ("XACT_DENIED_TXNID_IN_USE",                0x00000000 |  5);
         //  inline constexpr XactDenialEnumBack DENIED_TXNID_NOT_EXIST              ("XACT_DENIED_TXNID_NOT_EXIST",             0x00000000 |  6);
-            inline constexpr XactDenialEnumBack DENIED_DBID_IN_USE                  ("XACT_DENIED_DBID_IN_USE",                 0x00000000 |  7);
-            inline constexpr XactDenialEnumBack DENIED_DBID_NOT_EXIST               ("XACT_DENIED_DBID_NOT_EXIST",              0x00000000 |  8);
+        //  inline constexpr XactDenialEnumBack DENIED_DBID_IN_USE                  ("XACT_DENIED_DBID_IN_USE",                 0x00000000 |  7);
+        //  inline constexpr XactDenialEnumBack DENIED_DBID_NOT_EXIST               ("XACT_DENIED_DBID_NOT_EXIST",              0x00000000 |  8);
             inline constexpr XactDenialEnumBack DENIED_NESTING_SNP                  ("XACT_DENIED_NESTING_SNP",                 0x00000000 |  9);
 
             inline constexpr XactDenialEnumBack DENIED_CHANNEL_TXREQ                ("XACT_DENIED_CHANNEL_TXREQ",               0x00000000 | 32);
@@ -82,9 +82,12 @@ namespace CHI {
 
             inline constexpr XactDenialEnumBack DENIED_REQ_TXNID_IN_USE             ("XACT_DENIED_REQ_TXNID_IN_USE",            0x00000000 | 52);
             inline constexpr XactDenialEnumBack DENIED_SNP_TXNID_IN_USE             ("XACT_DENIED_SNP_TXNID_IN_USE",            0x00000000 | 53);
-
-            inline constexpr XactDenialEnumBack DENIED_RSP_TXNID_NOT_EXIST         ("XACT_DENIED_RSP_TXNID_NOT_EXIST",          0x00000000 | 58);
-            inline constexpr XactDenialEnumBack DENIED_DAT_TXNID_NOT_EXIST         ("XACT_DENIED_DAT_TXNID_NOT_EXIST",          0x00000000 | 59);
+            inline constexpr XactDenialEnumBack DENIED_RSP_TXNID_NOT_EXIST          ("XACT_DENIED_RSP_TXNID_NOT_EXIST",         0x00000000 | 58);
+            inline constexpr XactDenialEnumBack DENIED_DAT_TXNID_NOT_EXIST          ("XACT_DENIED_DAT_TXNID_NOT_EXIST",         0x00000000 | 59);
+            inline constexpr XactDenialEnumBack DENIED_RSP_DBID_IN_USE              ("XACT_DENIED_RSP_DBID_IN_USE",             0x00000000 | 62);
+            inline constexpr XactDenialEnumBack DENIED_DAT_DBID_IN_USE              ("XACT_DENIED_DAT_DBID_IN_USE",             0x00000000 | 63);
+            inline constexpr XactDenialEnumBack DENIED_RSP_DBID_NOT_EXIST           ("XACT_DENIED_RSP_DBID_NOT_EXIST",          0x00000000 | 66);
+            inline constexpr XactDenialEnumBack DENIED_DAT_DBID_NOT_EXIST           ("XACT_DENIED_DAT_DBID_NOT_EXIST",          0x00000000 | 67);
 
         //  inline constexpr XactDenialEnumBack DENIED_OPCODE                       ("XACT_DENIED_OPCODE",                      0x00010000 |  0);
             inline constexpr XactDenialEnumBack DENIED_REQ_OPCODE                   ("XACT_DENIED_REQ_OPCODE",                  0x00010000 |  1);

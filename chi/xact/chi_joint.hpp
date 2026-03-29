@@ -1936,8 +1936,8 @@ namespace /*CHI::*/Xact {
 
                 if (txDBIDTransactions.contains(keyDBID))
                 {
-                    xaction->SetLastDenial(XactDenial::DENIED_DBID_IN_USE);
-                    return this->ResponseDeniedByJoint(XactDenial::DENIED_DBID_IN_USE, firedRspFlit, xaction);
+                    xaction->SetLastDenial(XactDenial::DENIED_RSP_DBID_IN_USE);
+                    return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_DBID_IN_USE, firedRspFlit, xaction);
                 }
 
                 txDBIDTransactions[keyDBID] = xaction;
@@ -2146,7 +2146,7 @@ namespace /*CHI::*/Xact {
 
             auto xactionIter = rxTransactions.find(key);
             if (xactionIter == rxTransactions.end())
-                return this->ResponseDeniedByJoint(XactDenial::DENIED_DBID_NOT_EXIST, firedDatFlit);
+                return this->ResponseDeniedByJoint(XactDenial::DENIED_DAT_DBID_NOT_EXIST, firedDatFlit);
 
             xaction = xactionIter->second;
 
@@ -2405,8 +2405,8 @@ namespace /*CHI::*/Xact {
 
                 if (txDBIDTransactions.contains(keyDBID))
                 {
-                    xaction->SetLastDenial(XactDenial::DENIED_DBID_IN_USE);
-                    return this->ResponseDeniedByJoint(XactDenial::DENIED_DBID_IN_USE, firedDatFlit, xaction);
+                    xaction->SetLastDenial(XactDenial::DENIED_DAT_DBID_IN_USE);
+                    return this->ResponseDeniedByJoint(XactDenial::DENIED_DAT_DBID_IN_USE, firedDatFlit, xaction);
                 }
 
                 txDBIDTransactions[keyDBID] = xaction;
@@ -2997,8 +2997,8 @@ namespace /*CHI::*/Xact {
 
                 if (rxDBIDTransactions.contains(keyDBID))
                 {
-                    xaction->SetLastDenial(XactDenial::DENIED_DBID_IN_USE);
-                    return this->ResponseDeniedByJoint(XactDenial::DENIED_DBID_IN_USE, firedRspFlit, rxDBIDTransactions[keyDBID]);
+                    xaction->SetLastDenial(XactDenial::DENIED_RSP_DBID_IN_USE);
+                    return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_DBID_IN_USE, firedRspFlit, rxDBIDTransactions[keyDBID]);
                 }
 
                 rxDBIDTransactions[keyDBID] = xaction;
