@@ -110,8 +110,7 @@ namespace Opcodes {
 
 Each opcode has a *field mapping* that records which flit fields are applicable for that opcode and what constraints apply to each field.
 
-**File:** `chi/xact/chi_xact_field_eb.hpp`  
-(For Issue B: `chi/xact/chi_xact_field_b.hpp` — same structure.)
+**File:** `chi/xact/chi_xact_field_eb.hpp` (for Issue B: `chi/xact/chi_xact_field_b.hpp` — same structure)
 
 ### 4a — Understand the `FieldConvention` codes
 

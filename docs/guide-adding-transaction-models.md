@@ -79,6 +79,9 @@ Use the issue-version guard idiom that every other implementation file uses.  Th
 #endif
 
 
+// CHIron keeps `namespace CHI` commented out in every translation unit
+// to allow the headers to be included without wrapping the caller's code
+// in an extra namespace scope.  Follow the same convention here.
 /*
 namespace CHI {
 */
