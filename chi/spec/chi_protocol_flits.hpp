@@ -868,6 +868,63 @@ namespace CHI {
             inline constexpr const  mpam_t&             MPAM            () const    noexcept { return CHI::decay<mpam_t>(_MPAM); }
 #endif
             inline constexpr const  rsvdc_t&            RSVDC           () const    noexcept { return CHI::decay<rsvdc_t>(_RSVDC); }
+
+        //
+        public:
+            inline constexpr REQ<config> decay() const noexcept
+            {
+                REQ<config> req {};
+                req.QoS()               = QoS();
+                req.TgtID()             = TgtID();
+                req.SrcID()             = SrcID();
+                req.TxnID()             = TxnID();
+                req.ReturnNID()         = ReturnNID();
+                req.StashNID()          = StashNID();
+#ifdef CHI_ISSUE_EB_ENABLE
+                req.SLCRepHint()        = SLCRepHint();
+#endif
+                req.StashNIDValid()     = StashNIDValid();
+                req.Endian()            = Endian();
+#ifdef CHI_ISSUE_EB_ENABLE
+                req.Deep()              = Deep();
+#endif
+                req.ReturnTxnID()       = ReturnTxnID();
+                req.StashLPIDValid()    = StashLPIDValid();
+                req.StashLPID()         = StashLPID();
+                req.Opcode()            = Opcode();
+                req.Size()              = Size();
+                req.Addr()              = Addr();
+                req.NS()                = NS();
+                req.LikelyShared()      = LikelyShared();
+                req.AllowRetry()        = AllowRetry();
+                req.Order()             = Order();
+                req.PCrdType()          = PCrdType();
+                req.MemAttr()           = MemAttr();
+                req.SnpAttr()           = SnpAttr();
+#ifdef CHI_ISSUE_EB_ENABLE
+                req.DoDWT()             = DoDWT();
+#endif
+#ifdef CHI_ISSUE_EB_ENABLE
+                req.PGroupID()         = PGroupID();
+                req.StashGroupID()     = StashGroupID();
+                req.TagGroupID()       = TagGroupID();
+#endif
+                req.LPID()             = LPID();
+                req.Excl()             = Excl();
+                req.SnoopMe()          = SnoopMe();
+                req.ExpCompAck()       = ExpCompAck();
+#ifdef CHI_ISSUE_EB_ENABLE
+                req.TagOp()           = TagOp();
+#endif
+                req.TraceTag()        = TraceTag();
+#ifdef CHI_ISSUE_EB_ENABLE
+                if constexpr (hasMPAM)
+                    req.MPAM()            = MPAM();
+#endif
+                if constexpr (hasRSVDC)
+                    req.RSVDC()           = RSVDC();
+                return req;
+            }
         };
 
         //
@@ -1591,6 +1648,58 @@ namespace CHI {
             inline constexpr const  data_t&             Data            () const    noexcept    { return CHI::decay<data_t>(_Data); }
             inline constexpr const  datacheck_t&        DataCheck       () const    noexcept    { return CHI::decay<datacheck_t>(_DataCheck); }
             inline constexpr const  poison_t&           Poison          () const    noexcept    { return CHI::decay<poison_t>(_Poison); }
+
+        //
+        public:
+            inline constexpr DAT<config> decay() const noexcept
+            {
+                DAT<config> dat {};
+                dat.QoS()               = QoS();
+                dat.TgtID()             = TgtID();
+                dat.SrcID()             = SrcID();
+                dat.TxnID()             = TxnID();
+                dat.HomeNID()           = HomeNID();
+                dat.Opcode()            = Opcode();
+                dat.RespErr()           = RespErr();
+                dat.Resp()              = Resp();
+                dat.DataSource()        = DataSource();
+                dat.FwdState()          = FwdState();
+                dat.DataPull()          = DataPull();
+#ifdef CHI_ISSUE_EB_ENABLE
+                dat.CBusy()             = CBusy();
+#endif
+                dat.DBID()              = DBID();
+                dat.CCID()              = CCID();
+                dat.DataID()            = DataID();
+#ifdef CHI_ISSUE_EB_ENABLE
+                dat.TagOp()             = TagOp();
+                dat.Tag()               = Tag();
+                dat.TU()                = TU();
+#endif
+                dat.TraceTag()          = TraceTag();
+                if constexpr (hasRSVDC)
+                    dat.RSVDC()             = RSVDC();
+                dat.BE()                = BE();
+                dat.Data()[0]           = Data()[0];
+                dat.Data()[1]           = Data()[1];
+                if constexpr (config::dataWidth > 128)
+                {
+                    dat.Data()[2]       = Data()[2];
+                    dat.Data()[3]       = Data()[3];
+                }
+                if constexpr (config::dataWidth > 256)
+                {
+                    dat.Data()[4]       = Data()[4];
+                    dat.Data()[5]       = Data()[5];
+                    dat.Data()[6]       = Data()[6];
+                    dat.Data()[7]       = Data()[7];
+                }
+                if constexpr (hasDataCheck)
+                    dat.DataCheck()         = DataCheck();
+                if constexpr (hasPoison)
+                    dat.Poison()            = Poison();
+                return dat;
+            }
         };
 
         //
@@ -2128,6 +2237,37 @@ namespace CHI {
             inline constexpr const  tagop_t&            TagOp           () const    noexcept    { return CHI::decay<tagop_t>(_TagOp); }
 #endif
             inline constexpr const  tracetag_t&         TraceTag        () const    noexcept    { return CHI::decay<tracetag_t>(_TraceTag); }
+
+        //
+        public:
+            inline constexpr RSP<config> decay() const noexcept
+            {
+                RSP<config> rsp {};
+                rsp.QoS()               = QoS();
+                rsp.TgtID()             = TgtID();
+                rsp.SrcID()             = SrcID();
+                rsp.TxnID()             = TxnID();
+                rsp.Opcode()            = Opcode();
+                rsp.RespErr()           = RespErr();
+                rsp.Resp()              = Resp();
+                rsp.FwdState()          = FwdState();
+                rsp.DataPull()          = DataPull();
+#ifdef CHI_ISSUE_EB_ENABLE
+                rsp.CBusy()             = CBusy();
+#endif
+                rsp.DBID()              = DBID();
+#ifdef CHI_ISSUE_EB_ENABLE
+                rsp.PGroupID()          = PGroupID();
+                rsp.StashGroupID()      = StashGroupID();
+                rsp.TagGroupID()        = TagGroupID();
+#endif
+                rsp.PCrdType()          = PCrdType();
+#ifdef CHI_ISSUE_EB_ENABLE
+                rsp.TagOp()             = TagOp();
+#endif
+                rsp.TraceTag()          = TraceTag();
+                return rsp;
+            }
         };
 
         //
@@ -2567,6 +2707,35 @@ namespace CHI {
 #ifdef CHI_ISSUE_EB_ENABLE
             inline constexpr const  mpam_t&             MPAM            () const    noexcept { return CHI::decay<mpam_t>(_MPAM); }
 #endif
+
+        //
+        public:
+            inline constexpr SNP<config> decay() const noexcept
+            {
+                SNP<config> snp {};
+                snp.QoS()               = QoS();
+                snp.SrcID()             = SrcID();
+                snp.TxnID()             = TxnID();
+                snp.FwdNID()            = FwdNID();
+                snp.FwdTxnID()          = FwdTxnID();
+                snp.StashLPID()         = StashLPID();
+                snp.StashLPIDValid()    = StashLPIDValid();
+                snp.VMIDExt()           = VMIDExt();
+                snp.Opcode()            = Opcode();
+                snp.Addr()              = Addr();
+                snp.NS()                = NS();
+                snp.DoNotGoToSD()       = DoNotGoToSD();
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
+                snp.DoNotDataPull()     = DoNotDataPull();
+#endif
+                snp.RetToSrc()          = RetToSrc();
+                snp.TraceTag()          = TraceTag();
+#ifdef CHI_ISSUE_EB_ENABLE
+                if constexpr (hasMPAM)
+                    snp.MPAM()            = MPAM();
+#endif
+                return snp;
+            }
         };
 
         //
