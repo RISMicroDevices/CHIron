@@ -31,8 +31,12 @@
 
 ## Documentations
 
-**Sorry, no public documentation available for now :(**   
-But we are going to work on this part in near future!  
+| Guide | Description |
+|-------|-------------|
+| [Architecture Overview](docs/architecture-overview.md) | Repository layout, four-layer model, multi-issue support, design principles |
+| [CHI Protocol Stack](docs/chi-protocol-stack.md) | Node types, channels, flit structures, interfaces, configuration parameters |
+| [Transaction Layer](docs/transaction-layer.md) | Transaction types, Xaction class, Joint coordinator, cache-state tracking, event bus |
+| [CLog & Tools](docs/clog-and-tools.md) | CLog.B/T binary and text formats, DPI bindings, and CLI analysis tools |
 
 -----------------------
 
