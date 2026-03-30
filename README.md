@@ -31,8 +31,8 @@
 
 ## Documentations
 
-**Sorry, no public documentation available for now :(**   
-But we are going to work on this part in near future!  
+- [Quick Guide: Transaction Models (Xactions)](docs/quick-guide-transaction-models.md)
+- [Quick Guide: Cache State Trackers](docs/quick-guide-state-trackers.md)  
 
 -----------------------
 
