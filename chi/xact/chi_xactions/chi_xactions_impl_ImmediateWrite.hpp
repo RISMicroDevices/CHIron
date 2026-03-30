@@ -20,59 +20,58 @@ namespace CHI {
 */
     namespace Xact {
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class XactionImmediateWrite : public Xaction<config, conn> {
+        template<FlitConfigurationConcept config>
+        class XactionImmediateWrite : public Xaction<config> {
         public:
-            XactionImmediateWrite(const Global<config, conn>&               glbl,
-                                  const FiredRequestFlit<config, conn>&     first,
-                                  std::shared_ptr<Xaction<config, conn>>    retried) noexcept;
-
-        public:
-            virtual std::shared_ptr<Xaction<config, conn>>          Clone() const noexcept override;
-            std::shared_ptr<XactionImmediateWrite<config, conn>>    CloneAsIs() const noexcept;
+            XactionImmediateWrite(const Global<config>&               glbl,
+                                  const FiredRequestFlit<config>&     first,
+                                  std::shared_ptr<Xaction<config>>    retried) noexcept;
 
         public:
-            bool                            IsDataComplete(const Global<config, conn>& glbl) const noexcept;
-            bool                            IsResponseComplete(const Global<config, conn>& glbl) const noexcept;
-            bool                            IsAckComplete(const Global<config, conn>& glbl) const noexcept;
-            bool                            IsTagOpComplete(const Global<config, conn>& glbl) const noexcept;
+            virtual std::shared_ptr<Xaction<config>>          Clone() const noexcept override;
+            std::shared_ptr<XactionImmediateWrite<config>>    CloneAsIs() const noexcept;
 
-            virtual bool                    IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept override;
-            virtual bool                    IsDBIDComplete(const Global<config, conn>& glbl) const noexcept override;
-            virtual bool                    IsComplete(const Global<config, conn>& glbl) const noexcept override;
+        public:
+            bool                            IsDataComplete(const Global<config>& glbl) const noexcept;
+            bool                            IsResponseComplete(const Global<config>& glbl) const noexcept;
+            bool                            IsAckComplete(const Global<config>& glbl) const noexcept;
+            bool                            IsTagOpComplete(const Global<config>& glbl) const noexcept;
 
-            virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
+            virtual bool                    IsTxnIDComplete(const Global<config>& glbl) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Global<config>& glbl) const noexcept override;
+            virtual bool                    IsComplete(const Global<config>& glbl) const noexcept override;
+
+            virtual bool                    IsDBIDOverlappable(const Global<config>& glbl) const noexcept override;
 
         protected:
-            virtual const FiredResponseFlit<config, conn>*  
-                                            GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept override;
-            virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
-                                            GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*  
+                                            GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept override;
+            virtual std::optional<typename Flits::REQ<config>::tgtid_t>
+                                            GetPrimaryTgtIDNonREQ(const Global<config>& glbl) const noexcept override;
 
         public:
             virtual bool                    IsDMTPossible() const noexcept override;
             virtual bool                    IsDCTPossible() const noexcept override;
             virtual bool                    IsDWTPossible() const noexcept override;
 
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDMTSrcIDSource(const Global<config>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDMTTgtIDSource(const Global<config>& glbl) const noexcept override;
 
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDCTSrcIDSource(const Global<config>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDCTTgtIDSource(const Global<config>& glbl) const noexcept override;
 
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDWTSrcIDSource(const Global<config>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDWTTgtIDSource(const Global<config>& glbl) const noexcept override;
 
         public:
-            virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
     }
 /*
@@ -83,13 +82,12 @@ namespace CHI {
 // Implementation of: class XactionImmediateWrite
 namespace /*CHI::*/Xact {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactionImmediateWrite<config, conn>::XactionImmediateWrite(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   firstFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
-        : Xaction<config, conn>(XactionType::ImmediateWrite, firstFlit, retried)
+    template<FlitConfigurationConcept config>
+    inline XactionImmediateWrite<config>::XactionImmediateWrite(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   firstFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
+        : Xaction<config>(XactionType::ImmediateWrite, firstFlit, retried)
     {
         // *NOTICE: AllowRetry should be checked by external scoreboards.
 
@@ -129,23 +127,20 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> XactionImmediateWrite<config, conn>::Clone() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> XactionImmediateWrite<config>::Clone() const noexcept
     {
-        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+        return std::static_pointer_cast<Xaction<config>>(CloneAsIs());
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<XactionImmediateWrite<config, conn>> XactionImmediateWrite<config, conn>::CloneAsIs() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<XactionImmediateWrite<config>> XactionImmediateWrite<config>::CloneAsIs() const noexcept
     {
-        return std::make_shared<XactionImmediateWrite<config, conn>>(*this);
+        return std::make_shared<XactionImmediateWrite<config>>(*this);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsResponseComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsResponseComplete(const Global<config>& glbl) const noexcept
     {
         bool gotDBID = false;
         bool gotComp = false;
@@ -189,12 +184,11 @@ namespace /*CHI::*/Xact {
         return gotDBID && gotComp;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsDataComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsDataComplete(const Global<config>& glbl) const noexcept
     {
         std::bitset<4> completeDataIDMask =
-            details::GetDataIDCompleteMask<config, conn>(this->first.flit.req.Size());
+            details::GetDataIDCompleteMask<config>(this->first.flit.req.Size());
         
         std::bitset<4> collectedDataID;
 
@@ -214,7 +208,7 @@ namespace /*CHI::*/Xact {
 #endif
             )
             {
-                collectedDataID |= details::CollectDataID<config, conn>(
+                collectedDataID |= details::CollectDataID<config>(
                     this->first.flit.req.Size(), iter->flit.dat.DataID());
             }
             else if (iter->flit.dat.Opcode() == Opcodes::DAT::WriteDataCancel)
@@ -224,9 +218,8 @@ namespace /*CHI::*/Xact {
         return (completeDataIDMask & ~collectedDataID).none();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsAckComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsAckComplete(const Global<config>& glbl) const noexcept
     {
         if (!this->first.flit.req.ExpCompAck())
             return true;
@@ -252,9 +245,8 @@ namespace /*CHI::*/Xact {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsTagOpComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsTagOpComplete(const Global<config>& glbl) const noexcept
     {
         if (this->first.flit.req.TagOp() != TagOp::MatchFetch)
             return true;
@@ -275,37 +267,32 @@ namespace /*CHI::*/Xact {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsTxnIDComplete(const Global<config>& glbl) const noexcept
     {
         return this->GotRetryAck() || IsResponseComplete(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsDBIDComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsDBIDComplete(const Global<config>& glbl) const noexcept
     {
         return this->GotRetryAck() || IsDataComplete(glbl) && IsAckComplete(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsComplete(const Global<config>& glbl) const noexcept
     {
         return this->GotRetryAck() || IsResponseComplete(glbl) && IsDataComplete(glbl) && IsAckComplete(glbl) && IsTagOpComplete(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsDBIDOverlappable(const Global<config>& glbl) const noexcept
     {
         return IsDataComplete(glbl) && IsAckComplete(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionImmediateWrite<config, conn>::GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionImmediateWrite<config>::GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept
     {
         size_t index = 0;
         for (auto iter = this->subsequenceKeys.begin(); iter != this->subsequenceKeys.end(); iter++, index++)
@@ -333,11 +320,10 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> XactionImmediateWrite<config, conn>::GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::REQ<config>::tgtid_t> XactionImmediateWrite<config>::GetPrimaryTgtIDNonREQ(const Global<config>& glbl) const noexcept
     {
-        const FiredResponseFlit<config, conn>* optSource = GetPrimaryTgtIDSourceNonREQ(glbl);
+        const FiredResponseFlit<config>* optSource = GetPrimaryTgtIDSourceNonREQ(glbl);
 
         if (!optSource)
             return std::nullopt;
@@ -345,73 +331,63 @@ namespace /*CHI::*/Xact {
         return { optSource->flit.rsp.SrcID() };
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsDMTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsDMTPossible() const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsDCTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsDCTPossible() const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionImmediateWrite<config, conn>::IsDWTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionImmediateWrite<config>::IsDWTPossible() const noexcept
     {
         return true;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionImmediateWrite<config, conn>::GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionImmediateWrite<config>::GetDMTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionImmediateWrite<config, conn>::GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionImmediateWrite<config>::GetDMTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionImmediateWrite<config, conn>::GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionImmediateWrite<config>::GetDCTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionImmediateWrite<config, conn>::GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionImmediateWrite<config>::GetDCTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionImmediateWrite<config, conn>::GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionImmediateWrite<config>::GetDWTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionImmediateWrite<config, conn>::GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionImmediateWrite<config>::GetDWTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return this->GetFirstRSPFrom(glbl, XactScope::Subordinate,
             { Opcodes::RSP::DBIDResp });
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionImmediateWrite<config, conn>::NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum XactionImmediateWrite<config>::NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(glbl))
             return XactDenial::DENIED_COMPLETED_RSP;
@@ -462,7 +438,7 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
-            const FiredResponseFlit<config, conn>* optDBIDSource = this->GetDBIDSource();
+            const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
 
             if (optDBIDSource)
             {
@@ -528,7 +504,7 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
-            const FiredResponseFlit<config, conn>* optDBIDSource = this->GetDBIDSource();
+            const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
 
             if (optDBIDSource)
             {
@@ -573,7 +549,7 @@ namespace /*CHI::*/Xact {
             if (!rspFlit.IsFromRequesterToHome(glbl))
                 return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
 
-            const FiredResponseFlit<config, conn>* optDBIDSource = this->GetDBIDSource();
+            const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
 
             if (optDBIDSource)
             {
@@ -603,9 +579,8 @@ namespace /*CHI::*/Xact {
         return XactDenial::DENIED_RSP_OPCODE;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionImmediateWrite<config, conn>::NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum XactionImmediateWrite<config>::NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(glbl))
             return XactDenial::DENIED_COMPLETED_DAT;
@@ -621,7 +596,7 @@ namespace /*CHI::*/Xact {
          || datFlit.flit.dat.Opcode() == Opcodes::DAT::WriteDataCancel
         )
         {
-            const FiredResponseFlit<config, conn>* optDBIDSource 
+            const FiredResponseFlit<config>* optDBIDSource 
                 = this->GetLastDBIDSourceRSP({ 
                     Opcodes::RSP::DBIDResp,
                     Opcodes::RSP::DBIDRespOrd, 

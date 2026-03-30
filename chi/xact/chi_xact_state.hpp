@@ -38,8 +38,7 @@ namespace CHI {
             };
         }
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        template<FlitConfigurationConcept config>
         class RNCacheStateMap {
         private:
             static constexpr size_t ADDR_OFFSET_CACHE_BLOCK     = 6;
@@ -70,7 +69,7 @@ namespace CHI {
                         snpDecoder;
 
         private:
-            std::unordered_map<typename Flits::REQ<config, conn>::addr_t::value_type, CacheState>
+            std::unordered_map<typename Flits::REQ<config>::addr_t::value_type, CacheState>
                         stateMap;
 
         private:
@@ -83,15 +82,15 @@ namespace CHI {
             bool        seerEnabled;
             void*       seerConfusion;  // TODO
 
-            std::unordered_map<typename Flits::REQ<config, conn>::addr_t::value_type, std::bitset<SIZE_CACHE_MAP_SPAN>>
+            std::unordered_map<typename Flits::REQ<config>::addr_t::value_type, std::bitset<SIZE_CACHE_MAP_SPAN>>
                         seerAccessedMap;
 
         protected:
-            bool        IsAccessed(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
-            void        SetAccessed(Flits::REQ<config, conn>::addr_t::value_type addr) noexcept;
+            bool        IsAccessed(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
+            void        SetAccessed(Flits::REQ<config>::addr_t::value_type addr) noexcept;
 
-            std::pair<CacheState, bool> ExcavateWithSeer(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
-            std::pair<CacheState, bool> EvaluateWithSeer(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
+            std::pair<CacheState, bool> ExcavateWithSeer(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
+            std::pair<CacheState, bool> EvaluateWithSeer(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
 
         public:
             CacheState  EvaluateSilently(CacheState state) const noexcept;
@@ -110,23 +109,23 @@ namespace CHI {
             bool            HasSilentStore() const noexcept;
             bool            HasSilentInvalidation() const noexcept;
 
-            void            Set(Flits::REQ<config, conn>::addr_t::value_type addr, CacheState state) noexcept;
-            CacheState      Get(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
+            void            Set(Flits::REQ<config>::addr_t::value_type addr, CacheState state) noexcept;
+            CacheState      Get(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
 
         public:
-            CacheState      Excavate(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
-            CacheState      Evaluate(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept;
+            CacheState      Excavate(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
+            CacheState      Evaluate(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
 
         public:
-            XactDenialEnum  NextTXREQ(Flits::REQ<config, conn>::addr_t::value_type addr, const Flits::REQ<config, conn>& flit) noexcept;
-            XactDenialEnum  NextRXSNP(Flits::REQ<config, conn>::addr_t::value_type addr, const Flits::SNP<config, conn>& flit) noexcept;
-            XactDenialEnum  NextTXRSP(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::RSP<config, conn>& flit) noexcept;
-            XactDenialEnum  NextTXDAT(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::DAT<config, conn>& flit) noexcept;
-            XactDenialEnum  NextRXRSP(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::RSP<config, conn>& flit) noexcept;
-            XactDenialEnum  NextRXDAT(Flits::REQ<config, conn>::addr_t::value_type addr, const Xaction<config, conn>& xaction, const Flits::DAT<config, conn>& flit) noexcept;
+            XactDenialEnum  NextTXREQ(Flits::REQ<config>::addr_t::value_type addr, const Flits::REQ<config>& flit) noexcept;
+            XactDenialEnum  NextRXSNP(Flits::REQ<config>::addr_t::value_type addr, const Flits::SNP<config>& flit) noexcept;
+            XactDenialEnum  NextTXRSP(Flits::REQ<config>::addr_t::value_type addr, const Xaction<config>& xaction, const Flits::RSP<config>& flit) noexcept;
+            XactDenialEnum  NextTXDAT(Flits::REQ<config>::addr_t::value_type addr, const Xaction<config>& xaction, const Flits::DAT<config>& flit) noexcept;
+            XactDenialEnum  NextRXRSP(Flits::REQ<config>::addr_t::value_type addr, const Xaction<config>& xaction, const Flits::RSP<config>& flit) noexcept;
+            XactDenialEnum  NextRXDAT(Flits::REQ<config>::addr_t::value_type addr, const Xaction<config>& xaction, const Flits::DAT<config>& flit) noexcept;
 
         public:
-            XactDenialEnum  Transfer(Flits::REQ<config, conn>::addr_t::value_type addr, CacheState state, const Xaction<config, conn>* nestingXaction = nullptr) noexcept;
+            XactDenialEnum  Transfer(Flits::REQ<config>::addr_t::value_type addr, CacheState state, const Xaction<config>* nestingXaction = nullptr) noexcept;
         };
     }
 /*
@@ -142,9 +141,8 @@ namespace /*CHI::*/Xact {
     ...
     */
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline RNCacheStateMap<config, conn>::RNCacheStateMap() noexcept
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMap<config>::RNCacheStateMap() noexcept
         : reqDecoder                ()
         , snpDecoder                ()
         , stateMap                  ()
@@ -395,9 +393,8 @@ namespace /*CHI::*/Xact {
         #undef SET_SNPFWD_EX
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool RNCacheStateMap<config, conn>::IsAccessed(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool RNCacheStateMap<config>::IsAccessed(Flits::REQ<config>::addr_t::value_type addr) const noexcept
     {
         if (!seerEnabled)
             return false;
@@ -410,9 +407,8 @@ namespace /*CHI::*/Xact {
         return iter->second.test(addr & ((1UL << ADDR_OFFSET_CACHE_MAP_SPAN) - 1));
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void RNCacheStateMap<config, conn>::SetAccessed(Flits::REQ<config, conn>::addr_t::value_type addr) noexcept
+    template<FlitConfigurationConcept config>
+    inline void RNCacheStateMap<config>::SetAccessed(Flits::REQ<config>::addr_t::value_type addr) noexcept
     {
         if (!seerEnabled)
             return;
@@ -431,9 +427,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline CacheState RNCacheStateMap<config, conn>::EvaluateSilently(CacheState state) const noexcept
+    template<FlitConfigurationConcept config>
+    inline CacheState RNCacheStateMap<config>::EvaluateSilently(CacheState state) const noexcept
     {
         // silent transitions
 
@@ -475,9 +470,8 @@ namespace /*CHI::*/Xact {
         return state;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::pair<CacheState, bool> RNCacheStateMap<config, conn>::ExcavateWithSeer(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::pair<CacheState, bool> RNCacheStateMap<config>::ExcavateWithSeer(Flits::REQ<config>::addr_t::value_type addr) const noexcept
     {
         auto iter = stateMap.find(addr);
 
@@ -504,104 +498,90 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::pair<CacheState, bool> RNCacheStateMap<config, conn>::EvaluateWithSeer(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::pair<CacheState, bool> RNCacheStateMap<config>::EvaluateWithSeer(Flits::REQ<config>::addr_t::value_type addr) const noexcept
     {
         auto excavated = ExcavateWithSeer(addr);
         return { EvaluateSilently(excavated.first), excavated.second };
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void RNCacheStateMap<config, conn>::SetSilentEviction(bool enableSilentEviction) noexcept
+    template<FlitConfigurationConcept config>
+    inline void RNCacheStateMap<config>::SetSilentEviction(bool enableSilentEviction) noexcept
     {
         this->enableSilentEviction = enableSilentEviction;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void RNCacheStateMap<config, conn>::SetSilentSharing(bool enableSilentSharing) noexcept
+    template<FlitConfigurationConcept config>
+    inline void RNCacheStateMap<config>::SetSilentSharing(bool enableSilentSharing) noexcept
     {
         this->enableSilentSharing = enableSilentSharing;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void RNCacheStateMap<config, conn>::SetSilentStore(bool enableSilentStore) noexcept
+    template<FlitConfigurationConcept config>
+    inline void RNCacheStateMap<config>::SetSilentStore(bool enableSilentStore) noexcept
     {
         this->enableSilentStore = enableSilentStore;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void RNCacheStateMap<config, conn>::SetSilentInvalidation(bool enableSilentInvalidation) noexcept
+    template<FlitConfigurationConcept config>
+    inline void RNCacheStateMap<config>::SetSilentInvalidation(bool enableSilentInvalidation) noexcept
     {
         this->enableSilentInvalidation = enableSilentInvalidation;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool RNCacheStateMap<config, conn>::HasSilentEviction() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool RNCacheStateMap<config>::HasSilentEviction() const noexcept
     {
         return this->enableSilentEviction;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool RNCacheStateMap<config, conn>::HasSilentSharing() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool RNCacheStateMap<config>::HasSilentSharing() const noexcept
     {
         return this->enableSilentSharing;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool RNCacheStateMap<config, conn>::HasSilentStore() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool RNCacheStateMap<config>::HasSilentStore() const noexcept
     {
         return this->enableSilentStore;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool RNCacheStateMap<config, conn>::HasSilentInvalidation() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool RNCacheStateMap<config>::HasSilentInvalidation() const noexcept
     {
         return this->enableSilentInvalidation;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void RNCacheStateMap<config, conn>::Set(Flits::REQ<config, conn>::addr_t::value_type addr, CacheState state) noexcept
+    template<FlitConfigurationConcept config>
+    inline void RNCacheStateMap<config>::Set(Flits::REQ<config>::addr_t::value_type addr, CacheState state) noexcept
     {
         stateMap[addr] = state;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline CacheState RNCacheStateMap<config, conn>::Get(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
+    template<FlitConfigurationConcept config>
+    inline CacheState RNCacheStateMap<config>::Get(Flits::REQ<config>::addr_t::value_type addr) const noexcept
     {
         auto iter = stateMap.find(addr);
         return iter != stateMap.end() ? iter->second : CacheStates::None;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline CacheState RNCacheStateMap<config, conn>::Excavate(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
+    template<FlitConfigurationConcept config>
+    inline CacheState RNCacheStateMap<config>::Excavate(Flits::REQ<config>::addr_t::value_type addr) const noexcept
     {
         return ExcavateWithSeer(addr).first;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline CacheState RNCacheStateMap<config, conn>::Evaluate(Flits::REQ<config, conn>::addr_t::value_type addr) const noexcept
+    template<FlitConfigurationConcept config>
+    inline CacheState RNCacheStateMap<config>::Evaluate(Flits::REQ<config>::addr_t::value_type addr) const noexcept
     {
         return EvaluateWithSeer(addr).first;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNCacheStateMap<config, conn>::NextTXREQ(
-        Flits::REQ<config, conn>::addr_t::value_type    addr,
-        const Flits::REQ<config, conn>&                 flit) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::NextTXREQ(
+        Flits::REQ<config>::addr_t::value_type  addr,
+        const Flits::REQ<config>&               flit) noexcept
     {
         // Decode REQ opcode
         const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans*>& opcodeInfo = 
@@ -640,12 +620,11 @@ namespace /*CHI::*/Xact {
         return XactDenial::ACCEPTED;
     }
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNCacheStateMap<config, conn>::NextTXRSP(
-        Flits::REQ<config, conn>::addr_t::value_type    addr,
-        const Xaction<config, conn>&                    xaction,
-        const Flits::RSP<config, conn>&                 flit) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::NextTXRSP(
+        Flits::REQ<config>::addr_t::value_type  addr,
+        const Xaction<config>&                  xaction,
+        const Flits::RSP<config>&               flit) noexcept
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
@@ -815,12 +794,11 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNCacheStateMap<config, conn>::NextTXDAT(
-        Flits::REQ<config, conn>::addr_t::value_type    addr,
-        const Xaction<config, conn>&                    xaction,
-        const Flits::DAT<config, conn>&                 flit) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::NextTXDAT(
+        Flits::REQ<config>::addr_t::value_type    addr,
+        const Xaction<config>&                    xaction,
+        const Flits::DAT<config>&                 flit) noexcept
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
@@ -846,7 +824,7 @@ namespace /*CHI::*/Xact {
             std::pair<CacheState, bool> prevState; // lazy evaluation
 
             // check for multi-data-beat repeat
-            const FiredResponseFlit<config, conn>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
+            const FiredResponseFlit<config>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
             
             if (firstDAT && firstDAT->flit.dat.DataID() != flit.DataID())
             {
@@ -957,7 +935,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_UNSUPPORTED_FEATURE;
 
             // check for multi-data-beat repeat
-            const FiredResponseFlit<config, conn>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
+            const FiredResponseFlit<config>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
             
             if (firstDAT && firstDAT->flit.dat.DataID() != flit.DataID())
             {
@@ -1151,12 +1129,11 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNCacheStateMap<config, conn>::NextRXRSP(
-        Flits::REQ<config, conn>::addr_t::value_type    addr,
-        const Xaction<config, conn>&                    xaction,
-        const Flits::RSP<config, conn>&                 flit) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::NextRXRSP(
+        Flits::REQ<config>::addr_t::value_type    addr,
+        const Xaction<config>&                    xaction,
+        const Flits::RSP<config>&                 flit) noexcept
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
@@ -1368,12 +1345,11 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNCacheStateMap<config, conn>::NextRXDAT(
-        Flits::REQ<config, conn>::addr_t::value_type    addr,
-        const Xaction<config, conn>&                    xaction,
-        const Flits::DAT<config, conn>&                 flit) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::NextRXDAT(
+        Flits::REQ<config>::addr_t::value_type    addr,
+        const Xaction<config>&                    xaction,
+        const Flits::DAT<config>&                 flit) noexcept
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
@@ -1399,7 +1375,7 @@ namespace /*CHI::*/Xact {
             std::pair<CacheState, bool> prevState; // lazy evaluation
 
             // check for multi-data-beat repeat
-            const FiredResponseFlit<config, conn>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
+            const FiredResponseFlit<config>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
             
             if (firstDAT && firstDAT->flit.dat.DataID() != flit.DataID())
             {
@@ -1548,21 +1524,19 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNCacheStateMap<config, conn>::NextRXSNP(
-        Flits::REQ<config, conn>::addr_t::value_type    addr,
-        const Flits::SNP<config, conn>&                 flit) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::NextRXSNP(
+        Flits::REQ<config>::addr_t::value_type    addr,
+        const Flits::SNP<config>&                 flit) noexcept
     {
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNCacheStateMap<config, conn>::Transfer(
-        Flits::REQ<config, conn>::addr_t::value_type    addr,
-        CacheState                                      state,
-        const Xaction<config, conn>*                    nestingXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::Transfer(
+        Flits::REQ<config>::addr_t::value_type    addr,
+        CacheState                                state,
+        const Xaction<config>*                    nestingXaction) noexcept
     {
         if (!nestingXaction)
         {
@@ -1577,7 +1551,7 @@ namespace /*CHI::*/Xact {
             if (nestingXaction->GetFirst().IsREQ())
             {
                 // Decode REQ opcode
-                const Opcodes::OpcodeInfo<typename Flits::REQ<config, conn>::opcode_t, const details::RNCohTrans*>& opcodeInfo
+                const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans*>& opcodeInfo
                     = reqDecoder.Decode(nestingXaction->GetFirst().flit.req.Opcode());
 
                 if (!opcodeInfo.IsValid()) // unknown opcode

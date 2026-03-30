@@ -28,8 +28,7 @@ namespace CHI {
 */
     namespace Xact {
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn>
+        template<FlitConfigurationConcept config>
         class FiredFlit {
         public:
             XactScopeEnum   scope;
@@ -50,19 +49,18 @@ namespace CHI {
             virtual ChannelTypeEnum GetChannel() const noexcept = 0;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class FiredRequestFlit : public FiredFlit<config, conn> {
+        template<FlitConfigurationConcept config>
+        class FiredRequestFlit : public FiredFlit<config> {
         public:
             bool            isREQ;
             union {
-                Flits::REQ<config, conn>    req;
-                Flits::SNP<config, conn>    snp;
+                Flits::REQ<config>  req;
+                Flits::SNP<config>  snp;
             }               flit;
             
             // REQ: Request source Node ID
             // SNP: Snoop target Node ID
-            Flits::REQ<config, conn>::srcid_t
+            Flits::REQ<config>::srcid_t
                             nodeId;
 
         public:
@@ -70,15 +68,15 @@ namespace CHI {
                 XactScopeEnum                       scope,
                 bool                                isTX,
                 uint64_t                            time,
-                const Flits::REQ<config, conn>&     reqFlit
+                const Flits::REQ<config>&           reqFlit
             ) noexcept;
             
             FiredRequestFlit(
                 XactScopeEnum                       scope,
                 bool                                isTX,
                 uint64_t                            time,
-                const Flits::SNP<config, conn>&     snpFlit,
-                Flits::REQ<config, conn>::srcid_t   snpTgtId
+                const Flits::SNP<config>&           snpFlit,
+                Flits::REQ<config>::srcid_t         snpTgtId
             ) noexcept;
 
         public:
@@ -95,47 +93,46 @@ namespace CHI {
             ChannelTypeEnum         GetChannelType() const noexcept;
 
         public:
-            bool            IsToRequester(const Global<config, conn>&) const noexcept;
-            bool            IsToHome(const Global<config, conn>&) const noexcept;
-            bool            IsToSubordinate(const Global<config, conn>&) const noexcept;
+            bool            IsToRequester(const Global<config>&) const noexcept;
+            bool            IsToHome(const Global<config>&) const noexcept;
+            bool            IsToSubordinate(const Global<config>&) const noexcept;
 
         public:
-            bool            IsFromRequester(const Global<config, conn>&) const noexcept;
-            bool            IsFromHome(const Global<config, conn>&) const noexcept;
-            bool            IsFromSubordinate(const Global<config, conn>&) const noexcept;
+            bool            IsFromRequester(const Global<config>&) const noexcept;
+            bool            IsFromHome(const Global<config>&) const noexcept;
+            bool            IsFromSubordinate(const Global<config>&) const noexcept;
 
         public:
-            bool            IsFrom(const Global<config, conn>&, XactScopeEnum from) const noexcept;
-            bool            IsTo(const Global<config, conn>&, XactScopeEnum to) const noexcept;
-            bool            IsFromTo(const Global<config, conn>&, XactScopeEnum from, XactScopeEnum to) const noexcept;
-            bool            IsFromRequesterToHome(const Global<config, conn>&) const noexcept;
-            bool            IsFromRequesterToSubordinate(const Global<config, conn>&) const noexcept;
-            bool            IsFromHomeToRequester(const Global<config, conn>&) const noexcept;
-            bool            IsFromHomeToSubordinate(const Global<config, conn>&) const noexcept;
-            bool            IsFromSubordinateToRequester(const Global<config, conn>&) const noexcept;
-            bool            IsFromSubordinateToHome(const Global<config, conn>&) const noexcept;
+            bool            IsFrom(const Global<config>&, XactScopeEnum from) const noexcept;
+            bool            IsTo(const Global<config>&, XactScopeEnum to) const noexcept;
+            bool            IsFromTo(const Global<config>&, XactScopeEnum from, XactScopeEnum to) const noexcept;
+            bool            IsFromRequesterToHome(const Global<config>&) const noexcept;
+            bool            IsFromRequesterToSubordinate(const Global<config>&) const noexcept;
+            bool            IsFromHomeToRequester(const Global<config>&) const noexcept;
+            bool            IsFromHomeToSubordinate(const Global<config>&) const noexcept;
+            bool            IsFromSubordinateToRequester(const Global<config>&) const noexcept;
+            bool            IsFromSubordinateToHome(const Global<config>&) const noexcept;
 
         public:
-            bool            IsTXREQ(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
-            bool            IsRXREQ(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
-            bool            IsTXSNP(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
-            bool            IsRXSNP(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
+            bool            IsTXREQ(const Global<config>&, XactScopeEnum scope) const noexcept;
+            bool            IsRXREQ(const Global<config>&, XactScopeEnum scope) const noexcept;
+            bool            IsTXSNP(const Global<config>&, XactScopeEnum scope) const noexcept;
+            bool            IsRXSNP(const Global<config>&, XactScopeEnum scope) const noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class FiredResponseFlit : public FiredFlit<config, conn> {
+        template<FlitConfigurationConcept config>
+        class FiredResponseFlit : public FiredFlit<config> {
         public:
             bool            isRSP;
             union {
-                Flits::RSP<config, conn>    rsp;
-                Flits::DAT<config, conn>    dat;
+                Flits::RSP<config>  rsp;
+                Flits::DAT<config>  dat;
             }               flit;
 
         public:
             FiredResponseFlit() noexcept;
-            FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::RSP<config, conn>& rspFlit) noexcept;
-            FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::DAT<config, conn>& datFlit) noexcept;
+            FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::RSP<config>& rspFlit) noexcept;
+            FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::DAT<config>& datFlit) noexcept;
         
         public:
             bool            IsRSP() const noexcept;
@@ -151,45 +148,45 @@ namespace CHI {
             ChannelTypeEnum         GetChannelType() const noexcept;
 
         public:
-            bool            IsToRequester(const Global<config, conn>&) const noexcept;
-            bool            IsToHome(const Global<config, conn>&) const noexcept;
-            bool            IsToSubordinate(const Global<config, conn>&) const noexcept;
+            bool            IsToRequester(const Global<config>&) const noexcept;
+            bool            IsToHome(const Global<config>&) const noexcept;
+            bool            IsToSubordinate(const Global<config>&) const noexcept;
 
-            bool            IsToRequesterDCT(const Global<config, conn>&) const noexcept;
-            bool            IsToRequesterDMT(const Global<config, conn>&) const noexcept;
+            bool            IsToRequesterDCT(const Global<config>&) const noexcept;
+            bool            IsToRequesterDMT(const Global<config>&) const noexcept;
 #ifdef CHI_ISSUE_EB_ENABLE
-            bool            IsToRequesterDWT(const Global<config, conn>&) const noexcept;
-            bool            IsToSubordinateDWT(const Global<config, conn>&) const noexcept;
+            bool            IsToRequesterDWT(const Global<config>&) const noexcept;
+            bool            IsToSubordinateDWT(const Global<config>&) const noexcept;
 #endif
 
         public:
-            bool            IsFromRequester(const Global<config, conn>&) const noexcept;
-            bool            IsFromHome(const Global<config, conn>&) const noexcept;
-            bool            IsFromSubordinate(const Global<config, conn>&) const noexcept;
+            bool            IsFromRequester(const Global<config>&) const noexcept;
+            bool            IsFromHome(const Global<config>&) const noexcept;
+            bool            IsFromSubordinate(const Global<config>&) const noexcept;
 
-            bool            IsFromRequesterDCT(const Global<config, conn>&) const noexcept;
-            bool            IsFromSubordinateDMT(const Global<config, conn>&) const noexcept;
+            bool            IsFromRequesterDCT(const Global<config>&) const noexcept;
+            bool            IsFromSubordinateDMT(const Global<config>&) const noexcept;
 #ifdef CHI_ISSUE_EB_ENABLE
-            bool            IsFromRequesterDWT(const Global<config, conn>&) const noexcept;
-            bool            IsFromSubordinateDWT(const Global<config, conn>&) const noexcept;
+            bool            IsFromRequesterDWT(const Global<config>&) const noexcept;
+            bool            IsFromSubordinateDWT(const Global<config>&) const noexcept;
 #endif
 
         public:
-            bool            IsFrom(const Global<config, conn>&, XactScopeEnum from) const noexcept;
-            bool            IsTo(const Global<config, conn>&, XactScopeEnum to) const noexcept;
-            bool            IsFromTo(const Global<config, conn>&, XactScopeEnum from, XactScopeEnum to) const noexcept;
-            bool            IsFromRequesterToHome(const Global<config, conn>&) const noexcept;
-            bool            IsFromRequesterToSubordinate(const Global<config, conn>&) const noexcept;
-            bool            IsFromHomeToRequester(const Global<config, conn>&) const noexcept;
-            bool            IsFromHomeToSubordinate(const Global<config, conn>&) const noexcept;
-            bool            IsFromSubordinateToRequester(const Global<config, conn>&) const noexcept;
-            bool            IsFromSubordinateToHome(const Global<config, conn>&) const noexcept;
+            bool            IsFrom(const Global<config>&, XactScopeEnum from) const noexcept;
+            bool            IsTo(const Global<config>&, XactScopeEnum to) const noexcept;
+            bool            IsFromTo(const Global<config>&, XactScopeEnum from, XactScopeEnum to) const noexcept;
+            bool            IsFromRequesterToHome(const Global<config>&) const noexcept;
+            bool            IsFromRequesterToSubordinate(const Global<config>&) const noexcept;
+            bool            IsFromHomeToRequester(const Global<config>&) const noexcept;
+            bool            IsFromHomeToSubordinate(const Global<config>&) const noexcept;
+            bool            IsFromSubordinateToRequester(const Global<config>&) const noexcept;
+            bool            IsFromSubordinateToHome(const Global<config>&) const noexcept;
 
         public:
-            bool            IsTXRSP(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
-            bool            IsRXRSP(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
-            bool            IsTXDAT(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
-            bool            IsRXDAT(const Global<config, conn>&, XactScopeEnum scope) const noexcept;
+            bool            IsTXRSP(const Global<config>&, XactScopeEnum scope) const noexcept;
+            bool            IsRXRSP(const Global<config>&, XactScopeEnum scope) const noexcept;
+            bool            IsTXDAT(const Global<config>&, XactScopeEnum scope) const noexcept;
+            bool            IsRXDAT(const Global<config>&, XactScopeEnum scope) const noexcept;
         };
     }
 /*
@@ -205,24 +202,21 @@ namespace /*CHI::*/Xact {
     bool            isTX;
     */
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline FiredFlit<config, conn>::FiredFlit(XactScopeEnum scope, bool isTX, uint64_t time) noexcept
+    template<FlitConfigurationConcept config>
+    inline FiredFlit<config>::FiredFlit(XactScopeEnum scope, bool isTX, uint64_t time) noexcept
         : scope     (scope)
         , time      (time)
         , isTX      (isTX)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredFlit<config, conn>::IsTX() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredFlit<config>::IsTX() const noexcept
     {
         return isTX;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredFlit<config, conn>::IsRX() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredFlit<config>::IsRX() const noexcept
     {
         return !isTX;
     }
@@ -234,90 +228,79 @@ namespace /*CHI::*/Xact {
     /*
     bool        isREQ;
     union {
-        Flits::REQ<config, conn>    req;
-        Flits::SNP<config, conn>    snp;
+        Flits::REQ<config>    req;
+        Flits::SNP<config>    snp;
     }           flit;
     */
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline FiredRequestFlit<config, conn>::FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::REQ<config, conn>& reqFlit) noexcept
-        : FiredFlit<config, conn>   (scope, isTX, time)
-        , isREQ                     (true)
-        , nodeId                    (reqFlit.SrcID())
+    template<FlitConfigurationConcept config>
+    inline FiredRequestFlit<config>::FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::REQ<config>& reqFlit) noexcept
+        : FiredFlit<config> (scope, isTX, time)
+        , isREQ             (true)
+        , nodeId            (reqFlit.SrcID())
     { 
         flit.req = reqFlit;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline FiredRequestFlit<config, conn>::FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::SNP<config, conn>& snpFlit, Flits::REQ<config, conn>::srcid_t snpTgtId) noexcept
-        : FiredFlit<config, conn>   (scope, isTX, time)
-        , isREQ                     (false)
-        , nodeId                    (snpTgtId)
+    template<FlitConfigurationConcept config>
+    inline FiredRequestFlit<config>::FiredRequestFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::SNP<config>& snpFlit, Flits::REQ<config>::srcid_t snpTgtId) noexcept
+        : FiredFlit<config> (scope, isTX, time)
+        , isREQ             (false)
+        , nodeId            (snpTgtId)
     {
         flit.snp = snpFlit;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsREQ() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsREQ() const noexcept
     {
         return isREQ;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsSNP() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsSNP() const noexcept
     {
         return !isREQ;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsTXREQ() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsTXREQ() const noexcept
     {
         return this->IsTX() && IsREQ();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsRXREQ() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsRXREQ() const noexcept
     {
         return this->IsRX() && IsREQ();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsTXSNP() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsTXSNP() const noexcept
     {
         return this->IsTX() && IsSNP();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsRXSNP() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsRXSNP() const noexcept
     {
         return this->IsRX() && IsSNP();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline ChannelTypeEnum FiredRequestFlit<config, conn>::GetChannel() const noexcept
+    template<FlitConfigurationConcept config>
+    inline ChannelTypeEnum FiredRequestFlit<config>::GetChannel() const noexcept
     {
         return GetChannelType();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline ChannelTypeEnum FiredRequestFlit<config, conn>::GetChannelType() const noexcept
+    template<FlitConfigurationConcept config>
+    inline ChannelTypeEnum FiredRequestFlit<config>::GetChannelType() const noexcept
     {
         return IsREQ() ? ChannelType::REQ : ChannelType::SNP;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsToRequester(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsToRequester(const Global<config>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
@@ -335,9 +318,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsToHome(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsToHome(const Global<config>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
@@ -397,9 +379,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsToSubordinate(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsToSubordinate(const Global<config>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
@@ -477,9 +458,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromRequester(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromRequester(const Global<config>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
@@ -497,9 +477,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromHome(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromHome(const Global<config>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
@@ -517,17 +496,15 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromSubordinate(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromSubordinate(const Global<config>& glbl) const noexcept
     {
         // Requests never come from Subordnates.
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFrom(const Global<config, conn>& glbl, XactScopeEnum from) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFrom(const Global<config>& glbl, XactScopeEnum from) const noexcept
     {
         switch (from->value)
         {
@@ -550,9 +527,8 @@ namespace /*CHI::*/Xact {
         return true;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsTo(const Global<config, conn>& glbl, XactScopeEnum to) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsTo(const Global<config>& glbl, XactScopeEnum to) const noexcept
     {
         switch (to->value)
         {
@@ -575,79 +551,68 @@ namespace /*CHI::*/Xact {
         return true;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromTo(const Global<config, conn>& glbl, XactScopeEnum from, XactScopeEnum to) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromTo(const Global<config>& glbl, XactScopeEnum from, XactScopeEnum to) const noexcept
     {
         return IsFrom(glbl, from) && IsTo(glbl, to);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromRequesterToHome(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromRequesterToHome(const Global<config>& glbl) const noexcept
     {
         return IsFromRequester(glbl) && IsToHome(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromRequesterToSubordinate(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromRequesterToSubordinate(const Global<config>& glbl) const noexcept
     {
         return IsFromRequester(glbl) && IsToSubordinate(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromHomeToRequester(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromHomeToRequester(const Global<config>& glbl) const noexcept
     {
         return IsFromHome(glbl) && IsToRequester(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromHomeToSubordinate(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromHomeToSubordinate(const Global<config>& glbl) const noexcept
     {
         return IsFromHome(glbl) && IsToSubordinate(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromSubordinateToRequester(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromSubordinateToRequester(const Global<config>& glbl) const noexcept
     {
         return IsFromSubordinate(glbl) && IsToRequester(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsFromSubordinateToHome(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsFromSubordinateToHome(const Global<config>& glbl) const noexcept
     {
         return IsFromSubordinate(glbl) && IsToHome(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsTXREQ(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsTXREQ(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return IsREQ() && IsFrom(glbl, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsRXREQ(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsRXREQ(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return IsREQ() && IsTo(glbl, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsTXSNP(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsTXSNP(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return IsSNP() && IsFrom(glbl, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredRequestFlit<config, conn>::IsRXSNP(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredRequestFlit<config>::IsRXSNP(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return IsSNP() && IsTo(glbl, scope);
     }
@@ -658,95 +623,83 @@ namespace /*CHI::*/Xact {
     /*
     bool        isRSP;
     union {
-        Flits::RSP<config, conn>    rsp;
-        Flits::DAT<config, conn>    dat;
+        Flits::RSP<config>    rsp;
+        Flits::DAT<config>    dat;
     }           flit;
     */
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline FiredResponseFlit<config, conn>::FiredResponseFlit() noexcept
-        : FiredFlit<config, conn>   (XactScope::Requester, false, 0)
-        , isRSP                     (false)
+    template<FlitConfigurationConcept config>
+    inline FiredResponseFlit<config>::FiredResponseFlit() noexcept
+        : FiredFlit<config> (XactScope::Requester, false, 0)
+        , isRSP             (false)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline FiredResponseFlit<config, conn>::FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::RSP<config, conn>& rspFlit) noexcept
-        : FiredFlit<config, conn>   (scope, isTX, time)
-        , isRSP                     (true)
+    template<FlitConfigurationConcept config>
+    inline FiredResponseFlit<config>::FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::RSP<config>& rspFlit) noexcept
+        : FiredFlit<config> (scope, isTX, time)
+        , isRSP             (true)
     {
         flit.rsp = rspFlit;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline FiredResponseFlit<config, conn>::FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::DAT<config, conn>& datFlit) noexcept
-        : FiredFlit<config, conn>   (scope, isTX, time)
-        , isRSP                     (false)
+    template<FlitConfigurationConcept config>
+    inline FiredResponseFlit<config>::FiredResponseFlit(XactScopeEnum scope, bool isTX, uint64_t time, const Flits::DAT<config>& datFlit) noexcept
+        : FiredFlit<config> (scope, isTX, time)
+        , isRSP             (false)
     {
         flit.dat = datFlit;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsRSP() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsRSP() const noexcept
     {
         return isRSP;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsDAT() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsDAT() const noexcept
     {
         return !isRSP;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsTXRSP() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsTXRSP() const noexcept
     {
         return this->IsTX() && IsRSP();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsRXRSP() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsRXRSP() const noexcept
     {
         return this->IsRX() && IsRSP();
     }
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsTXDAT() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsTXDAT() const noexcept
     {
         return this->IsTX() && IsDAT();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsRXDAT() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsRXDAT() const noexcept
     {
         return this->IsRX() && IsDAT();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline ChannelTypeEnum FiredResponseFlit<config, conn>::GetChannel() const noexcept
+    template<FlitConfigurationConcept config>
+    inline ChannelTypeEnum FiredResponseFlit<config>::GetChannel() const noexcept
     {
         return GetChannelType();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline ChannelTypeEnum FiredResponseFlit<config, conn>::GetChannelType() const noexcept
+    template<FlitConfigurationConcept config>
+    inline ChannelTypeEnum FiredResponseFlit<config>::GetChannelType() const noexcept
     {
         return IsRSP() ? ChannelType::RSP : ChannelType::DAT;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToRequester(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsToRequester(const Global<config>& glbl) const noexcept
     {
         switch (this->scope->value)
         {
@@ -772,9 +725,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToHome(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsToHome(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -794,9 +746,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToSubordinate(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsToSubordinate(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -820,9 +771,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToRequesterDCT(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsToRequesterDCT(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -843,9 +793,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToRequesterDMT(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsToRequesterDMT(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -864,9 +813,8 @@ namespace /*CHI::*/Xact {
     }
 
 #ifdef CHI_ISSUE_EB_ENABLE
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToRequesterDWT(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsToRequesterDWT(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -886,9 +834,8 @@ namespace /*CHI::*/Xact {
 #endif
 
 #ifdef CHI_ISSUE_EB_ENABLE
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsToSubordinateDWT(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsToSubordinateDWT(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -907,9 +854,8 @@ namespace /*CHI::*/Xact {
     }
 #endif
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequester(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromRequester(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -929,9 +875,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromHome(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromHome(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -950,9 +895,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinate(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromSubordinate(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -976,9 +920,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequesterDCT(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromRequesterDCT(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -999,9 +942,8 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateDMT(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromSubordinateDMT(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -1020,9 +962,8 @@ namespace /*CHI::*/Xact {
     }
 
 #ifdef CHI_ISSUE_EB_ENABLE
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequesterDWT(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromRequesterDWT(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -1042,9 +983,8 @@ namespace /*CHI::*/Xact {
 #endif
     
 #ifdef CHI_ISSUE_EB_ENABLE
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateDWT(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromSubordinateDWT(const Global<config>& glbl) const noexcept
     {
         switch (*this->scope)
         {
@@ -1063,9 +1003,8 @@ namespace /*CHI::*/Xact {
     }
 #endif
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFrom(const Global<config, conn>& glbl, XactScopeEnum from) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFrom(const Global<config>& glbl, XactScopeEnum from) const noexcept
     {
         switch (from->value)
         {
@@ -1088,9 +1027,8 @@ namespace /*CHI::*/Xact {
         return true;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsTo(const Global<config, conn>& glbl, XactScopeEnum to) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsTo(const Global<config>& glbl, XactScopeEnum to) const noexcept
     {
         switch (to->value)
         {
@@ -1113,79 +1051,68 @@ namespace /*CHI::*/Xact {
         return true;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromTo(const Global<config, conn>& glbl, XactScopeEnum from, XactScopeEnum to) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromTo(const Global<config>& glbl, XactScopeEnum from, XactScopeEnum to) const noexcept
     {
         return IsFrom(glbl, from) && IsTo(glbl, to);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequesterToHome(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromRequesterToHome(const Global<config>& glbl) const noexcept
     {
         return IsFromRequester(glbl) && IsToHome(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromRequesterToSubordinate(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromRequesterToSubordinate(const Global<config>& glbl) const noexcept
     {
         return IsFromRequester(glbl) && IsToSubordinate(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromHomeToRequester(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromHomeToRequester(const Global<config>& glbl) const noexcept
     {
         return IsFromHome(glbl) && IsToRequester(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromHomeToSubordinate(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromHomeToSubordinate(const Global<config>& glbl) const noexcept
     {
         return IsFromHome(glbl) && IsToSubordinate(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateToRequester(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromSubordinateToRequester(const Global<config>& glbl) const noexcept
     {
         return IsFromSubordinate(glbl) && IsToRequester(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsFromSubordinateToHome(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsFromSubordinateToHome(const Global<config>& glbl) const noexcept
     {
         return IsFromSubordinate(glbl) && IsToHome(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsTXRSP(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsTXRSP(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return IsRSP() && IsFrom(glbl, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsRXRSP(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsRXRSP(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return IsRSP() && IsTo(glbl, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsTXDAT(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsTXDAT(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return IsDAT() && IsFrom(glbl, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool FiredResponseFlit<config, conn>::IsRXDAT(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool FiredResponseFlit<config>::IsRXDAT(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return IsDAT() && IsTo(glbl, scope);
     }

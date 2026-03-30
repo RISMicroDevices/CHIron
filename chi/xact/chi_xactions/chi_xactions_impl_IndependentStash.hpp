@@ -19,57 +19,56 @@ namespace CHI {
 */
     namespace Xact {
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class XactionIndependentStash : public Xaction<config, conn> {
+        template<FlitConfigurationConcept config>
+        class XactionIndependentStash : public Xaction<config> {
         public:
-            XactionIndependentStash(const Global<config, conn>&             glbl,
-                                    const FiredRequestFlit<config, conn>&   first,
-                                    std::shared_ptr<Xaction<config, conn>>  retried) noexcept;
-
-        public:
-            virtual std::shared_ptr<Xaction<config, conn>>          Clone() const noexcept override;
-            std::shared_ptr<XactionIndependentStash<config, conn>>  CloneAsIs() const noexcept;
+            XactionIndependentStash(const Global<config>&             glbl,
+                                    const FiredRequestFlit<config>&   first,
+                                    std::shared_ptr<Xaction<config>>  retried) noexcept;
 
         public:
-            bool                            IsCompResponseComplete(const Global<config, conn>& glbl) const noexcept;
-            bool                            IsStashDoneResponseComplete(const Global<config, conn>& glbl) const noexcept;
+            virtual std::shared_ptr<Xaction<config>>          Clone() const noexcept override;
+            std::shared_ptr<XactionIndependentStash<config>>  CloneAsIs() const noexcept;
 
-            virtual bool                    IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept override;
-            virtual bool                    IsDBIDComplete(const Global<config, conn>& glbl) const noexcept override;
-            virtual bool                    IsComplete(const Global<config, conn>& glbl) const noexcept override;
+        public:
+            bool                            IsCompResponseComplete(const Global<config>& glbl) const noexcept;
+            bool                            IsStashDoneResponseComplete(const Global<config>& glbl) const noexcept;
 
-            virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
+            virtual bool                    IsTxnIDComplete(const Global<config>& glbl) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Global<config>& glbl) const noexcept override;
+            virtual bool                    IsComplete(const Global<config>& glbl) const noexcept override;
+
+            virtual bool                    IsDBIDOverlappable(const Global<config>& glbl) const noexcept override;
         
         protected:
-            virtual const FiredResponseFlit<config, conn>*  
-                                            GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept override;
-            virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
-                                            GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*  
+                                            GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept override;
+            virtual std::optional<typename Flits::REQ<config>::tgtid_t>
+                                            GetPrimaryTgtIDNonREQ(const Global<config>& glbl) const noexcept override;
 
         public:
             virtual bool                    IsDMTPossible() const noexcept override;
             virtual bool                    IsDCTPossible() const noexcept override;
             virtual bool                    IsDWTPossible() const noexcept override;
 
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDMTSrcIDSource(const Global<config>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDMTTgtIDSource(const Global<config>& glbl) const noexcept override;
 
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDCTSrcIDSource(const Global<config>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDCTTgtIDSource(const Global<config>& glbl) const noexcept override;
 
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDWTSrcIDSource(const Global<config>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDWTTgtIDSource(const Global<config>& glbl) const noexcept override;
 
         public:
-            virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
     }
 /*
@@ -79,14 +78,13 @@ namespace CHI {
 
 // Implementation of: class XactionIndependentStash
 namespace /*CHI::*/Xact {
-
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactionIndependentStash<config, conn>::XactionIndependentStash(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   first,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
-        : Xaction<config, conn>(XactionType::IndependentStash, first, retried)
+ 
+    template<FlitConfigurationConcept config>
+    inline XactionIndependentStash<config>::XactionIndependentStash(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   first,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
+        : Xaction<config>(XactionType::IndependentStash, first, retried)
     {
         // *NOTICE: AllowRetry should be checked by external scoreboards.
 
@@ -124,23 +122,20 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> XactionIndependentStash<config, conn>::Clone() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> XactionIndependentStash<config>::Clone() const noexcept
     {
-        return std::static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+        return std::static_pointer_cast<Xaction<config>>(CloneAsIs());
     }
         
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<XactionIndependentStash<config, conn>> XactionIndependentStash<config, conn>::CloneAsIs() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<XactionIndependentStash<config>> XactionIndependentStash<config>::CloneAsIs() const noexcept
     {
-        return std::make_shared<XactionIndependentStash<config, conn>>(*this);
+        return std::make_shared<XactionIndependentStash<config>>(*this);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionIndependentStash<config, conn>::IsCompResponseComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionIndependentStash<config>::IsCompResponseComplete(const Global<config>& glbl) const noexcept
     {
         if (this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceUnique
          || this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceShared)
@@ -156,9 +151,8 @@ namespace /*CHI::*/Xact {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionIndependentStash<config, conn>::IsStashDoneResponseComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionIndependentStash<config>::IsStashDoneResponseComplete(const Global<config>& glbl) const noexcept
     {
         if (this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceUnique
          || this->first.flit.req.Opcode() == Opcodes::REQ::StashOnceShared)
@@ -174,46 +168,40 @@ namespace /*CHI::*/Xact {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionIndependentStash<config, conn>::IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionIndependentStash<config>::IsTxnIDComplete(const Global<config>& glbl) const noexcept
     {
         return IsComplete(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionIndependentStash<config, conn>::IsDBIDComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionIndependentStash<config>::IsDBIDComplete(const Global<config>& glbl) const noexcept
     {
         return true;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionIndependentStash<config, conn>::IsComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionIndependentStash<config>::IsComplete(const Global<config>& glbl) const noexcept
     {
         return this->GotRetryAck() || IsCompResponseComplete(glbl) && IsStashDoneResponseComplete(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionIndependentStash<config, conn>::IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionIndependentStash<config>::IsDBIDOverlappable(const Global<config>& glbl) const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionIndependentStash<config, conn>::GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionIndependentStash<config>::GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept
     {
         return this->GetLastRSP({ Opcodes::RSP::Comp, Opcodes::RSP::StashDone, Opcodes::RSP::CompStashDone });
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> XactionIndependentStash<config, conn>::GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::REQ<config>::tgtid_t> XactionIndependentStash<config>::GetPrimaryTgtIDNonREQ(const Global<config>& glbl) const noexcept
     {
-        const FiredResponseFlit<config, conn>* optSource = GetPrimaryTgtIDSourceNonREQ(glbl);
+        const FiredResponseFlit<config>* optSource = GetPrimaryTgtIDSourceNonREQ(glbl);
 
         if (!optSource)
             return std::nullopt;
@@ -221,74 +209,64 @@ namespace /*CHI::*/Xact {
         return { optSource->flit.rsp.SrcID() };
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionIndependentStash<config, conn>::IsDMTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionIndependentStash<config>::IsDMTPossible() const noexcept
     {
         return true;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionIndependentStash<config, conn>::IsDCTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionIndependentStash<config>::IsDCTPossible() const noexcept
     {
         return true;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionIndependentStash<config, conn>::IsDWTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionIndependentStash<config>::IsDWTPossible() const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionIndependentStash<config, conn>::GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionIndependentStash<config>::GetDMTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return this->GetFirstDATFrom(glbl, XactScope::Subordinate,
             { Opcodes::DAT::CompData, Opcodes::DAT::DataSepResp });
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionIndependentStash<config, conn>::GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionIndependentStash<config>::GetDMTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionIndependentStash<config, conn>::GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionIndependentStash<config>::GetDCTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return this->GetFirstDATFrom(glbl, XactScope::Requester,
             { Opcodes::DAT::CompData });
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionIndependentStash<config, conn>::GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionIndependentStash<config>::GetDCTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionIndependentStash<config, conn>::GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionIndependentStash<config>::GetDWTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionIndependentStash<config, conn>::GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionIndependentStash<config>::GetDWTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionIndependentStash<config, conn>::NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum XactionIndependentStash<config>::NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(glbl))
             return XactDenial::DENIED_COMPLETED_RSP;
@@ -381,9 +359,8 @@ namespace /*CHI::*/Xact {
         return XactDenial::DENIED_RSP_OPCODE;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionIndependentStash<config, conn>::NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum XactionIndependentStash<config>::NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         return XactDenial::DENIED_CHANNEL_DAT;
     }

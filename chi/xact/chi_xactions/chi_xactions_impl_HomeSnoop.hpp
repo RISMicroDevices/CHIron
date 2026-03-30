@@ -20,55 +20,54 @@ namespace CHI {
 */
     namespace Xact {
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class XactionHomeSnoop : public Xaction<config, conn> {
+        template<FlitConfigurationConcept config>
+        class XactionHomeSnoop : public Xaction<config> {
         public:
-            XactionHomeSnoop(const Global<config, conn>& glbl, const FiredRequestFlit<config, conn>& first) noexcept;
-
-        public:
-            virtual std::shared_ptr<Xaction<config, conn>>  Clone() const noexcept override;
-            std::shared_ptr<XactionHomeSnoop<config, conn>> CloneAsIs() const noexcept;
+            XactionHomeSnoop(const Global<config>& glbl, const FiredRequestFlit<config>& first) noexcept;
 
         public:
-            bool                            IsResponseComplete(const Global<config, conn>& glbl) const noexcept;
-            bool                            IsDataComplete(const Global<config, conn>& glbl) const noexcept;
+            virtual std::shared_ptr<Xaction<config>>  Clone() const noexcept override;
+            std::shared_ptr<XactionHomeSnoop<config>> CloneAsIs() const noexcept;
 
-            virtual bool                    IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept override;
-            virtual bool                    IsDBIDComplete(const Global<config, conn>& glbl) const noexcept override;
-            virtual bool                    IsComplete(const Global<config, conn>& glbl) const noexcept override;
+        public:
+            bool                            IsResponseComplete(const Global<config>& glbl) const noexcept;
+            bool                            IsDataComplete(const Global<config>& glbl) const noexcept;
 
-            virtual bool                    IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept override;
+            virtual bool                    IsTxnIDComplete(const Global<config>& glbl) const noexcept override;
+            virtual bool                    IsDBIDComplete(const Global<config>& glbl) const noexcept override;
+            virtual bool                    IsComplete(const Global<config>& glbl) const noexcept override;
+
+            virtual bool                    IsDBIDOverlappable(const Global<config>& glbl) const noexcept override;
 
         protected:
-            virtual const FiredResponseFlit<config, conn>*  
-                                            GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept override;
-            virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
-                                            GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*  
+                                            GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept override;
+            virtual std::optional<typename Flits::REQ<config>::tgtid_t>
+                                            GetPrimaryTgtIDNonREQ(const Global<config>& glbl) const noexcept override;
 
         public:
             virtual bool                    IsDMTPossible() const noexcept override;
             virtual bool                    IsDCTPossible() const noexcept override;
             virtual bool                    IsDWTPossible() const noexcept override;
 
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDMTSrcIDSource(const Global<config>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDMTTgtIDSource(const Global<config>& glbl) const noexcept override;
 
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDCTSrcIDSource(const Global<config>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDCTTgtIDSource(const Global<config>& glbl) const noexcept override;
 
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept override;
-            virtual const FiredResponseFlit<config, conn>*
-                                            GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDWTSrcIDSource(const Global<config>& glbl) const noexcept override;
+            virtual const FiredResponseFlit<config>*
+                                            GetDWTTgtIDSource(const Global<config>& glbl) const noexcept override;
 
         public:
-            virtual XactDenialEnum          NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
-            virtual XactDenialEnum          NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept override;
+            virtual XactDenialEnum          NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool& firstDBID) noexcept override;
         };
     }
 /*
@@ -79,10 +78,9 @@ namespace CHI {
 // Implementation of: class XactionHomeSnoop
 namespace /*CHI::*/Xact  {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactionHomeSnoop<config, conn>::XactionHomeSnoop(const Global<config, conn>& glbl, const FiredRequestFlit<config, conn>& first) noexcept
-        : Xaction<config, conn>(XactionType::HomeSnoop, first)
+    template<FlitConfigurationConcept config>
+    inline XactionHomeSnoop<config>::XactionHomeSnoop(const Global<config>& glbl, const FiredRequestFlit<config>& first) noexcept
+        : Xaction<config>(XactionType::HomeSnoop, first)
     {
         this->firstDenial = XactDenial::ACCEPTED;
 
@@ -128,23 +126,20 @@ namespace /*CHI::*/Xact  {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> XactionHomeSnoop<config, conn>::Clone() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> XactionHomeSnoop<config>::Clone() const noexcept
     {
-        return static_pointer_cast<Xaction<config, conn>>(CloneAsIs());
+        return static_pointer_cast<Xaction<config>>(CloneAsIs());
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<XactionHomeSnoop<config, conn>> XactionHomeSnoop<config, conn>::CloneAsIs() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<XactionHomeSnoop<config>> XactionHomeSnoop<config>::CloneAsIs() const noexcept
     {
-        return std::make_shared<XactionHomeSnoop<config, conn>>(*this);
+        return std::make_shared<XactionHomeSnoop<config>>(*this);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsResponseComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionHomeSnoop<config>::IsResponseComplete(const Global<config>& glbl) const noexcept
     {
         size_t index = 0;
         for (auto iter = this->subsequence.begin(); iter != this->subsequence.end(); iter++, index++)
@@ -161,12 +156,11 @@ namespace /*CHI::*/Xact  {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsDataComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionHomeSnoop<config>::IsDataComplete(const Global<config>& glbl) const noexcept
     {
         std::bitset<4> completeDataIDMask =
-            details::GetDataIDCompleteMask<config, conn>(Sizes::B64);
+            details::GetDataIDCompleteMask<config>(Sizes::B64);
 
         bool needCollectedSnpDataID = false;
 
@@ -185,7 +179,7 @@ namespace /*CHI::*/Xact  {
              || iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::SnpRespDataPtl)
             {
                 needCollectedSnpDataID = true;
-                collectedSnpDataID |= details::CollectDataID<config, conn>(
+                collectedSnpDataID |= details::CollectDataID<config>(
                     Sizes::B64, iter->flit.dat.DataID());
                 continue;
             }
@@ -194,114 +188,98 @@ namespace /*CHI::*/Xact  {
         return ((completeDataIDMask & ~collectedSnpDataID).none() || !needCollectedSnpDataID);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionHomeSnoop<config>::IsTxnIDComplete(const Global<config>& glbl) const noexcept
     {
         return IsComplete(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsDBIDComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionHomeSnoop<config>::IsDBIDComplete(const Global<config>& glbl) const noexcept
     {
         return IsComplete(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsComplete(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionHomeSnoop<config>::IsComplete(const Global<config>& glbl) const noexcept
     {
         return IsResponseComplete(glbl) && IsDataComplete(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionHomeSnoop<config>::IsDBIDOverlappable(const Global<config>& glbl) const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionHomeSnoop<config, conn>::GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionHomeSnoop<config>::GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> XactionHomeSnoop<config, conn>::GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::REQ<config>::tgtid_t> XactionHomeSnoop<config>::GetPrimaryTgtIDNonREQ(const Global<config>& glbl) const noexcept
     {
         return std::nullopt;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsDMTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionHomeSnoop<config>::IsDMTPossible() const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsDCTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionHomeSnoop<config>::IsDCTPossible() const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool XactionHomeSnoop<config, conn>::IsDWTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool XactionHomeSnoop<config>::IsDWTPossible() const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionHomeSnoop<config, conn>::GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionHomeSnoop<config>::GetDMTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionHomeSnoop<config, conn>::GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionHomeSnoop<config>::GetDMTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionHomeSnoop<config, conn>::GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionHomeSnoop<config>::GetDCTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionHomeSnoop<config, conn>::GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionHomeSnoop<config>::GetDCTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionHomeSnoop<config, conn>::GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionHomeSnoop<config>::GetDWTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* XactionHomeSnoop<config, conn>::GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionHomeSnoop<config>::GetDWTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum XactionHomeSnoop<config>::NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(glbl))
             return XactDenial::DENIED_COMPLETED_RSP;
@@ -353,9 +331,8 @@ namespace /*CHI::*/Xact  {
         return XactDenial::DENIED_RSP_OPCODE;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum XactionHomeSnoop<config, conn>::NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum XactionHomeSnoop<config>::NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(glbl))
             return XactDenial::DENIED_COMPLETED_DAT;

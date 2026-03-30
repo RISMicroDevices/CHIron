@@ -19,8 +19,7 @@ namespace CHI {
 */
     namespace Xact {
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        template<FlitConfigurationConcept config>
         class Local {
             
         };
@@ -48,8 +47,7 @@ namespace CHI {
         };
 
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        template<FlitConfigurationConcept config>
         class Xaction {
         public:
             // *NOTICE: Subsequence Key contains several critical attributes and fields
@@ -60,14 +58,14 @@ namespace CHI {
                 XactDenialEnum  denial;
                 bool            isRSP;
                 union   {
-                    Flits::RSP<config, conn>::opcode_t rsp;
-                    Flits::DAT<config, conn>::opcode_t dat;
+                    Flits::RSP<config>::opcode_t rsp;
+                    Flits::DAT<config>::opcode_t dat;
                 }               opcode;
                 bool            hasDBID;
 
                 SubsequenceKey() noexcept;
-                SubsequenceKey(XactDenialEnum, Flits::RSP<config, conn>::opcode_t, bool hasDBID) noexcept;
-                SubsequenceKey(XactDenialEnum, Flits::DAT<config, conn>::opcode_t, bool hasDBID) noexcept;
+                SubsequenceKey(XactDenialEnum, Flits::RSP<config>::opcode_t, bool hasDBID) noexcept;
+                SubsequenceKey(XactDenialEnum, Flits::DAT<config>::opcode_t, bool hasDBID) noexcept;
 
                 bool        IsRSP() const noexcept;
                 bool        IsDAT() const noexcept;
@@ -82,40 +80,40 @@ namespace CHI {
             const XactionType                               type;
 
         protected:
-            FiredRequestFlit<config, conn>                  first;
+            FiredRequestFlit<config>                        first;
             XactDenialEnum                                  firstDenial;
-            std::vector<FiredResponseFlit<config, conn>>    subsequence;
+            std::vector<FiredResponseFlit<config>>          subsequence;
             std::vector<SubsequenceKey>                     subsequenceKeys;
 
             bool                                            resent;
-            std::shared_ptr<Xaction<config, conn>>          resentXaction;
-            FiredResponseFlit<config, conn>                 sourcePCredit;
+            std::shared_ptr<Xaction<config>>                resentXaction;
+            FiredResponseFlit<config>                       sourcePCredit;
             XactDenialEnum                                  resentDenial;
 
             bool                                            retried;
-            std::shared_ptr<Xaction<config, conn>>          retriedXaction;
+            std::shared_ptr<Xaction<config>>                retriedXaction;
 
         public:
             Companion                                       companion;
 
         public:
             Xaction(XactionType                             type, 
-                    const FiredRequestFlit<config, conn>&   first) noexcept;
+                    const FiredRequestFlit<config>&         first) noexcept;
 
             Xaction(XactionType                             type, 
-                    const FiredRequestFlit<config, conn>&   first,
-                    std::shared_ptr<Xaction<config, conn>>  retried) noexcept;
+                    const FiredRequestFlit<config>&         first,
+                    std::shared_ptr<Xaction<config>>        retried) noexcept;
 
-            XactionType                             GetType() const noexcept;
-
-        public:
-            virtual std::shared_ptr<Xaction<config, conn>>          Clone() const noexcept = 0;
-            template<class T> std::shared_ptr<T>                    Clone() const noexcept;
+            XactionType                                     GetType() const noexcept;
 
         public:
-            const FiredRequestFlit<config, conn>&   GetFirst() const noexcept;
+            virtual std::shared_ptr<Xaction<config>>        Clone() const noexcept = 0;
+            template<class T> std::shared_ptr<T>            Clone() const noexcept;
+
+        public:
+            const FiredRequestFlit<config>&         GetFirst() const noexcept;
             XactDenialEnum                          GetFirstDenial() const noexcept;
-            const std::vector<FiredResponseFlit<config, conn>>&   
+            const std::vector<FiredResponseFlit<config>>&   
                                                     GetSubsequence() const noexcept;
             XactDenialEnum                          GetSubsequentDenial(size_t index) const noexcept;
 
@@ -126,137 +124,137 @@ namespace CHI {
 
         public:
             bool                                    IsSecondTry() const noexcept;
-            std::shared_ptr<Xaction<config, conn>>  GetFirstTry() const noexcept;
+            std::shared_ptr<Xaction<config>>        GetFirstTry() const noexcept;
 
         public:
-            bool                                    HasRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            bool                                    HasDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
+            bool                                    HasRSP(std::initializer_list<typename Flits::RSP<config>::opcode_t>) const noexcept;
+            bool                                    HasDAT(std::initializer_list<typename Flits::DAT<config>::opcode_t>) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstRSP() const noexcept;
-            const FiredResponseFlit<config, conn>*  GetFirstDAT() const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastRSP() const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastDAT() const noexcept;
+            const FiredResponseFlit<config>*       GetFirstRSP() const noexcept;
+            const FiredResponseFlit<config>*       GetFirstDAT() const noexcept;
+            const FiredResponseFlit<config>*       GetLastRSP() const noexcept;
+            const FiredResponseFlit<config>*       GetLastDAT() const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirst(ChannelTypeEnum channel) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLast(ChannelTypeEnum channel) const noexcept;
+            const FiredResponseFlit<config>*       GetFirst(ChannelTypeEnum channel) const noexcept;
+            const FiredResponseFlit<config>*       GetLast(ChannelTypeEnum channel) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetFirstDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstRSP(std::initializer_list<typename Flits::RSP<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstDAT(std::initializer_list<typename Flits::DAT<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetLastRSP(std::initializer_list<typename Flits::RSP<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetLastDAT(std::initializer_list<typename Flits::DAT<config>::opcode_t>) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirst(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLast(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept;
+            const FiredResponseFlit<config>*       GetFirst(std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept;
+            const FiredResponseFlit<config>*       GetLast(std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstRSPFrom(const Global<config, conn>&, XactScopeEnum) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetFirstDATFrom(const Global<config, conn>&, XactScopeEnum) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastRSPFrom(const Global<config, conn>&, XactScopeEnum) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastDATFrom(const Global<config, conn>&, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstRSPFrom(const Global<config>&, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstDATFrom(const Global<config>&, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetLastRSPFrom(const Global<config>&, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetLastDATFrom(const Global<config>&, XactScopeEnum) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstFrom(const Global<config, conn>&, ChannelTypeEnum, XactScopeEnum) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastFrom(const Global<config, conn>&, ChannelTypeEnum, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstFrom(const Global<config>&, ChannelTypeEnum, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetLastFrom(const Global<config>&, ChannelTypeEnum, XactScopeEnum) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstRSPFrom(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetFirstDATFrom(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastRSPFrom(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastDATFrom(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstRSPFrom(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstDATFrom(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::DAT<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetLastRSPFrom(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetLastDATFrom(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::DAT<config>::opcode_t>) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstFrom(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastFrom(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstFrom(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept;
+            const FiredResponseFlit<config>*       GetLastFrom(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstRSPTo(const Global<config, conn>&, XactScopeEnum) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetFirstDATTo(const Global<config, conn>&, XactScopeEnum) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastRSPTo(const Global<config, conn>&, XactScopeEnum) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastDATTo(const Global<config, conn>&, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstRSPTo(const Global<config>&, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstDATTo(const Global<config>&, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetLastRSPTo(const Global<config>&, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetLastDATTo(const Global<config>&, XactScopeEnum) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstTo(const Global<config, conn>&, ChannelTypeEnum, XactScopeEnum) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastTo(const Global<config, conn>&, ChannelTypeEnum, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstTo(const Global<config>&, ChannelTypeEnum, XactScopeEnum) const noexcept;
+            const FiredResponseFlit<config>*       GetLastTo(const Global<config>&, ChannelTypeEnum, XactScopeEnum) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstRSPTo(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetFirstDATTo(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastRSPTo(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastDATTo(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstRSPTo(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstDATTo(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::DAT<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetLastRSPTo(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*       GetLastDATTo(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::DAT<config>::opcode_t>) const noexcept;
 
-            const FiredResponseFlit<config, conn>*  GetFirstTo(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastTo(const Global<config, conn>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept;
+            const FiredResponseFlit<config>*       GetFirstTo(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept;
+            const FiredResponseFlit<config>*       GetLastTo(const Global<config>&, XactScopeEnum, std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept;
 
         public:
             bool                                    GotDBID() const noexcept;
-            std::optional<typename Flits::RSP<config, conn>::dbid_t>
+            std::optional<typename Flits::RSP<config>::dbid_t>
                                                     GetDBID() const noexcept;
-            const FiredResponseFlit<config, conn>*  GetDBIDSource() const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastDBIDSourceRSP(std::initializer_list<typename Flits::RSP<config, conn>::opcode_t>) const noexcept;
-            const FiredResponseFlit<config, conn>*  GetLastDBIDSourceDAT(std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*        GetDBIDSource() const noexcept;
+            const FiredResponseFlit<config>*        GetLastDBIDSourceRSP(std::initializer_list<typename Flits::RSP<config>::opcode_t>) const noexcept;
+            const FiredResponseFlit<config>*        GetLastDBIDSourceDAT(std::initializer_list<typename Flits::DAT<config>::opcode_t>) const noexcept;
 
-            bool                                    GotPrimaryTgtID(const Global<config, conn>& glbl) const noexcept;
-            std::optional<typename Flits::REQ<config, conn>::tgtid_t>
-                                                    GetPrimaryTgtID(const Global<config, conn>& glbl) const noexcept;
-            const FiredFlit<config, conn>*          GetPrimaryTgtIDSource(const Global<config, conn>& glbl) const noexcept;
-            bool                                    IsPrimaryTgtIDSourceREQ(const Global<config, conn>& glbl) const noexcept;
+            bool                                    GotPrimaryTgtID(const Global<config>& glbl) const noexcept;
+            std::optional<typename Flits::REQ<config>::tgtid_t>
+                                                    GetPrimaryTgtID(const Global<config>& glbl) const noexcept;
+            const FiredFlit<config>*                GetPrimaryTgtIDSource(const Global<config>& glbl) const noexcept;
+            bool                                    IsPrimaryTgtIDSourceREQ(const Global<config>& glbl) const noexcept;
 
-            bool                                    GotDMTSrcID(const Global<config, conn>& glbl) const noexcept;
-            std::optional<typename Flits::DAT<config, conn>::srcid_t>
-                                                    GetDMTSrcID(const Global<config, conn>& glbl) const noexcept;
-            virtual const FiredResponseFlit<config, conn>*
-                                                    GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept;
+            bool                                    GotDMTSrcID(const Global<config>& glbl) const noexcept;
+            std::optional<typename Flits::DAT<config>::srcid_t>
+                                                    GetDMTSrcID(const Global<config>& glbl) const noexcept;
+            virtual const FiredResponseFlit<config>*
+                                                    GetDMTSrcIDSource(const Global<config>& glbl) const noexcept;
 
-            bool                                    GotDMTTgtID(const Global<config, conn>& glbl) const noexcept;
-            std::optional<typename Flits::DAT<config, conn>::tgtid_t>
-                                                    GetDMTTgtID(const Global<config, conn>& glbl) const noexcept;
-            virtual const FiredResponseFlit<config, conn>*
-                                                    GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept;
+            bool                                    GotDMTTgtID(const Global<config>& glbl) const noexcept;
+            std::optional<typename Flits::DAT<config>::tgtid_t>
+                                                    GetDMTTgtID(const Global<config>& glbl) const noexcept;
+            virtual const FiredResponseFlit<config>*
+                                                    GetDMTTgtIDSource(const Global<config>& glbl) const noexcept;
 
-            bool                                    GotDCTSrcID(const Global<config, conn>& glbl) const noexcept;
-            std::optional<typename Flits::DAT<config, conn>::srcid_t>
-                                                    GetDCTSrcID(const Global<config, conn>& glbl) const noexcept;
-            virtual const FiredResponseFlit<config, conn>*
-                                                    GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept;
+            bool                                    GotDCTSrcID(const Global<config>& glbl) const noexcept;
+            std::optional<typename Flits::DAT<config>::srcid_t>
+                                                    GetDCTSrcID(const Global<config>& glbl) const noexcept;
+            virtual const FiredResponseFlit<config>*
+                                                    GetDCTSrcIDSource(const Global<config>& glbl) const noexcept;
 
-            bool                                    GotDCTTgtID(const Global<config, conn>& glbl) const noexcept;
-            std::optional<typename Flits::DAT<config, conn>::tgtid_t>
-                                                    GetDCTTgtID(const Global<config, conn>& glbl) const noexcept;
-            virtual const FiredResponseFlit<config, conn>*
-                                                    GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept;
+            bool                                    GotDCTTgtID(const Global<config>& glbl) const noexcept;
+            std::optional<typename Flits::DAT<config>::tgtid_t>
+                                                    GetDCTTgtID(const Global<config>& glbl) const noexcept;
+            virtual const FiredResponseFlit<config>*
+                                                    GetDCTTgtIDSource(const Global<config>& glbl) const noexcept;
 
-            bool                                    GotDWTSrcID(const Global<config, conn>& glbl) const noexcept;
-            std::optional<typename Flits::DAT<config, conn>::srcid_t>
-                                                    GetDWTSrcID(const Global<config, conn>& glbl) const noexcept;
-            virtual const FiredResponseFlit<config, conn>*
-                                                    GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept;
+            bool                                    GotDWTSrcID(const Global<config>& glbl) const noexcept;
+            std::optional<typename Flits::DAT<config>::srcid_t>
+                                                    GetDWTSrcID(const Global<config>& glbl) const noexcept;
+            virtual const FiredResponseFlit<config>*
+                                                    GetDWTSrcIDSource(const Global<config>& glbl) const noexcept;
 
-            bool                                    GotDWTTgtID(const Global<config, conn>& glbl) const noexcept;
-            std::optional<typename Flits::RSP<config, conn>::srcid_t>
-                                                    GetDWTTgtID(const Global<config, conn>& glbl) const noexcept;
-            virtual const FiredResponseFlit<config, conn>*  
-                                                    GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept;
+            bool                                    GotDWTTgtID(const Global<config>& glbl) const noexcept;
+            std::optional<typename Flits::RSP<config>::srcid_t>
+                                                    GetDWTTgtID(const Global<config>& glbl) const noexcept;
+            virtual const FiredResponseFlit<config>*  
+                                                    GetDWTTgtIDSource(const Global<config>& glbl) const noexcept;
 
             bool                                    GotRetryAck() const noexcept;
-            const FiredResponseFlit<config, conn>*  GetRetryAck() const noexcept;
+            const FiredResponseFlit<config>*        GetRetryAck() const noexcept;
 
             bool                                    IsResent() const noexcept;
-            std::shared_ptr<Xaction<config, conn>>  GetResentXaction() const noexcept;
-            const FiredResponseFlit<config, conn>&  GetPCreditSource() const noexcept;
+            std::shared_ptr<Xaction<config>>        GetResentXaction() const noexcept;
+            const FiredResponseFlit<config>&        GetPCreditSource() const noexcept;
 
-            virtual XactDenialEnum                  Next(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& flit, bool& hasDBID, bool& firstDBID) noexcept;
-            virtual XactDenialEnum                  NextRSP(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
-            virtual XactDenialEnum                  NextDAT(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
+            virtual XactDenialEnum                  Next(const Global<config>& glbl, const FiredResponseFlit<config>& flit, bool& hasDBID, bool& firstDBID) noexcept;
+            virtual XactDenialEnum                  NextRSP(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
+            virtual XactDenialEnum                  NextDAT(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
 
-            virtual XactDenialEnum                  Resend(const Global<config, conn>& glbl, FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
+            virtual XactDenialEnum                  Resend(const Global<config>& glbl, FiredResponseFlit<config> pCrdFlit, std::shared_ptr<Xaction<config>> xaction) noexcept;
             virtual bool                            RevertResent() noexcept;
 
-            virtual bool                            IsTxnIDComplete(const Global<config, conn>& glbl) const noexcept = 0;
-            virtual bool                            IsDBIDComplete(const Global<config, conn>& glbl) const noexcept = 0;
-            virtual bool                            IsComplete(const Global<config, conn>& glbl) const noexcept = 0;
+            virtual bool                            IsTxnIDComplete(const Global<config>& glbl) const noexcept = 0;
+            virtual bool                            IsDBIDComplete(const Global<config>& glbl) const noexcept = 0;
+            virtual bool                            IsComplete(const Global<config>& glbl) const noexcept = 0;
 
             // *NOTICE: Responses with both valid TxnID and DBID like Comp could be out-of-order on interconnect
             //          and came after DBID grant (e.g. DBIDResp, CompDBIDResp).
-            virtual bool                            IsDBIDOverlappable(const Global<config, conn>& glbl) const noexcept = 0;
+            virtual bool                            IsDBIDOverlappable(const Global<config>& glbl) const noexcept = 0;
 
         protected:
-            virtual const FiredResponseFlit<config, conn>*  
-                                                    GetPrimaryTgtIDSourceNonREQ(const Global<config, conn>& glbl) const noexcept = 0;
-            virtual std::optional<typename Flits::REQ<config, conn>::tgtid_t>
-                                                    GetPrimaryTgtIDNonREQ(const Global<config, conn>& glbl) const noexcept = 0;
+            virtual const FiredResponseFlit<config>*  
+                                                    GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept = 0;
+            virtual std::optional<typename Flits::REQ<config>::tgtid_t>
+                                                    GetPrimaryTgtIDNonREQ(const Global<config>& glbl) const noexcept = 0;
 
         public:
             virtual bool                            IsDMTPossible() const noexcept;
@@ -264,38 +262,35 @@ namespace CHI {
             virtual bool                            IsDWTPossible() const noexcept;
 
         protected:
-            virtual XactDenialEnum                  NextRSPNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept = 0;
-            virtual XactDenialEnum                  NextDATNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept = 0;
+            virtual XactDenialEnum                  NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept = 0;
+            virtual XactDenialEnum                  NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool& firstDBID) noexcept = 0;
 
         protected:
-            virtual XactDenialEnum                  NextRetryAckNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit) noexcept;
+            virtual XactDenialEnum                  NextRetryAckNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit) noexcept;
         
-            virtual XactDenialEnum                  ResendNoRecord(const Global<config, conn>& glbl, FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept;
+            virtual XactDenialEnum                  ResendNoRecord(const Global<config>& glbl, FiredResponseFlit<config> pCrdFlit, std::shared_ptr<Xaction<config>> xaction) noexcept;
         
-            virtual bool                            NextDataID(Flits::REQ<config, conn>::ssize_t, const FiredResponseFlit<config, conn>& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>) noexcept;
-            virtual bool                            NextREQDataID(const FiredResponseFlit<config, conn>& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> = {}) noexcept;
-            virtual bool                            NextSNPDataID(const FiredResponseFlit<config, conn>& datFlit, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> = {}) noexcept;
+            virtual bool                            NextDataID(Flits::REQ<config>::ssize_t, const FiredResponseFlit<config>& datFlit, std::initializer_list<typename Flits::DAT<config>::opcode_t>) noexcept;
+            virtual bool                            NextREQDataID(const FiredResponseFlit<config>& datFlit, std::initializer_list<typename Flits::DAT<config>::opcode_t> = {}) noexcept;
+            virtual bool                            NextSNPDataID(const FiredResponseFlit<config>& datFlit, std::initializer_list<typename Flits::DAT<config>::opcode_t> = {}) noexcept;
         };
     }
 
     namespace Xact::details {
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn>
+        template<FlitConfigurationConcept config>
         inline static std::bitset<4> CollectDataID(
-            typename Flits::REQ<config, conn>::ssize_t  reqSize,
-            typename Flits::DAT<config, conn>::dataid_t dataID) noexcept;
+            typename Flits::REQ<config>::ssize_t    reqSize,
+            typename Flits::DAT<config>::dataid_t   dataID) noexcept;
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn>
+        template<FlitConfigurationConcept config>
         inline static std::bitset<4> CollectDataID(
-            typename Flits::REQ<config, conn>::ssize_t  reqSize,
-            const std::vector<FiredResponseFlit<config, conn>>&) noexcept;
+            typename Flits::REQ<config>::ssize_t    reqSize,
+            const std::vector<FiredResponseFlit<config>>&) noexcept;
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn>
+        template<FlitConfigurationConcept config>
         inline static std::bitset<4> GetDataIDCompleteMask(
-            typename Flits::REQ<config, conn>::ssize_t  reqSize) noexcept;
+            typename Flits::REQ<config>::ssize_t    reqSize) noexcept;
     }
 /*
 }
@@ -305,11 +300,10 @@ namespace CHI {
 // Implementation of: details
 namespace /*CHI::*/Xact::details {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
+    template<FlitConfigurationConcept config>
     inline static std::bitset<4> CollectDataID(
-        typename Flits::REQ<config, conn>::ssize_t  reqSize,
-        typename Flits::DAT<config, conn>::dataid_t dataID) noexcept
+        typename Flits::REQ<config>::ssize_t  reqSize,
+        typename Flits::DAT<config>::dataid_t dataID) noexcept
     {
         std::bitset<4> collectedDataID;
         unsigned int requestSize = (1 << reqSize) << 3;
@@ -338,21 +332,20 @@ namespace /*CHI::*/Xact::details {
         return collectedDataID;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
+    template<FlitConfigurationConcept config>
     inline static std::bitset<4> CollectDataID(
-        typename Flits::REQ<config, conn>::ssize_t  reqSize,
-        const std::vector<FiredResponseFlit<config, conn>>& vec,
-        std::function<bool(size_t, const FiredResponseFlit<config, conn>&)> validFunc = [](auto, auto) -> bool { return true; }) noexcept
+        typename Flits::REQ<config>::ssize_t  reqSize,
+        const std::vector<FiredResponseFlit<config>>& vec,
+        std::function<bool(size_t, const FiredResponseFlit<config>&)> validFunc = [](auto, auto) -> bool { return true; }) noexcept
     {
         std::bitset<4> collectedDataID;
 
         size_t index = 0;
-        for (const FiredResponseFlit<config, conn>& flit : vec)
+        for (const FiredResponseFlit<config>& flit : vec)
         {
             if (flit.IsDAT() && validFunc(index, flit))
             {
-                collectedDataID |= CollectDataID<config, conn>(
+                collectedDataID |= CollectDataID<config>(
                     reqSize, flit.flit.dat.DataID());
             }
             
@@ -362,10 +355,9 @@ namespace /*CHI::*/Xact::details {
         return collectedDataID;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
+    template<FlitConfigurationConcept config>
     inline static std::bitset<4> GetDataIDCompleteMask(
-        typename Flits::REQ<config, conn>::ssize_t  reqSize) noexcept
+        typename Flits::REQ<config>::ssize_t  reqSize) noexcept
     {
         std::bitset<4> collectedDataID;
         unsigned int requestSize = (1 << reqSize) << 3;
@@ -419,21 +411,19 @@ namespace /*CHI::*/Xact {
     ...
     */
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Xaction<config, conn>::SubsequenceKey::SubsequenceKey() noexcept
+    template<FlitConfigurationConcept config>
+    inline Xaction<config>::SubsequenceKey::SubsequenceKey() noexcept
     {
         this->denial        = XactDenial::NOT_INITIALIZED;
         this->isRSP         = false;
         this->hasDBID       = false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Xaction<config, conn>::SubsequenceKey::SubsequenceKey(
-        XactDenialEnum                      denial,
-        Flits::RSP<config, conn>::opcode_t  opcode,
-        bool                                hasDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline Xaction<config>::SubsequenceKey::SubsequenceKey(
+        XactDenialEnum                  denial,
+        Flits::RSP<config>::opcode_t    opcode,
+        bool                            hasDBID) noexcept
     {
         this->denial        = denial;
         this->isRSP         = true;
@@ -441,12 +431,11 @@ namespace /*CHI::*/Xact {
         this->hasDBID       = hasDBID;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Xaction<config, conn>::SubsequenceKey::SubsequenceKey(
-        XactDenialEnum                      denial,
-        Flits::DAT<config, conn>::opcode_t  opcode,
-        bool                                hasDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline Xaction<config>::SubsequenceKey::SubsequenceKey(
+        XactDenialEnum                  denial,
+        Flits::DAT<config>::opcode_t    opcode,
+        bool                            hasDBID) noexcept
     {
         this->denial        = denial;
         this->isRSP         = false;
@@ -454,37 +443,32 @@ namespace /*CHI::*/Xact {
         this->hasDBID       = hasDBID;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::SubsequenceKey::IsRSP() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::SubsequenceKey::IsRSP() const noexcept
     {
         return isRSP;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::SubsequenceKey::IsDAT() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::SubsequenceKey::IsDAT() const noexcept
     {
         return !IsRSP();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::SubsequenceKey::IsAccepted() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::SubsequenceKey::IsAccepted() const noexcept
     {
         return denial == XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::SubsequenceKey::IsDenied() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::SubsequenceKey::IsDenied() const noexcept
     {
         return !IsAccepted();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::SubsequenceKey::HasDBID() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::SubsequenceKey::HasDBID() const noexcept
     {
         return hasDBID;
     }
@@ -493,25 +477,10 @@ namespace /*CHI::*/Xact {
 
 // Implementation of: class Xaction
 namespace /*CHI::*/Xact {
-    /*
-    FiredRequestFlit<config, conn>                  first;
-    XactDenialEnum                                  firstDenial;
-    std::vector<FiredResponseFlit<config, conn>>    subsequence;
-    std::vector<SubsequenceKey>                     subsequenceKeys;
 
-    bool                                            resent;
-    std::shared_ptr<Xaction<config, conn>>          resentXaction;
-    FiredResponseFlit<config, conn>                 sourcePCredit;
-    XactDenialEnum                                  resentDenial;
-
-    bool                                            retried;
-    std::shared_ptr<Xaction<config, conn>>          retriedXaction;
-    */
-
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Xaction<config, conn>::Xaction(XactionType                               type, 
-                                          const FiredRequestFlit<config, conn>&     first) noexcept
+    template<FlitConfigurationConcept config>
+    inline Xaction<config>::Xaction(XactionType                     type, 
+                                    const FiredRequestFlit<config>& first) noexcept
         : type              (type)
         , first             (first)
         , firstDenial       (XactDenial::NOT_INITIALIZED)
@@ -525,11 +494,10 @@ namespace /*CHI::*/Xact {
         , retriedXaction    (nullptr)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Xaction<config, conn>::Xaction(XactionType                               type, 
-                                          const FiredRequestFlit<config, conn>&     first,
-                                          std::shared_ptr<Xaction<config, conn>>    retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline Xaction<config>::Xaction(XactionType                         type, 
+                                    const FiredRequestFlit<config>&     first,
+                                    std::shared_ptr<Xaction<config>>    retried) noexcept
         : type              (type)
         , first             (first)
         , firstDenial       (XactDenial::NOT_INITIALIZED)
@@ -543,52 +511,45 @@ namespace /*CHI::*/Xact {
         , retriedXaction    (retried)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactionType Xaction<config, conn>::GetType() const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactionType Xaction<config>::GetType() const noexcept
     {
         return type;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
+    template<FlitConfigurationConcept config>
     template<class T>
-    inline std::shared_ptr<T> Xaction<config, conn>::Clone() const noexcept
+    inline std::shared_ptr<T> Xaction<config>::Clone() const noexcept
     {
         return std::make_shared<T>(*static_cast<T*>(this));
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredRequestFlit<config, conn>& Xaction<config, conn>::GetFirst() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredRequestFlit<config>& Xaction<config>::GetFirst() const noexcept
     {
         return first;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::GetFirstDenial() const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::GetFirstDenial() const noexcept
     {
         return firstDenial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const std::vector<FiredResponseFlit<config, conn>>& Xaction<config, conn>::GetSubsequence() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const std::vector<FiredResponseFlit<config>>& Xaction<config>::GetSubsequence() const noexcept
     {
         return subsequence;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::GetSubsequentDenial(size_t index) const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::GetSubsequentDenial(size_t index) const noexcept
     {
         return subsequenceKeys[index].denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::GetLastDenial() const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::GetLastDenial() const noexcept
     {
         if (subsequenceKeys.empty())
             return firstDenial;
@@ -596,9 +557,8 @@ namespace /*CHI::*/Xact {
         return subsequenceKeys.back().denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void Xaction<config, conn>::SetLastDenial(XactDenialEnum denial) noexcept
+    template<FlitConfigurationConcept config>
+    inline void Xaction<config>::SetLastDenial(XactDenialEnum denial) noexcept
     {
         if (subsequenceKeys.empty())
             this->firstDenial = denial;
@@ -606,9 +566,8 @@ namespace /*CHI::*/Xact {
         subsequenceKeys.back().denial = denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline size_t Xaction<config, conn>::Revert(size_t count) noexcept
+    template<FlitConfigurationConcept config>
+    inline size_t Xaction<config>::Revert(size_t count) noexcept
     {
         size_t rCount = 0;
         while (count-- > 0 && !subsequence.empty())
@@ -622,24 +581,21 @@ namespace /*CHI::*/Xact {
         return rCount;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::IsSecondTry() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::IsSecondTry() const noexcept
     {
         return retried;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> Xaction<config, conn>::GetFirstTry() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> Xaction<config>::GetFirstTry() const noexcept
     {
         return retriedXaction;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::HasRSP(
-        std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::HasRSP(
+        std::initializer_list<typename Flits::RSP<config>::opcode_t> opcodes) const noexcept
     {
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
@@ -660,10 +616,9 @@ namespace /*CHI::*/Xact {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::HasDAT(
-        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::HasDAT(
+        std::initializer_list<typename Flits::DAT<config>::opcode_t> opcodes) const noexcept
     {
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
@@ -684,37 +639,32 @@ namespace /*CHI::*/Xact {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstRSP() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstRSP() const noexcept
     {
         return GetFirst(ChannelType::RSP);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstDAT() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstDAT() const noexcept
     {
         return GetFirst(ChannelType::DAT);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastRSP() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastRSP() const noexcept
     {
         return GetLast(ChannelType::RSP);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDAT() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDAT() const noexcept
     {
         return GetLast(ChannelType::DAT);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirst(ChannelTypeEnum channel) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirst(ChannelTypeEnum channel) const noexcept
     {
         size_t index = 0;
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++, index++)
@@ -731,9 +681,8 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLast(ChannelTypeEnum channel) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLast(ChannelTypeEnum channel) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
         for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
@@ -750,43 +699,38 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstRSP(
-        std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstRSP(
+        std::initializer_list<typename Flits::RSP<config>::opcode_t> opcodes) const noexcept
     {
         return GetFirst(opcodes, {});
     }
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstDAT(
-        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstDAT(
+        std::initializer_list<typename Flits::DAT<config>::opcode_t> opcodes) const noexcept
     {
         return GetFirst({}, opcodes);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastRSP(
-        std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastRSP(
+        std::initializer_list<typename Flits::RSP<config>::opcode_t> opcodes) const noexcept
     {
         return GetLast(opcodes, {});
     }
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDAT(
-        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDAT(
+        std::initializer_list<typename Flits::DAT<config>::opcode_t> opcodes) const noexcept
     {
         return GetLast({}, opcodes);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirst(
-        std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes,
-        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirst(
+        std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes,
+        std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept
     {
         size_t index = 0;
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++, index++)
@@ -811,11 +755,10 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLast(
-        std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes,
-        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLast(
+        std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes,
+        std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
         for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
@@ -840,37 +783,32 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstRSPFrom(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstRSPFrom(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return GetFirstFrom(glbl, ChannelType::RSP, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstDATFrom(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstDATFrom(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return GetFirstFrom(glbl, ChannelType::DAT, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastRSPFrom(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastRSPFrom(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return GetLastFrom(glbl, ChannelType::RSP, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDATFrom(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDATFrom(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return GetLastFrom(glbl, ChannelType::DAT, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstFrom(const Global<config, conn>& glbl, ChannelTypeEnum channel, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstFrom(const Global<config>& glbl, ChannelTypeEnum channel, XactScopeEnum scope) const noexcept
     {
         size_t index = 0;
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++, index++)
@@ -890,9 +828,8 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastFrom(const Global<config, conn>& glbl, ChannelTypeEnum channel, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastFrom(const Global<config>& glbl, ChannelTypeEnum channel, XactScopeEnum scope) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
         for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
@@ -912,37 +849,32 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstRSPFrom(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstRSPFrom(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config>::opcode_t> opcodes) const noexcept
     {
         return GetFirstFrom(glbl, scope, opcodes, {});
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstDATFrom(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstDATFrom(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::DAT<config>::opcode_t> opcodes) const noexcept
     {
         return GetFirstFrom(glbl, scope, {}, opcodes);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastRSPFrom(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastRSPFrom(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config>::opcode_t> opcodes) const noexcept
     {
         return GetLastFrom(glbl, scope, opcodes, {});
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDATFrom(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDATFrom(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::DAT<config>::opcode_t> opcodes) const noexcept
     {
         return GetLastFrom(glbl, scope, {}, opcodes);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstFrom(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstFrom(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept
     {
         size_t index = 0;
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++, index++)
@@ -970,9 +902,8 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastFrom(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastFrom(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
         for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
@@ -1000,37 +931,32 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstRSPTo(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstRSPTo(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return GetFirstTo(glbl, ChannelType::RSP, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstDATTo(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstDATTo(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return GetFirstTo(glbl, ChannelType::DAT, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastRSPTo(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastRSPTo(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return GetLastTo(glbl, ChannelType::RSP, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDATTo(const Global<config, conn>& glbl, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDATTo(const Global<config>& glbl, XactScopeEnum scope) const noexcept
     {
         return GetLastTo(glbl, ChannelType::DAT, scope);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstTo(const Global<config, conn>& glbl, ChannelTypeEnum channel, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstTo(const Global<config>& glbl, ChannelTypeEnum channel, XactScopeEnum scope) const noexcept
     {
         size_t index = 0;
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++, index++)
@@ -1050,9 +976,8 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastTo(const Global<config, conn>& glbl, ChannelTypeEnum channel, XactScopeEnum scope) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastTo(const Global<config>& glbl, ChannelTypeEnum channel, XactScopeEnum scope) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
         for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
@@ -1072,37 +997,32 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstRSPTo(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstRSPTo(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config>::opcode_t> opcodes) const noexcept
     {
         return GetFirstTo(glbl, scope, opcodes, {});
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstDATTo(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstDATTo(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::DAT<config>::opcode_t> opcodes) const noexcept
     {
         return GetFirstTo(glbl, scope, {}, opcodes);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastRSPTo(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastRSPTo(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config>::opcode_t> opcodes) const noexcept
     {
         return GetLastTo(glbl, scope, opcodes, {});
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDATTo(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDATTo(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::DAT<config>::opcode_t> opcodes) const noexcept
     {
         return GetLastTo(glbl, scope, {}, opcodes);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetFirstTo(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetFirstTo(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept
     {
         size_t index = 0;
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++, index++)
@@ -1130,9 +1050,8 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastTo(const Global<config, conn>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> datOpcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastTo(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
         for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index++)
@@ -1160,33 +1079,30 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::GotDBID() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::GotDBID() const noexcept
     {
         return GetDBIDSource() != nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::RSP<config, conn>::dbid_t> Xaction<config, conn>::GetDBID() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::RSP<config>::dbid_t> Xaction<config>::GetDBID() const noexcept
     {
-        const FiredResponseFlit<config, conn>* dbidSource = GetDBIDSource();
+        const FiredResponseFlit<config>* dbidSource = GetDBIDSource();
 
         if (dbidSource != nullptr)
         {
             if (dbidSource->IsRSP())
                 return { dbidSource->flit.rsp.DBID() };
             else
-                return { static_cast<Flits::RSP<config, conn>::dbid_t>(dbidSource->flit.dat.DBID()) };
+                return { static_cast<Flits::RSP<config>::dbid_t>(dbidSource->flit.dat.DBID()) };
         }
 
         return std::nullopt;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetDBIDSource() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetDBIDSource() const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
         for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
@@ -1201,10 +1117,9 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDBIDSourceRSP(
-        std::initializer_list<typename Flits::RSP<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDBIDSourceRSP(
+        std::initializer_list<typename Flits::RSP<config>::opcode_t> opcodes) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
         for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
@@ -1232,10 +1147,9 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetLastDBIDSourceDAT(
-        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t> opcodes) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDBIDSourceDAT(
+        std::initializer_list<typename Flits::DAT<config>::opcode_t> opcodes) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
         for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
@@ -1263,16 +1177,14 @@ namespace /*CHI::*/Xact {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::GotPrimaryTgtID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::GotPrimaryTgtID(const Global<config>& glbl) const noexcept
     {
         return GetPrimaryTgtID(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::REQ<config, conn>::tgtid_t> Xaction<config, conn>::GetPrimaryTgtID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::REQ<config>::tgtid_t> Xaction<config>::GetPrimaryTgtID(const Global<config>& glbl) const noexcept
     {
         if (IsPrimaryTgtIDSourceREQ(glbl))
             return { this->first.flit.req.TgtID() };
@@ -1280,9 +1192,8 @@ namespace /*CHI::*/Xact {
             return GetPrimaryTgtIDNonREQ(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredFlit<config, conn>* Xaction<config, conn>::GetPrimaryTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredFlit<config>* Xaction<config>::GetPrimaryTgtIDSource(const Global<config>& glbl) const noexcept
     {
         if (IsPrimaryTgtIDSourceREQ(glbl))
             return &(this->first);
@@ -1290,9 +1201,8 @@ namespace /*CHI::*/Xact {
             return GetPrimaryTgtIDSourceNonREQ(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::IsPrimaryTgtIDSourceREQ(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::IsPrimaryTgtIDSourceREQ(const Global<config>& glbl) const noexcept
     {
         if (!this->first.IsREQ())
             return false;
@@ -1313,21 +1223,19 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::GotDMTSrcID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::GotDMTSrcID(const Global<config>& glbl) const noexcept
     {
         return GetDMTSrcID(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::DAT<config, conn>::srcid_t> Xaction<config, conn>::GetDMTSrcID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::DAT<config>::srcid_t> Xaction<config>::GetDMTSrcID(const Global<config>& glbl) const noexcept
     {
         if (!IsDMTPossible())
             return std::nullopt;
 
-        const FiredResponseFlit<config, conn>* optSource = GetDMTSrcIDSource(glbl);
+        const FiredResponseFlit<config>* optSource = GetDMTSrcIDSource(glbl);
 
         if (!optSource)
             return std::nullopt;
@@ -1337,28 +1245,25 @@ namespace /*CHI::*/Xact {
         return { optSource->flit.dat.SrcID() };
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetDMTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetDMTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::GotDMTTgtID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::GotDMTTgtID(const Global<config>& glbl) const noexcept
     {
         return GetDMTTgtID(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::DAT<config, conn>::tgtid_t> Xaction<config, conn>::GetDMTTgtID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::DAT<config>::tgtid_t> Xaction<config>::GetDMTTgtID(const Global<config>& glbl) const noexcept
     {
         if (!IsDMTPossible())
             return std::nullopt;
 
-        const FiredResponseFlit<config, conn>* optSource = GetDMTTgtIDSource(glbl);
+        const FiredResponseFlit<config>* optSource = GetDMTTgtIDSource(glbl);
 
         if (!optSource)
             return std::nullopt;
@@ -1368,28 +1273,25 @@ namespace /*CHI::*/Xact {
         return { optSource->flit.dat.TgtID() };
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetDMTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetDMTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::GotDCTSrcID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::GotDCTSrcID(const Global<config>& glbl) const noexcept
     {
         return GetDCTSrcID(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::DAT<config, conn>::srcid_t> Xaction<config, conn>::GetDCTSrcID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::DAT<config>::srcid_t> Xaction<config>::GetDCTSrcID(const Global<config>& glbl) const noexcept
     {
         if (!IsDCTPossible())
             return std::nullopt;
 
-        const FiredResponseFlit<config, conn>* optSource = GetDCTSrcIDSource(glbl);
+        const FiredResponseFlit<config>* optSource = GetDCTSrcIDSource(glbl);
 
         if (!optSource)
             return std::nullopt;
@@ -1399,28 +1301,25 @@ namespace /*CHI::*/Xact {
         return { optSource->flit.dat.SrcID() };
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetDCTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetDCTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::GotDCTTgtID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::GotDCTTgtID(const Global<config>& glbl) const noexcept
     {
         return GetDCTTgtID(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::DAT<config, conn>::tgtid_t> Xaction<config, conn>::GetDCTTgtID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::DAT<config>::tgtid_t> Xaction<config>::GetDCTTgtID(const Global<config>& glbl) const noexcept
     {
         if (!IsDCTPossible())
             return std::nullopt;
 
-        const FiredResponseFlit<config, conn>* optSource = GetDCTTgtIDSource(glbl);
+        const FiredResponseFlit<config>* optSource = GetDCTTgtIDSource(glbl);
 
         if (!optSource)
             return std::nullopt;
@@ -1430,28 +1329,25 @@ namespace /*CHI::*/Xact {
         return { optSource->flit.dat.TgtID() };
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetDCTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetDCTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::GotDWTSrcID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::GotDWTSrcID(const Global<config>& glbl) const noexcept
     {
         return GetDWTSrcID(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::DAT<config, conn>::srcid_t> Xaction<config, conn>::GetDWTSrcID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::DAT<config>::srcid_t> Xaction<config>::GetDWTSrcID(const Global<config>& glbl) const noexcept
     {
         if (!IsDWTPossible())
             return std::nullopt;
 
-        const FiredResponseFlit<config, conn>* optSource = GetDWTSrcIDSource(glbl);
+        const FiredResponseFlit<config>* optSource = GetDWTSrcIDSource(glbl);
 
         if (!optSource)
             return std::nullopt;
@@ -1461,28 +1357,25 @@ namespace /*CHI::*/Xact {
         return { optSource->flit.rsp.TgtID() };
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetDWTSrcIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetDWTSrcIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::GotDWTTgtID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::GotDWTTgtID(const Global<config>& glbl) const noexcept
     {
         return GetDWTTgtID(glbl);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::optional<typename Flits::RSP<config, conn>::srcid_t> Xaction<config, conn>::GetDWTTgtID(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::optional<typename Flits::RSP<config>::srcid_t> Xaction<config>::GetDWTTgtID(const Global<config>& glbl) const noexcept
     {
         if (!IsDWTPossible())
             return std::nullopt;
 
-        const FiredResponseFlit<config, conn>* optSource = GetDWTTgtIDSource(glbl);
+        const FiredResponseFlit<config>* optSource = GetDWTTgtIDSource(glbl);
 
         if (!optSource)
             return std::nullopt;
@@ -1492,58 +1385,50 @@ namespace /*CHI::*/Xact {
         return { optSource->flit.rsp.TgtID() };
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetDWTTgtIDSource(const Global<config, conn>& glbl) const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetDWTTgtIDSource(const Global<config>& glbl) const noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::GotRetryAck() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::GotRetryAck() const noexcept
     {
         return GetRetryAck() != nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>* Xaction<config, conn>::GetRetryAck() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetRetryAck() const noexcept
     {
         return GetLastRSP({ Opcodes::RSP::RetryAck });
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::IsResent() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::IsResent() const noexcept
     {
         return resent;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> Xaction<config, conn>::GetResentXaction() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> Xaction<config>::GetResentXaction() const noexcept
     {
         return resentXaction;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>& Xaction<config, conn>::GetPCreditSource() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>& Xaction<config>::GetPCreditSource() const noexcept
     {
         return sourcePCredit;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::Next(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& flit, bool& hasDBID, bool& firstDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::Next(const Global<config>& glbl, const FiredResponseFlit<config>& flit, bool& hasDBID, bool& firstDBID) noexcept
     {
         return flit.IsRSP() ? NextRSP(glbl, flit, hasDBID, firstDBID) : NextDAT(glbl, flit, hasDBID, firstDBID);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::NextRSP(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::NextRSP(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         hasDBID = false;
         firstDBID = false;
@@ -1559,9 +1444,8 @@ namespace /*CHI::*/Xact {
         return denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::NextDAT(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::NextDAT(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         hasDBID = false;
         firstDBID = false;
@@ -1577,9 +1461,8 @@ namespace /*CHI::*/Xact {
         return denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::Resend(const Global<config, conn>& glbl, FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::Resend(const Global<config>& glbl, FiredResponseFlit<config> pCrdFlit, std::shared_ptr<Xaction<config>> xaction) noexcept
     {
         XactDenialEnum denial = ResendNoRecord(glbl, pCrdFlit, xaction);
 
@@ -1591,9 +1474,8 @@ namespace /*CHI::*/Xact {
         return denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::RevertResent() noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::RevertResent() noexcept
     {
         if (resent)
         {
@@ -1604,30 +1486,26 @@ namespace /*CHI::*/Xact {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::IsDMTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::IsDMTPossible() const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::IsDCTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::IsDCTPossible() const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::IsDWTPossible() const noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::IsDWTPossible() const noexcept
     {
         return false;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::NextRetryAckNoRecord(const Global<config, conn>& glbl, const FiredResponseFlit<config, conn>& rspFlit) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::NextRetryAckNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit) noexcept
     {
         if (!rspFlit.IsRSP())
             return XactDenial::DENIED_CHANNEL_NOT_RSP;
@@ -1661,9 +1539,8 @@ namespace /*CHI::*/Xact {
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Xaction<config, conn>::ResendNoRecord(const Global<config, conn>& glbl, FiredResponseFlit<config, conn> pCrdFlit, std::shared_ptr<Xaction<config, conn>> xaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::ResendNoRecord(const Global<config>& glbl, FiredResponseFlit<config> pCrdFlit, std::shared_ptr<Xaction<config>> xaction) noexcept
     {
         if (xaction->GetType() != type)
             return XactDenial::DENIED_RETRY_DIFF_XACT_TYPE;
@@ -1689,8 +1566,8 @@ namespace /*CHI::*/Xact {
 
             if (fields)
             {
-                Flits::REQ<config, conn> origin = this->first.flit.req;
-                Flits::REQ<config, conn> retry = xaction->GetFirst().flit.req;
+                Flits::REQ<config> origin = this->first.flit.req;
+                Flits::REQ<config> retry = xaction->GetFirst().flit.req;
                     
                 // QoS
                 /* Permitted to be different */
@@ -1880,15 +1757,14 @@ namespace /*CHI::*/Xact {
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::NextDataID(
-        Flits::REQ<config, conn>::ssize_t                                   size, 
-        const FiredResponseFlit<config, conn>&                              datFlit,
-        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>  opcodes) noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::NextDataID(
+        Flits::REQ<config>::ssize_t                                   size, 
+        const FiredResponseFlit<config>&                              datFlit,
+        std::initializer_list<typename Flits::DAT<config>::opcode_t>  opcodes) noexcept
     {
-        std::function<bool(size_t, const FiredResponseFlit<config, conn>&)> validFunc = 
-            [&](size_t i, const FiredResponseFlit<config, conn>& flit) -> bool
+        std::function<bool(size_t, const FiredResponseFlit<config>&)> validFunc = 
+            [&](size_t i, const FiredResponseFlit<config>& flit) -> bool
         {
             bool opcodeMatch = false;
             if (opcodes.size() == 0)
@@ -1906,29 +1782,27 @@ namespace /*CHI::*/Xact {
             return opcodeMatch && this->subsequenceKeys[i].denial == XactDenial::ACCEPTED;
         };
 
-        std::bitset<4> collectedDataID = details::CollectDataID<config, conn>(
+        std::bitset<4> collectedDataID = details::CollectDataID<config>(
             size, this->subsequence, validFunc);
 
-        std::bitset<4> nextDataID = details::CollectDataID<config, conn>(
+        std::bitset<4> nextDataID = details::CollectDataID<config>(
             size, datFlit.flit.dat.DataID());
 
         return (collectedDataID & nextDataID).none();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::NextREQDataID(
-        const FiredResponseFlit<config, conn>&                              datFlit,
-        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>  opcodes) noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::NextREQDataID(
+        const FiredResponseFlit<config>&                              datFlit,
+        std::initializer_list<typename Flits::DAT<config>::opcode_t>  opcodes) noexcept
     {
         return NextDataID(this->first.flit.req.Size(), datFlit, opcodes);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline bool Xaction<config, conn>::NextSNPDataID(
-        const FiredResponseFlit<config, conn>&                              datFlit,
-        std::initializer_list<typename Flits::DAT<config, conn>::opcode_t>  opcodes) noexcept
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::NextSNPDataID(
+        const FiredResponseFlit<config>&                              datFlit,
+        std::initializer_list<typename Flits::DAT<config>::opcode_t>  opcodes) noexcept
     {
         return NextDataID(Sizes::B64, datFlit, opcodes);
     }

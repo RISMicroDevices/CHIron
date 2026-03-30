@@ -3,6 +3,7 @@
 //#ifndef __CHI__CHI_XACT_JOINT
 //#define __CHI__CHI_XACT_JOINT
 
+#include "chi_xactions/includes.hpp"
 #ifndef CHI_XACT_JOINT__STANDALONE
 #   include "chi_joint_header.hpp"              // IWYU pragma: keep
 #   include "chi_xactions.hpp"                  // IWYU pragma: keep
@@ -27,8 +28,7 @@ namespace CHI {
     namespace Xact {
 
         //
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        template<FlitConfigurationConcept config>
         class Joint;
 
 
@@ -38,192 +38,178 @@ namespace CHI {
             JOINT
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        template<FlitConfigurationConcept config>
         class JointDenialEventBase {
         protected:
-            Joint<config, conn>&                    joint;
-            std::shared_ptr<Xaction<config, conn>>  xaction;
-            XactDenialEnum                          denial;
-            JointDenialSource                       denialSource;
+            Joint<config>&                      joint;
+            std::shared_ptr<Xaction<config>>    xaction;
+            XactDenialEnum                      denial;
+            JointDenialSource                   denialSource;
 
         public:
-            JointDenialEventBase(Joint<config, conn>&                   joint,
-                                 std::shared_ptr<Xaction<config, conn>> xaction,
-                                 XactDenialEnum                         denial,
-                                 JointDenialSource                      source) noexcept;
+            JointDenialEventBase(Joint<config>&                     joint,
+                                 std::shared_ptr<Xaction<config>>   xaction,
+                                 XactDenialEnum                     denial,
+                                 JointDenialSource                  source) noexcept;
 
         public:
-            Joint<config, conn>&                            GetJoint() noexcept;
-            const Joint<config, conn>&                      GetJoint() const noexcept;
+            Joint<config>&                          GetJoint() noexcept;
+            const Joint<config>&                    GetJoint() const noexcept;
 
-            std::shared_ptr<Xaction<config, conn>>          GetXaction() noexcept;
-            std::shared_ptr<const Xaction<config, conn>>    GetXaction() const noexcept;
+            std::shared_ptr<Xaction<config>>        GetXaction() noexcept;
+            std::shared_ptr<const Xaction<config>>  GetXaction() const noexcept;
 
-            XactDenialEnum                                  GetDenial() const noexcept;
-            JointDenialSource                               GetDenialSource() const noexcept;
+            XactDenialEnum                          GetDenial() const noexcept;
+            JointDenialSource                       GetDenialSource() const noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class JointDeniedRequestEvent : public JointDenialEventBase<config, conn>,
-                                        public Gravity::Event<JointDeniedRequestEvent<config, conn>> {
+        template<FlitConfigurationConcept config>
+        class JointDeniedRequestEvent : public JointDenialEventBase<config>,
+                                        public Gravity::Event<JointDeniedRequestEvent<config>> {
         protected:
-            FiredRequestFlit<config, conn>&     firedRequestFlit;
+            FiredRequestFlit<config>&   firedRequestFlit;
 
         public:
-            JointDeniedRequestEvent(Joint<config, conn>&                        joint,
-                                    std::shared_ptr<Xaction<config, conn>>      xaction,
-                                    XactDenialEnum                              denial,
-                                    JointDenialSource                           source,
-                                    FiredRequestFlit<config, conn>&             firedRequestFlit) noexcept;
+            JointDeniedRequestEvent(Joint<config>&                      joint,
+                                    std::shared_ptr<Xaction<config>>    xaction,
+                                    XactDenialEnum                      denial,
+                                    JointDenialSource                   source,
+                                    FiredRequestFlit<config>&           firedRequestFlit) noexcept;
         
         public:
-            FiredRequestFlit<config, conn>&         GetFiredFlit() noexcept;
-            const FiredRequestFlit<config, conn>&   GetFiredFlit() const noexcept;
+            FiredRequestFlit<config>&       GetFiredFlit() noexcept;
+            const FiredRequestFlit<config>& GetFiredFlit() const noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class JointDeniedResponseEvent : public JointDenialEventBase<config, conn>,
-                                         public Gravity::Event<JointDeniedResponseEvent<config, conn>> {
+        template<FlitConfigurationConcept config>
+        class JointDeniedResponseEvent : public JointDenialEventBase<config>,
+                                         public Gravity::Event<JointDeniedResponseEvent<config>> {
         protected:
-            FiredResponseFlit<config, conn>&    firedResponseFlit;
+            FiredResponseFlit<config>&  firedResponseFlit;
 
         public:
-            JointDeniedResponseEvent(Joint<config, conn>&                       joint,
-                                     std::shared_ptr<Xaction<config, conn>>     xaction,
-                                     XactDenialEnum                             denial,
-                                     JointDenialSource                          source,
-                                     FiredResponseFlit<config, conn>&           firedResponseFlit) noexcept;
+            JointDeniedResponseEvent(Joint<config>&                     joint,
+                                     std::shared_ptr<Xaction<config>>   xaction,
+                                     XactDenialEnum                     denial,
+                                     JointDenialSource                  source,
+                                     FiredResponseFlit<config>&         firedResponseFlit) noexcept;
 
         public:
-            FiredResponseFlit<config, conn>&        GetFiredFlit() noexcept;
-            const FiredResponseFlit<config, conn>&  GetFiredFlit() const noexcept;                
+            FiredResponseFlit<config>&          GetFiredFlit() noexcept;
+            const FiredResponseFlit<config>&    GetFiredFlit() const noexcept;                
         };
 
 
         // Joint Xaction Events
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        template<FlitConfigurationConcept config>
         class JointXactionEventBase {
         protected:
-            Joint<config, conn>&                    joint;
-            std::shared_ptr<Xaction<config, conn>>  xaction;
+            Joint<config>&                      joint;
+            std::shared_ptr<Xaction<config>>    xaction;
 
         public:
-            JointXactionEventBase(Joint<config, conn>&                      joint, 
-                                  std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+            JointXactionEventBase(Joint<config>&                    joint, 
+                                  std::shared_ptr<Xaction<config>>  xaction) noexcept;
 
         public:
-            Joint<config, conn>&                            GetJoint() noexcept;
-            const Joint<config, conn>&                      GetJoint() const noexcept;
+            Joint<config>&                          GetJoint() noexcept;
+            const Joint<config>&                    GetJoint() const noexcept;
 
-            std::shared_ptr<Xaction<config, conn>>          GetXaction() noexcept;
-            std::shared_ptr<const Xaction<config, conn>>    GetXaction() const noexcept;
+            std::shared_ptr<Xaction<config>>        GetXaction() noexcept;
+            std::shared_ptr<const Xaction<config>>  GetXaction() const noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class JointXactionAcceptedEvent : public JointXactionEventBase<config, conn>, 
-                                          public Gravity::Event<JointXactionAcceptedEvent<config, conn>> {
+        template<FlitConfigurationConcept       config>
+        class JointXactionAcceptedEvent : public JointXactionEventBase<config>, 
+                                          public Gravity::Event<JointXactionAcceptedEvent<config>> {
         public:
-            JointXactionAcceptedEvent(Joint<config, conn>&                      joint, 
-                                      std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+            JointXactionAcceptedEvent(Joint<config>&                      joint, 
+                                      std::shared_ptr<Xaction<config>>    xaction) noexcept;
                                     
-            JointXactionAcceptedEvent(Joint<config, conn>&                      joint,
-                                      std::shared_ptr<Xaction<config, conn>>    xaction,
-                                      Flits::REQ<config, conn>::srcid_t         snpTgtId) noexcept;
+            JointXactionAcceptedEvent(Joint<config>&                      joint,
+                                      std::shared_ptr<Xaction<config>>    xaction,
+                                      Flits::REQ<config>::srcid_t         snpTgtId) noexcept;
 
         private:
-            Flits::REQ<config, conn>::srcid_t   snoopTargetID;
+            Flits::REQ<config>::srcid_t   snoopTargetID;
 
         public:
-            Flits::REQ<config, conn>::srcid_t   GetSnoopTargetID() const noexcept;
+            Flits::REQ<config>::srcid_t   GetSnoopTargetID() const noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class JointXactionRetryEvent : public JointXactionEventBase<config, conn>,
-                                       public Gravity::Event<JointXactionRetryEvent<config, conn>> {
+        template<FlitConfigurationConcept config>
+        class JointXactionRetryEvent : public JointXactionEventBase<config>,
+                                       public Gravity::Event<JointXactionRetryEvent<config>> {
         public:
-            JointXactionRetryEvent(Joint<config, conn>&                     joint, 
-                                   std::shared_ptr<Xaction<config, conn>>   xaction) noexcept;
+            JointXactionRetryEvent(Joint<config>&                     joint, 
+                                   std::shared_ptr<Xaction<config>>   xaction) noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class JointXactionTxnIDAllocationEvent : public JointXactionEventBase<config, conn>,
-                                                 public Gravity::Event<JointXactionTxnIDAllocationEvent<config, conn>> {
+        template<FlitConfigurationConcept config>
+        class JointXactionTxnIDAllocationEvent : public JointXactionEventBase<config>,
+                                                 public Gravity::Event<JointXactionTxnIDAllocationEvent<config>> {
         public:
-            JointXactionTxnIDAllocationEvent(Joint<config, conn>&                      joint,
-                                             std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+            JointXactionTxnIDAllocationEvent(Joint<config>&                      joint,
+                                             std::shared_ptr<Xaction<config>>    xaction) noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class JointXactionTxnIDFreeEvent : public JointXactionEventBase<config, conn>,
-                                           public Gravity::Event<JointXactionTxnIDFreeEvent<config, conn>> {
+        template<FlitConfigurationConcept config>
+        class JointXactionTxnIDFreeEvent : public JointXactionEventBase<config>,
+                                           public Gravity::Event<JointXactionTxnIDFreeEvent<config>> {
         public:
-            JointXactionTxnIDFreeEvent(Joint<config, conn>&                      joint,
-                                       std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+            JointXactionTxnIDFreeEvent(Joint<config>&                      joint,
+                                       std::shared_ptr<Xaction<config>>    xaction) noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class JointXactionDBIDAllocationEvent : public JointXactionEventBase<config, conn>,
-                                                public Gravity::Event<JointXactionDBIDAllocationEvent<config, conn>> {
+        template<FlitConfigurationConcept config>
+        class JointXactionDBIDAllocationEvent : public JointXactionEventBase<config>,
+                                                public Gravity::Event<JointXactionDBIDAllocationEvent<config>> {
         public:
-            JointXactionDBIDAllocationEvent(Joint<config, conn>&                      joint,
-                                            std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+            JointXactionDBIDAllocationEvent(Joint<config>&                      joint,
+                                            std::shared_ptr<Xaction<config>>    xaction) noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class JointXactionDBIDFreeEvent : public JointXactionEventBase<config, conn>,
-                                          public Gravity::Event<JointXactionDBIDFreeEvent<config, conn>> {
+        template<FlitConfigurationConcept config>
+        class JointXactionDBIDFreeEvent : public JointXactionEventBase<config>,
+                                          public Gravity::Event<JointXactionDBIDFreeEvent<config>> {
         public:
-            JointXactionDBIDFreeEvent(Joint<config, conn>&                      joint,
-                                      std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+            JointXactionDBIDFreeEvent(Joint<config>&                      joint,
+                                      std::shared_ptr<Xaction<config>>    xaction) noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class JointXactionCompleteEvent : public JointXactionEventBase<config, conn>,
-                                          public Gravity::Event<JointXactionCompleteEvent<config, conn>> {
+        template<FlitConfigurationConcept config>
+        class JointXactionCompleteEvent : public JointXactionEventBase<config>,
+                                          public Gravity::Event<JointXactionCompleteEvent<config>> {
         public:
-            JointXactionCompleteEvent(Joint<config, conn>&                      joint,
-                                      std::shared_ptr<Xaction<config, conn>>    xaction) noexcept;
+            JointXactionCompleteEvent(Joint<config>&                      joint,
+                                      std::shared_ptr<Xaction<config>>    xaction) noexcept;
 
-            JointXactionCompleteEvent(Joint<config, conn>&                      joint,
-                                      std::shared_ptr<Xaction<config, conn>>    xaction,
-                                      Flits::REQ<config, conn>::srcid_t         snpTgtId) noexcept;
+            JointXactionCompleteEvent(Joint<config>&                      joint,
+                                      std::shared_ptr<Xaction<config>>    xaction,
+                                      Flits::REQ<config>::srcid_t         snpTgtId) noexcept;
 
         private:
-            Flits::REQ<config, conn>::srcid_t   snoopTargetID;
+            Flits::REQ<config>::srcid_t   snoopTargetID;
 
         public:
-            Flits::REQ<config, conn>::srcid_t   GetSnoopTargetID() const noexcept;
+            Flits::REQ<config>::srcid_t   GetSnoopTargetID() const noexcept;
         };
 
 
         // Joint Base
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn>
+        template<FlitConfigurationConcept config>
         class Joint {
         public:
-            Gravity::EventBus<JointDeniedRequestEvent<config, conn>>    OnDeniedRequest;
-            Gravity::EventBus<JointDeniedResponseEvent<config, conn>>   OnDeniedResponse;
+            Gravity::EventBus<JointDeniedRequestEvent<config>>          OnDeniedRequest;
+            Gravity::EventBus<JointDeniedResponseEvent<config>>         OnDeniedResponse;
 
-            Gravity::EventBus<JointXactionAcceptedEvent<config, conn>>  OnAccepted;
-            Gravity::EventBus<JointXactionRetryEvent<config, conn>>     OnRetry;
-            Gravity::EventBus<JointXactionTxnIDAllocationEvent<config, conn>>
-                                                                        OnTxnIDAllocation;
-            Gravity::EventBus<JointXactionTxnIDFreeEvent<config, conn>> OnTxnIDFree;
-            Gravity::EventBus<JointXactionDBIDAllocationEvent<config, conn>>
-                                                                        OnDBIDAllocation;
-            Gravity::EventBus<JointXactionDBIDFreeEvent<config, conn>>  OnDBIDFree;
-            Gravity::EventBus<JointXactionCompleteEvent<config, conn>>  OnComplete;
+            Gravity::EventBus<JointXactionAcceptedEvent<config>>        OnAccepted;
+            Gravity::EventBus<JointXactionRetryEvent<config>>           OnRetry;
+            Gravity::EventBus<JointXactionTxnIDAllocationEvent<config>> OnTxnIDAllocation;
+            Gravity::EventBus<JointXactionTxnIDFreeEvent<config>>       OnTxnIDFree;
+            Gravity::EventBus<JointXactionDBIDAllocationEvent<config>>  OnDBIDAllocation;
+            Gravity::EventBus<JointXactionDBIDFreeEvent<config>>        OnDBIDFree;
+            Gravity::EventBus<JointXactionCompleteEvent<config>>        OnComplete;
 
         public:
             Joint() noexcept;
@@ -236,92 +222,91 @@ namespace CHI {
             virtual XactScopeEnum   GetActiveScope() const noexcept = 0;
 
         protected:
-            XactDenialEnum  RequestDeniedByJoint(XactDenialEnum                         denial,
-                                                 FiredRequestFlit<config, conn>&        firedRequestFlit,
-                                                 std::shared_ptr<Xaction<config, conn>> xaction = nullptr) noexcept;
+            XactDenialEnum  RequestDeniedByJoint(XactDenialEnum                   denial,
+                                                 FiredRequestFlit<config>&        firedRequestFlit,
+                                                 std::shared_ptr<Xaction<config>> xaction = nullptr) noexcept;
 
-            XactDenialEnum  RequestDeniedByXaction(XactDenialEnum                           denial,
-                                                   FiredRequestFlit<config, conn>&          firedRequestFlit,
-                                                   std::shared_ptr<Xaction<config, conn>>   xaction = nullptr) noexcept;
+            XactDenialEnum  RequestDeniedByXaction(XactDenialEnum                     denial,
+                                                   FiredRequestFlit<config>&          firedRequestFlit,
+                                                   std::shared_ptr<Xaction<config>>   xaction = nullptr) noexcept;
 
-            XactDenialEnum  ResponseDeniedByJoint(XactDenialEnum                            denial,
-                                                  FiredResponseFlit<config, conn>&          firedResponseFlit,
-                                                  std::shared_ptr<Xaction<config, conn>>    xaction = nullptr) noexcept;
+            XactDenialEnum  ResponseDeniedByJoint(XactDenialEnum                      denial,
+                                                  FiredResponseFlit<config>&          firedResponseFlit,
+                                                  std::shared_ptr<Xaction<config>>    xaction = nullptr) noexcept;
 
-            XactDenialEnum  ResponseDeniedByXaction(XactDenialEnum                          denial,
-                                                    FiredResponseFlit<config, conn>&        firedResponseFlit,
-                                                    std::shared_ptr<Xaction<config, conn>>  xaction = nullptr) noexcept;
+            XactDenialEnum  ResponseDeniedByXaction(XactDenialEnum                    denial,
+                                                    FiredResponseFlit<config>&        firedResponseFlit,
+                                                    std::shared_ptr<Xaction<config>>  xaction = nullptr) noexcept;
 
         public:
             virtual XactDenialEnum  NextTXREQ(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::REQ<config, conn>&         reqFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::REQ<config>&         reqFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept;
 
             virtual XactDenialEnum  NextRXREQ(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::REQ<config, conn>&         reqFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::REQ<config>&         reqFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept;
 
             virtual XactDenialEnum  NextTXSNP(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::SNP<config, conn>&         snpFlit,
-                const Flits::REQ<config, conn>::srcid_t snpTgtId,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::SNP<config>&         snpFlit,
+                const Flits::REQ<config>::srcid_t snpTgtId,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept;
             
             virtual XactDenialEnum  NextRXSNP(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::SNP<config, conn>&         snpFlit,
-                const Flits::REQ<config, conn>::srcid_t snpTgtId,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::SNP<config>&         snpFlit,
+                const Flits::REQ<config>::srcid_t snpTgtId,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept;
 
             virtual XactDenialEnum  NextTXRSP(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::RSP<config, conn>&         rspFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::RSP<config>&         rspFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept;
 
             virtual XactDenialEnum  NextRXRSP(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::RSP<config, conn>&         rspFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::RSP<config>&         rspFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept;
             
             virtual XactDenialEnum  NextTXDAT(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::DAT<config, conn>&         datFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::DAT<config>&         datFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept;
 
             virtual XactDenialEnum  NextRXDAT(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::DAT<config, conn>&         rspFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::DAT<config>&         rspFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept;
         };
 
 
         // RN-F Joint
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class RNFJoint : public Joint<config, conn> {
+        template<FlitConfigurationConcept config>
+        class RNFJoint : public Joint<config> {
         public:
             using txreqid_t = union __txreqid_t {
                 struct {
-                    Flits::REQ<config, conn>::txnid_t   txn;
-                    Flits::REQ<config, conn>::srcid_t   src;
+                    Flits::REQ<config>::txnid_t   txn;
+                    Flits::REQ<config>::srcid_t   src;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -329,9 +314,9 @@ namespace CHI {
 
             using txreqdbid_t = union __txreqdbid_t {
                 struct {
-                    Flits::RSP<config, conn>::dbid_t    db;     // same for DAT
-                    Flits::RSP<config, conn>::srcid_t   src;    // same for DAT
-                    Flits::RSP<config, conn>::tgtid_t   tgt;    // same for DAT
+                    Flits::RSP<config>::dbid_t    db;     // same for DAT
+                    Flits::RSP<config>::srcid_t   src;    // same for DAT
+                    Flits::RSP<config>::tgtid_t   tgt;    // same for DAT
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -339,10 +324,10 @@ namespace CHI {
 
             using txreqdbidovlp_t = union __txreqdbidovlp_t {
                 struct {
-                    Flits::RSP<config, conn>::dbid_t    db;     // same for DAT
-                    Flits::RSP<config, conn>::srcid_t   src;    // same for DAT
-                    Flits::RSP<config, conn>::tgtid_t   tgt;    // same for DAT
-                    Flits::RSP<config, conn>::txnid_t   txn;    // same for DAT
+                    Flits::RSP<config>::dbid_t    db;     // same for DAT
+                    Flits::RSP<config>::srcid_t   src;    // same for DAT
+                    Flits::RSP<config>::tgtid_t   tgt;    // same for DAT
+                    Flits::RSP<config>::txnid_t   txn;    // same for DAT
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -350,9 +335,9 @@ namespace CHI {
 
             using rxsnpid_t = union __rxsnpid_t {
                 struct {
-                    Flits::SNP<config, conn>::txnid_t   txn;
-                    Flits::SNP<config, conn>::srcid_t   src;
-                    Flits::REQ<config, conn>::srcid_t   tgt;
+                    Flits::SNP<config>::txnid_t   txn;
+                    Flits::SNP<config>::srcid_t   src;
+                    Flits::REQ<config>::srcid_t   tgt;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -360,8 +345,8 @@ namespace CHI {
             
             using pcrd_t = union __pcrd_t {
                 struct {
-                    Flits::RSP<config, conn>::tgtid_t   tgt;
-                    Flits::RSP<config, conn>::srcid_t   src;
+                    Flits::RSP<config>::tgtid_t   tgt;
+                    Flits::RSP<config>::srcid_t   src;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -369,53 +354,53 @@ namespace CHI {
 
             using rnsrc_t = union __rnsrc_t {
                 struct {
-                    Flits::REQ<config, conn>::srcid_t   src;
+                    Flits::REQ<config>::srcid_t   src;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
             };
 
         private:
-            using GetXaction = std::function<std::shared_ptr<Xaction<config, conn>>(
-                const Global<config, conn>&,
-                const FiredRequestFlit<config, conn>&,
-                std::shared_ptr<Xaction<config, conn>>)>;
+            using GetXaction = std::function<std::shared_ptr<Xaction<config>>(
+                const Global<config>&,
+                const FiredRequestFlit<config>&,
+                std::shared_ptr<Xaction<config>>)>;
 
         private:
-            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        txTransactions;
-            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        rxTransactions;
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        txTransactions;
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        rxTransactions;
 
-            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        txDBIDTransactions;
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        txDBIDTransactions;
 
-            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        txDBIDOverlappableTransactions;
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        txDBIDOverlappableTransactions;
 
-            std::unordered_map<uint64_t, std::list<std::shared_ptr<Xaction<config, conn>>>>
-                                                                                        txRetriedTransactions;
+            std::unordered_map<uint64_t, std::list<std::shared_ptr<Xaction<config>>>>
+                                                                                  txRetriedTransactions;
 
-            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config, conn>>>    grantedPCredits[1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH];
+            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>    grantedPCredits[1 << Flits::RSP<config>::PCRDTYPE_WIDTH];
 
-            Opcodes::REQ::Decoder<Flits::REQ<config>, GetXaction>                       reqDecoder;
-            Opcodes::SNP::Decoder<Flits::SNP<config>, GetXaction>                       snpDecoder;
+            Opcodes::REQ::Decoder<Flits::REQ<config>, GetXaction>                 reqDecoder;
+            Opcodes::SNP::Decoder<Flits::SNP<config>, GetXaction>                 snpDecoder;
 
         protected:
-            static std::shared_ptr<Xaction<config, conn>>   ConstructNone(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructAllocatingRead(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructNonAllocatingRead(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructImmediateWrite(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructWriteZero(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructCopyBackWrite(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructDataless(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeSnoop(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructForwardSnoop(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructAtomic(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructIndependentStash(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructNone(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructAllocatingRead(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructNonAllocatingRead(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructImmediateWrite(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructWriteZero(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructCopyBackWrite(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructDataless(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructHomeSnoop(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructForwardSnoop(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructAtomic(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>>   ConstructIndependentStash(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
 
         public:
             RNFJoint() noexcept;
 
         public:
-            RNFJoint(const RNFJoint<config, conn>& obj) noexcept;
-            RNFJoint<config, conn>& operator=(const RNFJoint<config, conn>& obj) noexcept;
+            RNFJoint(const RNFJoint<config>& obj) noexcept;
+            RNFJoint<config>& operator=(const RNFJoint<config>& obj) noexcept;
 
         public:
             void                    Fork() noexcept;
@@ -426,66 +411,65 @@ namespace CHI {
             virtual XactScopeEnum   GetActiveScope() const noexcept override;
 
             virtual void            GetInflight(
-                const Global<config, conn>&                             glbl,
-                std::vector<std::shared_ptr<Xaction<config, conn>>>&    dstVector,
-                bool                                                    sortByTime = false
+                const Global<config>&                             glbl,
+                std::vector<std::shared_ptr<Xaction<config>>>&    dstVector,
+                bool                                              sortByTime = false
             ) const noexcept;
 
         public:
             virtual XactDenialEnum  NextTXREQ(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::REQ<config, conn>&         reqFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                           time,
+                const Flits::REQ<config>&         reqFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept override;
             
             virtual XactDenialEnum  NextRXSNP(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::SNP<config, conn>&         snpFlit,
-                const Flits::REQ<config, conn>::srcid_t snpTgtId,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::SNP<config>&         snpFlit,
+                const Flits::REQ<config>::srcid_t snpTgtId,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept override;
             
             virtual XactDenialEnum  NextTXRSP(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::RSP<config, conn>&         rspFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::RSP<config>&         rspFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept override;
             
             virtual XactDenialEnum  NextRXRSP(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::RSP<config, conn>&         rspFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::RSP<config>&         rspFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept override;
             
             virtual XactDenialEnum  NextTXDAT(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::DAT<config, conn>&         datFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::DAT<config>&         datFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept override;
             
             virtual XactDenialEnum  NextRXDAT(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::DAT<config, conn>&         datFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&             glbl,
+                uint64_t                          time,
+                const Flits::DAT<config>&         datFlit,
+                std::shared_ptr<Xaction<config>>* xaction = nullptr
             ) noexcept override;
         };
 
 
         // SN-F Joint
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
-        class SNFJoint : public Joint<config, conn> {
+        template<FlitConfigurationConcept config>
+        class SNFJoint : public Joint<config> {
         public:
             using rxreqid_t = union __rxreqid_t {
                 struct {
-                    Flits::REQ<config, conn>::txnid_t   txn;
-                    Flits::REQ<config, conn>::srcid_t   src;
+                    Flits::REQ<config>::txnid_t   txn;
+                    Flits::REQ<config>::srcid_t   src;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -493,9 +477,9 @@ namespace CHI {
 
             using rxreqdbid_t = union __rxreqdbid_t {
                 struct {
-                    Flits::RSP<config, conn>::dbid_t    db;
-                    Flits::RSP<config, conn>::srcid_t   src;
-                    Flits::RSP<config, conn>::tgtid_t   tgt;
+                    Flits::RSP<config>::dbid_t    db;
+                    Flits::RSP<config>::srcid_t   src;
+                    Flits::RSP<config>::tgtid_t   tgt;
                 }           id; 
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -503,10 +487,10 @@ namespace CHI {
 
             using rxreqdbidovlp_t = union __rxreqdbidovlp_t {
                 struct {
-                    Flits::RSP<config, conn>::dbid_t    db;
-                    Flits::RSP<config, conn>::srcid_t   src;
-                    Flits::RSP<config, conn>::tgtid_t   tgt;
-                    Flits::RSP<config, conn>::txnid_t   txn;
+                    Flits::RSP<config>::dbid_t    db;
+                    Flits::RSP<config>::srcid_t   src;
+                    Flits::RSP<config>::tgtid_t   tgt;
+                    Flits::RSP<config>::txnid_t   txn;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -514,8 +498,8 @@ namespace CHI {
 
             using pcrd_t = union __pcrd_t {
                 struct {
-                    Flits::RSP<config, conn>::tgtid_t   tgt;
-                    Flits::RSP<config, conn>::srcid_t   src;
+                    Flits::RSP<config>::tgtid_t   tgt;
+                    Flits::RSP<config>::srcid_t   src;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
@@ -523,39 +507,40 @@ namespace CHI {
 
             using hnsrc_t = union __hnsrc_t {
                 struct {
-                    Flits::REQ<config, conn>::srcid_t   src;
+                    Flits::REQ<config>::srcid_t   src;
                 }           id;
                 uint64_t    value;
                 inline operator uint64_t() const noexcept { return value; }
             };
 
         private:
-            using GetXaction = std::function<std::shared_ptr<Xaction<config, conn>>(
-                const Global<config, conn>&,
-                const FiredRequestFlit<config, conn>&,
-                std::shared_ptr<Xaction<config, conn>>)>;
+            using GetXaction = std::function<std::shared_ptr<Xaction<config>>(
+                const Global<config>&,
+                const FiredRequestFlit<config>&,
+                std::shared_ptr<Xaction<config>>)>;
+
 
         private:
-            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        rxTransactions;
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        rxTransactions;
 
-            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        rxDBIDTransactions;
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        rxDBIDTransactions;
 
-            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config, conn>>>        rxDBIDOverlappableTransactions;
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        rxDBIDOverlappableTransactions;
 
-            std::unordered_map<uint64_t, std::list<std::shared_ptr<Xaction<config, conn>>>>
-                                                                                        rxRetriedTransactions;
+            std::unordered_map<uint64_t, std::list<std::shared_ptr<Xaction<config>>>>
+                                                                                  rxRetriedTransactions;
 
-            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config, conn>>>    grantedPCredits[1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH];
+            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>    grantedPCredits[1 << Flits::RSP<config>::PCRDTYPE_WIDTH];
 
-            Opcodes::REQ::Decoder<Flits::REQ<config>, GetXaction>                       reqDecoder;
+            Opcodes::REQ::Decoder<Flits::REQ<config>, GetXaction>                 reqDecoder;
 
         protected:
-            static std::shared_ptr<Xaction<config, conn>>   ConstructNone(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeRead(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeWrite(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeWriteZero(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeDataless(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
-            static std::shared_ptr<Xaction<config, conn>>   ConstructHomeAtomic(const Global<config, conn>&, const FiredRequestFlit<config, conn>&, std::shared_ptr<Xaction<config, conn>>) noexcept;
+            static std::shared_ptr<Xaction<config>> ConstructNone(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>> ConstructHomeRead(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>> ConstructHomeWrite(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>> ConstructHomeWriteZero(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>> ConstructHomeDataless(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
+            static std::shared_ptr<Xaction<config>> ConstructHomeAtomic(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
 
         public:
             SNFJoint() noexcept;
@@ -566,38 +551,38 @@ namespace CHI {
             virtual XactScopeEnum   GetActiveScope() const noexcept override;
 
             virtual void            GetInflight(
-                const Global<config, conn>&                             glbl,
-                std::vector<std::shared_ptr<Xaction<config, conn>>>&    dstVector,
-                bool                                                    sortByTime = false
+                const Global<config>&                           glbl,
+                std::vector<std::shared_ptr<Xaction<config>>>&  dstVector,
+                bool                                            sortByTime = false
             ) const noexcept;
 
         public:
             virtual XactDenialEnum  NextRXREQ(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::REQ<config, conn>&         reqFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&               glbl,
+                uint64_t                            time,
+                const Flits::REQ<config>&           reqFlit,
+                std::shared_ptr<Xaction<config>>*   xaction = nullptr
             ) noexcept override;
 
             virtual XactDenialEnum  NextTXRSP(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::RSP<config, conn>&         rspFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&               glbl,
+                uint64_t                            time,
+                const Flits::RSP<config>&           rspFlit,
+                std::shared_ptr<Xaction<config>>*   xaction = nullptr
             ) noexcept override;
 
             virtual XactDenialEnum  NextTXDAT(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::DAT<config, conn>&         datFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&               glbl,
+                uint64_t                            time,
+                const Flits::DAT<config>&           datFlit,
+                std::shared_ptr<Xaction<config>>*   xaction = nullptr
             ) noexcept override;
 
             virtual XactDenialEnum  NextRXDAT(
-                const Global<config, conn>&             glbl,
-                uint64_t                                time,
-                const Flits::DAT<config, conn>&         datFlit,
-                std::shared_ptr<Xaction<config, conn>>* xaction = nullptr
+                const Global<config>&               glbl,
+                uint64_t                            time,
+                const Flits::DAT<config>&           datFlit,
+                std::shared_ptr<Xaction<config>>*   xaction = nullptr
             ) noexcept override;
         };
     }
@@ -608,20 +593,13 @@ namespace CHI {
 
 // Implementation of: class JointDenialEventBase
 namespace /*CHI::*/Xact {
-    /*
-    Joint<config, conn>&                    joint;
-    std::shared_ptr<Xaction<config, conn>>  xaction;
-    XactDenialEnum                          denial;
-    JointDenialSource                       denialSource;
-    */
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointDenialEventBase<config, conn>::JointDenialEventBase(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction,
-        XactDenialEnum                          denial,
-        JointDenialSource                       source
+    template<FlitConfigurationConcept config>
+    inline JointDenialEventBase<config>::JointDenialEventBase(
+        Joint<config>&                      joint,
+        std::shared_ptr<Xaction<config>>    xaction,
+        XactDenialEnum                      denial,
+        JointDenialSource                   source
     ) noexcept
         : joint         (joint)
         , xaction       (xaction)
@@ -629,44 +607,38 @@ namespace /*CHI::*/Xact {
         , denialSource  (source)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Joint<config, conn>& JointDenialEventBase<config, conn>::GetJoint() noexcept
+    template<FlitConfigurationConcept config>
+    inline Joint<config>& JointDenialEventBase<config>::GetJoint() noexcept
     {
         return joint;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const Joint<config, conn>& JointDenialEventBase<config, conn>::GetJoint() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const Joint<config>& JointDenialEventBase<config>::GetJoint() const noexcept
     {
         return joint;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> JointDenialEventBase<config, conn>::GetXaction() noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> JointDenialEventBase<config>::GetXaction() noexcept
     {
         return xaction;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<const Xaction<config, conn>> JointDenialEventBase<config, conn>::GetXaction() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xaction<config>> JointDenialEventBase<config>::GetXaction() const noexcept
     {
         return xaction;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum JointDenialEventBase<config, conn>::GetDenial() const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum JointDenialEventBase<config>::GetDenial() const noexcept
     {
         return denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointDenialSource JointDenialEventBase<config, conn>::GetDenialSource() const noexcept
+    template<FlitConfigurationConcept config>
+    inline JointDenialSource JointDenialEventBase<config>::GetDenialSource() const noexcept
     {
         return denialSource;
     }
@@ -675,29 +647,26 @@ namespace /*CHI::*/Xact {
 // Implementation of: class JointDeniedRequestEvent
 namespace /*CHI::*/Xact {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointDeniedRequestEvent<config, conn>::JointDeniedRequestEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction,
-        XactDenialEnum                          denial,
-        JointDenialSource                       source,
-        FiredRequestFlit<config, conn>&         firedRequestFlit
+    template<FlitConfigurationConcept config>
+    inline JointDeniedRequestEvent<config>::JointDeniedRequestEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction,
+        XactDenialEnum                    denial,
+        JointDenialSource                 source,
+        FiredRequestFlit<config>&         firedRequestFlit
     ) noexcept
-        : JointDenialEventBase<config, conn>    (joint, xaction, denial, source)
-        , firedRequestFlit                      (firedRequestFlit)
+        : JointDenialEventBase<config>    (joint, xaction, denial, source)
+        , firedRequestFlit                (firedRequestFlit)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline FiredRequestFlit<config, conn>& JointDeniedRequestEvent<config, conn>::GetFiredFlit() noexcept
+    template<FlitConfigurationConcept config>
+    inline FiredRequestFlit<config>& JointDeniedRequestEvent<config>::GetFiredFlit() noexcept
     {
         return firedRequestFlit;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredRequestFlit<config, conn>& JointDeniedRequestEvent<config, conn>::GetFiredFlit() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredRequestFlit<config>& JointDeniedRequestEvent<config>::GetFiredFlit() const noexcept
     {
         return firedRequestFlit;
     }
@@ -706,29 +675,26 @@ namespace /*CHI::*/Xact {
 // Implementation of: class JointDeniedResponseEvent
 namespace /*CHI::*/Xact {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointDeniedResponseEvent<config, conn>::JointDeniedResponseEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction,
-        XactDenialEnum                          denial,
-        JointDenialSource                       source,
-        FiredResponseFlit<config, conn>&        firedResponseFlit
+    template<FlitConfigurationConcept config>
+    inline JointDeniedResponseEvent<config>::JointDeniedResponseEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction,
+        XactDenialEnum                    denial,
+        JointDenialSource                 source,
+        FiredResponseFlit<config>&        firedResponseFlit
     ) noexcept
-        : JointDenialEventBase<config, conn>    (joint, xaction, denial, source)
-        , firedResponseFlit                     (firedResponseFlit)
+        : JointDenialEventBase<config>    (joint, xaction, denial, source)
+        , firedResponseFlit               (firedResponseFlit)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline FiredResponseFlit<config, conn>& JointDeniedResponseEvent<config, conn>::GetFiredFlit() noexcept
+    template<FlitConfigurationConcept config>
+    inline FiredResponseFlit<config>& JointDeniedResponseEvent<config>::GetFiredFlit() noexcept
     {
         return firedResponseFlit;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const FiredResponseFlit<config, conn>& JointDeniedResponseEvent<config, conn>::GetFiredFlit() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>& JointDeniedResponseEvent<config>::GetFiredFlit() const noexcept
     {
         return firedResponseFlit;
     }
@@ -737,45 +703,36 @@ namespace /*CHI::*/Xact {
 
 // Implementation of: class JointXactionEventBase
 namespace /*CHI::*/Xact {
-    /*
-    Joint<config, conn>&                    joint;
-    std::shared_ptr<Xaction<config, conn>>  xaction;
-    */
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionEventBase<config, conn>::JointXactionEventBase(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction
+    template<FlitConfigurationConcept config>
+    inline JointXactionEventBase<config>::JointXactionEventBase(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction
     ) noexcept
         : joint     (joint)
         , xaction   (xaction)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Joint<config, conn>& JointXactionEventBase<config, conn>::GetJoint() noexcept
+    template<FlitConfigurationConcept config>
+    inline Joint<config>& JointXactionEventBase<config>::GetJoint() noexcept
     {
         return joint;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline const Joint<config, conn>& JointXactionEventBase<config, conn>::GetJoint() const noexcept
+    template<FlitConfigurationConcept config>
+    inline const Joint<config>& JointXactionEventBase<config>::GetJoint() const noexcept
     {
         return joint;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> JointXactionEventBase<config, conn>::GetXaction() noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> JointXactionEventBase<config>::GetXaction() noexcept
     {
         return xaction;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<const Xaction<config, conn>> JointXactionEventBase<config, conn>::GetXaction() const noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xaction<config>> JointXactionEventBase<config>::GetXaction() const noexcept
     {
         return xaction;
     }
@@ -784,29 +741,26 @@ namespace /*CHI::*/Xact {
 // Implementation of: class JointXactionAcceptedEvent
 namespace /*CHI::*/Xact {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionAcceptedEvent<config, conn>::JointXactionAcceptedEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction
+    template<FlitConfigurationConcept config>
+    inline JointXactionAcceptedEvent<config>::JointXactionAcceptedEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction
     ) noexcept
-        : JointXactionEventBase<config, conn>   (joint, xaction)
+        : JointXactionEventBase<config>   (joint, xaction)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionAcceptedEvent<config, conn>::JointXactionAcceptedEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction,
-        Flits::REQ<config, conn>::srcid_t       snpTgtId
+    template<FlitConfigurationConcept config>
+    inline JointXactionAcceptedEvent<config>::JointXactionAcceptedEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction,
+        Flits::REQ<config>::srcid_t       snpTgtId
     ) noexcept
-        : JointXactionEventBase<config, conn>   (joint, xaction)
-        , snoopTargetID                         (snpTgtId)
+        : JointXactionEventBase<config>   (joint, xaction)
+        , snoopTargetID                   (snpTgtId)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Flits::REQ<config, conn>::srcid_t JointXactionAcceptedEvent<config, conn>::GetSnoopTargetID() const noexcept
+    template<FlitConfigurationConcept config>
+    inline Flits::REQ<config>::srcid_t JointXactionAcceptedEvent<config>::GetSnoopTargetID() const noexcept
     {
         return snoopTargetID;
     }
@@ -815,43 +769,39 @@ namespace /*CHI::*/Xact {
 // Implementation of: class JointXactionRetryEvent
 namespace /*CHI::*/Xact {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionRetryEvent<config, conn>::JointXactionRetryEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction
+    template<FlitConfigurationConcept config>
+    inline JointXactionRetryEvent<config>::JointXactionRetryEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction
     ) noexcept
-        : JointXactionEventBase<config, conn>   (joint, xaction)
+        : JointXactionEventBase<config>   (joint, xaction)
     { }
 }
 
 // Implementation of: class JointXactionCompleteEvent
 namespace /*CHI::*/Xact {
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionCompleteEvent<config, conn>::JointXactionCompleteEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction
+    template<FlitConfigurationConcept config>
+    inline JointXactionCompleteEvent<config>::JointXactionCompleteEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction
     ) noexcept
-        : JointXactionEventBase<config, conn>   (joint, xaction)
-        , snoopTargetID                         (0)
+        : JointXactionEventBase<config>   (joint, xaction)
+        , snoopTargetID                   (0)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionCompleteEvent<config, conn>::JointXactionCompleteEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction,
-        Flits::REQ<config, conn>::srcid_t       snpTgtId
+    template<FlitConfigurationConcept config>
+    inline JointXactionCompleteEvent<config>::JointXactionCompleteEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction,
+        Flits::REQ<config>::srcid_t       snpTgtId
     ) noexcept
-        : JointXactionEventBase<config, conn>   (joint, xaction)
-        , snoopTargetID                         (snpTgtId)
+        : JointXactionEventBase<config>   (joint, xaction)
+        , snoopTargetID                   (snpTgtId)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Flits::REQ<config, conn>::srcid_t JointXactionCompleteEvent<config, conn>::GetSnoopTargetID() const noexcept
+    template<FlitConfigurationConcept config>
+    inline Flits::REQ<config>::srcid_t JointXactionCompleteEvent<config>::GetSnoopTargetID() const noexcept
     {
         return snoopTargetID;
     }
@@ -860,52 +810,48 @@ namespace /*CHI::*/Xact {
 // Implementation of: class JointXactionTxnIDAllocationEvent
 namespace /*CHI::*/Xact {
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionTxnIDAllocationEvent<config, conn>::JointXactionTxnIDAllocationEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction
+    template<FlitConfigurationConcept config>
+    inline JointXactionTxnIDAllocationEvent<config>::JointXactionTxnIDAllocationEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction
     ) noexcept
-        : JointXactionEventBase<config, conn>   (joint, xaction)
+        : JointXactionEventBase<config>   (joint, xaction)
     { }
 }
 
 // Implementation of: class JointXactionTxnIDFreeEvent
 namespace /*CHI::*/Xact {
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionTxnIDFreeEvent<config, conn>::JointXactionTxnIDFreeEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction
+    template<FlitConfigurationConcept config>
+    inline JointXactionTxnIDFreeEvent<config>::JointXactionTxnIDFreeEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction
     ) noexcept
-        : JointXactionEventBase<config, conn>   (joint, xaction)
+        : JointXactionEventBase<config>   (joint, xaction)
     { }
 }
 
 // Implementation of: class JointXactionDBIDAllocationEvent
 namespace /*CHI::*/Xact {
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionDBIDAllocationEvent<config, conn>::JointXactionDBIDAllocationEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction
+    template<FlitConfigurationConcept config>
+    inline JointXactionDBIDAllocationEvent<config>::JointXactionDBIDAllocationEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction
     ) noexcept
-        : JointXactionEventBase<config, conn>   (joint, xaction)
+        : JointXactionEventBase<config>   (joint, xaction)
     { }
 }
 
 // Implementation of: class JointXactionDBIDFreeEvent
 namespace /*CHI::*/Xact {
     
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline JointXactionDBIDFreeEvent<config, conn>::JointXactionDBIDFreeEvent(
-        Joint<config, conn>&                    joint,
-        std::shared_ptr<Xaction<config, conn>>  xaction
+    template<FlitConfigurationConcept config>
+    inline JointXactionDBIDFreeEvent<config>::JointXactionDBIDFreeEvent(
+        Joint<config>&                    joint,
+        std::shared_ptr<Xaction<config>>  xaction
     ) noexcept
-        : JointXactionEventBase<config, conn>   (joint, xaction)
+        : JointXactionEventBase<config>   (joint, xaction)
     { }
 }
 
@@ -913,9 +859,8 @@ namespace /*CHI::*/Xact {
 // Implementation of: class Joint
 namespace /*CHI::*/Xact {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Joint<config, conn>::Joint() noexcept
+    template<FlitConfigurationConcept config>
+    inline Joint<config>::Joint() noexcept
         : OnAccepted            (0)
         , OnRetry               (0)
         , OnTxnIDAllocation     (0)
@@ -925,9 +870,8 @@ namespace /*CHI::*/Xact {
         , OnComplete            (0)
     { }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void Joint<config, conn>::ClearListeners() noexcept
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::ClearListeners() noexcept
     {
         OnAccepted.UnregisterAll();
         OnRetry.UnregisterAll();
@@ -938,277 +882,250 @@ namespace /*CHI::*/Xact {
         OnComplete.UnregisterAll();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::RequestDeniedByJoint(
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::RequestDeniedByJoint(
         XactDenialEnum                          denial,
-        FiredRequestFlit<config, conn>&         firedRequestFlit,
-        std::shared_ptr<Xaction<config, conn>>  xaction) noexcept
+        FiredRequestFlit<config>&               firedRequestFlit,
+        std::shared_ptr<Xaction<config>>        xaction) noexcept
     {
-        this->OnDeniedRequest(JointDeniedRequestEvent<config, conn>(
+        this->OnDeniedRequest(JointDeniedRequestEvent<config>(
             *this, xaction, denial, JointDenialSource::JOINT, firedRequestFlit));
         return denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::RequestDeniedByXaction(
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::RequestDeniedByXaction(
         XactDenialEnum                          denial,
-        FiredRequestFlit<config, conn>&         firedRequestFlit,
-        std::shared_ptr<Xaction<config, conn>>  xaction) noexcept
+        FiredRequestFlit<config>&               firedRequestFlit,
+        std::shared_ptr<Xaction<config>>        xaction) noexcept
     {
-        this->OnDeniedRequest(JointDeniedRequestEvent<config, conn>(
+        this->OnDeniedRequest(JointDeniedRequestEvent<config>(
             *this, xaction, denial, JointDenialSource::XACTION, firedRequestFlit));
         return denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::ResponseDeniedByJoint(
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::ResponseDeniedByJoint(
         XactDenialEnum                          denial,
-        FiredResponseFlit<config, conn>&        firedResponseFlit,
-        std::shared_ptr<Xaction<config, conn>>  xaction) noexcept
+        FiredResponseFlit<config>&              firedResponseFlit,
+        std::shared_ptr<Xaction<config>>        xaction) noexcept
     {
-        this->OnDeniedResponse(JointDeniedResponseEvent<config, conn>(
+        this->OnDeniedResponse(JointDeniedResponseEvent<config>(
             *this, xaction, denial, JointDenialSource::JOINT, firedResponseFlit));
         return denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::ResponseDeniedByXaction(
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::ResponseDeniedByXaction(
         XactDenialEnum                          denial,
-        FiredResponseFlit<config, conn>&        firedResponseFlit,
-        std::shared_ptr<Xaction<config, conn>>  xaction) noexcept
+        FiredResponseFlit<config>&              firedResponseFlit,
+        std::shared_ptr<Xaction<config>>        xaction) noexcept
     {
-        this->OnDeniedResponse(JointDeniedResponseEvent<config, conn>(
+        this->OnDeniedResponse(JointDeniedResponseEvent<config>(
             *this, xaction, denial, JointDenialSource::XACTION, firedResponseFlit));
         return denial;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::NextTXREQ(
-        const Global<config, conn>&             glbl,
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::NextTXREQ(
+        const Global<config>&                   glbl,
         uint64_t                                time,
-        const Flits::REQ<config, conn>&         reqFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+        const Flits::REQ<config>&               reqFlit,
+        std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
         return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_TXREQ, 
-            FiredRequestFlit<config, conn>(GetActiveScope(), true, time, reqFlit));
+            FiredRequestFlit<config>(GetActiveScope(), true, time, reqFlit));
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::NextRXREQ(
-        const Global<config, conn>&             glbl,
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::NextRXREQ(
+        const Global<config>&                   glbl,
         uint64_t                                time,
-        const Flits::REQ<config, conn>&         reqFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+        const Flits::REQ<config>&               reqFlit,
+        std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
         return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_RXREQ,
-            FiredRequestFlit<config, conn>(GetActiveScope(), false, time, reqFlit));
+            FiredRequestFlit<config>(GetActiveScope(), false, time, reqFlit));
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::NextTXSNP(
-        const Global<config, conn>&             glbl,
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::NextTXSNP(
+        const Global<config>&                   glbl,
         uint64_t                                time,
-        const Flits::SNP<config, conn>&         snpFlit,
-        const Flits::REQ<config, conn>::srcid_t snpTgtId,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+        const Flits::SNP<config>&               snpFlit,
+        const Flits::REQ<config>::srcid_t       snpTgtId,
+        std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
         return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_TXSNP,
-            FiredRequestFlit<config, conn>(GetActiveScope(), true, time, snpFlit, snpTgtId));
+            FiredRequestFlit<config>(GetActiveScope(), true, time, snpFlit, snpTgtId));
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::NextRXSNP(
-        const Global<config, conn>&             glbl,
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::NextRXSNP(
+        const Global<config>&                   glbl,
         uint64_t                                time,
-        const Flits::SNP<config, conn>&         snpFlit,
-        const Flits::REQ<config, conn>::srcid_t snpTgtId,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+        const Flits::SNP<config>&               snpFlit,
+        const Flits::REQ<config>::srcid_t       snpTgtId,
+        std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
         return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_RXSNP,
-            FiredRequestFlit<config, conn>(GetActiveScope(), false, time, snpFlit, snpTgtId));
+            FiredRequestFlit<config>(GetActiveScope(), false, time, snpFlit, snpTgtId));
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::NextTXRSP(
-        const Global<config, conn>&             glbl,
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::NextTXRSP(
+        const Global<config>&                   glbl,
         uint64_t                                time,
-        const Flits::RSP<config, conn>&         rspFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+        const Flits::RSP<config>&               rspFlit,
+        std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
         return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_TXRSP,
-            FiredResponseFlit<config, conn>(GetActiveScope(), true, time, rspFlit));
+            FiredResponseFlit<config>(GetActiveScope(), true, time, rspFlit));
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::NextRXRSP(
-        const Global<config, conn>&             glbl,
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::NextRXRSP(
+        const Global<config>&                   glbl,
         uint64_t                                time,
-        const Flits::RSP<config, conn>&         rspFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+        const Flits::RSP<config>&               rspFlit,
+        std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
         return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_RXRSP,
-            FiredResponseFlit<config, conn>(GetActiveScope(), false, time, rspFlit));
+            FiredResponseFlit<config>(GetActiveScope(), false, time, rspFlit));
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::NextTXDAT(
-        const Global<config, conn>&             glbl,
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::NextTXDAT(
+        const Global<config>&                   glbl,
         uint64_t                                time,
-        const Flits::DAT<config, conn>&         datFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+        const Flits::DAT<config>&               datFlit,
+        std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
         return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_TXDAT,
-            FiredResponseFlit<config, conn>(GetActiveScope(), true, time, datFlit));
+            FiredResponseFlit<config>(GetActiveScope(), true, time, datFlit));
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum Joint<config, conn>::NextRXDAT(
-        const Global<config, conn>&             glbl,
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Joint<config>::NextRXDAT(
+        const Global<config>&                   glbl,
         uint64_t                                time,
-        const Flits::DAT<config, conn>&         datFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+        const Flits::DAT<config>&               datFlit,
+        std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
         return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_RXDAT,
-            FiredResponseFlit<config, conn>(GetActiveScope(), false, time, datFlit));
+            FiredResponseFlit<config>(GetActiveScope(), false, time, datFlit));
     }
 }
 
 
 // Implementation of: class RNFJoint
 namespace /*CHI::*/Xact {
-    /*
-    ...
-    */
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructNone(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retired) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructNone(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retired) noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructAllocatingRead(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructAllocatingRead(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionAllocatingRead<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionAllocatingRead<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructNonAllocatingRead(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructNonAllocatingRead(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionNonAllocatingRead<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionNonAllocatingRead<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructImmediateWrite(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructImmediateWrite(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionImmediateWrite<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionImmediateWrite<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructWriteZero(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructWriteZero(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionWriteZero<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionWriteZero<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructCopyBackWrite(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructCopyBackWrite(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionCopyBackWrite<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionCopyBackWrite<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructDataless(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructDataless(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionDataless<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionDataless<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructHomeSnoop(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructHomeSnoop(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionHomeSnoop<config, conn>>(glbl, reqFlit);
+        return std::make_shared<XactionHomeSnoop<config>>(glbl, reqFlit);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructForwardSnoop(
-        const Global<config, conn>&             glbl,       
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructForwardSnoop(
+        const Global<config>&             glbl,       
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionForwardSnoop<config, conn>>(glbl, reqFlit);
+        return std::make_shared<XactionForwardSnoop<config>>(glbl, reqFlit);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructAtomic(
-        const Global<config, conn>&             glbl,       
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructAtomic(
+        const Global<config>&             glbl,       
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionAtomic<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionAtomic<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> RNFJoint<config, conn>::ConstructIndependentStash(
-        const Global<config, conn>&             glbl,       
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> RNFJoint<config>::ConstructIndependentStash(
+        const Global<config>&             glbl,       
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionIndependentStash<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionIndependentStash<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline RNFJoint<config, conn>::RNFJoint() noexcept
+    template<FlitConfigurationConcept config>
+    inline RNFJoint<config>::RNFJoint() noexcept
     {
         // TXREQ transactions
         #define SET_REQ_XACTION(opcode, type) \
-            reqDecoder[Opcodes::REQ::opcode].SetCompanion(&RNFJoint<config, conn>::Construct##type)
+            reqDecoder[Opcodes::REQ::opcode].SetCompanion(&RNFJoint<config>::Construct##type)
 
         SET_REQ_XACTION(ReqLCrdReturn               , None              );  // 0x00
         SET_REQ_XACTION(ReadShared                  , AllocatingRead    );  // 0x01
@@ -1343,7 +1260,7 @@ namespace /*CHI::*/Xact {
 
         // RXSNP Transactions
         #define SET_SNP_XACTION(opcode, type) \
-            snpDecoder[Opcodes::SNP::opcode].SetCompanion(&RNFJoint<config, conn>::Construct##type)
+            snpDecoder[Opcodes::SNP::opcode].SetCompanion(&RNFJoint<config>::Construct##type)
         
         SET_SNP_XACTION(SnpLCrdReturn               , None              );  // 0x00
         SET_SNP_XACTION(SnpShared                   , HomeSnoop         );  // 0x01
@@ -1381,10 +1298,9 @@ namespace /*CHI::*/Xact {
         #undef SET_SNP_XACTION
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline RNFJoint<config, conn>::RNFJoint(const RNFJoint<config, conn>& obj) noexcept
-        : Joint<config, conn>               (obj)
+    template<FlitConfigurationConcept config>
+    inline RNFJoint<config>::RNFJoint(const RNFJoint<config>& obj) noexcept
+        : Joint<config>                     (obj)
         , txTransactions                    (obj.txTransactions)
         , rxTransactions                    (obj.rxTransactions)
         , txDBIDTransactions                (obj.txDBIDTransactions)
@@ -1394,17 +1310,16 @@ namespace /*CHI::*/Xact {
         , reqDecoder                        (obj.reqDecoder)
         , snpDecoder                        (obj.snpDecoder)
     {
-        std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH),
+        std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
             grantedPCredits);
 
         Fork();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline RNFJoint<config, conn>& RNFJoint<config, conn>::operator=(const RNFJoint<config, conn>& obj) noexcept
+    template<FlitConfigurationConcept config>
+    inline RNFJoint<config>& RNFJoint<config>::operator=(const RNFJoint<config>& obj) noexcept
     {
-        *(Joint<config, conn>*)(this) = obj;
+        *(Joint<config>*)(this) = obj;
 
         txTransactions                  = obj.txTransactions;
         rxTransactions                  = obj.rxTransactions;
@@ -1415,15 +1330,14 @@ namespace /*CHI::*/Xact {
         reqDecoder                      = obj.reqDecoder;
         snpDecoder                      = obj.snpDecoder;
 
-        std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH),
+        std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
             grantedPCredits);
 
         Fork();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void RNFJoint<config, conn>::Fork() noexcept
+    template<FlitConfigurationConcept config>
+    inline void RNFJoint<config>::Fork() noexcept
     {
         for (auto& p : txTransactions)
             p.second = p.second->Clone();
@@ -1442,9 +1356,8 @@ namespace /*CHI::*/Xact {
                 p1 = p1->Clone();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void RNFJoint<config, conn>::Clear() noexcept
+    template<FlitConfigurationConcept config>
+    inline void RNFJoint<config>::Clear() noexcept
     {
         txTransactions.clear();
         rxTransactions.clear();
@@ -1455,23 +1368,21 @@ namespace /*CHI::*/Xact {
 
         txRetriedTransactions.clear();
 
-        for (int i = 0; i < (1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH); i++)
+        for (int i = 0; i < (1 << Flits::RSP<config>::PCRDTYPE_WIDTH); i++)
             grantedPCredits[i].clear();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactScopeEnum RNFJoint<config, conn>::GetActiveScope() const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactScopeEnum RNFJoint<config>::GetActiveScope() const noexcept
     {
         return XactScope::Requester;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void RNFJoint<config, conn>::GetInflight(
-        const Global<config, conn>&                             glbl,
-        std::vector<std::shared_ptr<Xaction<config, conn>>>&    dstVector,
-        bool                                                    sortByTime
+    template<FlitConfigurationConcept config>
+    inline void RNFJoint<config>::GetInflight(
+        const Global<config>&                             glbl,
+        std::vector<std::shared_ptr<Xaction<config>>>&    dstVector,
+        bool                                              sortByTime
     ) const noexcept
     {
         for (auto& rxTransaction : rxTransactions)
@@ -1499,7 +1410,7 @@ namespace /*CHI::*/Xact {
         if (sortByTime)
         {
             std::sort(dstVector.begin(), dstVector.end(),
-                [] (std::shared_ptr<Xaction<config, conn>> a, std::shared_ptr<Xaction<config, conn>> b)
+                [] (std::shared_ptr<Xaction<config>> a, std::shared_ptr<Xaction<config>> b)
                 {
                     return a->GetFirst().time < b->GetFirst().time;
                 }
@@ -1507,13 +1418,12 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNFJoint<config, conn>::NextTXREQ(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::REQ<config, conn>&         reqFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNFJoint<config>::NextTXREQ(
+        const Global<config>&             glbl,
+        uint64_t                          time,
+        const Flits::REQ<config>&         reqFlit,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
         txreqid_t key;
         key.value   = 0;
@@ -1523,7 +1433,7 @@ namespace /*CHI::*/Xact {
         bool retry = false;
 
         //
-        FiredRequestFlit<config, conn> firedReqFlit(XactScope::Requester, true, time, reqFlit);
+        FiredRequestFlit<config> firedReqFlit(XactScope::Requester, true, time, reqFlit);
 
         const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, GetXaction>& opcodeInfo = 
             reqDecoder.DecodeRNF(reqFlit.Opcode());
@@ -1557,11 +1467,11 @@ namespace /*CHI::*/Xact {
             if (xactionIter == xactionList->second.end())
                 return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_RETRY, firedReqFlit);
 
-            std::shared_ptr<Xaction<config, conn>> firstXaction = *xactionIter;
+            std::shared_ptr<Xaction<config>> firstXaction = *xactionIter;
 
             xactionList->second.erase(xactionIter);
 
-            std::shared_ptr<Xaction<config, conn>> retryXaction =
+            std::shared_ptr<Xaction<config>> retryXaction =
                 opcodeInfo.GetCompanion()(glbl, firedReqFlit, firstXaction);
 
             if (!retryXaction) // unsupported opcode transaction
@@ -1581,14 +1491,14 @@ namespace /*CHI::*/Xact {
             pCrdKey.id.src  = firstXaction->GetRetryAck()->flit.rsp.SrcID();
             pCrdKey.id.tgt  = reqFlit.SrcID();
 
-            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config, conn>>>& grantedPCredits
+            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>& grantedPCredits
                 = this->grantedPCredits[reqFlit.PCrdType()];
 
             auto iterPCreditList = grantedPCredits.find(pCrdKey);
             if (iterPCreditList == grantedPCredits.end())
                 return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
 
-            std::list<FiredResponseFlit<config, conn>>& pCreditList = iterPCreditList->second;
+            std::list<FiredResponseFlit<config>>& pCreditList = iterPCreditList->second;
 
             if (pCreditList.empty())
                 return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
@@ -1608,10 +1518,10 @@ namespace /*CHI::*/Xact {
             txTransactions.erase(firstKey);
 
             // event on retry xaction
-            this->OnRetry(JointXactionRetryEvent<config, conn>(*this, retryXaction));
+            this->OnRetry(JointXactionRetryEvent<config>(*this, retryXaction));
 
             // event on TxnID allocation
-            this->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config, conn>(*this, retryXaction));
+            this->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config>(*this, retryXaction));
 
             // consume P-Credit
             pCreditList.pop_front();
@@ -1624,7 +1534,7 @@ namespace /*CHI::*/Xact {
             if (txTransactions.contains(key))
                 return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_TXNID_IN_USE, firedReqFlit, txTransactions[key]);
 
-            std::shared_ptr<Xaction<config, conn>> xaction;
+            std::shared_ptr<Xaction<config>> xaction;
 
             xaction = opcodeInfo.GetCompanion()(glbl, firedReqFlit, nullptr);
 
@@ -1638,10 +1548,10 @@ namespace /*CHI::*/Xact {
                 return this->RequestDeniedByXaction(xaction->GetFirstDenial(), firedReqFlit, xaction);
 
             // event on Request xaction accepted
-            this->OnAccepted(JointXactionAcceptedEvent<config, conn>(*this, xaction));
+            this->OnAccepted(JointXactionAcceptedEvent<config>(*this, xaction));
 
             // event on TxnID allocation
-            this->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config, conn>(*this, xaction));
+            this->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config>(*this, xaction));
 
             txTransactions[key] = xaction;
         }
@@ -1649,14 +1559,13 @@ namespace /*CHI::*/Xact {
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNFJoint<config, conn>::NextRXSNP(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::SNP<config, conn>&         snpFlit,
-        const Flits::REQ<config, conn>::srcid_t snpTgtId,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNFJoint<config>::NextRXSNP(
+        const Global<config>&             glbl,
+        uint64_t                          time,
+        const Flits::SNP<config>&         snpFlit,
+        const Flits::REQ<config>::srcid_t snpTgtId,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
         rxsnpid_t key;
         key.value   = 0;
@@ -1665,7 +1574,7 @@ namespace /*CHI::*/Xact {
         key.id.txn  = snpFlit.TxnID();
 
         //
-        FiredRequestFlit<config, conn> firedSnpFlit(XactScope::Requester, false, time, snpFlit, snpTgtId);
+        FiredRequestFlit<config> firedSnpFlit(XactScope::Requester, false, time, snpFlit, snpTgtId);
 
         //
         if (rxTransactions.contains(key))
@@ -1677,7 +1586,7 @@ namespace /*CHI::*/Xact {
         if (!opcodeInfo.IsValid()) // unknown opcode
             return this->RequestDeniedByJoint(XactDenial::DENIED_SNP_OPCODE, firedSnpFlit);
         
-        std::shared_ptr<Xaction<config, conn>> xaction =
+        std::shared_ptr<Xaction<config>> xaction =
             opcodeInfo.GetCompanion()(glbl, firedSnpFlit, nullptr);
 
         if (!xaction) // unsupported opcode transaction
@@ -1690,24 +1599,23 @@ namespace /*CHI::*/Xact {
             return this->RequestDeniedByXaction(xaction->GetFirstDenial(), firedSnpFlit, xaction);
 
         // event on Request xaction accepted
-        this->OnAccepted(JointXactionAcceptedEvent<config, conn>(*this, xaction, snpTgtId));
+        this->OnAccepted(JointXactionAcceptedEvent<config>(*this, xaction, snpTgtId));
 
         rxTransactions[key] = xaction;
 
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNFJoint<config, conn>::NextTXRSP(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::RSP<config, conn>&         rspFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNFJoint<config>::NextTXRSP(
+        const Global<config>&             glbl,
+        uint64_t                          time,
+        const Flits::RSP<config>&         rspFlit,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
-        FiredResponseFlit<config, conn> firedRspFlit(XactScope::Requester, true, time, rspFlit);
+        FiredResponseFlit<config> firedRspFlit(XactScope::Requester, true, time, rspFlit);
 
-        std::shared_ptr<Xaction<config, conn>> xaction;
+        std::shared_ptr<Xaction<config>> xaction;
 
         // RSPs from requester might apply TxnID with DBID (CompAck).
         // Otherwise, snoop RSPs use TxnID from SNPs (SnpResp, SnpRespFwded).
@@ -1774,13 +1682,13 @@ namespace /*CHI::*/Xact {
             if (xaction->IsDBIDComplete(glbl))
             {
                 // remove related DBID mapping
-                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                const FiredResponseFlit<config>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
                 {
                     // event on DBID free
-                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
                     
                     // DBID overlapping would never happen on CompAck
                     // see above for details
@@ -1806,7 +1714,7 @@ namespace /*CHI::*/Xact {
             // consider DBID overlapping here
             else if (xaction->IsDBIDOverlappable(glbl))
             {
-                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                const FiredResponseFlit<config>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
@@ -1836,7 +1744,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+                this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
             }
         }
         else // SNP
@@ -1845,7 +1753,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction, rspFlit.SrcID()));
+                this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction, rspFlit.SrcID()));
 
                 rxsnpid_t key;
                 key.value   = 0;
@@ -1860,15 +1768,14 @@ namespace /*CHI::*/Xact {
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNFJoint<config, conn>::NextRXRSP(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::RSP<config, conn>&         rspFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNFJoint<config>::NextRXRSP(
+        const Global<config>&             glbl,
+        uint64_t                          time,
+        const Flits::RSP<config>&         rspFlit,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
-        FiredResponseFlit<config, conn> firedRspFlit(XactScope::Requester, false, time, rspFlit);
+        FiredResponseFlit<config> firedRspFlit(XactScope::Requester, false, time, rspFlit);
 
         // P-Credit Grant
         if (rspFlit.Opcode() == Opcodes::RSP::PCrdGrant)
@@ -1878,7 +1785,7 @@ namespace /*CHI::*/Xact {
             pCrdKey.id.src  = rspFlit.SrcID();
             pCrdKey.id.tgt  = rspFlit.TgtID();
 
-            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config, conn>>>& grantedPCredits
+            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>& grantedPCredits
                 = this->grantedPCredits[rspFlit.PCrdType()];
 
             auto iterPCreditList = grantedPCredits.try_emplace(pCrdKey).first;
@@ -1896,7 +1803,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        std::shared_ptr<Xaction<config, conn>> xaction;
+        std::shared_ptr<Xaction<config>> xaction;
 
         // RSPs to requester do not apply TxnID with DBID,
         // but may pass new DBID to requester.
@@ -1943,7 +1850,7 @@ namespace /*CHI::*/Xact {
                 txDBIDTransactions[keyDBID] = xaction;
 
                 // event on DBID allocation
-                this->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config, conn>(*this, xaction));
+                this->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config>(*this, xaction));
             }
             else
             {
@@ -1958,7 +1865,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsTxnIDComplete(glbl))
             {
                 // event on TxnID free
-                this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config, conn>(*this, xaction));
+                this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config>(*this, xaction));
 
                 // remove related TxnID mapping
                 txreqid_t key;
@@ -1973,13 +1880,13 @@ namespace /*CHI::*/Xact {
             if (xaction->IsDBIDComplete(glbl))
             {
                 // remove related DBID mapping
-                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                const FiredResponseFlit<config>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
                 {
                     // event on DBID free
-                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
 
                     // check overlappable DBID mapping first
                     txreqdbidovlp_t keyDBIDOvlp;
@@ -2034,7 +1941,7 @@ namespace /*CHI::*/Xact {
             else if (xaction->IsDBIDOverlappable(glbl))
             {
                 // move DBID mapping to overlappable if not moved yet
-                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                const FiredResponseFlit<config>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
@@ -2088,7 +1995,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+                this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
 
                 if (xaction->GotRetryAck())
                 {
@@ -2108,7 +2015,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction, rspFlit.TgtID()));
+                this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction, rspFlit.TgtID()));
 
                 rxsnpid_t key;
                 key.value   = 0;
@@ -2123,17 +2030,16 @@ namespace /*CHI::*/Xact {
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNFJoint<config, conn>::NextTXDAT(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::DAT<config, conn>&         datFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNFJoint<config>::NextTXDAT(
+        const Global<config>&             glbl,
+        uint64_t                          time,
+        const Flits::DAT<config>&         datFlit,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
-        FiredResponseFlit<config, conn> firedDatFlit(XactScope::Requester, true, time, datFlit);
+        FiredResponseFlit<config> firedDatFlit(XactScope::Requester, true, time, datFlit);
 
-        std::shared_ptr<Xaction<config, conn>> xaction;
+        std::shared_ptr<Xaction<config>> xaction;
 
         // DCT or Write
         if (firedDatFlit.IsToRequester(glbl))
@@ -2220,13 +2126,13 @@ namespace /*CHI::*/Xact {
             if (xaction->IsDBIDComplete(glbl))
             {
                 // remove related DBID mapping
-                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                const FiredResponseFlit<config>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
                 {
                     // event on DBID free
-                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
 
                     // check overlappable DBID mapping first
                     txreqdbidovlp_t keyDBIDOvlp;
@@ -2281,7 +2187,7 @@ namespace /*CHI::*/Xact {
             else if (xaction->IsDBIDOverlappable(glbl))
             {
                 // move DBID mapping to overlappable if not moved yet
-                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                const FiredResponseFlit<config>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
@@ -2334,7 +2240,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+                this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
             }
         }
         else // SNP
@@ -2342,7 +2248,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction, datFlit.SrcID()));
+                this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction, datFlit.SrcID()));
                     
                 rxsnpid_t key;
                 key.value   = 0;
@@ -2357,17 +2263,16 @@ namespace /*CHI::*/Xact {
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum RNFJoint<config, conn>::NextRXDAT(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::DAT<config, conn>&         datFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNFJoint<config>::NextRXDAT(
+        const Global<config>&             glbl,
+        uint64_t                          time,
+        const Flits::DAT<config>&         datFlit,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
-        FiredResponseFlit<config, conn> firedDatFlit(XactScope::Requester, false, time, datFlit);
+        FiredResponseFlit<config> firedDatFlit(XactScope::Requester, false, time, datFlit);
 
-        std::shared_ptr<Xaction<config, conn>> xaction;
+        std::shared_ptr<Xaction<config>> xaction;
 
         // DCT or Read
         txreqid_t key;
@@ -2412,7 +2317,7 @@ namespace /*CHI::*/Xact {
                 txDBIDTransactions[keyDBID] = xaction;
 
                 // on DBID allocation
-                this->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config, conn>(*this, xaction));
+                this->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config>(*this, xaction));
             }
             else
             {
@@ -2427,7 +2332,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsTxnIDComplete(glbl))
             {
                 // event on TxnID free
-                this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config, conn>(*this, xaction));
+                this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config>(*this, xaction));
 
                 if (xaction->GetFirst().IsREQ())
                 {
@@ -2445,13 +2350,13 @@ namespace /*CHI::*/Xact {
             if (xaction->IsDBIDComplete(glbl))
             {
                 // remove related DBID mapping
-                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                const FiredResponseFlit<config>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
                 {
                     // event on DBID free
-                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+                    this->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
 
                     // check overlappable DBID mapping first
                     txreqdbidovlp_t keyDBIDOvlp;
@@ -2506,7 +2411,7 @@ namespace /*CHI::*/Xact {
             else if (xaction->IsDBIDOverlappable(glbl))
             {
                 // move DBID mapping to overlappable if not moved yet
-                const FiredResponseFlit<config, conn>* xactionDBIDSource =
+                const FiredResponseFlit<config>* xactionDBIDSource =
                     xaction->GetDBIDSource();
 
                 if (xactionDBIDSource)
@@ -2560,7 +2465,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+                this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
             }
         }
         else // SNP
@@ -2569,7 +2474,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction, datFlit.TgtID()));
+                this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction, datFlit.TgtID()));
             
                 rxsnpid_t key;
                 key.value   = 0;
@@ -2592,73 +2497,66 @@ namespace /*CHI::*/Xact {
     ...
     */
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructNone(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retired) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> SNFJoint<config>::ConstructNone(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retired) noexcept
     {
         return nullptr;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeRead(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> SNFJoint<config>::ConstructHomeRead(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionHomeRead<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionHomeRead<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeWrite(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> SNFJoint<config>::ConstructHomeWrite(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionHomeWrite<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionHomeWrite<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeWriteZero(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> SNFJoint<config>::ConstructHomeWriteZero(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionHomeWriteZero<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionHomeWriteZero<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeDataless(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> SNFJoint<config>::ConstructHomeDataless(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionHomeDataless<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionHomeDataless<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline std::shared_ptr<Xaction<config, conn>> SNFJoint<config, conn>::ConstructHomeAtomic(
-        const Global<config, conn>&             glbl,
-        const FiredRequestFlit<config, conn>&   reqFlit,
-        std::shared_ptr<Xaction<config, conn>>  retried) noexcept
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> SNFJoint<config>::ConstructHomeAtomic(
+        const Global<config>&             glbl,
+        const FiredRequestFlit<config>&   reqFlit,
+        std::shared_ptr<Xaction<config>>  retried) noexcept
     {
-        return std::make_shared<XactionHomeAtomic<config, conn>>(glbl, reqFlit, retried);
+        return std::make_shared<XactionHomeAtomic<config>>(glbl, reqFlit, retried);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline SNFJoint<config, conn>::SNFJoint() noexcept
+    template<FlitConfigurationConcept config>
+    inline SNFJoint<config>::SNFJoint() noexcept
     {
         // TXREQ transactions
         #define SET_REQ_XACTION(opcode, type) \
-            reqDecoder[Opcodes::REQ::opcode].SetCompanion(&SNFJoint<config, conn>::Construct##type)
+            reqDecoder[Opcodes::REQ::opcode].SetCompanion(&SNFJoint<config>::Construct##type)
 
             SET_REQ_XACTION(ReqLCrdReturn               , None              );  // 0x00
             SET_REQ_XACTION(ReadShared                  , None              );  // 0x01
@@ -2792,9 +2690,8 @@ namespace /*CHI::*/Xact {
         #undef SET_REQ_XACTION
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void SNFJoint<config, conn>::Clear() noexcept
+    template<FlitConfigurationConcept config>
+    inline void SNFJoint<config>::Clear() noexcept
     {
         rxTransactions.clear();
         
@@ -2804,23 +2701,21 @@ namespace /*CHI::*/Xact {
 
         rxRetriedTransactions.clear();
 
-        for (int i = 0; i < (1 << Flits::RSP<config, conn>::PCRDTYPE_WIDTH); i++)
+        for (int i = 0; i < (1 << Flits::RSP<config>::PCRDTYPE_WIDTH); i++)
             grantedPCredits[i].clear();
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactScopeEnum SNFJoint<config, conn>::GetActiveScope() const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactScopeEnum SNFJoint<config>::GetActiveScope() const noexcept
     {
         return XactScope::Subordinate;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline void SNFJoint<config, conn>::GetInflight(
-        const Global<config, conn>&                             glbl,
-        std::vector<std::shared_ptr<Xaction<config, conn>>>&    dstVector,
-        bool                                                    sortByTime
+    template<FlitConfigurationConcept config>
+    inline void SNFJoint<config>::GetInflight(
+        const Global<config>&                             glbl,
+        std::vector<std::shared_ptr<Xaction<config>>>&    dstVector,
+        bool                                              sortByTime
     ) const noexcept
     {
         for (auto& rxTransaction : rxTransactions)
@@ -2845,7 +2740,7 @@ namespace /*CHI::*/Xact {
         if (sortByTime)
         {
             std::sort(dstVector.begin(), dstVector.end(),
-                [] (std::shared_ptr<Xaction<config, conn>> a, std::shared_ptr<Xaction<config, conn>> b)
+                [] (std::shared_ptr<Xaction<config>> a, std::shared_ptr<Xaction<config>> b)
                 {
                     return a->GetFirst().time < b->GetFirst().time;
                 }
@@ -2853,13 +2748,12 @@ namespace /*CHI::*/Xact {
         }
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum SNFJoint<config, conn>::NextRXREQ(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::REQ<config, conn>&         reqFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum SNFJoint<config>::NextRXREQ(
+        const Global<config>&             glbl,
+        uint64_t                           time,
+        const Flits::REQ<config>&         reqFlit,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
         rxreqid_t key;
         key.value   = 0;
@@ -2869,7 +2763,7 @@ namespace /*CHI::*/Xact {
         bool retry = false;
 
         //
-        FiredRequestFlit<config, conn> firedReqFlit(XactScope::Subordinate, false, time, reqFlit);
+        FiredRequestFlit<config> firedReqFlit(XactScope::Subordinate, false, time, reqFlit);
 
         const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, GetXaction>& opcodeInfo =
             reqDecoder.DecodeSNF(reqFlit.Opcode());
@@ -2894,7 +2788,7 @@ namespace /*CHI::*/Xact {
             if (rxTransactions.contains(key))
                 return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_TXNID_IN_USE, firedReqFlit, rxTransactions[key]);
 
-            std::shared_ptr<Xaction<config, conn>> xaction;
+            std::shared_ptr<Xaction<config>> xaction;
 
             xaction = opcodeInfo.GetCompanion()(glbl, firedReqFlit, nullptr);
 
@@ -2908,10 +2802,10 @@ namespace /*CHI::*/Xact {
                 return this->RequestDeniedByXaction(xaction->GetFirstDenial(), firedReqFlit, xaction);
 
             // event on Request xaction acccepted
-            this->OnAccepted(JointXactionAcceptedEvent<config, conn>(*this, xaction));
+            this->OnAccepted(JointXactionAcceptedEvent<config>(*this, xaction));
 
             // event on TxnID allocation
-            this->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config, conn>(*this, xaction));
+            this->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config>(*this, xaction));
 
             rxTransactions[key] = xaction;
         }
@@ -2919,15 +2813,14 @@ namespace /*CHI::*/Xact {
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum SNFJoint<config, conn>::NextTXRSP(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::RSP<config, conn>&         rspFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum SNFJoint<config>::NextTXRSP(
+        const Global<config>&             glbl,
+        uint64_t                          time,
+        const Flits::RSP<config>&         rspFlit,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
-        FiredResponseFlit<config, conn> firedRspFlit(XactScope::Subordinate, true, time, rspFlit);
+        FiredResponseFlit<config> firedRspFlit(XactScope::Subordinate, true, time, rspFlit);
 
         // P-Credit Grant
         if (rspFlit.Opcode() == Opcodes::RSP::PCrdGrant)
@@ -2937,7 +2830,7 @@ namespace /*CHI::*/Xact {
             pCrdKey.id.src  = rspFlit.SrcID();
             pCrdKey.id.tgt  = rspFlit.TgtID();
 
-            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config, conn>>>& grantedPCredits
+            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>& grantedPCredits
                 = this->grantedPCredits[rspFlit.PCrdType()];
 
             auto iterPCreditList = grantedPCredits.try_emplace(pCrdKey).first;
@@ -2955,7 +2848,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        std::shared_ptr<Xaction<config, conn>> xaction;
+        std::shared_ptr<Xaction<config>> xaction;
 
         // RSPs to requester do not apply TxnID with DBID,
         // but may pass new DBID to requester.
@@ -3004,7 +2897,7 @@ namespace /*CHI::*/Xact {
                 rxDBIDTransactions[keyDBID] = xaction;
 
                 // event on DBID allocation
-                this->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config, conn>(*this, xaction));
+                this->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config>(*this, xaction));
             }
             else
             {
@@ -3019,7 +2912,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsTxnIDComplete(glbl))
         {
             // event on TxnID free
-            this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config, conn>(*this, xaction));
+            this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config>(*this, xaction));
 
             // remove related TxnID mapping
             rxreqid_t key;
@@ -3034,7 +2927,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsDBIDComplete(glbl))
         {
             // remove related DBID mapping
-            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+            const FiredResponseFlit<config>* xactionDBIDSource =
                 xaction->GetDBIDSource();
 
             if (xactionDBIDSource)
@@ -3042,7 +2935,7 @@ namespace /*CHI::*/Xact {
                 assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
 
                 // event on DBID free
-                this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+                this->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
 
                 // check overlappable DBID mapping first
                 rxreqdbidovlp_t keyDBIDOvlp;
@@ -3078,7 +2971,7 @@ namespace /*CHI::*/Xact {
         else if (xaction->IsDBIDOverlappable(glbl))
         {
             // move DBID mapping to overlappable if not moved yet
-            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+            const FiredResponseFlit<config>* xactionDBIDSource =
                 xaction->GetDBIDSource();
 
             if (xactionDBIDSource)
@@ -3115,7 +3008,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsComplete(glbl))
         {
             // event on completion
-            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+            this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
 
             if (xaction->GotRetryAck())
             {
@@ -3133,17 +3026,16 @@ namespace /*CHI::*/Xact {
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum SNFJoint<config, conn>::NextTXDAT(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::DAT<config, conn>&         datFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum SNFJoint<config>::NextTXDAT(
+        const Global<config>&             glbl,
+        uint64_t                          time,
+        const Flits::DAT<config>&         datFlit,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
-        FiredResponseFlit<config, conn> firedDatFlit(XactScope::Subordinate, true, time, datFlit);
+        FiredResponseFlit<config> firedDatFlit(XactScope::Subordinate, true, time, datFlit);
 
-        std::shared_ptr<Xaction<config, conn>> xaction;
+        std::shared_ptr<Xaction<config>> xaction;
 
         // DMT or Home Read
         rxreqid_t key;
@@ -3184,7 +3076,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsTxnIDComplete(glbl))
         {
             // event on TxnID free
-            this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config, conn>(*this, xaction));
+            this->OnTxnIDFree(JointXactionTxnIDFreeEvent<config>(*this, xaction));
 
             // remove related TxnID mapping
             rxreqid_t key;
@@ -3199,7 +3091,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsDBIDComplete(glbl))
         {
             // remove related DBID mapping
-            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+            const FiredResponseFlit<config>* xactionDBIDSource =
                 xaction->GetDBIDSource();
 
             if (xactionDBIDSource)
@@ -3207,7 +3099,7 @@ namespace /*CHI::*/Xact {
                 assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
 
                 // event on DBID free
-                this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+                this->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
 
                 // check overlappable DBID mapping first
                 rxreqdbidovlp_t keyDBIDOvlp;
@@ -3243,7 +3135,7 @@ namespace /*CHI::*/Xact {
         else if (xaction->IsDBIDOverlappable(glbl))
         {
             // move DBID mapping to overlappable if not moved yet
-            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+            const FiredResponseFlit<config>* xactionDBIDSource =
                 xaction->GetDBIDSource();
 
             if (xactionDBIDSource)
@@ -3279,23 +3171,22 @@ namespace /*CHI::*/Xact {
         if (xaction->IsComplete(glbl))
         {
             // event on completion
-            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+            this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
         }
 
         return XactDenial::ACCEPTED;
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum SNFJoint<config, conn>::NextRXDAT(
-        const Global<config, conn>&             glbl,
-        uint64_t                                time,
-        const Flits::DAT<config, conn>&         datFlit,
-        std::shared_ptr<Xaction<config, conn>>* theXaction) noexcept
+    template<FlitConfigurationConcept       config>
+    inline XactDenialEnum SNFJoint<config>::NextRXDAT(
+        const Global<config>&             glbl,
+        uint64_t                          time,
+        const Flits::DAT<config>&         datFlit,
+        std::shared_ptr<Xaction<config>>* theXaction) noexcept
     {
-        FiredResponseFlit<config, conn> firedDatFlit(XactScope::Subordinate, false, time, datFlit);
+        FiredResponseFlit<config> firedDatFlit(XactScope::Subordinate, false, time, datFlit);
 
-        std::shared_ptr<Xaction<config, conn>> xaction;
+        std::shared_ptr<Xaction<config>> xaction;
 
         // DWT or Write
         rxreqdbid_t key;
@@ -3329,7 +3220,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsDBIDComplete(glbl))
         {
             // remove related DBID mapping
-            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+            const FiredResponseFlit<config>* xactionDBIDSource =
                 xaction->GetDBIDSource();
 
             if (xactionDBIDSource)
@@ -3337,7 +3228,7 @@ namespace /*CHI::*/Xact {
                 assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
 
                 // event on DBID free
-                this->OnDBIDFree(JointXactionDBIDFreeEvent<config, conn>(*this, xaction));
+                this->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
 
                 // check overlappable DBID mapping first
                 rxreqdbidovlp_t keyDBIDOvlp;
@@ -3373,7 +3264,7 @@ namespace /*CHI::*/Xact {
         else if (xaction->IsDBIDOverlappable(glbl))
         {
             // move DBID mapping to overlappable if not moved yet
-            const FiredResponseFlit<config, conn>* xactionDBIDSource =
+            const FiredResponseFlit<config>* xactionDBIDSource =
                 xaction->GetDBIDSource();
 
             if (xactionDBIDSource)
@@ -3409,7 +3300,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsComplete(glbl))
         {
             // event on completion
-            this->OnComplete(JointXactionCompleteEvent<config, conn>(*this, xaction));
+            this->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
         }
 
         return XactDenial::ACCEPTED;

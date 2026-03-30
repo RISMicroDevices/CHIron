@@ -30,33 +30,32 @@ namespace CHI {
 
         using GlobalTopology = Topology;
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        template<FlitConfigurationConcept config>
         class GlobalCheckFieldMapping {
         public:
             bool enable = true;
             struct {
-                bool                                        enable  = true;
-                RequestFieldMappingChecker<config, conn>    checker;
+                bool                                enable  = true;
+                RequestFieldMappingChecker<config>  checker;
             } REQ;
             struct {
-                bool                                        enable  = true;
-                SnoopFieldMappingChecker<config, conn>      checker;
+                bool                                enable  = true;
+                SnoopFieldMappingChecker<config>    checker;
             } SNP;
             struct {
-                bool                                        enable  = true;
-                ResponseFieldMappingChecker<config, conn>   checker;
+                bool                                enable  = true;
+                ResponseFieldMappingChecker<config> checker;
             } RSP;
             struct {
-                bool                                        enable  = true;
-                DataFieldMappingChecker<config, conn>       checker;
+                bool                                enable  = true;
+                DataFieldMappingChecker<config>     checker;
             } DAT;
 
         public:
-            XactDenialEnum  Check(const Flits::REQ<config, conn>&) const noexcept;
-            XactDenialEnum  Check(const Flits::SNP<config, conn>&) const noexcept;
-            XactDenialEnum  Check(const Flits::RSP<config, conn>&) const noexcept;
-            XactDenialEnum  Check(const Flits::DAT<config, conn>&) const noexcept;
+            XactDenialEnum  Check(const Flits::REQ<config>&) const noexcept;
+            XactDenialEnum  Check(const Flits::SNP<config>&) const noexcept;
+            XactDenialEnum  Check(const Flits::RSP<config>&) const noexcept;
+            XactDenialEnum  Check(const Flits::DAT<config>&) const noexcept;
         };
 
         class GlobalSAMScope {
@@ -82,8 +81,7 @@ namespace CHI {
             SAMScopeEnum    Get(uint16_t nodeId) const noexcept;
         };
 
-        template<FlitConfigurationConcept       config,
-                 CHI::IOLevelConnectionConcept  conn    = CHI::Connection<>>
+        template<FlitConfigurationConcept config>
         class Global {
         public:
             /*
@@ -95,7 +93,7 @@ namespace CHI {
             /*
             Enable Controls and Checkers of Flit Field Checking.
             */
-            GlobalCheckFieldMapping<config, conn>
+            GlobalCheckFieldMapping<config>
                 CHECK_FIELD_MAPPING;
 
             /*
@@ -120,9 +118,8 @@ namespace CHI {
 // Implementation of: class GlobalCheckFieldMapping
 namespace /*CHI::*/Xact {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum GlobalCheckFieldMapping<config, conn>::Check(const Flits::REQ<config, conn>& reqFlit) const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum GlobalCheckFieldMapping<config>::Check(const Flits::REQ<config>& reqFlit) const noexcept
     {
         if (!enable || !REQ.enable)
             return XactDenial::ACCEPTED;
@@ -130,9 +127,8 @@ namespace /*CHI::*/Xact {
         return REQ.checker.Check(reqFlit);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum GlobalCheckFieldMapping<config, conn>::Check(const Flits::SNP<config, conn>& snpFlit) const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum GlobalCheckFieldMapping<config>::Check(const Flits::SNP<config>& snpFlit) const noexcept
     {
         if (!enable || !SNP.enable)
             return XactDenial::ACCEPTED;
@@ -140,9 +136,8 @@ namespace /*CHI::*/Xact {
         return SNP.checker.Check(snpFlit);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum GlobalCheckFieldMapping<config, conn>::Check(const Flits::RSP<config, conn>& rspFlit) const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum GlobalCheckFieldMapping<config>::Check(const Flits::RSP<config>& rspFlit) const noexcept
     {
         if (!enable || !RSP.enable)
             return XactDenial::ACCEPTED;
@@ -150,9 +145,8 @@ namespace /*CHI::*/Xact {
         return RSP.checker.Check(rspFlit);
     }
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline XactDenialEnum GlobalCheckFieldMapping<config, conn>::Check(const Flits::DAT<config, conn>& datFlit) const noexcept
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum GlobalCheckFieldMapping<config>::Check(const Flits::DAT<config>& datFlit) const noexcept
     {
         if (!enable || !DAT.enable)
             return XactDenial::ACCEPTED;
@@ -185,11 +179,10 @@ namespace /*CHI::*/Xact {
 // Implementation of: class Global
 namespace /*CHI::*/Xact {
 
-    template<FlitConfigurationConcept       config,
-             CHI::IOLevelConnectionConcept  conn>
-    inline Global<config, conn>::Global() noexcept
+    template<FlitConfigurationConcept config>
+    inline Global<config>::Global() noexcept
         : TOPOLOGY              (GlobalTopology())
-        , CHECK_FIELD_MAPPING   (GlobalCheckFieldMapping<config, conn>())
+        , CHECK_FIELD_MAPPING   (GlobalCheckFieldMapping<config>())
         , SAM_SCOPE             (GlobalSAMScope())
     { }
 }
