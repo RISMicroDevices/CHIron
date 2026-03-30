@@ -194,11 +194,17 @@ inline XactionMyNewTransaction<config>::XactionMyNewTransaction(
     this->firstDenial = XactDenial::ACCEPTED;
 
     // 1. Check that the first flit arrived on the expected channel.
-    if (!this->first.IsREQ())   // or IsSNP() for snoop-initiated transactions
+    //    For REQ-initiated transactions (most read/write/dataless):
+    if (!this->first.IsREQ())
     {
         this->firstDenial = XactDenial::DENIED_CHANNEL_NOT_REQ;
         return;
     }
+    //    For SNP-initiated transactions (snoops), replace the above with:
+    //      if (!this->first.IsSNP()) {
+    //          this->firstDenial = XactDenial::DENIED_CHANNEL_NOT_SNP;
+    //          return;
+    //      }
 
     // 2. Accept only the REQ opcodes that belong to this transaction type.
     if (

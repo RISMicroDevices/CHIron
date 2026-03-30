@@ -102,7 +102,7 @@ The opcode field widths (and therefore the number of valid slots) are determined
 
 | Channel | Opcode type alias | Width |
 |---------|-------------------|-------|
-| REQ | `Flits::REQ<>::opcode_t` | 7 bits (128 slots, Issue EB: 7 bits = 128 slots) |
+| REQ | `Flits::REQ<>::opcode_t` | 7 bits (128 slots) |
 | SNP | `Flits::SNP<>::opcode_t` | 5 bits (32 slots) |
 | RSP | `Flits::RSP<>::opcode_t` | 5 bits (32 slots) |
 | DAT | `Flits::DAT<>::opcode_t` | 4 bits (16 slots) |
