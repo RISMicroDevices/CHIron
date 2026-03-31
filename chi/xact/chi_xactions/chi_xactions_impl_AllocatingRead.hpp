@@ -254,6 +254,18 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionAllocatingRead<config>::GetDWTSrcIDSource(const Global<config>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionAllocatingRead<config>::GetDWTTgtIDSource(const Global<config>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
     inline const FiredResponseFlit<config>* XactionAllocatingRead<config>::GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept
     {
         return this->GetFirst(

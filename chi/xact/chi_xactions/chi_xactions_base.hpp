@@ -67,13 +67,15 @@ namespace CHI {
                 SubsequenceKey(XactDenialEnum, Flits::RSP<config>::opcode_t, bool hasDBID) noexcept;
                 SubsequenceKey(XactDenialEnum, Flits::DAT<config>::opcode_t, bool hasDBID) noexcept;
 
-                bool        IsRSP() const noexcept;
-                bool        IsDAT() const noexcept;
+                bool            IsRSP() const noexcept;
+                bool            IsDAT() const noexcept;
 
-                bool        IsAccepted() const noexcept;
-                bool        IsDenied() const noexcept;
+                bool            IsAccepted() const noexcept;
+                bool            IsDenied() const noexcept;
 
-                bool        HasDBID() const noexcept;
+                bool            HasDBID() const noexcept;
+
+                ChannelTypeEnum GetChannelType() const noexcept;
             };
 
         private:
@@ -472,6 +474,12 @@ namespace /*CHI::*/Xact {
     {
         return hasDBID;
     }
+
+    template<FlitConfigurationConcept config>
+    inline ChannelTypeEnum Xaction<config>::SubsequenceKey::GetChannelType() const noexcept
+    {
+        return isRSP ? &ChannelType::RSP : &ChannelType::DAT;
+    }
 }
 
 
@@ -819,7 +827,7 @@ namespace /*CHI::*/Xact {
             if (iter->GetChannelType() != channel)
                 continue;
 
-            if (!iter->IsFrom(glbl, scope))
+            if (!subsequence[index].IsFrom(glbl, scope))
                 continue;
 
             return &(subsequence[index]);
@@ -840,7 +848,7 @@ namespace /*CHI::*/Xact {
             if (iter->GetChannelType() != channel)
                 continue;
 
-            if (!iter->IsFrom(glbl, scope))
+            if (!subsequence[index].IsFrom(glbl, scope))
                 continue;
 
             return &(subsequence[index]);
@@ -882,7 +890,7 @@ namespace /*CHI::*/Xact {
             if (iter->IsDenied())
                 continue;
 
-            if (!iter->IsFrom(glbl, scope))
+            if (!subsequence[index].IsFrom(glbl, scope))
                 continue;
 
             if (iter->IsRSP())
@@ -911,7 +919,7 @@ namespace /*CHI::*/Xact {
             if (iter->IsDenied())
                 continue;
 
-            if (!iter->IsFrom(glbl, scope))
+            if (!subsequence[index].IsFrom(glbl, scope))
                 continue;
 
             if (iter->IsRSP())
@@ -967,7 +975,7 @@ namespace /*CHI::*/Xact {
             if (iter->GetChannelType() != channel)
                 continue;
 
-            if (!iter->IsTo(glbl, scope))
+            if (!subsequence[index].IsTo(glbl, scope))
                 continue;
 
             return &(subsequence[index]);
@@ -988,7 +996,7 @@ namespace /*CHI::*/Xact {
             if (iter->GetChannelType() != channel)
                 continue;
 
-            if (!iter->IsTo(glbl, scope))
+            if (!subsequence[index].IsTo(glbl, scope))
                 continue;
 
             return &(subsequence[index]);
@@ -1030,7 +1038,7 @@ namespace /*CHI::*/Xact {
             if (iter->IsDenied())
                 continue;
 
-            if (!iter->IsTo(glbl, scope))
+            if (!subsequence[index].IsTo(glbl, scope))
                 continue;
 
             if (iter->IsRSP())
@@ -1054,12 +1062,12 @@ namespace /*CHI::*/Xact {
     inline const FiredResponseFlit<config>* Xaction<config>::GetLastTo(const Global<config>& glbl, XactScopeEnum scope, std::initializer_list<typename Flits::RSP<config>::opcode_t> rspOpcodes, std::initializer_list<typename Flits::DAT<config>::opcode_t> datOpcodes) const noexcept
     {
         size_t index = subsequenceKeys.size() - 1;
-        for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index++)
+        for (auto iter = subsequenceKeys.rbegin(); iter != subsequenceKeys.rend(); iter++, index--)
         {
             if (iter->IsDenied())
                 continue;
 
-            if (!iter->IsTo(glbl, scope))
+            if (!subsequence[index].IsTo(glbl, scope))
                 continue;
 
             if (iter->IsRSP())

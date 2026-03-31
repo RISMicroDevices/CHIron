@@ -329,7 +329,7 @@ namespace /*CHI::*/Xact {
                 {
                     if (glbl.SAM_SCOPE.enable)
                     {
-                        switch (glbl.SAM_SCOPE.Get(flit.req.SrcID()).value)
+                        switch (glbl.SAM_SCOPE.Get(flit.req.SrcID())->value)
                         {
                             case SAMScope::AfterSAM:
                                 return glbl.TOPOLOGY.IsHome(flit.req.TgtID());
@@ -390,14 +390,17 @@ namespace /*CHI::*/Xact {
                 {
                     if (glbl.SAM_SCOPE.enable)
                     {
-                        case SAMScope::AfterSAM:
-                            return glbl.TOPOLOGY.IsSubordinate(flit.req.TgtID());
+                        switch (glbl.SAM_SCOPE.Get(flit.req.SrcID())->value)
+                        {
+                            case SAMScope::AfterSAM:
+                                return glbl.TOPOLOGY.IsSubordinate(flit.req.TgtID());
 
-                        case SAMScope::BeforeSAM:
-                            return flit.req.Opcode() == Opcodes::REQ::PrefetchTgt; // Do not check TgtID of TXREQ before SAM
+                            case SAMScope::BeforeSAM:
+                                return flit.req.Opcode() == Opcodes::REQ::PrefetchTgt; // Do not check TgtID of TXREQ before SAM
 
-                        [[unlikely]] default:
-                            return false;
+                            [[unlikely]] default:
+                                return false;
+                        }
                     }
                     else
                         return flit.req.Opcode() == Opcodes::REQ::PrefetchTgt; // Do not check TgtID of TXREQ on SAM check disabled
