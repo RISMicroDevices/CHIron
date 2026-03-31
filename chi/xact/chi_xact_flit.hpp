@@ -329,7 +329,7 @@ namespace /*CHI::*/Xact {
                 {
                     if (glbl.SAM_SCOPE.enable)
                     {
-                        switch (glbl.SAM_SCOPE.Get(flit.req.SrcID()).value)
+                        switch (glbl.SAM_SCOPE.Get(flit.req.SrcID())->value)
                         {
                             case SAMScope::AfterSAM:
                                 return glbl.TOPOLOGY.IsHome(flit.req.TgtID());
