@@ -71,7 +71,7 @@ class chi_monitor extends uvm_monitor;
       // Write protocol parameters matching our FlitConfiguration
       CLogB_WriteParameters(
         clog_handle,
-        `CLOG_ISSUE_E,          // issue
+        int'(chi_pkg::CLOG_ISSUE_E), // issue
         NODEID_W,               // nodeIdWidth
         ADDR_W,                 // addrWidth
         RSVDC_W,                // reqRsvdcWidth
@@ -350,6 +350,7 @@ class chi_monitor extends uvm_monitor;
     f[pos +: 3]            = item.size;         pos += 3;
     f[pos +: ADDR_W]       = item.addr;         pos += ADDR_W;
     f[pos]                 = item.ns;           pos += 1;
+    f[pos]                 = '0;               pos += 1;          // LikelyShared
     f[pos]                 = item.allow_retry;  pos += 1;
     f[pos +: 2]            = item.order;        pos += 2;
     f[pos +: 4]            = item.pcrd_type;    pos += 4;
@@ -363,7 +364,7 @@ class chi_monitor extends uvm_monitor;
     f[pos +: RSVDC_W]      = '0;               pos += RSVDC_W;
     f[pos]                 = item.trace_tag;
     item.flit        = f;
-    item.flit_length = 88 + 2*NODEID_W + ADDR_W + TXNID_W + RSVDC_W;
+    item.flit_length = 88 + 4*NODEID_W + 2*TXNID_W + ADDR_W + RSVDC_W;
   endfunction
 
   function void pack_rsp_flit(chi_seq_item item);

@@ -37,7 +37,7 @@ module chi_top;
 
   // 1 GHz clock
   initial clk = 1'b0;
-  always #0.5ns clk = ~clk;
+  always #500ps clk = ~clk;
 
   // Active-low reset: assert for 10 cycles
   initial begin

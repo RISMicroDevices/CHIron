@@ -127,15 +127,43 @@ class chi_seq_item extends uvm_sequence_item;
   // Only the lower flit_length bits are meaningful.
   // -------------------------------------------------------------------------
   function void pack_req();
+    // Pack REQ flit fields in CHI Issue E order (LSB first).
+    // Field order: QoS, TgtID, SrcID, TxnID, ReturnNID, StashNIDValid,
+    //   ReturnTxnID, StashNID, Endian, Deep, Opcode, Size, Addr, NS,
+    //   LikelyShared, AllowRetry, Order, PCrdType, MemAttr, SnpAttr,
+    //   DoDWT, LPID, Excl, SnoopMe, CAH, RSVDC, TraceTag
     flit = '0;
-    flit[3:0]                            = qos;
-    flit[3+NODEID_W:4]                   = tgtid;
-    flit[3+2*NODEID_W:4+NODEID_W]        = srcid;
-    flit[3+2*NODEID_W+TXNID_W:4+2*NODEID_W] = txnid;
-    flit[6:0]                            = opcode; // simplified placeholder
-    // Full packing requires knowledge of exact field positions from the spec.
-    // Use chi_pkg flit structs or CHIron's Flits::REQ for precise packing.
-    flit_length  = 88 + 2*NODEID_W + ADDR_W + TXNID_W + RSVDC_W;
+    begin
+      int pos = 0;
+      flit[pos +: 4]        = qos;           pos += 4;
+      flit[pos +: NODEID_W] = tgtid;         pos += NODEID_W;
+      flit[pos +: NODEID_W] = srcid;         pos += NODEID_W;
+      flit[pos +: TXNID_W]  = txnid;         pos += TXNID_W;
+      pos += NODEID_W;   // ReturnNID (not carried in item)
+      pos += 1;          // StashNIDValid
+      pos += TXNID_W;    // ReturnTxnID
+      pos += NODEID_W;   // StashNID
+      pos += 1;          // Endian
+      pos += 1;          // Deep
+      flit[pos +: 7]     = opcode[6:0];     pos += 7;
+      flit[pos +: 3]     = size;            pos += 3;
+      flit[pos +: ADDR_W]= addr;            pos += ADDR_W;
+      flit[pos]          = ns;              pos += 1;
+      pos += 1;          // LikelyShared
+      flit[pos]          = allow_retry;     pos += 1;
+      flit[pos +: 2]     = order;           pos += 2;
+      flit[pos +: 4]     = pcrd_type;       pos += 4;
+      flit[pos +: 4]     = mem_attr;        pos += 4;
+      flit[pos]          = snp_attr;        pos += 1;
+      pos += 1;          // DoDWT
+      pos += 5;          // LPID
+      flit[pos]          = excl;            pos += 1;
+      pos += 1;          // SnoopMe
+      pos += 1;          // CAH
+      pos += RSVDC_W;    // RSVDC
+      flit[pos]          = trace_tag;
+    end
+    flit_length  = 88 + 4*NODEID_W + 2*TXNID_W + ADDR_W + RSVDC_W;
     clog_channel = CLOG_CH_TXREQ;
   endfunction
 
