@@ -122,13 +122,14 @@ namespace HN {
     // -------------------------------------------------------------------------
     template<FlitConfigurationConcept config>
     struct PendingTxn {
-        using nodeid_t  = typename Flits::REQ<config>::srcid_t;
-        using txnid_t   = typename Flits::REQ<config>::txnid_t;
-        using addr_t    = typename Flits::REQ<config>::addr_t;
-        using opcode_t  = typename Flits::REQ<config>::opcode_t;
-        using ssize_t   = typename Flits::REQ<config>::ssize_t;
-        using resp_t    = typename Flits::RSP<config>::resp_t;
-        using dbid_t    = typename Flits::RSP<config>::dbid_t;
+        using nodeid_t      = typename Flits::REQ<config>::srcid_t;
+        using txnid_t       = typename Flits::REQ<config>::txnid_t;
+        using addr_t        = typename Flits::REQ<config>::addr_t;
+        using addr_value_t  = typename Flits::REQ<config>::addr_t::value_type;
+        using opcode_t      = typename Flits::REQ<config>::opcode_t;
+        using ssize_t       = typename Flits::REQ<config>::ssize_t;
+        using resp_t        = typename Flits::RSP<config>::resp_t;
+        using dbid_t        = typename Flits::RSP<config>::dbid_t;
 
         // ── Original RN request ──────────────────────────────────────────────
         nodeid_t    requesterID;
@@ -141,6 +142,11 @@ namespace HN {
         // ── HN-allocated transaction state ───────────────────────────────────
         txnid_t     hnTxnID;        // used as: SNP TxnID, SN REQ TxnID, DBID for RN
         TxnPhase    phase;
+
+        // ── Framework transaction tracker (RN's perspective) ─────────────────
+        // Created by RNFJoint::NextTXREQ() when the RN issues the REQ.
+        // Records the full protocol subsequence for protocol-level analysis.
+        std::shared_ptr<Xact::Xaction<config>> xaction;
 
         // ── Snoop tracking ───────────────────────────────────────────────────
         int         pendingSnoopCount;      // number of outstanding snoop responses
@@ -166,15 +172,16 @@ namespace HN {
     template<FlitConfigurationConcept config>
     class Node {
     public:
-        using nodeid_t  = typename Flits::REQ<config>::srcid_t;
-        using txnid_t   = typename Flits::REQ<config>::txnid_t;
-        using addr_t    = typename Flits::REQ<config>::addr_t;
-        using opcode_t  = typename Flits::REQ<config>::opcode_t;
-        using snpopcode_t = typename Flits::SNP<config>::opcode_t;
-        using resp_t    = typename Flits::RSP<config>::resp_t;
-        using dbid_t    = typename Flits::RSP<config>::dbid_t;
-        using txn_t     = PendingTxn<config>;
-        using dir_t     = CacheLineEntry<config>;
+        using nodeid_t      = typename Flits::REQ<config>::srcid_t;
+        using txnid_t       = typename Flits::REQ<config>::txnid_t;
+        using addr_t        = typename Flits::REQ<config>::addr_t;
+        using addr_value_t  = typename Flits::REQ<config>::addr_t::value_type;
+        using opcode_t      = typename Flits::REQ<config>::opcode_t;
+        using snpopcode_t   = typename Flits::SNP<config>::opcode_t;
+        using resp_t        = typename Flits::RSP<config>::resp_t;
+        using dbid_t        = typename Flits::RSP<config>::dbid_t;
+        using txn_t         = PendingTxn<config>;
+        using dir_t         = CacheLineEntry<config>;
 
         // ── Configuration ────────────────────────────────────────────────────
         nodeid_t                                nodeID;
@@ -187,9 +194,21 @@ namespace HN {
         std::function<void(const Flits::DAT<config>&)>                  txDAT;
         std::function<void(const Flits::REQ<config>&)>                  txREQ;
 
+        // ── Framework global context ──────────────────────────────────────────
+        // Topology / SAM-scope / field-check configuration shared across all
+        // Xaction and RNCacheStateMap operations.
+        Xact::Global<config>                    global;
+
     private:
         // ── Cache directory ──────────────────────────────────────────────────
-        std::unordered_map<uint64_t, dir_t>         directory;
+        std::unordered_map<uint64_t, dir_t>     directory;
+
+        // ── Per-RN framework trackers ─────────────────────────────────────────
+        // Each connected RN gets its own Joint (creates/tracks Xaction objects
+        // from the RN's protocol perspective) and its own RNCacheStateMap (tracks
+        // what state that RN holds per cache-line address).
+        std::unordered_map<uint64_t, Xact::RNFJoint<config>>        rnJoints;
+        std::unordered_map<uint64_t, Xact::RNCacheStateMap<config>>  rnStateMaps;
 
         // ── Transaction table ─────────────────────────────────────────────────
         // Keyed by hnTxnID, which equals:
@@ -197,11 +216,11 @@ namespace HN {
         //   • SN REQ.TxnID     (for outgoing SN reads/writes)
         //   • DBID sent to RN  (for CompDBIDResp/CompData)
         // This lets every inbound response be looked up by flit.TxnID() directly.
-        std::unordered_map<uint64_t, txn_t>          transactions;
+        std::unordered_map<uint64_t, txn_t>     transactions;
 
         // Reverse map: {srcID, txnID} → hnTxnID for the initial RN REQ.
         // Used to detect duplicate requests and clean up on completion.
-        std::unordered_map<uint64_t, txnid_t>       rxReqMap;
+        std::unordered_map<uint64_t, txnid_t>   rxReqMap;
 
         txnid_t     nextTxnID;
 
@@ -230,6 +249,15 @@ namespace HN {
             return (static_cast<uint64_t>(src) << Flits::REQ<config>::TXNID_WIDTH)
                  | static_cast<uint64_t>(txn);
         }
+
+        // ── Address conversion helper ─────────────────────────────────────────
+        // Convert addr_t to the plain integer type used by RNCacheStateMap.
+        static addr_value_t AddrValue(addr_t addr) noexcept
+        { return static_cast<addr_value_t>(addr); }
+
+        // ── Per-RN framework tracker accessors ────────────────────────────────
+        Xact::RNFJoint<config>&         RNJoint    (nodeid_t rn) noexcept;
+        Xact::RNCacheStateMap<config>&  RNStateMap (nodeid_t rn) noexcept;
 
         // ── Transaction lifecycle ─────────────────────────────────────────────
         txn_t&  CreateTransaction(const Flits::REQ<config>& req, txnid_t hnTxn);
@@ -348,6 +376,23 @@ namespace HN {
     }
 
 
+    // ── Per-RN tracker accessors ────────────────────────────────────────────
+
+    template<FlitConfigurationConcept config>
+    inline Xact::RNFJoint<config>&
+    Node<config>::RNJoint(nodeid_t rn) noexcept
+    {
+        return rnJoints[static_cast<uint64_t>(rn)];
+    }
+
+    template<FlitConfigurationConcept config>
+    inline Xact::RNCacheStateMap<config>&
+    Node<config>::RNStateMap(nodeid_t rn) noexcept
+    {
+        return rnStateMaps[static_cast<uint64_t>(rn)];
+    }
+
+
     // ── Transaction lifecycle ───────────────────────────────────────────────
 
     template<FlitConfigurationConcept config>
@@ -370,6 +415,15 @@ namespace HN {
         txn.needWriteToSN      = false;
         txn.snNodeID           = getSNNodeID(req.Addr());
         txn.dbidFromSN         = 0;
+
+        // Register with the per-RN framework trackers.
+        // RNFJoint creates the right Xaction subtype (AllocatingRead, CopyBackWrite,
+        // ImmediateWrite, Dataless, …) keyed by the RN's {SrcID, TxnID}.
+        // RNCacheStateMap validates and records the initial cache-line state for
+        // protocol-level state-machine tracking.
+        RNJoint   (req.SrcID()).NextTXREQ(global, 0, req, &txn.xaction);
+        RNStateMap(req.SrcID()).NextTXREQ(AddrValue(req.Addr()), req);
+
         return transactions[static_cast<uint64_t>(hnTxn)] = txn;
     }
 
@@ -766,6 +820,16 @@ namespace HN {
         if (it == transactions.end()) return;
         txn_t& txn = it->second;
 
+        // Notify the snooped RN's joint and state map.
+        // RNFJoint::NextTXRSP looks up the snoop xaction by TxnID and returns it;
+        // RNCacheStateMap uses that xaction to apply the correct state transition.
+        {
+            std::shared_ptr<Xact::Xaction<config>> snpXact;
+            RNJoint(rsp.SrcID()).NextTXRSP(global, 0, rsp, &snpXact);
+            if (snpXact)
+                RNStateMap(rsp.SrcID()).NextTXRSP(AddrValue(txn.addr), *snpXact, rsp);
+        }
+
         // Update snoop filter for the responding RN
         dir_t& entry = GetOrCreateEntry(txn.addr);
         nodeid_t responder = rsp.SrcID();
@@ -788,6 +852,10 @@ namespace HN {
         // rsp.TxnID() == DBID that HN sent == hnTxnID
         auto it = transactions.find(static_cast<uint64_t>(rsp.TxnID()));
         if (it == transactions.end()) return;
+
+        // Notify the requester RN's joint — CompAck closes the TxnID slot.
+        RNJoint(rsp.SrcID()).NextTXRSP(global, 0, rsp);
+
         CompleteTransaction(it->second.hnTxnID);
     }
 
@@ -863,6 +931,14 @@ namespace HN {
             txn.needWriteToSN      = true; // must write dirty data to SN
         }
 
+        // Notify the snooped RN's joint and state map.
+        {
+            std::shared_ptr<Xact::Xaction<config>> snpXact;
+            RNJoint(dat.SrcID()).NextTXDAT(global, 0, dat, &snpXact);
+            if (snpXact)
+                RNStateMap(dat.SrcID()).NextTXDAT(AddrValue(txn.addr), *snpXact, dat);
+        }
+
         // Update directory for the responding RN
         dir_t& entry = GetOrCreateEntry(txn.addr);
         nodeid_t responder = dat.SrcID();
@@ -893,6 +969,15 @@ namespace HN {
         // If NCBWrDataCompAck, the RN has also acknowledged Comp — no separate CompAck
         if (dat.Opcode() == Opcodes::DAT::NCBWrDataCompAck)
             txn.expCompAck = false;
+
+        // Notify the requester RN's joint and state map.
+        // The requester's xaction carries the original REQ opcode context.
+        {
+            std::shared_ptr<Xact::Xaction<config>> reqXact;
+            RNJoint(txn.requesterID).NextTXDAT(global, 0, dat, &reqXact);
+            if (reqXact)
+                RNStateMap(txn.requesterID).NextTXDAT(AddrValue(txn.addr), *reqXact, dat);
+        }
 
         // Update directory: RN no longer holds the line (write-back / invalidation)
         dir_t& entry = GetOrCreateEntry(txn.addr);
@@ -952,6 +1037,13 @@ namespace HN {
 
         ++txn.pendingSnoopCount;
 
+        // Register the outgoing snoop with the target RN's joint and state map.
+        // RNFJoint::NextRXSNP creates the snoop Xaction (XactionHomeSnoop or
+        // XactionForwardSnoop) that will be matched when the SnpResp/SnpRespData
+        // arrives later via HandleSnpResp / HandleSnpRespData.
+        RNJoint   (tgt).NextRXSNP(global, 0, snp, tgt);
+        RNStateMap(tgt).NextRXSNP(AddrValue(txn.addr), snp);
+
         if (txSNP) txSNP(snp, tgt);
     }
 
@@ -999,6 +1091,11 @@ namespace HN {
         rsp.Resp()   = resp;
 
         if (txRSP) txRSP(rsp);
+
+        // Notify the requester RN's joint and state map that it received a Comp.
+        RNJoint(txn.requesterID).NextRXRSP(global, 0, rsp);
+        if (txn.xaction)
+            RNStateMap(txn.requesterID).NextRXRSP(AddrValue(txn.addr), *txn.xaction, rsp);
     }
 
 
@@ -1014,6 +1111,11 @@ namespace HN {
         rsp.Resp()   = resp;
 
         if (txRSP) txRSP(rsp);
+
+        // Notify the requester RN's joint and state map that it received a CompDBIDResp.
+        RNJoint(txn.requesterID).NextRXRSP(global, 0, rsp);
+        if (txn.xaction)
+            RNStateMap(txn.requesterID).NextRXRSP(AddrValue(txn.addr), *txn.xaction, rsp);
     }
 
 
@@ -1039,6 +1141,11 @@ namespace HN {
             CopyDatData(dat, txn.cachedDat);
 
         if (txDAT) txDAT(dat);
+
+        // Notify the requester RN's joint and state map that it received CompData.
+        RNJoint(txn.requesterID).NextRXDAT(global, 0, dat);
+        if (txn.xaction)
+            RNStateMap(txn.requesterID).NextRXDAT(AddrValue(txn.addr), *txn.xaction, dat);
     }
 
 

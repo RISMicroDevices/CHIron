@@ -222,20 +222,20 @@ namespace CHI {
             virtual XactScopeEnum   GetActiveScope() const noexcept = 0;
 
         protected:
-            XactDenialEnum  RequestDeniedByJoint(XactDenialEnum                   denial,
-                                                 FiredRequestFlit<config>&        firedRequestFlit,
-                                                 std::shared_ptr<Xaction<config>> xaction = nullptr) noexcept;
+            XactDenialEnum  RequestDeniedByJoint(XactDenialEnum                       denial,
+                                                 const FiredRequestFlit<config>&      firedRequestFlit,
+                                                 std::shared_ptr<Xaction<config>>     xaction = nullptr) noexcept;
 
             XactDenialEnum  RequestDeniedByXaction(XactDenialEnum                     denial,
-                                                   FiredRequestFlit<config>&          firedRequestFlit,
+                                                   const FiredRequestFlit<config>&    firedRequestFlit,
                                                    std::shared_ptr<Xaction<config>>   xaction = nullptr) noexcept;
 
             XactDenialEnum  ResponseDeniedByJoint(XactDenialEnum                      denial,
-                                                  FiredResponseFlit<config>&          firedResponseFlit,
+                                                  const FiredResponseFlit<config>&    firedResponseFlit,
                                                   std::shared_ptr<Xaction<config>>    xaction = nullptr) noexcept;
 
             XactDenialEnum  ResponseDeniedByXaction(XactDenialEnum                    denial,
-                                                    FiredResponseFlit<config>&        firedResponseFlit,
+                                                    const FiredResponseFlit<config>&  firedResponseFlit,
                                                     std::shared_ptr<Xaction<config>>  xaction = nullptr) noexcept;
 
         public:
@@ -861,7 +861,9 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept config>
     inline Joint<config>::Joint() noexcept
-        : OnAccepted            (0)
+        : OnDeniedRequest       (0)
+        , OnDeniedResponse      (0)
+        , OnAccepted            (0)
         , OnRetry               (0)
         , OnTxnIDAllocation     (0)
         , OnTxnIDFree           (0)
@@ -885,44 +887,44 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum Joint<config>::RequestDeniedByJoint(
         XactDenialEnum                          denial,
-        FiredRequestFlit<config>&               firedRequestFlit,
+        const FiredRequestFlit<config>&         firedRequestFlit,
         std::shared_ptr<Xaction<config>>        xaction) noexcept
     {
         this->OnDeniedRequest(JointDeniedRequestEvent<config>(
-            *this, xaction, denial, JointDenialSource::JOINT, firedRequestFlit));
+            *this, xaction, denial, JointDenialSource::JOINT, const_cast<FiredRequestFlit<config>&>(firedRequestFlit)));
         return denial;
     }
 
     template<FlitConfigurationConcept config>
     inline XactDenialEnum Joint<config>::RequestDeniedByXaction(
         XactDenialEnum                          denial,
-        FiredRequestFlit<config>&               firedRequestFlit,
+        const FiredRequestFlit<config>&         firedRequestFlit,
         std::shared_ptr<Xaction<config>>        xaction) noexcept
     {
         this->OnDeniedRequest(JointDeniedRequestEvent<config>(
-            *this, xaction, denial, JointDenialSource::XACTION, firedRequestFlit));
+            *this, xaction, denial, JointDenialSource::XACTION, const_cast<FiredRequestFlit<config>&>(firedRequestFlit)));
         return denial;
     }
 
     template<FlitConfigurationConcept config>
     inline XactDenialEnum Joint<config>::ResponseDeniedByJoint(
         XactDenialEnum                          denial,
-        FiredResponseFlit<config>&              firedResponseFlit,
+        const FiredResponseFlit<config>&        firedResponseFlit,
         std::shared_ptr<Xaction<config>>        xaction) noexcept
     {
         this->OnDeniedResponse(JointDeniedResponseEvent<config>(
-            *this, xaction, denial, JointDenialSource::JOINT, firedResponseFlit));
+            *this, xaction, denial, JointDenialSource::JOINT, const_cast<FiredResponseFlit<config>&>(firedResponseFlit)));
         return denial;
     }
 
     template<FlitConfigurationConcept config>
     inline XactDenialEnum Joint<config>::ResponseDeniedByXaction(
         XactDenialEnum                          denial,
-        FiredResponseFlit<config>&              firedResponseFlit,
+        const FiredResponseFlit<config>&        firedResponseFlit,
         std::shared_ptr<Xaction<config>>        xaction) noexcept
     {
         this->OnDeniedResponse(JointDeniedResponseEvent<config>(
-            *this, xaction, denial, JointDenialSource::XACTION, firedResponseFlit));
+            *this, xaction, denial, JointDenialSource::XACTION, const_cast<FiredResponseFlit<config>&>(firedResponseFlit)));
         return denial;
     }
 
