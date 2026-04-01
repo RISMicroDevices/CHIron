@@ -34,7 +34,7 @@ public:
 
     TCPt() noexcept
     {
-        glbl.CHECK_FIELD_MAPPING->enable = false;
+        glbl.CHECK_FIELD_MAPPING.enable = false;
     }
 
     inline T* TotalCount(size_t* totalCount) noexcept
@@ -63,7 +63,7 @@ public:
 
     inline T* Topology(Xact::Topology topo) noexcept
     {
-        *this->glbl.TOPOLOGY = topo;
+        this->glbl.TOPOLOGY = topo;
         return static_cast<T*>(this);
     }
 
