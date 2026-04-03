@@ -283,10 +283,19 @@ namespace CHI {
             typename Flits::REQ<config>::ssize_t    reqSize,
             typename Flits::DAT<config>::dataid_t   dataID) noexcept;
 
-        template<FlitConfigurationConcept config>
+        template<FlitConfigurationConcept config, typename T>
+        requires std::ranges::range<T> && std::same_as<std::ranges::range_value_t<T>, FiredResponseFlit<config>>
         inline static std::bitset<4> CollectDataID(
-            typename Flits::REQ<config>::ssize_t    reqSize,
-            const std::vector<FiredResponseFlit<config>>&) noexcept;
+            typename Flits::REQ<config>::ssize_t                            reqSize,
+            const T&                                                        flits,
+            std::function<bool(size_t, const FiredResponseFlit<config>&)>   validFunc  = [](auto, auto) -> bool { return true; }) noexcept;
+
+        template<FlitConfigurationConcept config, typename T>
+        requires std::ranges::range<T> && std::same_as<std::ranges::range_value_t<T>, FiredResponseFlit<config>>
+        inline static std::bitset<4> CollectDataID(
+            typename Flits::REQ<config>::ssize_t                            reqSize,
+            const T&                                                        flits,
+            std::initializer_list<typename Flits::DAT<config>::opcode_t>    datOpcodes) noexcept;
 
         template<FlitConfigurationConcept config>
         inline static std::bitset<4> GetDataIDCompleteMask(
@@ -332,16 +341,17 @@ namespace /*CHI::*/Xact::details {
         return collectedDataID;
     }
 
-    template<FlitConfigurationConcept config>
+    template<FlitConfigurationConcept config, typename T>
+    requires std::ranges::range<T> && std::same_as<std::ranges::range_value_t<T>, FiredResponseFlit<config>>
     inline static std::bitset<4> CollectDataID(
         typename Flits::REQ<config>::ssize_t  reqSize,
-        const std::vector<FiredResponseFlit<config>>& vec,
-        std::function<bool(size_t, const FiredResponseFlit<config>&)> validFunc = [](auto, auto) -> bool { return true; }) noexcept
+        const T& flits,
+        std::function<bool(size_t, const FiredResponseFlit<config>&)> validFunc) noexcept
     {
         std::bitset<4> collectedDataID;
 
         size_t index = 0;
-        for (const FiredResponseFlit<config>& flit : vec)
+        for (const FiredResponseFlit<config>& flit : flits)
         {
             if (flit.IsDAT() && validFunc(index, flit))
             {
@@ -354,6 +364,19 @@ namespace /*CHI::*/Xact::details {
 
         return collectedDataID;
     }
+
+    template<FlitConfigurationConcept config, typename T>
+    requires std::ranges::range<T> && std::same_as<std::ranges::range_value_t<T>, FiredResponseFlit<config>>
+    inline static std::bitset<4> CollectDataID(
+        typename Flits::REQ<config>::ssize_t                            reqSize,
+        const T&                                                        flits,
+        std::initializer_list<typename Flits::DAT<config>::opcode_t>    datOpcodes) noexcept
+    {
+        return CollectDataID<config>(reqSize, flits, [&datOpcodes](auto, const auto& flit) -> bool {
+            return flit.IsDAT() && datOpcodes.size() > 0 ? datOpcodes.contains(flit.flit.dat.Opcode()) : true;
+        });
+    }
+
 
     template<FlitConfigurationConcept config>
     inline static std::bitset<4> GetDataIDCompleteMask(
