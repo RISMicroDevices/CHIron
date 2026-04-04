@@ -168,6 +168,8 @@ namespace Gravity {
         bool                        UnregisterOnce(const std::string& name) noexcept;
         void                        UnregisterAll() noexcept;
 
+        bool                        empty() const noexcept;
+
         iterator                    begin() noexcept;
         const_iterator              begin() const noexcept;
         iterator                    end() noexcept;
@@ -634,6 +636,14 @@ namespace Gravity {
     {
         list.clear();
         list.shrink_to_fit();
+    }
+
+    template<class _TEvent,
+             class _TEventListener,
+             class _TEventBusId>
+    inline bool EventBus<_TEvent, _TEventListener, _TEventBusId>::empty() const noexcept
+    {
+        return list.empty();
     }
 
     template<class _TEvent,
