@@ -1455,7 +1455,7 @@ namespace /*CHI::*/Xact {
             reqDecoder.DecodeRNF(reqFlit.Opcode());
 
         if (!opcodeInfo.IsValid()) // unknown opcode
-            return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE, firedReqFlit);
+            return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, firedReqFlit);
 
         //
         if (reqFlit.AllowRetry() == 0)
@@ -1600,7 +1600,7 @@ namespace /*CHI::*/Xact {
             snpDecoder.DecodeRNF(snpFlit.Opcode());
         
         if (!opcodeInfo.IsValid()) // unknown opcode
-            return this->RequestDeniedByJoint(XactDenial::DENIED_SNP_OPCODE, firedSnpFlit);
+            return this->RequestDeniedByJoint(XactDenial::DENIED_SNP_OPCODE_NOT_DECODED, firedSnpFlit);
         
         std::shared_ptr<Xaction<config>> xaction =
             opcodeInfo.GetCompanion()(glbl, firedSnpFlit, nullptr);
@@ -2785,7 +2785,7 @@ namespace /*CHI::*/Xact {
             reqDecoder.DecodeSNF(reqFlit.Opcode());
 
         if (!opcodeInfo.IsValid()) // unknown opcode
-            return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE, firedReqFlit);
+            return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, firedReqFlit);
 
         //
         if (reqFlit.AllowRetry() == 0)

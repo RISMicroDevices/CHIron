@@ -539,7 +539,7 @@ namespace /*CHI::*/Xact {
         {
             // TODO: MTE features currently not supported
 
-            return XactDenial::DENIED_UNSUPPORTED_FEATURE_OPCODE;
+            return XactDenial::DENIED_UNSUPPORTED_FEATURE;
         }
         else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompAck)
         {

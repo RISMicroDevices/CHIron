@@ -588,13 +588,13 @@ namespace /*CHI::*/Xact {
             reqDecoder.Decode(flit.Opcode());
 
         if (!opcodeInfo.IsValid()) // unknown opcode
-            return XactDenial::DENIED_REQ_OPCODE;
+            return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
 
         //
         const details::RNCohTrans* trans = opcodeInfo.GetCompanion();
 
         if (!trans)
-            return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+            return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
 
         //
         const std::pair<CacheState, bool> initialState = EvaluateWithSeer(addr);
@@ -643,12 +643,12 @@ namespace /*CHI::*/Xact {
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_REQ_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
 
             trans = &opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
             */
         }
         else
@@ -658,14 +658,14 @@ namespace /*CHI::*/Xact {
                 = snpDecoder.Decode(xaction.GetFirst().flit.snp.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_SNP_OPCODE;
+                return XactDenial::DENIED_SNP_OPCODE_NOT_DECODED;
 
             bool retToSrc = xaction.GetFirst().flit.snp.RetToSrc();
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
 
             const CacheStateTransitions::Intermediates::details::TableG0* g0 = nullptr;
             const CacheStateTransitions::Intermediates::details::TableG1* g1 = nullptr;
@@ -707,10 +707,10 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_RSP_OPCODE;
             }
             else
-                return XactDenial::DENIED_SNP_OPCODE;
+                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
 
             if (!g0 && !g1)
-                return XactDenial::DENIED_SNP_OPCODE;
+                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
 
             //
             CacheResp resp = fwded ? CacheResp::FromSnpRespFwded(flit.Resp()) 
@@ -810,12 +810,12 @@ namespace /*CHI::*/Xact {
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_REQ_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
 
             //
             CacheState nextState;
@@ -902,7 +902,7 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_DAT_OPCODE;
             }
             else
-                return XactDenial::DENIED_REQ_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
 
             // Speculative path tracking
             if (prevState.second)
@@ -925,14 +925,14 @@ namespace /*CHI::*/Xact {
                 = snpDecoder.Decode(xaction.GetFirst().flit.snp.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_SNP_OPCODE;
+                return XactDenial::DENIED_SNP_OPCODE_NOT_DECODED;
 
             bool retToSrc = xaction.GetFirst().flit.snp.RetToSrc();
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
 
             // check for multi-data-beat repeat
             const FiredResponseFlit<config>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
@@ -1004,10 +1004,10 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_DAT_OPCODE;
             }
             else
-                return XactDenial::DENIED_SNP_OPCODE;
+                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
 
             if (!g0 && !g1)
-                return XactDenial::DENIED_SNP_OPCODE;
+                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
 
             //
             CacheResp resp = dct ? CacheResp::FromCompData(flit.Resp()) : (
@@ -1145,12 +1145,12 @@ namespace /*CHI::*/Xact {
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
             
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_REQ_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
 
             //
             CacheState nextState;
@@ -1320,7 +1320,7 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_RSP_OPCODE;                
             }
             else
-                return XactDenial::DENIED_REQ_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
 
             // Speculative path tracking
             if (prevState.second)
@@ -1361,12 +1361,12 @@ namespace /*CHI::*/Xact {
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
             
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_REQ_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
 
             //
             CacheState nextState;
@@ -1499,7 +1499,7 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_DAT_OPCODE;
             }
             else
-                return XactDenial::DENIED_REQ_OPCODE;
+                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
             
             // Speculative path tracking
             if (prevState.second)
@@ -1555,12 +1555,12 @@ namespace /*CHI::*/Xact {
                     = reqDecoder.Decode(nestingXaction->GetFirst().flit.req.Opcode());
 
                 if (!opcodeInfo.IsValid()) // unknown opcode
-                    return XactDenial::DENIED_REQ_OPCODE;
+                    return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
 
                 trans = opcodeInfo.GetCompanion();
 
                 if (!trans)
-                    return XactDenial::DENIED_UNSUPPORTED_FEATURE;
+                    return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
                 
                 //
                 std::pair<CacheState, bool> prevState = EvaluateWithSeer(addr);
