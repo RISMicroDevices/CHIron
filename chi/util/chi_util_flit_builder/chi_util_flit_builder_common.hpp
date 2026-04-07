@@ -29,6 +29,12 @@ namespace CHI {
         template<class T>
         concept has_rsvdc = T::hasRSVDC;
 
+        template<class T>
+        concept has_datacheck = T::hasDataCheck;
+
+        template<class T>
+        concept has_poison = T::hasPoison;
+
         
         // constevals
         template<Xact::FieldConvention conv>
