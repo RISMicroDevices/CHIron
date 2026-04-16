@@ -379,6 +379,9 @@ namespace CHI {
 
             consteval REQ<config>                       EvalUnsafe() const noexcept;
             constexpr REQ<config>                       BuildUnsafe() const noexcept;
+
+            constexpr REQFlitBuilder<T, config, details::always_buildable_req>
+                                                        Unsafe() const noexcept;
         };
 
         template<REQBuildTargetEnum T, REQFlitConfigurationConcept config>
@@ -1347,6 +1350,12 @@ namespace /*CHI::*/Flits {
     inline constexpr REQ<config> REQFlitBuilder<T, config, able>::BuildUnsafe() const noexcept
     {
         return flit;
+    }
+
+    template<REQBuildTargetEnum T, REQFlitConfigurationConcept config, details::REQFlitBuildability able>
+    inline constexpr REQFlitBuilder<T, config, details::always_buildable_req> REQFlitBuilder<T, config, able>::Unsafe() const noexcept
+    {
+        return REQFlitBuilder<T, config, details::always_buildable_req>(*this);
     }
 }
 

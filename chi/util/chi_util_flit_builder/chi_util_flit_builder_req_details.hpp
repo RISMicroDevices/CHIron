@@ -159,6 +159,56 @@ namespace CHI {
             bool RSVDC          = false;
         };
 
+        constexpr REQFlitBuildability always_buildable_req = {
+            .QoS            = true,
+            .TgtID          = true,
+            .SrcID          = true,
+            .TxnID          = true,
+            .ReturnNID      = true,
+            .StashNID       = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .SLCRepHint     = true,
+#endif
+            .StashNIDValid  = true,
+            .Endian         = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .Deep           = true,
+#endif
+            .ReturnTxnID    = true,
+            .StashLPIDValid = true,
+            .StashLPID      = true,
+            .Opcode         = true,
+            .Size           = true,
+            .Addr           = true,
+            .NS             = true,
+            .LikelyShared   = true,
+            .AllowRetry     = true,
+            .Order          = true,
+            .PCrdType       = true,
+            .MemAttr        = true,
+            .SnpAttr        = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .DoDWT          = true,
+#endif
+            .LPID           = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .PGroupID       = true,
+            .StashGroupID   = true,
+            .TagGroupID     = true,
+#endif
+            .Excl           = true,
+            .SnoopMe        = true,
+            .ExpCompAck     = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .TagOp          = true,
+#endif
+            .TraceTag       = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .MPAM           = true,
+#endif
+            .RSVDC          = true
+        };
+
         template<REQFlitBuildability able>
         concept is_buildable = able.QoS
                             && able.TgtID
