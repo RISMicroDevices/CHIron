@@ -184,6 +184,9 @@ namespace CHI {
 
             consteval SNP<config>                       EvalUnsafe() const noexcept;
             constexpr SNP<config>                       BuildUnsafe() const noexcept;
+
+            constexpr SNPFlitBuilder<T, config, details::always_buildable_snp> 
+                                                        Unsafe() const noexcept;
         };
     
         template<SNPBuildTargetEnum T, SNPFlitConfigurationConcept config>
@@ -619,6 +622,12 @@ namespace /*CHI:*/Flits {
     inline constexpr SNP<config> SNPFlitBuilder<T, config, able>::BuildUnsafe() const noexcept
     {
         return this->flit;
+    }
+
+    template<SNPBuildTargetEnum T, SNPFlitConfigurationConcept config, details::SNPFlitBuildability able>
+    inline constexpr SNPFlitBuilder<T, config, details::always_buildable_snp> SNPFlitBuilder<T, config, able>::Unsafe() const noexcept
+    {
+        return SNPFlitBuilder<T, config, details::always_buildable_snp>(*this);
     }
 }
 

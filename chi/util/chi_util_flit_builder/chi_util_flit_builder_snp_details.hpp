@@ -94,6 +94,29 @@ namespace CHI {
 #endif
         };
 
+        constexpr SNPFlitBuildability always_buildable_snp = {
+            .QoS            = true,
+            .SrcID          = true,
+            .TxnID          = true,
+            .FwdNID         = true,
+            .FwdTxnID       = true,
+            .StashLPID      = true,
+            .StashLPIDValid = true,
+            .VMIDExt        = true,
+            .Opcode         = true,
+            .Addr           = true,
+            .NS             = true,
+            .DoNotGoToSD    = true,
+#if defined(CHI_ISSUE_B_ENABLE) || defined(CHI_ISSUE_C_ENABLE)
+            .DoNotDataPull  = true,
+#endif
+            .RetToSrc       = true,
+            .TraceTag       = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .MPAM           = true
+#endif
+        };
+
         template<SNPFlitBuildability able>
         concept is_buildable = able.QoS
                             && able.SrcID
