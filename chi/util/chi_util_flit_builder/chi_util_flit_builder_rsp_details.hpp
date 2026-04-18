@@ -94,6 +94,32 @@ namespace CHI {
             bool TraceTag       = false;
         };
 
+        constexpr RSPFlitBuildability always_buildable_rsp = {
+            .QoS        = true,
+            .TgtID      = true,
+            .SrcID      = true,
+            .TxnID      = true,
+            .Opcode     = true,
+            .RespErr    = true,
+            .Resp       = true,
+            .FwdState   = true,
+            .DataPull   = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .CBusy      = true,
+#endif
+            .DBID       = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .PGroupID   = true,
+            .StashGroupID = true,
+            .TagGroupID = true,
+#endif
+            .PCrdType   = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .TagOp      = true,
+#endif
+            .TraceTag   = true
+        };
+
         template<RSPFlitBuildability able>
         concept is_buildable = able.QoS
                             && able.TgtID

@@ -186,6 +186,9 @@ namespace CHI {
 
             consteval RSP<config>                       EvalUnsafe() const noexcept;
             constexpr RSP<config>                       BuildUnsafe() const noexcept;
+
+            constexpr RSPFlitBuilder<T, config, details::always_buildable_rsp>
+                                                        Unsafe() const noexcept;
         };
     }
 /*
@@ -674,6 +677,12 @@ namespace /*CHI::*/Flits {
     inline constexpr RSP<config> RSPFlitBuilder<T, config, able>::BuildUnsafe() const noexcept
     {
         return flit;
+    }
+
+    template<RSPBuildTargetEnum T, RSPFlitConfigurationConcept config, details::RSPFlitBuildability able>
+    inline constexpr RSPFlitBuilder<T, config, details::always_buildable_rsp> RSPFlitBuilder<T, config, able>::Unsafe() const noexcept
+    {
+        return RSPFlitBuilder<T, config, details::always_buildable_rsp>(*this);
     }
 }
 
