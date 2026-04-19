@@ -217,6 +217,9 @@ namespace CHI {
 
             consteval DAT<config>                       EvalUnsafe() const noexcept;
             constexpr DAT<config>                       BuildUnsafe() const noexcept;
+
+            constexpr DATFlitBuilder<T, config, details::always_buildable_dat>
+                                                        Unsafe() const noexcept;
         };
 
         template<DATBuildTargetEnum T, DATFlitConfigurationConcept config>
@@ -875,6 +878,12 @@ namespace /*CHI::*/Flits {
     inline constexpr DAT<config> DATFlitBuilder<T, config, able>::BuildUnsafe() const noexcept
     {
         return this->flit;
+    }
+
+    template<DATBuildTargetEnum T, DATFlitConfigurationConcept config, details::DATFlitBuildability able>
+    inline constexpr DATFlitBuilder<T, config, details::always_buildable_dat> DATFlitBuilder<T, config, able>::Unsafe() const noexcept
+    {
+        return DATFlitBuilder<T, config, details::always_buildable_dat>(*this);
     }
 }
 

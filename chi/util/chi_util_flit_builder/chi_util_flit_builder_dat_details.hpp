@@ -110,6 +110,37 @@ namespace CHI {
             bool Poison         = false;
         };
 
+        constexpr DATFlitBuildability always_buildable_dat = {
+            .QoS        = true,
+            .TgtID      = true,
+            .SrcID      = true,
+            .TxnID      = true,
+            .HomeNID    = true,
+            .Opcode     = true,
+            .RespErr    = true,
+            .Resp       = true,
+            .FwdState   = true,
+            .DataPull   = true,
+            .DataSource = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .CBusy      = true,
+#endif
+            .DBID       = true,
+            .CCID       = true,
+            .DataID     = true,
+#ifdef CHI_ISSUE_EB_ENABLE
+            .TagOp      = true,
+            .Tag        = true,
+            .TU         = true,
+#endif
+            .TraceTag   = true,
+            .RSVDC      = true,
+            .BE         = true,
+            .Data       = true,
+            .DataCheck  = true,
+            .Poison     = true
+        };
+
         template<DATFlitBuildability able>
         concept is_buildable = able.QoS
                             && able.TgtID
