@@ -96,7 +96,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsSNP())
         {
-            this->firstDenial = XactDenial::DENIED_CHANNEL_NOT_SNP;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_CHANNEL_NOT_SNP, this->first);
             return;
         }
 

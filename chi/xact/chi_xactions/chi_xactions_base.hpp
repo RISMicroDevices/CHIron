@@ -27,6 +27,9 @@ namespace CHI {
 
     namespace Xact {
 
+        template<FlitConfigurationConcept config>
+        class Xaction;
+
         enum class XactionType {
             AllocatingRead  = 0,
             NonAllocatingRead,
@@ -47,9 +50,58 @@ namespace CHI {
         };
 
 
+        // Xaction Denial Events
+        template<FlitConfigurationConcept config>
+        class XactionEventBase {
+        protected:
+            Xaction<config>& xaction;
+
+        public:
+            XactionEventBase(Xaction<config>& xaction) noexcept;
+
+        public:
+            Xaction<config>&        GetXaction() noexcept;
+            const Xaction<config>&  GetXaction() const noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class XactionDeniedEventBase : public XactionEventBase<config> {
+        protected:
+            XactDenialEnum  denial;
+            std::string     message;
+
+        public:
+            XactionDeniedEventBase(Xaction<config>& xaction, XactDenialEnum denial, const std::string& message = "") noexcept;
+
+        public:
+            XactDenialEnum          GetDenial() const noexcept;
+
+            std::string&            GetMessage() noexcept;
+            const std::string&      GetMessage() const noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class XactionDeniedRequestFlitEvent : public XactionDeniedEventBase<config> {
+        protected:
+            const FiredRequestFlit<config>& flit;
+        
+        public:
+            XactionDeniedRequestFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredRequestFlit<config>& flit, const std::string& message = "") noexcept;
+
+        public:
+            const FiredRequestFlit<config>& GetFlit() const noexcept;
+        };
+
+
+        // Xaction Base
         template<FlitConfigurationConcept config>
         class Xaction {
         public:
+            class EventHub {
+            public:
+                Gravity::EventBus<XactionDeniedRequestFlitEvent<config>>    OnDeniedRequestFlit;
+            };
+
             // *NOTICE: Subsequence Key contains several critical attributes and fields
             //          of fired response flits to speed up Xaction query operations,
             //          because full flit data might not fit into a single cache line and
@@ -273,6 +325,11 @@ namespace CHI {
             virtual bool                            NextDataID(Flits::REQ<config>::ssize_t, const FiredResponseFlit<config>& datFlit, std::initializer_list<typename Flits::DAT<config>::opcode_t>) noexcept;
             virtual bool                            NextREQDataID(const FiredResponseFlit<config>& datFlit, std::initializer_list<typename Flits::DAT<config>::opcode_t> = {}) noexcept;
             virtual bool                            NextSNPDataID(const FiredResponseFlit<config>& datFlit, std::initializer_list<typename Flits::DAT<config>::opcode_t> = {}) noexcept;
+
+        protected:
+            XactDenialEnum  RequestFlitDenied(XactDenialEnum                    denial, 
+                                              const FiredRequestFlit<config>&   flit,
+                                              const std::string&                message = "") noexcept;
         };
     }
 
@@ -1571,8 +1628,8 @@ namespace /*CHI::*/Xact {
         if (!pCrdFlit.IsRSP())
             return XactDenial::DENIED_PCRD_CHANNEL_NOT_RSP;
 
-        if (!xaction->GetFirst().IsREQ())
-            return XactDenial::DENIED_CHANNEL_NOT_REQ;
+        if (!xaction->GetFirst().IsREQ()) // TODO: use individual denial for "Retry on non-REQ xaction"
+            return this->RequestFlitDenied(XactDenial::DENIED_CHANNEL_NOT_REQ, xaction->GetFirst());
 
         auto retryAck = GetRetryAck();
         if (!retryAck)

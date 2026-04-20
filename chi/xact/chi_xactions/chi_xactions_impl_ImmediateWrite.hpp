@@ -95,7 +95,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsREQ())
         {
-            this->firstDenial = XactDenial::DENIED_CHANNEL_NOT_REQ;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_CHANNEL_NOT_REQ, this->first);
             return;
         }
 
