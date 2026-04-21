@@ -92,7 +92,19 @@ namespace CHI {
             const FiredRequestFlit<config>& GetFlit() const noexcept;
         };
 
+        template<FlitConfigurationConcept config>
+        class XactionDeniedResponseFlitEvent : public XactionDeniedEventBase<config> {
+        protected:
+            const FiredResponseFlit<config>& flit;
 
+        public:
+            XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const std::string& message = "") noexcept;
+
+        public:
+            const FiredResponseFlit<config>& GetFlit() const noexcept;
+        };
+
+        
         // Xaction Base
         template<FlitConfigurationConcept config>
         class Xaction {
@@ -100,6 +112,7 @@ namespace CHI {
             class EventHub {
             public:
                 Gravity::EventBus<XactionDeniedRequestFlitEvent<config>>    OnDeniedRequestFlit;
+                Gravity::EventBus<XactionDeniedResponseFlitEvent<config>>   OnDeniedResponseFlit;
             };
 
             // *NOTICE: Subsequence Key contains several critical attributes and fields
@@ -330,6 +343,10 @@ namespace CHI {
             XactDenialEnum  RequestFlitDenied(XactDenialEnum                    denial, 
                                               const FiredRequestFlit<config>&   flit,
                                               const std::string&                message = "") noexcept;
+
+            XactDenialEnum  ResponseFlitDenied(XactDenialEnum                     denial, 
+                                               const FiredResponseFlit<config>&   flit,
+                                               const std::string&                 message = "") noexcept;
         };
     }
 
@@ -1531,7 +1548,7 @@ namespace /*CHI::*/Xact {
         firstDBID = false;
 
         if (!datFlit.IsDAT()) [[unlikely]]
-            return XactDenial::DENIED_CHANNEL_NOT_DAT;
+            return this->ResponseFlitDenied(XactDenial::DENIED_CHANNEL_NOT_DAT, datFlit);
 
         XactDenialEnum denial = NextDATNoRecord(glbl, datFlit, hasDBID, firstDBID);
 

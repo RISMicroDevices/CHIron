@@ -293,7 +293,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::DENIED_COMPLETED_RSP;
 
         if (!rspFlit.IsRSP())
-            return XactDenial::DENIED_CHANNEL_NOT_RSP;
+            return this->ResponseFlitDenied(XactDenial::DENIED_CHANNEL_NOT_RSP, rspFlit);
 
         if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::RetryAck)
             return this->NextRetryAckNoRecord(glbl, rspFlit);
