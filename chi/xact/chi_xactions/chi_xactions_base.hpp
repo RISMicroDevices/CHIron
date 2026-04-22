@@ -113,8 +113,15 @@ namespace CHI {
             public:
                 Gravity::EventBus<XactionDeniedRequestFlitEvent<config>>    OnDeniedRequestFlit;
                 Gravity::EventBus<XactionDeniedResponseFlitEvent<config>>   OnDeniedResponseFlit;
+
+            public:
+                EventHub() noexcept;
+                void Clear() noexcept;
             };
 
+            std::shared_ptr<EventHub> events;
+            
+        public:
             // *NOTICE: Subsequence Key contains several critical attributes and fields
             //          of fired response flits to speed up Xaction query operations,
             //          because full flit data might not fit into a single cache line and
@@ -612,6 +619,19 @@ namespace /*CHI::*/Xact {
     inline XactionType Xaction<config>::GetType() const noexcept
     {
         return type;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline Xaction<config>::EventHub::EventHub() noexcept
+        : OnDeniedRequestFlit   (0)
+        , OnDeniedResponseFlit  (0)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline void Xaction<config>::EventHub::Clear() noexcept
+    {
+        OnDeniedRequestFlit.Clear();
+        OnDeniedResponseFlit.Clear();
     }
 
     template<FlitConfigurationConcept config>
@@ -1902,6 +1922,111 @@ namespace /*CHI::*/Xact {
         std::initializer_list<typename Flits::DAT<config>::opcode_t>  opcodes) noexcept
     {
         return NextDataID(Sizes::B64, datFlit, opcodes);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::RequestFlitDenied(
+        XactDenialEnum                  denial,
+        const FiredRequestFlit<config>& flit,
+        const std::string&              message) noexcept
+    {
+        this->events->OnDeniedRequestFlit(XactionDeniedRequestFlitEvent<config>(
+            *this, denial, flit, message));
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::ResponseFlitDenied(
+        XactDenialEnum                      denial,
+        const FiredResponseFlit<config>&    flit,
+        const std::string&                  message) noexcept
+    {
+        this->events->OnDeniedResponseFlit(XactionDeniedResponseFlitEvent<config>(
+            *this, denial, flit, message));
+        return denial;
+    }
+}
+
+
+// Implementation of: class XactionEventBase
+namespace /*CHI::*/Xact {
+
+    template<FlitConfigurationConcept config>
+    inline XactionEventBase<config>::XactionEventBase(Xaction<config>& xaction) noexcept
+        : xaction(xaction)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline Xaction<config>& XactionEventBase<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Xaction<config>& XactionEventBase<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+}
+
+// Implementation of: class XactionDeniedEventBase
+namespace /*CHI::*/Xact {
+
+    template<FlitConfigurationConcept config>
+    inline XactionDeniedEventBase<config>::XactionDeniedEventBase(Xaction<config>& xaction, XactDenialEnum denial, const std::string& message) noexcept
+        : XactionEventBase<config>  (xaction)
+        , denial                    (denial)
+        , message                   (message)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum XactionDeniedEventBase<config>::GetDenial() const noexcept
+    {
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string& XactionDeniedEventBase<config>::GetMessage() noexcept
+    {
+        return message;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const std::string& XactionDeniedEventBase<config>::GetMessage() const noexcept
+    {
+        return message;
+    }
+}
+
+// Implementation of: class XactionDeniedRequestFlitEvent
+namespace /*CHI::*/Xact {
+
+    template<FlitConfigurationConcept config>
+    inline XactionDeniedRequestFlitEvent<config>::XactionDeniedRequestFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredRequestFlit<config>& flit, const std::string& message) noexcept
+        : XactionDeniedEventBase<config>    (xaction, denial, message)
+        , flit                              (flit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredRequestFlit<config>& XactionDeniedRequestFlitEvent<config>::GetFlit() const noexcept
+    {
+        return flit;
+    }
+}
+
+// Implementation of: class XactionDeniedResponseFlitEvent
+namespace /*CHI::*/Xact {
+
+    template<FlitConfigurationConcept config>
+    inline XactionDeniedResponseFlitEvent<config>::XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const std::string& message) noexcept
+        : XactionDeniedEventBase<config>    (xaction, denial, message)
+        , flit                              (flit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>& XactionDeniedResponseFlitEvent<config>::GetFlit() const noexcept
+    {
+        return flit;
     }
 }
 
