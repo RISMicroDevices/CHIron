@@ -428,9 +428,10 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
-    inline XactDenialEnum XactionHomeDataless<config>::NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
+    inline XactDenialEnum XactionHomeDataless<config>::NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
-        return XactDenial::DENIED_CHANNEL_DAT;
+        return this->ResponseFlitDenied(XactDenial::DENIED_CHANNEL_DAT, datFlit,
+            "Not expecting any DAT flit for Home Dataless transactions");
     }
 }
 

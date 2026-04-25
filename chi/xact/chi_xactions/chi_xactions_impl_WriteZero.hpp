@@ -369,7 +369,8 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum XactionWriteZero<config>::NextDATNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& datFlit, bool& hasDBID, bool &firstDBID) noexcept
     {
-        return XactDenial::DENIED_CHANNEL_DAT;
+        return this->ResponseFlitDenied(XactDenial::DENIED_CHANNEL_DAT, datFlit,
+            "Not expecting any DAT flit for Write Zero transactions");
     }
 }
 
