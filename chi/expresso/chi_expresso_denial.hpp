@@ -504,6 +504,109 @@ namespace CHI {
                 [](auto) -> std::vector<Flit::Key> { return {}; }
             };
 
+            /*
+            DENIED_CHANNEL_REQ
+            - Title Message: "Denied channel REQ"
+            - Further Message: "Unexpected flit on REQ channel: {Print({FiredRequestFlit})}"
+            - Source: [Xaction]
+            - Subject: [Xaction, FiredRequestFlit]
+            */
+            inline static constexpr ExplanationBack<config> DENIED_CHANNEL_REQ = (
+                "DENIED_CHANNEL_REQ",
+                Xact::XactDenial::DENIED_CHANNEL_REQ,
+                [](auto, SourceEnum source) -> std::string { return "Denied channel REQ"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "Unexpected flit on REQ channel: ";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->IsREQ()) {
+                            flitPrinter->PrintFlit(oss, subject.obj.firedFlitRequest->flit.req);
+                            break;
+                        }
+                    }
+                    return oss.str();
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_CHANNEL_SNP
+            - Title Message: "Denied channel SNP"
+            - Further Message: "Unexpected flit on SNP channel: {Print({FiredRequestFlit})}"
+            - Source: [Xaction]
+            - Subject: [Xaction, FiredRequestFlit]
+            */
+            inline static constexpr ExplanationBack<config> DENIED_CHANNEL_SNP = (
+                "DENIED_CHANNEL_SNP",
+                Xact::XactDenial::DENIED_CHANNEL_SNP,
+                [](auto, SourceEnum source) -> std::string { return "Denied channel SNP"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "Unexpected flit on SNP channel: ";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->IsSNP()) {
+                            flitPrinter->PrintFlit(oss, subject.obj.firedFlitRequest->flit.snp);
+                            break;
+                        }
+                    }
+                    return oss.str();
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_CHANNEL_RSP
+            - Title Message: "Denied channel RSP"
+            - Further Message: "Unexpected flit on RSP channel: {Print({FiredResponseFlit})}"
+            - Source: [Xaction]
+            - Subject: [Xaction, FiredResponseFlit]
+            */
+            inline static constexpr ExplanationBack<config> DENIED_CHANNEL_RSP = (
+                "DENIED_CHANNEL_RSP",
+                Xact::XactDenial::DENIED_CHANNEL_RSP,
+                [](auto, SourceEnum source) -> std::string { return "Denied channel RSP"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "Unexpected flit on RSP channel: ";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->IsRSP()) {
+                            flitPrinter->PrintFlit(oss, subject.obj.firedFlitResponse->flit.rsp);
+                            break;
+                        }
+                    }
+                    return oss.str();
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_CHANNEL_DAT
+            - Title Message: "Denied channel DAT"
+            - Further Message: "Unexpected flit on DAT channel: {Print({FiredResponseFlit})}"
+            - Source: [Xaction]
+            - Subject: [Xaction, FiredResponseFlit]
+            */
+            inline static constexpr ExplanationBack<config> DENIED_CHANNEL_DAT = (
+                "DENIED_CHANNEL_DAT",
+                Xact::XactDenial::DENIED_CHANNEL_DAT,
+                [](auto, SourceEnum source) -> std::string { return "Denied channel DAT"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "Unexpected flit on DAT channel: ";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            flitPrinter->PrintFlit(oss, subject.obj.firedFlitResponse->flit.dat);
+                            break;
+                        }
+                    }
+                    return oss.str();
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
 
             // TODO
 
