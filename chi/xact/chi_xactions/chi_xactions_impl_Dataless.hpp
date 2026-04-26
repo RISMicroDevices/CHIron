@@ -336,7 +336,7 @@ namespace /*CHI::*/Xact {
     inline XactDenialEnum XactionDataless<config>::NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(glbl))
-            return XactDenial::DENIED_COMPLETED_RSP;
+            return this->ResponseFlitDenied(XactDenial::DENIED_COMPLETED_RSP;
 
         if (!rspFlit.IsRSP())
             return this->ResponseFlitDenied(XactDenial::DENIED_CHANNEL_NOT_RSP, rspFlit);
