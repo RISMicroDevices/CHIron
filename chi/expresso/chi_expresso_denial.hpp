@@ -608,6 +608,84 @@ namespace CHI {
                 [](auto) -> std::vector<Flit::Key> { return {}; }
             );
 
+            /*
+            DENIED_COMPLETED_RSP
+            - Title Message: "Denied RSP on completed transaction"
+            - Further Message: "Unexpected RSP flit after transaction completed: {Print({FiredResponseFlit})}"
+            - Source: [Xaction]
+            - Subject: [Xaction, FiredResponseFlit]
+            */
+            inline static constexpr ExplanationBack<config> DENIED_COMPLETED_RSP = (
+                "DENIED_COMPLETED_RSP",
+                Xact::XactDenial::DENIED_COMPLETED_RSP,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP on completed transaction"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "Unexpected RSP flit after transaction completed: ";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            flitPrinter->PrintFlit(oss, subject.obj.firedFlitResponse->flit.rsp);
+                            break;
+                        }
+                    }
+                    return oss.str();
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_COMPLETED_DAT
+            - Title Message: "Denied DAT on completed transaction"
+            - Further Message: "Unexpected DAT flit after transaction completed: {Print({FiredResponseFlit})}"
+            - Source: [Xaction]
+            - Subject: [Xaction, FiredResponseFlit]
+            */
+            inline static constexpr ExplanationBack<config> DENIED_COMPLETED_DAT = (
+                "DENIED_COMPLETED_DAT",
+                Xact::XactDenial::DENIED_COMPLETED_DAT,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT on completed transaction"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "Unexpected DAT flit after transaction completed: ";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            flitPrinter->PrintFlit(oss, subject.obj.firedFlitResponse->flit.dat);
+                            break;
+                        }
+                    }
+                    return oss.str();
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_COMPLETED_SNP
+            - Title Message: "Denied SNP on completed transaction"
+            - Further Message: "Unexpected SNP flit after transaction completed: {Print({FiredRequestFlit})}"
+            - Source: [Xaction]
+            - Subject: [Xaction, FiredRequestFlit]
+            */
+            inline static constexpr ExplanationBack<config> DENIED_COMPLETED_SNP = (
+                "DENIED_COMPLETED_SNP",
+                Xact::XactDenial::DENIED_COMPLETED_SNP,
+                [](auto, SourceEnum source) -> std::string { return "Denied SNP on completed transaction"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "Unexpected SNP flit after transaction completed: ";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsSNP()) {
+                            flitPrinter->PrintFlit(oss, subject.obj.firedFlitRequest->flit.snp);
+                            break;
+                        }
+                    }
+                    return oss.str();
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
             // TODO
 
             /*
