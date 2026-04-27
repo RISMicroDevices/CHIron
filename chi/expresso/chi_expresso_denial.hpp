@@ -686,27 +686,255 @@ namespace CHI {
                 [](auto) -> std::vector<Flit::Key> { return {}; }
             );
 
+            /*
+            DENIED_REQ_TXNID_IN_USE
+            - Title Message: "Denied TxnID of REQ already in use"
+            - Further Message: "TxnID {REQ.TxnID} of REQ flit is already in use by existing transaction"
+            - Source: [Joint]
+            - Subject: [Joint, FiredRequestFlit, Xaction]
+            - Subject Key: 1. REQ.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_REQ_TXNID_IN_USE = (
+                "DENIED_REQ_TXNID_IN_USE",
+                Xact::XactDenial::DENIED_REQ_TXNID_IN_USE,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID of REQ already in use"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "TxnID";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsREQ()) {
+                            uint64_t txnId = subject.obj.firedFlitRequest->flit.req.TxnID();
+                            oss << std::format(" {:#x}", txnId);
+                            break;
+                        }
+                    }
+                    oss << " of REQ flit is already in use by existing transaction";
+                    return oss.str();
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::TxnID };
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_SNP_TXNID_IN_USE
+            - Title Message: "Denied TxnID of SNP already in use"
+            - Further Message: "TxnID {SNP.TxnID} of SNP flit is already in use by existing transaction"
+            - Source: [Joint]
+            - Subject: [Joint, FiredRequestFlit, Xaction]
+            - Subject Key: 1. SNP.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_SNP_TXNID_IN_USE = (
+                "DENIED_SNP_TXNID_IN_USE",
+                Xact::XactDenial::DENIED_SNP_TXNID_IN_USE,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID of SNP already in use"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "TxnID";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsSNP()) {
+                            uint64_t txnId = subject.obj.firedFlitRequest->flit.snp.TxnID();
+                            oss << std::format(" {:#x}", txnId);
+                            break;
+                        }
+                    }
+                    oss << " of SNP flit is already in use by existing transaction";
+                    return oss.str();
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::TxnID };
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_RSP_TXNID_NOT_EXIST
+            - Title Message: "Denied TxnID of RSP does not exist"
+            - Further Message: "TxnID {RSP.TxnID} of RSP flit does not match any transaction"
+            - Source: [Joint]
+            - Subject: [Joint, FiredResponseFlit]
+            - Subject Key: 1. RSP.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_TXNID_NOT_EXIST = (
+                "DENIED_RSP_TXNID_NOT_EXIST",
+                Xact::XactDenial::DENIED_RSP_TXNID_NOT_EXIST,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID of RSP does not exist"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "TxnID";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            uint64_t txnId = subject.obj.firedFlitResponse->flit.rsp.TxnID();
+                            oss << std::format(" {:#x}", txnId);
+                            break;
+                        }
+                    }
+                    oss << " of RSP flit does not match any transaction";
+                    return oss.str();
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::TxnID };
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_DAT_TXNID_NOT_EXIST
+            - Title Message: "Denied TxnID of DAT does not exist"
+            - Further Message: "TxnID {DAT.TxnID} of DAT flit does not match any transaction"
+            - Source: [Joint]
+            - Subject: [Joint, FiredResponseFlit]
+            - Subject Key: 1. DAT.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_TXNID_NOT_EXIST = (
+                "DENIED_DAT_TXNID_NOT_EXIST",
+                Xact::XactDenial::DENIED_DAT_TXNID_NOT_EXIST,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID of DAT does not exist"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "TxnID";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            uint64_t txnId = subject.obj.firedFlitResponse->flit.dat.TxnID();
+                            oss << std::format(" {:#x}", txnId);
+                            break;
+                        }
+                    }
+                    oss << " of DAT flit does not match any transaction";
+                    return oss.str();
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TxnID };
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_RSP_DBID_IN_USE
+            - Title Message: "Denied DBID of RSP already in use"
+            - Further Message: "DBID {RSP.DBID} of RSP flit occupied by existing transaction"
+            - Source: [Joint]
+            - Subject: [Joint, FiredResponseFlit, Xaction]
+            - Subject Key: 1. RSP.DBID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_DBID_IN_USE = (
+                "DENIED_RSP_DBID_IN_USE",
+                Xact::XactDenial::DENIED_RSP_DBID_IN_USE,
+                [](auto, SourceEnum source) -> std::string { return "Denied DBID of RSP already in use"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "DBID";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            uint64_t dbId = subject.obj.firedFlitResponse->flit.rsp.DBID();
+                            oss << std::format(" {:#x}", dbId);
+                            break;
+                        }
+                    }
+                    oss << " of RSP flit occupied by existing transaction";
+                    return oss.str();
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::DBID };
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_DAT_DBID_IN_USE
+            - Title Message: "Denied DBID of DAT already in use"
+            - Further Message: "DBID {DAT.DBID} of DAT flit occupied by existing transaction"
+            - Source: [Joint]
+            - Subject: [Joint, FiredResponseFlit, Xaction]
+            - Subject Key: 1. DAT.DBID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_DBID_IN_USE = (
+                "DENIED_DAT_DBID_IN_USE",
+                Xact::XactDenial::DENIED_DAT_DBID_IN_USE,
+                [](auto, SourceEnum source) -> std::string { return "Denied DBID of DAT already in use"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "DBID";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            uint64_t dbId = subject.obj.firedFlitResponse->flit.dat.DBID();
+                            oss << std::format(" {:#x}", dbId);
+                            break;
+                        }
+                    }
+                    oss << " of DAT flit occupied by existing transaction";
+                    return oss.str();
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::DBID };
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_RSP_DBID_NOT_EXIST
+            - Title Message: "Denied DBID of RSP does not exist"
+            - Further Message: "DBID {RSP.DBID} of RSP flit does not match any transaction"
+            - Source: [Joint]
+            - Subject: [Joint, FiredResponseFlit]
+            - Subject Key: 1. RSP.DBID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_DBID_NOT_EXIST = (
+                "DENIED_RSP_DBID_NOT_EXIST",
+                Xact::XactDenial::DENIED_RSP_DBID_NOT_EXIST,
+                [](auto, SourceEnum source) -> std::string { return "Denied DBID of RSP does not exist"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "DBID";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            uint64_t dbId = subject.obj.firedFlitResponse->flit.rsp.DBID();
+                            oss << std::format(" {:#x}", dbId);
+                            break;
+                        }
+                    }
+                    oss << " of RSP flit does not match any transaction";
+                    return oss.str();
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::DBID };
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
+            /*
+            DENIED_DAT_DBID_NOT_EXIST
+            - Title Message: "Denied DBID of DAT does not exist"
+            - Further Message: "DBID {DAT.DBID} of DAT flit does not match any transaction"
+            - Source: [Joint]
+            - Subject: [Joint, FiredResponseFlit]
+            - Subject Key: 1. DAT.DBID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_DBID_NOT_EXIST = (
+                "DENIED_DAT_DBID_NOT_EXIST",
+                Xact::XactDenial::DENIED_DAT_DBID_NOT_EXIST,
+                [](auto, SourceEnum source) -> std::string { return "Denied DBID of DAT does not exist"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, const Flit::Printer* flitPrinter, const Objects<config>& subjects, auto) -> std::string {
+                    std::ostringstream oss;
+                    oss << "DBID";
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            uint64_t dbId = subject.obj.firedFlitResponse->flit.dat.DBID();
+                            oss << std::format(" {:#x}", dbId);
+                            break;
+                        }
+                    }
+                    oss << " of DAT flit does not match any transaction";
+                    return oss.str();
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::DBID };
+                },
+                [](auto) -> std::vector<Flit::Key> { return {}; }
+            );
+
             // TODO
-
-            /*
-            DENIED_TXNID_IN_USE
-            - Title Message: "Denied TxnID in use"
-            */
-
-            // TODO
-
-            /*
-            DENIED_COMPLETED_RSP
-            - Title Message: "Denied RSP by already completed transaction"
-            - Further Message: ""
-            - Source: [Xaction]
-            - Subject: [Xaction, FiredResponseFlit]
-            */
-
-            /*
-            DENIED_COMPLETED_DAT
-            */
-
 
             /*
             DENIED_REQ_OPCODE
