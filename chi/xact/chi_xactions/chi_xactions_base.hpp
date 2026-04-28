@@ -81,7 +81,8 @@ namespace CHI {
         };
 
         template<FlitConfigurationConcept config>
-        class XactionDeniedRequestFlitEvent : public XactionDeniedEventBase<config> {
+        class XactionDeniedRequestFlitEvent : public XactionDeniedEventBase<config>, 
+                                              public Gravity::Event<XactionDeniedRequestFlitEvent<config>> {
         protected:
             const FiredRequestFlit<config>& flit;
         
@@ -93,7 +94,8 @@ namespace CHI {
         };
 
         template<FlitConfigurationConcept config>
-        class XactionDeniedResponseFlitEvent : public XactionDeniedEventBase<config> {
+        class XactionDeniedResponseFlitEvent : public XactionDeniedEventBase<config>, 
+                                               public Gravity::Event<XactionDeniedResponseFlitEvent<config>> {
         protected:
             const FiredResponseFlit<config>& flit;
 
