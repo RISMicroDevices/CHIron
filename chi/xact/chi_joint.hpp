@@ -291,6 +291,18 @@ namespace CHI {
                                                     std::shared_ptr<Xaction<config>>  xaction = nullptr,
                                                     const std::string&                message = "") noexcept;
 
+            void            FireXactionAccepted(const std::shared_ptr<Xaction<config>>& xaction) noexcept;
+            void            FireXactionAccepted(const std::shared_ptr<Xaction<config>>& xaction,
+                                                Flits::REQ<config>::srcid_t              snpTgtId) noexcept;
+            void            FireXactionRetry(const std::shared_ptr<Xaction<config>>& xaction) noexcept;
+            void            FireXactionTxnIDAllocation(const std::shared_ptr<Xaction<config>>& xaction) noexcept;
+            void            FireXactionTxnIDFree(const std::shared_ptr<Xaction<config>>& xaction) noexcept;
+            void            FireXactionDBIDAllocation(const std::shared_ptr<Xaction<config>>& xaction) noexcept;
+            void            FireXactionDBIDFree(const std::shared_ptr<Xaction<config>>& xaction) noexcept;
+            void            FireXactionComplete(const std::shared_ptr<Xaction<config>>& xaction) noexcept;
+            void            FireXactionComplete(const std::shared_ptr<Xaction<config>>& xaction,
+                                                Flits::REQ<config>::srcid_t              snpTgtId) noexcept;
+
         public:
             virtual XactDenialEnum  NextTXREQ(
                 const Global<config>&             glbl,
@@ -974,8 +986,9 @@ namespace /*CHI::*/Xact {
         std::shared_ptr<Xaction<config>>        xaction,
         const std::string&                      message) noexcept
     {
-        this->events->OnDeniedRequest(JointDeniedRequestEvent<config>(
-            *this, xaction, denial, JointDenialSource::JOINT, firedRequestFlit, message));
+        if (this->events)
+            this->events->OnDeniedRequest(JointDeniedRequestEvent<config>(
+                *this, xaction, denial, JointDenialSource::JOINT, firedRequestFlit, message));
         return denial;
     }
 
@@ -986,8 +999,9 @@ namespace /*CHI::*/Xact {
         std::shared_ptr<Xaction<config>>        xaction,
         const std::string&                      message) noexcept
     {
-        this->events->OnDeniedRequest(JointDeniedRequestEvent<config>(
-            *this, xaction, denial, JointDenialSource::XACTION, firedRequestFlit, message));
+        if (this->events)
+            this->events->OnDeniedRequest(JointDeniedRequestEvent<config>(
+                *this, xaction, denial, JointDenialSource::XACTION, firedRequestFlit, message));
         return denial;
     }
 
@@ -998,8 +1012,9 @@ namespace /*CHI::*/Xact {
         std::shared_ptr<Xaction<config>>        xaction,
         const std::string&                      message) noexcept
     {
-        this->events->OnDeniedResponse(JointDeniedResponseEvent<config>(
-            *this, xaction, denial, JointDenialSource::JOINT, firedResponseFlit, message));
+        if (this->events)
+            this->events->OnDeniedResponse(JointDeniedResponseEvent<config>(
+                *this, xaction, denial, JointDenialSource::JOINT, firedResponseFlit, message));
         return denial;
     }
 
@@ -1010,9 +1025,77 @@ namespace /*CHI::*/Xact {
         std::shared_ptr<Xaction<config>>        xaction,
         const std::string&                      message) noexcept
     {
-        this->events->OnDeniedResponse(JointDeniedResponseEvent<config>(
-            *this, xaction, denial, JointDenialSource::XACTION, firedResponseFlit, message));
+        if (this->events)
+            this->events->OnDeniedResponse(JointDeniedResponseEvent<config>(
+                *this, xaction, denial, JointDenialSource::XACTION, firedResponseFlit, message));
         return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::FireXactionAccepted(const std::shared_ptr<Xaction<config>>& xaction) noexcept
+    {
+        if (this->events)
+            this->events->OnAccepted(JointXactionAcceptedEvent<config>(*this, xaction));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::FireXactionAccepted(
+        const std::shared_ptr<Xaction<config>>& xaction,
+        Flits::REQ<config>::srcid_t             snpTgtId) noexcept
+    {
+        if (this->events)
+            this->events->OnAccepted(JointXactionAcceptedEvent<config>(*this, xaction, snpTgtId));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::FireXactionRetry(const std::shared_ptr<Xaction<config>>& xaction) noexcept
+    {
+        if (this->events)
+            this->events->OnRetry(JointXactionRetryEvent<config>(*this, xaction));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::FireXactionTxnIDAllocation(const std::shared_ptr<Xaction<config>>& xaction) noexcept
+    {
+        if (this->events)
+            this->events->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config>(*this, xaction));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::FireXactionTxnIDFree(const std::shared_ptr<Xaction<config>>& xaction) noexcept
+    {
+        if (this->events)
+            this->events->OnTxnIDFree(JointXactionTxnIDFreeEvent<config>(*this, xaction));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::FireXactionDBIDAllocation(const std::shared_ptr<Xaction<config>>& xaction) noexcept
+    {
+        if (this->events)
+            this->events->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config>(*this, xaction));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::FireXactionDBIDFree(const std::shared_ptr<Xaction<config>>& xaction) noexcept
+    {
+        if (this->events)
+            this->events->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::FireXactionComplete(const std::shared_ptr<Xaction<config>>& xaction) noexcept
+    {
+        if (this->events)
+            this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::FireXactionComplete(
+        const std::shared_ptr<Xaction<config>>& xaction,
+        Flits::REQ<config>::srcid_t             snpTgtId) noexcept
+    {
+        if (this->events)
+            this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction, snpTgtId));
     }
 
     template<FlitConfigurationConcept config>
@@ -1618,10 +1701,10 @@ namespace /*CHI::*/Xact {
             txTransactions.erase(firstKey);
 
             // event on retry xaction
-            this->events->OnRetry(JointXactionRetryEvent<config>(*this, retryXaction));
+            this->FireXactionRetry(retryXaction);
 
             // event on TxnID allocation
-            this->events->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config>(*this, retryXaction));
+            this->FireXactionTxnIDAllocation(retryXaction);
 
             // consume P-Credit
             pCreditList.pop_front();
@@ -1649,10 +1732,10 @@ namespace /*CHI::*/Xact {
                 return this->RequestDeniedByXaction(xaction->GetFirstDenial(), firedReqFlit, xaction);
 
             // event on Request xaction accepted
-            this->events->OnAccepted(JointXactionAcceptedEvent<config>(*this, xaction));
+            this->FireXactionAccepted(xaction);
 
             // event on TxnID allocation
-            this->events->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config>(*this, xaction));
+            this->FireXactionTxnIDAllocation(xaction);
 
             txTransactions[key] = xaction;
         }
@@ -1702,7 +1785,7 @@ namespace /*CHI::*/Xact {
             return this->RequestDeniedByXaction(xaction->GetFirstDenial(), firedSnpFlit, xaction);
 
         // event on Request xaction accepted
-        this->events->OnAccepted(JointXactionAcceptedEvent<config>(*this, xaction, snpTgtId));
+        this->FireXactionAccepted(xaction, snpTgtId);
 
         rxTransactions[key] = xaction;
 
@@ -1791,7 +1874,7 @@ namespace /*CHI::*/Xact {
                 if (xactionDBIDSource)
                 {
                     // event on DBID free
-                    this->events->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
+                    this->FireXactionDBIDFree(xaction);
                     
                     // DBID overlapping would never happen on CompAck
                     // see above for details
@@ -1847,7 +1930,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
+                this->FireXactionComplete(xaction);
             }
         }
         else // SNP
@@ -1856,7 +1939,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction, rspFlit.SrcID()));
+                this->FireXactionComplete(xaction, rspFlit.SrcID());
 
                 rxsnpid_t key;
                 key.value   = 0;
@@ -1953,7 +2036,7 @@ namespace /*CHI::*/Xact {
                 txDBIDTransactions[keyDBID] = xaction;
 
                 // event on DBID allocation
-                this->events->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config>(*this, xaction));
+                this->FireXactionDBIDAllocation(xaction);
             }
             else
             {
@@ -1968,7 +2051,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsTxnIDComplete(glbl))
             {
                 // event on TxnID free
-                this->events->OnTxnIDFree(JointXactionTxnIDFreeEvent<config>(*this, xaction));
+                this->FireXactionTxnIDFree(xaction);
 
                 // remove related TxnID mapping
                 txreqid_t key;
@@ -1989,7 +2072,7 @@ namespace /*CHI::*/Xact {
                 if (xactionDBIDSource)
                 {
                     // event on DBID free
-                    this->events->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
+                    this->FireXactionDBIDFree(xaction);
 
                     // check overlappable DBID mapping first
                     txreqdbidovlp_t keyDBIDOvlp;
@@ -2098,7 +2181,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
+                this->FireXactionComplete(xaction);
 
                 if (xaction->GotRetryAck())
                 {
@@ -2118,7 +2201,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction, rspFlit.TgtID()));
+                this->FireXactionComplete(xaction, rspFlit.TgtID());
 
                 rxsnpid_t key;
                 key.value   = 0;
@@ -2235,7 +2318,7 @@ namespace /*CHI::*/Xact {
                 if (xactionDBIDSource)
                 {
                     // event on DBID free
-                    this->events->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
+                    this->FireXactionDBIDFree(xaction);
 
                     // check overlappable DBID mapping first
                     txreqdbidovlp_t keyDBIDOvlp;
@@ -2343,7 +2426,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
+                this->FireXactionComplete(xaction);
             }
         }
         else // SNP
@@ -2351,7 +2434,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction, datFlit.SrcID()));
+                this->FireXactionComplete(xaction, datFlit.SrcID());
                     
                 rxsnpid_t key;
                 key.value   = 0;
@@ -2420,7 +2503,7 @@ namespace /*CHI::*/Xact {
                 txDBIDTransactions[keyDBID] = xaction;
 
                 // on DBID allocation
-                this->events->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config>(*this, xaction));
+                this->FireXactionDBIDAllocation(xaction);
             }
             else
             {
@@ -2435,7 +2518,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsTxnIDComplete(glbl))
             {
                 // event on TxnID free
-                this->events->OnTxnIDFree(JointXactionTxnIDFreeEvent<config>(*this, xaction));
+                this->FireXactionTxnIDFree(xaction);
 
                 if (xaction->GetFirst().IsREQ())
                 {
@@ -2459,7 +2542,7 @@ namespace /*CHI::*/Xact {
                 if (xactionDBIDSource)
                 {
                     // event on DBID free
-                    this->events->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
+                    this->FireXactionDBIDFree(xaction);
 
                     // check overlappable DBID mapping first
                     txreqdbidovlp_t keyDBIDOvlp;
@@ -2568,7 +2651,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
+                this->FireXactionComplete(xaction);
             }
         }
         else // SNP
@@ -2577,7 +2660,7 @@ namespace /*CHI::*/Xact {
             if (xaction->IsComplete(glbl))
             {
                 // event on completion
-                this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction, datFlit.TgtID()));
+                this->FireXactionComplete(xaction, datFlit.TgtID());
             
                 rxsnpid_t key;
                 key.value   = 0;
@@ -2909,10 +2992,10 @@ namespace /*CHI::*/Xact {
                 return this->RequestDeniedByXaction(xaction->GetFirstDenial(), firedReqFlit, xaction);
 
             // event on Request xaction acccepted
-            this->events->OnAccepted(JointXactionAcceptedEvent<config>(*this, xaction));
+            this->FireXactionAccepted(xaction);
 
             // event on TxnID allocation
-            this->events->OnTxnIDAllocation(JointXactionTxnIDAllocationEvent<config>(*this, xaction));
+            this->FireXactionTxnIDAllocation(xaction);
 
             rxTransactions[key] = xaction;
         }
@@ -3004,7 +3087,7 @@ namespace /*CHI::*/Xact {
                 rxDBIDTransactions[keyDBID] = xaction;
 
                 // event on DBID allocation
-                this->events->OnDBIDAllocation(JointXactionDBIDAllocationEvent<config>(*this, xaction));
+                this->FireXactionDBIDAllocation(xaction);
             }
             else
             {
@@ -3019,7 +3102,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsTxnIDComplete(glbl))
         {
             // event on TxnID free
-            this->events->OnTxnIDFree(JointXactionTxnIDFreeEvent<config>(*this, xaction));
+            this->FireXactionTxnIDFree(xaction);
 
             // remove related TxnID mapping
             rxreqid_t key;
@@ -3042,7 +3125,7 @@ namespace /*CHI::*/Xact {
                 assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
 
                 // event on DBID free
-                this->events->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
+                this->FireXactionDBIDFree(xaction);
 
                 // check overlappable DBID mapping first
                 rxreqdbidovlp_t keyDBIDOvlp;
@@ -3115,7 +3198,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsComplete(glbl))
         {
             // event on completion
-            this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
+            this->FireXactionComplete(xaction);
 
             if (xaction->GotRetryAck())
             {
@@ -3183,7 +3266,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsTxnIDComplete(glbl))
         {
             // event on TxnID free
-            this->events->OnTxnIDFree(JointXactionTxnIDFreeEvent<config>(*this, xaction));
+            this->FireXactionTxnIDFree(xaction);
 
             // remove related TxnID mapping
             rxreqid_t key;
@@ -3206,7 +3289,7 @@ namespace /*CHI::*/Xact {
                 assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
 
                 // event on DBID free
-                this->events->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
+                this->FireXactionDBIDFree(xaction);
 
                 // check overlappable DBID mapping first
                 rxreqdbidovlp_t keyDBIDOvlp;
@@ -3278,7 +3361,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsComplete(glbl))
         {
             // event on completion
-            this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
+            this->FireXactionComplete(xaction);
         }
 
         return XactDenial::ACCEPTED;
@@ -3335,7 +3418,7 @@ namespace /*CHI::*/Xact {
                 assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
 
                 // event on DBID free
-                this->events->OnDBIDFree(JointXactionDBIDFreeEvent<config>(*this, xaction));
+                this->FireXactionDBIDFree(xaction);
 
                 // check overlappable DBID mapping first
                 rxreqdbidovlp_t keyDBIDOvlp;
@@ -3407,7 +3490,7 @@ namespace /*CHI::*/Xact {
         if (xaction->IsComplete(glbl))
         {
             // event on completion
-            this->events->OnComplete(JointXactionCompleteEvent<config>(*this, xaction));
+            this->FireXactionComplete(xaction);
         }
 
         return XactDenial::ACCEPTED;
