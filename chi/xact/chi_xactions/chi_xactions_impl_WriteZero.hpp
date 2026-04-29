@@ -101,7 +101,8 @@ namespace /*CHI::*/Xact {
          && this->first.flit.req.Opcode() != Opcodes::REQ::WriteUniqueZero
         ) [[unlikely]]
         {
-            this->firstDenial = XactDenial::DENIED_REQ_OPCODE;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_OPCODE, this->first,
+                "This Opcode is not type of / supported by Write Zero transaction");
             return;
         }
 
@@ -363,7 +364,8 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_RSP_OPCODE;
+        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+            "RSP opcode is not expected for Write Zero transactions");
     }
 
     template<FlitConfigurationConcept config>

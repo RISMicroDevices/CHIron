@@ -103,7 +103,8 @@ namespace /*CHI::*/Xact {
          && this->first.flit.req.Opcode() != Opcodes::REQ::StashOnceSepShared
         ) [[unlikely]]
         {
-            this->firstDenial = XactDenial::DENIED_REQ_OPCODE;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_OPCODE, this->first,
+                "This Opcode is not type of / supported by Independent Stash transaction");
             return;
         }
 
@@ -342,7 +343,8 @@ namespace /*CHI::*/Xact {
                         return XactDenial::DENIED_COMPSTASHDONE_AFTER_COMPSTASHDONE;
                 }
                 else
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+                        "RSP opcode is not expected for Independent Stash transactions");
 
                 //
                 if (glbl.CHECK_FIELD_MAPPING.enable)
@@ -356,7 +358,8 @@ namespace /*CHI::*/Xact {
             }
         }
 
-        return XactDenial::DENIED_RSP_OPCODE;
+        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+            "RSP opcode is not expected for Independent Stash transactions");
     }
 
     template<FlitConfigurationConcept config>

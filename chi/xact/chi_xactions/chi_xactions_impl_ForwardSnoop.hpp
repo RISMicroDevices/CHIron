@@ -101,7 +101,8 @@ namespace /*CHI::*/Xact {
          && this->first.flit.snp.Opcode() != Opcodes::SNP::SnpUniqueFwd
         ) [[unlikely]]
         {
-            this->firstDenial = XactDenial::DENIED_SNP_OPCODE;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_SNP_OPCODE, this->first,
+                "This Opcode is not type of / supported by Forward Snoop transaction");
             return;
         }
 
@@ -414,7 +415,8 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_RSP_OPCODE;
+        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+            "RSP opcode is not expected for Forward Snoop transactions");
     }
 
     template<FlitConfigurationConcept config>

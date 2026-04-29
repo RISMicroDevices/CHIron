@@ -102,7 +102,8 @@ namespace /*CHI::*/Xact {
 
         if (this->first.flit.snp.Opcode() != Opcodes::SNP::SnpDVMOp) [[unlikely]]
         {
-            this->firstDenial = XactDenial::DENIED_SNP_OPCODE;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_SNP_OPCODE, this->first,
+                "This Opcode is not type of / supported by DVMSnoop transaction");
             return;
         }
 
@@ -266,7 +267,8 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_RSP_OPCODE;
+        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+            "RSP opcode is not expected for DVM Snoop transactions");
     }
 
     template<FlitConfigurationConcept config>
@@ -327,7 +329,7 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_SNP_OPCODE;
+        return this->RequestFlitDenied(XactDenial::DENIED_SNP_OPCODE, snpFlit);
     }
 }
 

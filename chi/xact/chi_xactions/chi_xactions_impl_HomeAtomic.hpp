@@ -106,7 +106,8 @@ namespace /*CHI::*/Xact {
          && this->first.flit.req.Opcode() != Opcodes::REQ::AtomicCompare
         ) [[unlikely]]
         {
-            this->firstDenial = XactDenial::DENIED_REQ_OPCODE;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_OPCODE, this->first,
+                "This Opcode is not type of / supported by Home Atomic transaction");
             return;
         }
 
@@ -361,7 +362,8 @@ namespace /*CHI::*/Xact {
         else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
         {
             if (!Opcodes::REQ::AtomicStore::Is(this->first.flit.req.Opcode()))
-                return XactDenial::DENIED_RSP_OPCODE;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+                    "Comp is only expected for AtomicStore");
 
             if (!rspFlit.IsFromSubordinateToHome(glbl))
                 return XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN;
@@ -406,7 +408,8 @@ namespace /*CHI::*/Xact {
         else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
         {
             if (!Opcodes::REQ::AtomicStore::Is(this->first.flit.req.Opcode()))
-                return XactDenial::DENIED_RSP_OPCODE;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+                    "CompDBIDResp is only expected for AtomicStore");
 
             if (!rspFlit.IsFromSubordinateToHome(glbl))
                 return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
@@ -452,7 +455,8 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_RSP_OPCODE;
+        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+            "RSP opcode is not expected for Home Atomic transactions");
     }
 
     template<FlitConfigurationConcept config>

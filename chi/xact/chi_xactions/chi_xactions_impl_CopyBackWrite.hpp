@@ -108,7 +108,8 @@ namespace /*CHI::*/Xact {
 #endif
         ) [[unlikely]]
         {
-            this->firstDenial = XactDenial::DENIED_REQ_OPCODE;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_OPCODE, this->first,
+                "This Opcode is not type of / supported by CopyBackWrite transaction");
             return;
         }
 
@@ -369,7 +370,8 @@ namespace /*CHI::*/Xact {
             else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
             {
                 if (this->first.flit.req.Opcode() != Opcodes::REQ::WriteEvictOrEvict)
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+                        "Comp is only expected for WriteEvictOrEvict");
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -399,7 +401,8 @@ namespace /*CHI::*/Xact {
         {
             // WriteEvictOrEvict only
             if (this->first.flit.req.Opcode() != Opcodes::REQ::WriteEvictOrEvict)
-                return XactDenial::DENIED_RSP_OPCODE;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+                    "CompAck is only expected for WriteEvictOrEvict");
 
             if (!rspFlit.IsFromRequesterToHome(glbl))
                 return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
@@ -427,7 +430,8 @@ namespace /*CHI::*/Xact {
         }
 #endif
 
-        return XactDenial::DENIED_RSP_OPCODE;
+        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+            "RSP opcode is not expected for CopyBack Write transactions");
     }
 
     template<FlitConfigurationConcept config>

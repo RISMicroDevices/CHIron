@@ -104,7 +104,8 @@ namespace /*CHI::*/Xact {
 #endif
         ) [[unlikely]]
         {
-            this->firstDenial = XactDenial::DENIED_REQ_OPCODE;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_OPCODE, this->first,
+                "This Opcode is not type of / supported by Allocating Read transaction");
             return;
         }
 
@@ -333,7 +334,8 @@ namespace /*CHI::*/Xact {
             else // Comp
             {
                 if (this->first.flit.req.Opcode() != Opcodes::REQ::MakeReadUnique)
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+                        "Comp is only expected for MakeReadUnique");
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -404,7 +406,8 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_RSP_OPCODE;
+        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
+            "RSP opcode is not expected for Allocating Read transactions");
     }
 
     template<FlitConfigurationConcept config>
