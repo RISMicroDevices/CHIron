@@ -39,7 +39,129 @@ namespace CHI {
         }
 
         template<FlitConfigurationConcept config>
+        class RNCacheStateMap;
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapEventBase {
+        protected:
+            RNCacheStateMap<config>&    host;
+            const Xaction<config>&      xaction;
+
+        public:
+            RNCacheStateMapEventBase(RNCacheStateMap<config>& host, const Xaction<config>& xaction) noexcept;
+
+        public:
+            RNCacheStateMap<config>&        GetRNCacheStateMap() noexcept;
+            const RNCacheStateMap<config>&  GetRNCacheStateMap() const noexcept;
+
+            const Xaction<config>&          GetXaction() const noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapDeniedEventBase : public RNCacheStateMapEventBase<config> {
+        protected:
+            XactDenialEnum  denial;
+            std::string     message;
+
+        public:
+            RNCacheStateMapDeniedEventBase(RNCacheStateMap<config>&    host,
+                                           const Xaction<config>&      xaction,
+                                           XactDenialEnum              denial,
+                                           const std::string&          message = "") noexcept;
+
+        public:
+            XactDenialEnum          GetDenial() const noexcept;
+
+            std::string&            GetMessage() noexcept;
+            const std::string&      GetMessage() const noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapDeniedTXRSPEvent : public RNCacheStateMapDeniedEventBase<config>,
+                                                public Gravity::Event<RNCacheStateMapDeniedTXRSPEvent<config>> {
+        protected:
+            const FiredResponseFlit<config>& flit;
+
+        public:
+            RNCacheStateMapDeniedTXRSPEvent(RNCacheStateMap<config>&            host,
+                                            const Xaction<config>&              xaction,
+                                            XactDenialEnum                      denial,
+                                            const FiredResponseFlit<config>&    flit,
+                                            const std::string&                  message = "") noexcept;
+
+        public:
+            const FiredResponseFlit<config>& GetFlit() const noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapDeniedTXDATEvent : public RNCacheStateMapDeniedEventBase<config>,
+                                                public Gravity::Event<RNCacheStateMapDeniedTXDATEvent<config>> {
+        protected:
+            const FiredResponseFlit<config>& flit;
+
+        public:
+            RNCacheStateMapDeniedTXDATEvent(RNCacheStateMap<config>&            host,
+                                            const Xaction<config>&              xaction,
+                                            XactDenialEnum                      denial,
+                                            const FiredResponseFlit<config>&    flit,
+                                            const std::string&                  message = "") noexcept;
+
+        public:
+            const FiredResponseFlit<config>& GetFlit() const noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapDeniedRXRSPEvent : public RNCacheStateMapDeniedEventBase<config>,
+                                                public Gravity::Event<RNCacheStateMapDeniedRXRSPEvent<config>> {
+        protected:
+            const FiredResponseFlit<config>& flit;
+
+        public:
+            RNCacheStateMapDeniedRXRSPEvent(RNCacheStateMap<config>&            host,
+                                            const Xaction<config>&              xaction,
+                                            XactDenialEnum                      denial,
+                                            const FiredResponseFlit<config>&    flit,
+                                            const std::string&                  message = "") noexcept;
+
+        public:
+            const FiredResponseFlit<config>& GetFlit() const noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapDeniedRXDATEvent : public RNCacheStateMapDeniedEventBase<config>,
+                                                public Gravity::Event<RNCacheStateMapDeniedRXDATEvent<config>> {
+        protected:
+            const FiredResponseFlit<config>& flit;
+
+        public:
+            RNCacheStateMapDeniedRXDATEvent(RNCacheStateMap<config>&            host,
+                                            const Xaction<config>&              xaction,
+                                            XactDenialEnum                      denial,
+                                            const FiredResponseFlit<config>&    flit,
+                                            const std::string&                  message = "") noexcept;
+
+        public:
+            const FiredResponseFlit<config>& GetFlit() const noexcept;
+        };
+
+
+        template<FlitConfigurationConcept config>
         class RNCacheStateMap {
+        public:
+            class EventHub {
+            public:
+                Gravity::EventBus<RNCacheStateMapDeniedTXRSPEvent<config>>   OnDeniedTXRSP;
+                Gravity::EventBus<RNCacheStateMapDeniedTXDATEvent<config>>   OnDeniedTXDAT;
+                Gravity::EventBus<RNCacheStateMapDeniedRXRSPEvent<config>>   OnDeniedRXRSP;
+                Gravity::EventBus<RNCacheStateMapDeniedRXDATEvent<config>>   OnDeniedRXDAT;
+                
+            public:
+                EventHub() noexcept;
+                void Clear() noexcept;
+            };
+
+            std::shared_ptr<EventHub> events;
+
         private:
             static constexpr size_t ADDR_OFFSET_CACHE_BLOCK     = 6;
             static constexpr size_t ADDR_OFFSET_CACHE_MAP_SPAN  = 24;
@@ -92,6 +214,23 @@ namespace CHI {
             std::pair<CacheState, bool> ExcavateWithSeer(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
             std::pair<CacheState, bool> EvaluateWithSeer(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
 
+            XactDenialEnum  DeniedTXRSP(XactDenialEnum              denial,
+                                        const Xaction<config>&      xaction,
+                                        const FiredResponseFlit<config>& flit,
+                                        const std::string&          message = "") noexcept;
+            XactDenialEnum  DeniedTXDAT(XactDenialEnum              denial,
+                                        const Xaction<config>&      xaction,
+                                        const FiredResponseFlit<config>& flit,
+                                        const std::string&          message = "") noexcept;
+            XactDenialEnum  DeniedRXRSP(XactDenialEnum              denial,
+                                        const Xaction<config>&      xaction,
+                                        const FiredResponseFlit<config>& flit,
+                                        const std::string&          message = "") noexcept;
+            XactDenialEnum  DeniedRXDAT(XactDenialEnum              denial,
+                                        const Xaction<config>&      xaction,
+                                        const FiredResponseFlit<config>& flit,
+                                        const std::string&          message = "") noexcept;
+
         public:
             CacheState  EvaluateSilently(CacheState state) const noexcept;
 
@@ -142,9 +281,206 @@ namespace /*CHI::*/Xact {
     */
 
     template<FlitConfigurationConcept config>
+    inline RNCacheStateMapEventBase<config>::RNCacheStateMapEventBase(
+        RNCacheStateMap<config>&    host,
+        const Xaction<config>&      xaction) noexcept
+        : host      (host)
+        , xaction   (xaction)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMap<config>& RNCacheStateMapEventBase<config>::GetRNCacheStateMap() noexcept
+    {
+        return host;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const RNCacheStateMap<config>& RNCacheStateMapEventBase<config>::GetRNCacheStateMap() const noexcept
+    {
+        return host;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Xaction<config>& RNCacheStateMapEventBase<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMapDeniedEventBase<config>::RNCacheStateMapDeniedEventBase(
+        RNCacheStateMap<config>&    host,
+        const Xaction<config>&      xaction,
+        XactDenialEnum              denial,
+        const std::string&          message) noexcept
+        : RNCacheStateMapEventBase<config> (host, xaction)
+        , denial                        (denial)
+        , message                       (message)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMapDeniedEventBase<config>::GetDenial() const noexcept
+    {
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::string& RNCacheStateMapDeniedEventBase<config>::GetMessage() noexcept
+    {
+        return message;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const std::string& RNCacheStateMapDeniedEventBase<config>::GetMessage() const noexcept
+    {
+        return message;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMapDeniedTXRSPEvent<config>::RNCacheStateMapDeniedTXRSPEvent(
+        RNCacheStateMap<config>&    host,
+        const Xaction<config>&      xaction,
+        XactDenialEnum              denial,
+        const FiredResponseFlit<config>& flit,
+        const std::string&          message) noexcept
+        : RNCacheStateMapDeniedEventBase<config>   (host, xaction, denial, message)
+        , flit                                     (flit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>& RNCacheStateMapDeniedTXRSPEvent<config>::GetFlit() const noexcept
+    {
+        return flit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMapDeniedTXDATEvent<config>::RNCacheStateMapDeniedTXDATEvent(
+        RNCacheStateMap<config>&    host,
+        const Xaction<config>&      xaction,
+        XactDenialEnum              denial,
+        const FiredResponseFlit<config>& flit,
+        const std::string&          message) noexcept
+        : RNCacheStateMapDeniedEventBase<config>   (host, xaction, denial, message)
+        , flit                                     (flit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>& RNCacheStateMapDeniedTXDATEvent<config>::GetFlit() const noexcept
+    {
+        return flit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMapDeniedRXRSPEvent<config>::RNCacheStateMapDeniedRXRSPEvent(
+        RNCacheStateMap<config>&    host,
+        const Xaction<config>&      xaction,
+        XactDenialEnum              denial,
+        const FiredResponseFlit<config>& flit,
+        const std::string&          message) noexcept
+        : RNCacheStateMapDeniedEventBase<config>   (host, xaction, denial, message)
+        , flit                                     (flit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>& RNCacheStateMapDeniedRXRSPEvent<config>::GetFlit() const noexcept
+    {
+        return flit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMapDeniedRXDATEvent<config>::RNCacheStateMapDeniedRXDATEvent(
+        RNCacheStateMap<config>&    host,
+        const Xaction<config>&      xaction,
+        XactDenialEnum              denial,
+        const FiredResponseFlit<config>& flit,
+        const std::string&          message) noexcept
+        : RNCacheStateMapDeniedEventBase<config>   (host, xaction, denial, message)
+        , flit                                     (flit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>& RNCacheStateMapDeniedRXDATEvent<config>::GetFlit() const noexcept
+    {
+        return flit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMap<config>::EventHub::EventHub() noexcept
+        : OnDeniedTXRSP    (0)
+        , OnDeniedTXDAT    (0)
+        , OnDeniedRXRSP    (0)
+        , OnDeniedRXDAT    (0)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline void RNCacheStateMap<config>::EventHub::Clear() noexcept
+    {
+        OnDeniedTXRSP.Clear();
+        OnDeniedTXDAT.Clear();
+        OnDeniedRXRSP.Clear();
+        OnDeniedRXDAT.Clear();
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::DeniedTXRSP(
+        XactDenialEnum                      denial,
+        const Xaction<config>&              xaction,
+        const FiredResponseFlit<config>&    flit,
+        const std::string&                  message) noexcept
+    {
+        if (this->events)
+            this->events->OnDeniedTXRSP(RNCacheStateMapDeniedTXRSPEvent<config>(
+                *this, xaction, denial, flit, message));
+
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::DeniedTXDAT(
+        XactDenialEnum                      denial,
+        const Xaction<config>&              xaction,
+        const FiredResponseFlit<config>&    flit,
+        const std::string&                  message) noexcept
+    {
+        if (this->events)
+            this->events->OnDeniedTXDAT(RNCacheStateMapDeniedTXDATEvent<config>(
+                *this, xaction, denial, flit, message));
+
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::DeniedRXRSP(
+        XactDenialEnum                      denial,
+        const Xaction<config>&              xaction,
+        const FiredResponseFlit<config>&    flit,
+        const std::string&                  message) noexcept
+    {
+        if (this->events)
+            this->events->OnDeniedRXRSP(RNCacheStateMapDeniedRXRSPEvent<config>(
+                *this, xaction, denial, flit, message));
+
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::DeniedRXDAT(
+        XactDenialEnum                      denial,
+        const Xaction<config>&              xaction,
+        const FiredResponseFlit<config>&    flit,
+        const std::string&                  message) noexcept
+    {
+        if (this->events)
+            this->events->OnDeniedRXDAT(RNCacheStateMapDeniedRXDATEvent<config>(
+                *this, xaction, denial, flit, message));
+
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
     inline RNCacheStateMap<config>::RNCacheStateMap() noexcept
         : reqDecoder                ()
         , snpDecoder                ()
+        , events                    (std::make_shared<EventHub>())
         , stateMap                  ()
         , enableSilentEviction      (true)
         , enableSilentSharing       (true)
