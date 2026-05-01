@@ -240,19 +240,19 @@ namespace CHI {
 
         template<FlitConfigurationConcept config>
         inline KeyValueMap Map(const Flits::REQ<config>& reqFlit) noexcept
-        { return Mapper<config>().Map(reqFlit).Get(); }
+        { return std::move(Mapper<config>().Map(reqFlit).Get()); }
 
         template<FlitConfigurationConcept config>
         inline KeyValueMap Map(const Flits::SNP<config>& snpFlit) noexcept
-        { return Mapper<config>().Map(snpFlit).Get(); }
+        { return std::move(Mapper<config>().Map(snpFlit).Get()); }
 
         template<FlitConfigurationConcept config>
         inline KeyValueMap Map(const Flits::RSP<config>& rspFlit) noexcept
-        { return Mapper<config>().Map(rspFlit).Get(); }
+        { return std::move(Mapper<config>().Map(rspFlit).Get()); }
 
         template<FlitConfigurationConcept config>
         inline KeyValueMap Map(const Flits::DAT<config>& datFlit) noexcept
-        { return Mapper<config>().Map(datFlit).Get(); }
+        { return std::move(Mapper<config>().Map(datFlit).Get()); }
 
 
         class Formatter {
