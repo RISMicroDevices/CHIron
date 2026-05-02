@@ -1260,14 +1260,12 @@ namespace /*CHI::*/Expresso::Flit {
         MapIntegral(Keys::REQ::TxnID            , reqFlit.TxnID());
         MapIntegral(Keys::REQ::ReturnNID        , reqFlit.ReturnNID());
         MapIntegral(Keys::REQ::StashNID         , reqFlit.StashNID());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::REQ::SLCRepHint       , reqFlit.SLCRepHint());
-#endif
+        if constexpr (requires { reqFlit.SLCRepHint(); })
+            MapIntegral(Keys::REQ::SLCRepHint       , reqFlit.SLCRepHint());
         MapIntegral(Keys::REQ::StashNIDValid    , reqFlit.StashNIDValid());
         MapIntegral(Keys::REQ::Endian           , reqFlit.Endian());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::REQ::Deep             , reqFlit.Deep());
-#endif
+        if constexpr (requires { reqFlit.Deep(); })
+            MapIntegral(Keys::REQ::Deep             , reqFlit.Deep());
         MapIntegral(Keys::REQ::ReturnTxnID      , reqFlit.ReturnTxnID());
         MapIntegral(Keys::REQ::StashLPIDValid   , reqFlit.StashLPIDValid());
         MapIntegral(Keys::REQ::StashLPID        , reqFlit.StashLPID());
@@ -1281,26 +1279,24 @@ namespace /*CHI::*/Expresso::Flit {
         MapIntegral(Keys::REQ::PCrdType         , reqFlit.PCrdType());
         MapIntegral(Keys::REQ::MemAttr          , reqFlit.MemAttr());
         MapIntegral(Keys::REQ::SnpAttr          , reqFlit.SnpAttr());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::REQ::DoDWT            , reqFlit.DoDWT());
-#endif
+        if constexpr (requires { reqFlit.DoDWT(); })
+            MapIntegral(Keys::REQ::DoDWT            , reqFlit.DoDWT());
         MapIntegral(Keys::REQ::LPID             , reqFlit.LPID());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::REQ::PGroupID         , reqFlit.PGroupID());
-        MapIntegral(Keys::REQ::StashGroupID     , reqFlit.StashGroupID());
-        MapIntegral(Keys::REQ::TagGroupID       , reqFlit.TagGroupID());
-#endif
+        if constexpr (requires { reqFlit.PGroupID(); })
+            MapIntegral(Keys::REQ::PGroupID         , reqFlit.PGroupID());
+        if constexpr (requires { reqFlit.StashGroupID(); })
+            MapIntegral(Keys::REQ::StashGroupID     , reqFlit.StashGroupID());
+        if constexpr (requires { reqFlit.TagGroupID(); })
+            MapIntegral(Keys::REQ::TagGroupID       , reqFlit.TagGroupID());
         MapIntegral(Keys::REQ::Excl             , reqFlit.Excl());
         MapIntegral(Keys::REQ::SnoopMe          , reqFlit.SnoopMe());
         MapIntegral(Keys::REQ::ExpCompAck       , reqFlit.ExpCompAck());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::REQ::TagOp            , reqFlit.TagOp());
-#endif
+        if constexpr (requires { reqFlit.TagOp(); })
+            MapIntegral(Keys::REQ::TagOp            , reqFlit.TagOp());
         MapIntegral(Keys::REQ::TraceTag         , reqFlit.TraceTag());
-#ifdef CHI_ISSUE_EB_ENABLE
-        if constexpr (Flits::REQ<config>::hasMPAM)
-            MapIntegral(Keys::REQ::MPAM             , reqFlit.MPAM());
-#endif
+        if constexpr (requires { reqFlit.MPAM(); })
+            if constexpr (Flits::REQ<config>::hasMPAM)
+                MapIntegral(Keys::REQ::MPAM             , reqFlit.MPAM());
         if constexpr (Flits::REQ<config>::hasRSVDC)
             MapIntegral(Keys::REQ::RSVDC            , reqFlit.RSVDC());
 
@@ -1311,6 +1307,7 @@ namespace /*CHI::*/Expresso::Flit {
     inline Mapper<config>& Mapper<config>::Map(const Flits::SNP<config>& snpFlit) noexcept
     {
         MapIntegral(Keys::SNP::QoS              , snpFlit.QoS());
+        MapIntegral(Keys::SNP::Opcode           , snpFlit.Opcode());
         MapIntegral(Keys::SNP::SrcID            , snpFlit.SrcID());
         MapIntegral(Keys::SNP::TxnID            , snpFlit.TxnID());
         MapIntegral(Keys::SNP::FwdNID           , snpFlit.FwdNID());
@@ -1321,15 +1318,13 @@ namespace /*CHI::*/Expresso::Flit {
         MapIntegral(Keys::SNP::Addr             , snpFlit.Addr());
         MapIntegral(Keys::SNP::NS               , snpFlit.NS());
         MapIntegral(Keys::SNP::DoNotGoToSD      , snpFlit.DoNotGoToSD());
-#ifdef CHI_ISSUE_B_ENABLE
-        MapIntegral(Keys::SNP::DoNotDataPull    , snpFlit.DoNotDataPull());
-#endif
+        if constexpr (requires { snpFlit.DoNotDataPull(); })
+            MapIntegral(Keys::SNP::DoNotDataPull    , snpFlit.DoNotDataPull());
         MapIntegral(Keys::SNP::RetToSrc         , snpFlit.RetToSrc());
         MapIntegral(Keys::SNP::TraceTag         , snpFlit.TraceTag());
-#ifdef CHI_ISSUE_EB_ENABLE
-        if constexpr (Flits::SNP<config>::hasMPAM)
-            MapIntegral(Keys::SNP::MPAM,            snpFlit.MPAM());
-#endif
+        if constexpr (requires { snpFlit.MPAM(); })
+            if constexpr (Flits::SNP<config>::hasMPAM)
+                MapIntegral(Keys::SNP::MPAM,            snpFlit.MPAM());
         return *this;
     }
 
@@ -1337,6 +1332,7 @@ namespace /*CHI::*/Expresso::Flit {
     inline Mapper<config>& Mapper<config>::Map(const Flits::RSP<config>& rspFlit) noexcept
     {
         MapIntegral(Keys::RSP::QoS              , rspFlit.QoS());
+        MapIntegral(Keys::RSP::Opcode           , rspFlit.Opcode());
         MapIntegral(Keys::RSP::TgtID            , rspFlit.TgtID());
         MapIntegral(Keys::RSP::SrcID            , rspFlit.SrcID());
         MapIntegral(Keys::RSP::TxnID            , rspFlit.TxnID());
@@ -1344,28 +1340,28 @@ namespace /*CHI::*/Expresso::Flit {
         MapIntegral(Keys::RSP::Resp             , rspFlit.Resp());
         MapIntegral(Keys::RSP::FwdState         , rspFlit.FwdState());
         MapIntegral(Keys::RSP::DataPull         , rspFlit.DataPull());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::RSP::CBusy            , rspFlit.CBusy());
-#endif
+        if constexpr (requires { rspFlit.CBusy(); })
+            MapIntegral(Keys::RSP::CBusy            , rspFlit.CBusy());
         MapIntegral(Keys::RSP::DBID             , rspFlit.DBID());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::RSP::PGroupID         , rspFlit.PGroupID());
-        MapIntegral(Keys::RSP::StashGroupID     , rspFlit.StashGroupID());
-        MapIntegral(Keys::RSP::TagGroupID       , rspFlit.TagGroupID());
-#endif
+        if constexpr (requires { rspFlit.PGroupID(); })
+            MapIntegral(Keys::RSP::PGroupID         , rspFlit.PGroupID());
+        if constexpr (requires { rspFlit.StashGroupID(); })
+            MapIntegral(Keys::RSP::StashGroupID     , rspFlit.StashGroupID());
+        if constexpr (requires { rspFlit.TagGroupID(); })
+            MapIntegral(Keys::RSP::TagGroupID       , rspFlit.TagGroupID());
         MapIntegral(Keys::RSP::PCrdType         , rspFlit.PCrdType());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::RSP::TagOp            , rspFlit.TagOp());
-#endif
+        if constexpr (requires { rspFlit.TagOp(); })
+            MapIntegral(Keys::RSP::TagOp            , rspFlit.TagOp());
         MapIntegral(Keys::RSP::TraceTag         , rspFlit.TraceTag());
 
-        return this;
+        return *this;
     }
 
     template<FlitConfigurationConcept config>
     inline Mapper<config>& Mapper<config>::Map(const Flits::DAT<config>& datFlit) noexcept
     {
         MapIntegral(Keys::DAT::QoS              , datFlit.QoS());
+        MapIntegral(Keys::DAT::Opcode           , datFlit.Opcode());
         MapIntegral(Keys::DAT::TgtID            , datFlit.TgtID());
         MapIntegral(Keys::DAT::SrcID            , datFlit.SrcID());
         MapIntegral(Keys::DAT::TxnID            , datFlit.TxnID());
@@ -1375,17 +1371,17 @@ namespace /*CHI::*/Expresso::Flit {
         MapIntegral(Keys::DAT::FwdState         , datFlit.FwdState());
         MapIntegral(Keys::DAT::DataPull         , datFlit.DataPull());
         MapIntegral(Keys::DAT::DataSource       , datFlit.DataSource());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::DAT::CBusy            , datFlit.CBusy());
-#endif
+        if constexpr (requires { datFlit.CBusy(); })
+            MapIntegral(Keys::DAT::CBusy            , datFlit.CBusy());
         MapIntegral(Keys::DAT::DBID             , datFlit.DBID());
         MapIntegral(Keys::DAT::CCID             , datFlit.CCID());
         MapIntegral(Keys::DAT::DataID           , datFlit.DataID());
-#ifdef CHI_ISSUE_EB_ENABLE
-        MapIntegral(Keys::DAT::TagOp            , datFlit.TagOp());
-        MapIntegral(Keys::DAT::Tag              , datFlit.Tag());
-        MapIntegral(Keys::DAT::TU               , datFlit.TU());
-#endif
+        if constexpr (requires { datFlit.TagOp(); })
+            MapIntegral(Keys::DAT::TagOp            , datFlit.TagOp());
+        if constexpr (requires { datFlit.Tag(); })
+            MapIntegral(Keys::DAT::Tag              , datFlit.Tag());
+        if constexpr (requires { datFlit.TU(); })
+            MapIntegral(Keys::DAT::TU               , datFlit.TU());
         MapIntegral(Keys::DAT::TraceTag         , datFlit.TraceTag());
         if constexpr (Flits::DAT<config>::hasRSVDC)
             MapIntegral(Keys::DAT::RSVDC            , datFlit.RSVDC());
