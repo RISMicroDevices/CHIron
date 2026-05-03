@@ -218,15 +218,22 @@ namespace CHI {
         static_assert(sizeof(ValueVector) == sizeof(Value));
 
 
-        template<FlitConfigurationConcept config>
+       
         class Mapper {
         protected:
             KeyValueMap map;
 
         public:
+            template<FlitConfigurationConcept config>
             inline Mapper&  Map(const Flits::REQ<config>& reqFlit) noexcept;
+
+            template<FlitConfigurationConcept config>
             inline Mapper&  Map(const Flits::SNP<config>& snpFlit) noexcept;
+
+            template<FlitConfigurationConcept config>
             inline Mapper&  Map(const Flits::RSP<config>& rspFlit) noexcept;
+
+            template<FlitConfigurationConcept config>
             inline Mapper&  Map(const Flits::DAT<config>& datFlit) noexcept;
 
         public:
@@ -240,19 +247,19 @@ namespace CHI {
 
         template<FlitConfigurationConcept config>
         inline KeyValueMap Map(const Flits::REQ<config>& reqFlit) noexcept
-        { return std::move(Mapper<config>().Map(reqFlit).Get()); }
+        { return std::move(Mapper().Map(reqFlit).Get()); }
 
         template<FlitConfigurationConcept config>
         inline KeyValueMap Map(const Flits::SNP<config>& snpFlit) noexcept
-        { return std::move(Mapper<config>().Map(snpFlit).Get()); }
+        { return std::move(Mapper().Map(snpFlit).Get()); }
 
         template<FlitConfigurationConcept config>
         inline KeyValueMap Map(const Flits::RSP<config>& rspFlit) noexcept
-        { return std::move(Mapper<config>().Map(rspFlit).Get()); }
+        { return std::move(Mapper().Map(rspFlit).Get()); }
 
         template<FlitConfigurationConcept config>
         inline KeyValueMap Map(const Flits::DAT<config>& datFlit) noexcept
-        { return std::move(Mapper<config>().Map(datFlit).Get()); }
+        { return std::move(Mapper().Map(datFlit).Get()); }
 
 
         class Formatter {
@@ -1252,7 +1259,7 @@ namespace /*CHI::*/Expresso::Flit {
 namespace /*CHI::*/Expresso::Flit {
 
     template<FlitConfigurationConcept config>
-    inline Mapper<config>& Mapper<config>::Map(const Flits::REQ<config>& reqFlit) noexcept
+    inline Mapper& Mapper::Map(const Flits::REQ<config>& reqFlit) noexcept
     {
         MapIntegral(Keys::REQ::QoS              , reqFlit.QoS());
         MapIntegral(Keys::REQ::TgtID            , reqFlit.TgtID());
@@ -1304,7 +1311,7 @@ namespace /*CHI::*/Expresso::Flit {
     }
 
     template<FlitConfigurationConcept config>
-    inline Mapper<config>& Mapper<config>::Map(const Flits::SNP<config>& snpFlit) noexcept
+    inline Mapper& Mapper::Map(const Flits::SNP<config>& snpFlit) noexcept
     {
         MapIntegral(Keys::SNP::QoS              , snpFlit.QoS());
         MapIntegral(Keys::SNP::Opcode           , snpFlit.Opcode());
@@ -1329,7 +1336,7 @@ namespace /*CHI::*/Expresso::Flit {
     }
 
     template<FlitConfigurationConcept config>
-    inline Mapper<config>& Mapper<config>::Map(const Flits::RSP<config>& rspFlit) noexcept
+    inline Mapper& Mapper::Map(const Flits::RSP<config>& rspFlit) noexcept
     {
         MapIntegral(Keys::RSP::QoS              , rspFlit.QoS());
         MapIntegral(Keys::RSP::Opcode           , rspFlit.Opcode());
@@ -1358,7 +1365,7 @@ namespace /*CHI::*/Expresso::Flit {
     }
 
     template<FlitConfigurationConcept config>
-    inline Mapper<config>& Mapper<config>::Map(const Flits::DAT<config>& datFlit) noexcept
+    inline Mapper& Mapper::Map(const Flits::DAT<config>& datFlit) noexcept
     {
         MapIntegral(Keys::DAT::QoS              , datFlit.QoS());
         MapIntegral(Keys::DAT::Opcode           , datFlit.Opcode());
@@ -1395,26 +1402,22 @@ namespace /*CHI::*/Expresso::Flit {
         return *this;
     }
 
-    template<FlitConfigurationConcept config>
-    inline KeyValueMap& Mapper<config>::Get() noexcept
+    inline KeyValueMap& Mapper::Get() noexcept
     {
         return map;
     }
 
-    template<FlitConfigurationConcept config>
-    inline const KeyValueMap& Mapper<config>::Get() const noexcept
+    inline const KeyValueMap& Mapper::Get() const noexcept
     {
         return map;
     }
 
-    template<FlitConfigurationConcept config>
-    inline void Mapper<config>::MapIntegral(Key key, uint64_t value) noexcept
+    inline void Mapper::MapIntegral(Key key, uint64_t value) noexcept
     {
         map[key] = ValueIntegral(value);
     }
 
-    template<FlitConfigurationConcept config>
-    inline void Mapper<config>::MapVector(Key key, size_t size, const uint64_t* vec) noexcept
+    inline void Mapper::MapVector(Key key, size_t size, const uint64_t* vec) noexcept
     {
         map[key] = ValueVector(size, vec);
     }
