@@ -1200,7 +1200,7 @@ namespace CHI {
             msb     .Size = msb.Opcode + width.Size;
 
             // Addr
-            width   .Addr = params.reqRsvdcWidth;
+            width   .Addr = params.reqAddrWidth;
             lsb     .Addr = msb.Size + 1;
             msb     .Addr = msb.Size + width.Addr;
 
@@ -1539,12 +1539,12 @@ namespace CHI {
             msb     .Data = msb.BE + width.Data;
 
             // DataCheck
-            width   .DataCheck = params.dataCheckPresent ? 1 : 0;
+            width   .DataCheck = params.dataCheckPresent ? (params.dataWidth / 8) : 0;
             lsb     .DataCheck = msb.Data + 1;
             msb     .DataCheck = msb.Data + width.DataCheck;
 
             // Poison
-            width   .Poison = params.poisonPresent ? 1 : 0;
+            width   .Poison = params.poisonPresent ? (params.dataWidth / 64) : 0;
             lsb     .Poison = msb.DataCheck + 1;
             msb     .Poison = msb.DataCheck + width.Poison;
 
