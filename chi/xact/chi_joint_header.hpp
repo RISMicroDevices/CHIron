@@ -10,6 +10,7 @@
 #include <cstdint>                          // IWYU pragma: export
 #include <vector>                           // IWYU pragma: export
 #include <list>                             // IWYU pragma: export
+#include <string>                           // IWYU pragma: export
 #include "../../common/eventbus.hpp"        // IWYU pragma: export
 
 

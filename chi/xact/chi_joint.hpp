@@ -1105,9 +1105,10 @@ namespace /*CHI::*/Xact {
         const Flits::REQ<config>&               reqFlit,
         std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
+        FiredRequestFlit<config> firedReqFlit(GetActiveScope(), true, time, reqFlit);
         return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_TXREQ, 
-            FiredRequestFlit<config>(GetActiveScope(), true, time, reqFlit),
-            nullptr, "Nonexistent TXREQ channel on " + GetType()->name);
+            firedReqFlit,
+            nullptr, std::string("Nonexistent TXREQ channel on ") + GetType()->name);
     }
 
     template<FlitConfigurationConcept config>
@@ -1117,9 +1118,10 @@ namespace /*CHI::*/Xact {
         const Flits::REQ<config>&               reqFlit,
         std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
+        FiredRequestFlit<config> firedReqFlit(GetActiveScope(), false, time, reqFlit);
         return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_RXREQ,
-            FiredRequestFlit<config>(GetActiveScope(), false, time, reqFlit),
-            nullptr, "Nonexistent RXREQ channel on " + GetType()->name);
+            firedReqFlit,
+            nullptr, std::string("Nonexistent RXREQ channel on ") + GetType()->name);
     }
 
     template<FlitConfigurationConcept config>
@@ -1130,9 +1132,10 @@ namespace /*CHI::*/Xact {
         const Flits::REQ<config>::srcid_t       snpTgtId,
         std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
+        FiredRequestFlit<config> firedSnpFlit(GetActiveScope(), true, time, snpFlit, snpTgtId);
         return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_TXSNP,
-            FiredRequestFlit<config>(GetActiveScope(), true, time, snpFlit, snpTgtId),
-            nullptr, "Nonexistent TXSNP channel on " + GetType()->name);
+            firedSnpFlit,
+            nullptr, std::string("Nonexistent TXSNP channel on ") + GetType()->name);
     }
 
     template<FlitConfigurationConcept config>
@@ -1143,9 +1146,10 @@ namespace /*CHI::*/Xact {
         const Flits::REQ<config>::srcid_t       snpTgtId,
         std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
+        FiredRequestFlit<config> firedSnpFlit(GetActiveScope(), false, time, snpFlit, snpTgtId);
         return RequestDeniedByJoint(XactDenial::DENIED_CHANNEL_RXSNP,
-            FiredRequestFlit<config>(GetActiveScope(), false, time, snpFlit, snpTgtId),
-            nullptr, "Nonexistent RXSNP channel on " + GetType()->name);
+            firedSnpFlit,
+            nullptr, std::string("Nonexistent RXSNP channel on ") + GetType()->name);
     }
 
     template<FlitConfigurationConcept config>
@@ -1155,9 +1159,10 @@ namespace /*CHI::*/Xact {
         const Flits::RSP<config>&               rspFlit,
         std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
+        FiredResponseFlit<config> firedRspFlit(GetActiveScope(), true, time, rspFlit);
         return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_TXRSP,
-            FiredResponseFlit<config>(GetActiveScope(), true, time, rspFlit),
-            nullptr, "Nonexistent TXRSP channel on " + GetType()->name);
+            firedRspFlit,
+            nullptr, std::string("Nonexistent TXRSP channel on ") + GetType()->name);
     }
 
     template<FlitConfigurationConcept config>
@@ -1167,9 +1172,10 @@ namespace /*CHI::*/Xact {
         const Flits::RSP<config>&               rspFlit,
         std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
+        FiredResponseFlit<config> firedRspFlit(GetActiveScope(), false, time, rspFlit);
         return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_RXRSP,
-            FiredResponseFlit<config>(GetActiveScope(), false, time, rspFlit),
-            nullptr, "Nonexistent RXRSP channel on " + GetType()->name);
+            firedRspFlit,
+            nullptr, std::string("Nonexistent RXRSP channel on ") + GetType()->name);
     }
 
     template<FlitConfigurationConcept config>
@@ -1179,9 +1185,10 @@ namespace /*CHI::*/Xact {
         const Flits::DAT<config>&               datFlit,
         std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
+        FiredResponseFlit<config> firedDatFlit(GetActiveScope(), true, time, datFlit);
         return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_TXDAT,
-            FiredResponseFlit<config>(GetActiveScope(), true, time, datFlit),
-            nullptr, "Nonexistent TXDAT channel on " + GetType()->name);
+            firedDatFlit,
+            nullptr, std::string("Nonexistent TXDAT channel on ") + GetType()->name);
     }
 
     template<FlitConfigurationConcept config>
@@ -1191,9 +1198,10 @@ namespace /*CHI::*/Xact {
         const Flits::DAT<config>&               datFlit,
         std::shared_ptr<Xaction<config>>*       theXaction) noexcept
     {
+        FiredResponseFlit<config> firedDatFlit(GetActiveScope(), false, time, datFlit);
         return ResponseDeniedByJoint(XactDenial::DENIED_CHANNEL_RXDAT,
-            FiredResponseFlit<config>(GetActiveScope(), false, time, datFlit),
-            nullptr, "Nonexistent RXDAT channel on " + GetType()->name);
+            firedDatFlit,
+            nullptr, std::string("Nonexistent RXDAT channel on ") + GetType()->name);
     }
 }
 
@@ -1621,7 +1629,7 @@ namespace /*CHI::*/Xact {
 
         if (!opcodeInfo.IsValid()) // unknown opcode
             return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, firedReqFlit,
-                nullptr, "This opcode could not be decoded by Opcodes::REQ::Decoder on " + this->GetType()->name);
+                nullptr, std::string("This opcode could not be decoded by Opcodes::REQ::Decoder on ") + this->GetType()->name);
 
         //
         if (reqFlit.AllowRetry() == 0)
@@ -1658,7 +1666,7 @@ namespace /*CHI::*/Xact {
 
             if (!retryXaction) // unsupported opcode transaction
                 return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, firedReqFlit,
-                    nullptr, "No Xaction object mapped for " + opcodeInfo.GetName() + " on " + this->GetType()->name);
+                    nullptr, std::string("No Xaction object mapped for ") + opcodeInfo.GetName() + " on " + this->GetType()->name);
 
             if (theXaction)
                 *theXaction = retryXaction;
@@ -1723,7 +1731,7 @@ namespace /*CHI::*/Xact {
 
             if (!xaction) // unsupported opcode transaction
                 return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, firedReqFlit,
-                    nullptr, "No Xaction object mapped for " + opcodeInfo.GetName() + " on " + this->GetType()->name);
+                    nullptr, std::string("No Xaction object mapped for ") + opcodeInfo.GetName() + " on " + this->GetType()->name);
 
             if (theXaction)
                 *theXaction = xaction;
@@ -1769,14 +1777,14 @@ namespace /*CHI::*/Xact {
         
         if (!opcodeInfo.IsValid()) // unknown opcode
             return this->RequestDeniedByJoint(XactDenial::DENIED_SNP_OPCODE_NOT_DECODED, firedSnpFlit,
-                nullptr, "This opcode could not be decoded by Opcodes::SNP::Decoder on " + this->GetType()->name);
+                nullptr, std::string("This opcode could not be decoded by Opcodes::SNP::Decoder on ") + this->GetType()->name);
         
         std::shared_ptr<Xaction<config>> xaction =
             opcodeInfo.GetCompanion()(glbl, firedSnpFlit, nullptr);
 
         if (!xaction) // unsupported opcode transaction
             return this->RequestDeniedByJoint(XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED, firedSnpFlit,
-                nullptr, "No Xaction object mapped for " + opcodeInfo.GetName() + " on " + this->GetType()->name);
+                nullptr, std::string("No Xaction object mapped for ") + opcodeInfo.GetName() + " on " + this->GetType()->name);
         
         if (theXaction)
             *theXaction = xaction;
@@ -2957,7 +2965,7 @@ namespace /*CHI::*/Xact {
 
         if (!opcodeInfo.IsValid()) // unknown opcode
             return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, firedReqFlit,
-                nullptr, "This opcode could not be decoded by Opcodes::REQ::Decoder on " + this->GetType()->name);
+                nullptr, std::string("This opcode could not be decoded by Opcodes::REQ::Decoder on ") + this->GetType()->name);
 
         //
         if (reqFlit.AllowRetry() == 0)
@@ -2970,7 +2978,7 @@ namespace /*CHI::*/Xact {
             // TODO: retry query
 
             return this->RequestDeniedByJoint(XactDenial::DENIED_UNSUPPORTED_FEATURE, firedReqFlit,
-                nullptr, "Retry on " + this->GetType()->name + " is not supported yet");
+                nullptr, std::string("Retry on ") + this->GetType()->name + " is not supported yet");
         }
         else
         {
@@ -2983,7 +2991,7 @@ namespace /*CHI::*/Xact {
 
             if (!xaction) // unsupported opcode transactions
                 return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, firedReqFlit,
-                    nullptr, "No Xaction object mapped for " + opcodeInfo.GetName() + " on " + this->GetType()->name);
+                    nullptr, std::string("No Xaction object mapped for ") + opcodeInfo.GetName() + " on " + this->GetType()->name);
 
             if (theXaction)
                 *theXaction = xaction;
