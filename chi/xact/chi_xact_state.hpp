@@ -216,19 +216,23 @@ namespace CHI {
 
             XactDenialEnum  DeniedTXRSP(XactDenialEnum              denial,
                                         const Xaction<config>&      xaction,
-                                        const FiredResponseFlit<config>& flit,
+                                        uint64_t                    time,
+                                        const Flits::RSP<config>&   flit,
                                         const std::string&          message = "") noexcept;
             XactDenialEnum  DeniedTXDAT(XactDenialEnum              denial,
                                         const Xaction<config>&      xaction,
-                                        const FiredResponseFlit<config>& flit,
+                                        uint64_t                    time,
+                                        const Flits::DAT<config>&   flit,
                                         const std::string&          message = "") noexcept;
             XactDenialEnum  DeniedRXRSP(XactDenialEnum              denial,
                                         const Xaction<config>&      xaction,
-                                        const FiredResponseFlit<config>& flit,
+                                        uint64_t                    time,
+                                        const Flits::RSP<config>&   flit,
                                         const std::string&          message = "") noexcept;
             XactDenialEnum  DeniedRXDAT(XactDenialEnum              denial,
                                         const Xaction<config>&      xaction,
-                                        const FiredResponseFlit<config>& flit,
+                                        uint64_t                    time,
+                                        const Flits::DAT<config>&   flit,
                                         const std::string&          message = "") noexcept;
 
         public:
@@ -256,12 +260,13 @@ namespace CHI {
             CacheState      Evaluate(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
 
         public:
-            XactDenialEnum  NextTXREQ(Flits::REQ<config>::addr_t::value_type addr, const Flits::REQ<config>& flit) noexcept;
-            XactDenialEnum  NextRXSNP(Flits::REQ<config>::addr_t::value_type addr, const Flits::SNP<config>& flit) noexcept;
-            XactDenialEnum  NextTXRSP(Flits::REQ<config>::addr_t::value_type addr, const Xaction<config>& xaction, const Flits::RSP<config>& flit) noexcept;
-            XactDenialEnum  NextTXDAT(Flits::REQ<config>::addr_t::value_type addr, const Xaction<config>& xaction, const Flits::DAT<config>& flit) noexcept;
-            XactDenialEnum  NextRXRSP(Flits::REQ<config>::addr_t::value_type addr, const Xaction<config>& xaction, const Flits::RSP<config>& flit) noexcept;
-            XactDenialEnum  NextRXDAT(Flits::REQ<config>::addr_t::value_type addr, const Xaction<config>& xaction, const Flits::DAT<config>& flit) noexcept;
+            // TODO: add time parameter, use FiredFlit in these functions
+            XactDenialEnum  NextTXREQ(Flits::REQ<config>::addr_t::value_type addr, uint64_t time, const Flits::REQ<config>& flit) noexcept;
+            XactDenialEnum  NextRXSNP(Flits::REQ<config>::addr_t::value_type addr, uint64_t time, const Flits::SNP<config>& flit) noexcept;
+            XactDenialEnum  NextTXRSP(Flits::REQ<config>::addr_t::value_type addr, uint64_t time, const Xaction<config>& xaction, const Flits::RSP<config>& flit) noexcept;
+            XactDenialEnum  NextTXDAT(Flits::REQ<config>::addr_t::value_type addr, uint64_t time, const Xaction<config>& xaction, const Flits::DAT<config>& flit) noexcept;
+            XactDenialEnum  NextRXRSP(Flits::REQ<config>::addr_t::value_type addr, uint64_t time, const Xaction<config>& xaction, const Flits::RSP<config>& flit) noexcept;
+            XactDenialEnum  NextRXDAT(Flits::REQ<config>::addr_t::value_type addr, uint64_t time, const Xaction<config>& xaction, const Flits::DAT<config>& flit) noexcept;
 
         public:
             XactDenialEnum  Transfer(Flits::REQ<config>::addr_t::value_type addr, CacheState state, const Xaction<config>* nestingXaction = nullptr) noexcept;
@@ -424,12 +429,15 @@ namespace /*CHI::*/Xact {
     inline XactDenialEnum RNCacheStateMap<config>::DeniedTXRSP(
         XactDenialEnum                      denial,
         const Xaction<config>&              xaction,
-        const FiredResponseFlit<config>&    flit,
+        uint64_t                            time,
+        const Flits::RSP<config>&           flit,
         const std::string&                  message) noexcept
     {
+        FiredResponseFlit<config> firedFlit(XactScope::Requester, true, time, flit);
+
         if (this->events)
             this->events->OnDeniedTXRSP(RNCacheStateMapDeniedTXRSPEvent<config>(
-                *this, xaction, denial, flit, message));
+                *this, xaction, denial, firedFlit, message));
 
         return denial;
     }
@@ -438,12 +446,15 @@ namespace /*CHI::*/Xact {
     inline XactDenialEnum RNCacheStateMap<config>::DeniedTXDAT(
         XactDenialEnum                      denial,
         const Xaction<config>&              xaction,
-        const FiredResponseFlit<config>&    flit,
+        uint64_t                            time,
+        const Flits::DAT<config>&           flit,
         const std::string&                  message) noexcept
     {
+        FiredResponseFlit<config> firedFlit(XactScope::Requester, true, time, flit);
+
         if (this->events)
             this->events->OnDeniedTXDAT(RNCacheStateMapDeniedTXDATEvent<config>(
-                *this, xaction, denial, flit, message));
+                *this, xaction, denial, firedFlit, message));
 
         return denial;
     }
@@ -452,12 +463,15 @@ namespace /*CHI::*/Xact {
     inline XactDenialEnum RNCacheStateMap<config>::DeniedRXRSP(
         XactDenialEnum                      denial,
         const Xaction<config>&              xaction,
-        const FiredResponseFlit<config>&    flit,
+        uint64_t                            time,
+        const Flits::RSP<config>&           flit,
         const std::string&                  message) noexcept
     {
+        FiredResponseFlit<config> firedFlit(XactScope::Requester, false, time, flit);
+
         if (this->events)
             this->events->OnDeniedRXRSP(RNCacheStateMapDeniedRXRSPEvent<config>(
-                *this, xaction, denial, flit, message));
+                *this, xaction, denial, firedFlit, message));
 
         return denial;
     }
@@ -466,12 +480,15 @@ namespace /*CHI::*/Xact {
     inline XactDenialEnum RNCacheStateMap<config>::DeniedRXDAT(
         XactDenialEnum                      denial,
         const Xaction<config>&              xaction,
-        const FiredResponseFlit<config>&    flit,
+        uint64_t                            time,
+        const Flits::DAT<config>&           flit,
         const std::string&                  message) noexcept
     {
+        FiredResponseFlit<config> firedFlit(XactScope::Requester, false, time, flit);
+
         if (this->events)
             this->events->OnDeniedRXDAT(RNCacheStateMapDeniedRXDATEvent<config>(
-                *this, xaction, denial, flit, message));
+                *this, xaction, denial, firedFlit, message));
 
         return denial;
     }
@@ -917,6 +934,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::NextTXREQ(
         Flits::REQ<config>::addr_t::value_type  addr,
+        uint64_t                                time,
         const Flits::REQ<config>&               flit) noexcept
     {
         // Decode REQ opcode
@@ -959,6 +977,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::NextTXRSP(
         Flits::REQ<config>::addr_t::value_type  addr,
+        uint64_t                                time,
         const Xaction<config>&                  xaction,
         const Flits::RSP<config>&               flit) noexcept
     {
@@ -1133,6 +1152,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::NextTXDAT(
         Flits::REQ<config>::addr_t::value_type    addr,
+        uint64_t                                  time,
         const Xaction<config>&                    xaction,
         const Flits::DAT<config>&                 flit) noexcept
     {
@@ -1468,6 +1488,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::NextRXRSP(
         Flits::REQ<config>::addr_t::value_type    addr,
+        uint64_t                                  time,
         const Xaction<config>&                    xaction,
         const Flits::RSP<config>&                 flit) noexcept
     {
@@ -1677,13 +1698,15 @@ namespace /*CHI::*/Xact {
             /*
             * *NOTICE: No RN RXRSP possible on SNP transactions.
             */
-            return XactDenial::DENIED_RSP_OPCODE;
+            return this->DeniedRXRSP(XactDenial::DENIED_CHANNEL_RXRSP, xaction, time, flit,
+                "No RN RXRSP possible on SNP transactions");
         }
     }
 
     template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::NextRXDAT(
         Flits::REQ<config>::addr_t::value_type    addr,
+        uint64_t                                  time,
         const Xaction<config>&                    xaction,
         const Flits::DAT<config>&                 flit) noexcept
     {
@@ -1863,6 +1886,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::NextRXSNP(
         Flits::REQ<config>::addr_t::value_type    addr,
+        uint64_t                                  time,
         const Flits::SNP<config>&                 flit) noexcept
     {
         return XactDenial::ACCEPTED;
