@@ -1879,7 +1879,7 @@ namespace /*CHI::*/Xact {
             /*
             * *NOTICE: No RN RXDAT possible on SNP transactions.
             */
-            return XactDenial::DENIED_RSP_OPCODE;
+            return XactDenial::DENIED_DAT_OPCODE;
         }
     }
 
