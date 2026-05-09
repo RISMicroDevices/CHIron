@@ -1040,7 +1040,8 @@ namespace /*CHI::*/Xact {
                         g0 = &tables->GSnpResp_RetToSrc_1();
                 }
                 else
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->DeniedTXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                        "This Opcode is unexpected for SnpX transactions on RN TXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::SnpXFwd)
             {
@@ -1059,7 +1060,8 @@ namespace /*CHI::*/Xact {
                     fwded = true;
                 }
                 else
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->DeniedTXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                        "This Opcode is unexpected for SnpXFwd transactions on RN TXRSP");
             }
             else
                 return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
@@ -1528,7 +1530,8 @@ namespace /*CHI::*/Xact {
                     return XactDenial::ACCEPTED;
                 }
                 else
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                        "This Opcode is unexpected for Read transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::MakeReadUnique)
             {
@@ -1559,7 +1562,8 @@ namespace /*CHI::*/Xact {
                     return XactDenial::ACCEPTED;
                 }
                 else
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                        "This Opcode is unexpected for MakeReadUnique transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::Dataless)
             {
@@ -1605,7 +1609,8 @@ namespace /*CHI::*/Xact {
                     return XactDenial::ACCEPTED;
                 }
                 else
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                        "This Opcode is unexpected for Dataless transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::WriteNonCopyBack)
             {
@@ -1626,7 +1631,8 @@ namespace /*CHI::*/Xact {
                     nextState = CacheStates::I;
                 }
                 else
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                        "This Opcode is unexpected for WriteNonCopyBack transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::Write)
             {
@@ -1639,7 +1645,8 @@ namespace /*CHI::*/Xact {
                 {
                     // NOTICE: Prior to Issue G, Comp response was only possible for WriteEvictOrEvict
                     if (opcodeInfo.GetOpcode() != Opcodes::REQ::WriteEvictOrEvict)
-                        return XactDenial::DENIED_RSP_OPCODE;
+                        return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                            "Comp is only expected on WriteEvictOrEvict transactions on RN RXRSP");
 
                     nextState = CacheStates::I;
                 }
@@ -1648,7 +1655,8 @@ namespace /*CHI::*/Xact {
                     return XactDenial::ACCEPTED;
                 }
                 else
-                    return XactDenial::DENIED_RSP_OPCODE;
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                        "This Opcode is unexpected for Write transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::Atomic)
             {
@@ -1674,7 +1682,8 @@ namespace /*CHI::*/Xact {
                     nextState = xs;
                 }
                 else
-                    return XactDenial::DENIED_RSP_OPCODE;                
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                        "This Opcode is unexpected for Atomic transactions on RN RXRSP");                
             }
             else
                 return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
