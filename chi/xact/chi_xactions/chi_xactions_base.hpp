@@ -143,6 +143,7 @@ namespace CHI {
 
                 bool        IsRSP() const noexcept;
                 bool        IsDAT() const noexcept;
+                ChannelTypeEnum GetChannelType() const noexcept;
 
                 bool        IsAccepted() const noexcept;
                 bool        IsDenied() const noexcept;
@@ -559,6 +560,12 @@ namespace /*CHI::*/Xact {
     inline bool Xaction<config>::SubsequenceKey::IsDAT() const noexcept
     {
         return !IsRSP();
+    }
+
+    template<FlitConfigurationConcept config>
+    inline ChannelTypeEnum Xaction<config>::SubsequenceKey::GetChannelType() const noexcept
+    {
+        return IsRSP() ? ChannelType::RSP : ChannelType::DAT;
     }
 
     template<FlitConfigurationConcept config>
