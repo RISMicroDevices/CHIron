@@ -945,7 +945,7 @@ namespace /*CHI::*/Xact {
             if (iter->GetChannelType() != channel)
                 continue;
 
-            if (!iter->IsFrom(glbl, scope))
+            if (!subsequence[index].IsFrom(glbl, scope))
                 continue;
 
             return &(subsequence[index]);
@@ -966,7 +966,7 @@ namespace /*CHI::*/Xact {
             if (iter->GetChannelType() != channel)
                 continue;
 
-            if (!iter->IsFrom(glbl, scope))
+            if (!subsequence[index].IsFrom(glbl, scope))
                 continue;
 
             return &(subsequence[index]);
@@ -1008,7 +1008,7 @@ namespace /*CHI::*/Xact {
             if (iter->IsDenied())
                 continue;
 
-            if (!iter->IsFrom(glbl, scope))
+            if (!subsequence[index].IsFrom(glbl, scope))
                 continue;
 
             if (iter->IsRSP())
@@ -1037,7 +1037,7 @@ namespace /*CHI::*/Xact {
             if (iter->IsDenied())
                 continue;
 
-            if (!iter->IsFrom(glbl, scope))
+            if (!subsequence[index].IsFrom(glbl, scope))
                 continue;
 
             if (iter->IsRSP())
@@ -1093,7 +1093,7 @@ namespace /*CHI::*/Xact {
             if (iter->GetChannelType() != channel)
                 continue;
 
-            if (!iter->IsTo(glbl, scope))
+            if (!subsequence[index].IsTo(glbl, scope))
                 continue;
 
             return &(subsequence[index]);
@@ -1114,7 +1114,7 @@ namespace /*CHI::*/Xact {
             if (iter->GetChannelType() != channel)
                 continue;
 
-            if (!iter->IsTo(glbl, scope))
+            if (!subsequence[index].IsTo(glbl, scope))
                 continue;
 
             return &(subsequence[index]);
@@ -1156,7 +1156,7 @@ namespace /*CHI::*/Xact {
             if (iter->IsDenied())
                 continue;
 
-            if (!iter->IsTo(glbl, scope))
+            if (!subsequence[index].IsTo(glbl, scope))
                 continue;
 
             if (iter->IsRSP())
@@ -1185,7 +1185,7 @@ namespace /*CHI::*/Xact {
             if (iter->IsDenied())
                 continue;
 
-            if (!iter->IsTo(glbl, scope))
+            if (!subsequence[index].IsTo(glbl, scope))
                 continue;
 
             if (iter->IsRSP())
