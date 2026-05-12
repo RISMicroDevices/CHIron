@@ -481,6 +481,8 @@ namespace CHI {
                 bool                                              sortByTime = false
             ) const noexcept;
 
+            virtual bool            HasInflight() const noexcept;
+
         public:
             virtual XactDenialEnum  NextTXREQ(
                 const Global<config>&             glbl,
@@ -620,6 +622,8 @@ namespace CHI {
                 std::vector<std::shared_ptr<Xaction<config>>>&  dstVector,
                 bool                                            sortByTime = false
             ) const noexcept;
+
+            virtual bool            HasInflight() const noexcept;
 
         public:
             virtual XactDenialEnum  NextRXREQ(
@@ -1605,6 +1609,13 @@ namespace /*CHI::*/Xact {
                 }
             );
         }
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool RNFJoint<config>::HasInflight() const noexcept
+    {
+        return !rxTransactions.empty() || !txTransactions.empty()
+            || !txDBIDTransactions.empty() || !txDBIDOverlappableTransactions.empty();
     }
 
     template<FlitConfigurationConcept config>
@@ -2941,6 +2952,12 @@ namespace /*CHI::*/Xact {
                 }
             );
         }
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool SNFJoint<config>::HasInflight() const noexcept
+    {
+        return !rxTransactions.empty() || !rxDBIDTransactions.empty() || !rxDBIDOverlappableTransactions.empty();
     }
 
     template<FlitConfigurationConcept config>
