@@ -613,6 +613,13 @@ namespace CHI {
             SNFJoint() noexcept;
 
         public:
+            SNFJoint(const SNFJoint<config>& obj) noexcept;
+            SNFJoint<config>& operator=(const SNFJoint<config>& obj) noexcept;
+
+        public:
+            void                    Fork() noexcept;
+
+        public:
             virtual void            Clear() noexcept override;
 
             virtual XactScopeEnum   GetActiveScope() const noexcept override;
@@ -1493,7 +1500,7 @@ namespace /*CHI::*/Xact {
 
     template<FlitConfigurationConcept config>
     inline RNFJoint<config>::RNFJoint(const RNFJoint<config>& obj) noexcept
-        : Joint<config>                     (obj)
+        : Joint<config>                     (obj.type)
         , txTransactions                    (obj.txTransactions)
         , rxTransactions                    (obj.rxTransactions)
         , txDBIDTransactions                (obj.txDBIDTransactions)
@@ -1512,7 +1519,8 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline RNFJoint<config>& RNFJoint<config>::operator=(const RNFJoint<config>& obj) noexcept
     {
-        *(Joint<config>*)(this) = obj;
+        this->type = obj.type;
+        this->events = std::make_shared<typename Joint<config>::EventHub>();
 
         txTransactions                  = obj.txTransactions;
         rxTransactions                  = obj.rxTransactions;
@@ -1527,26 +1535,47 @@ namespace /*CHI::*/Xact {
             grantedPCredits);
 
         Fork();
+        return *this;
     }
 
     template<FlitConfigurationConcept config>
     inline void RNFJoint<config>::Fork() noexcept
     {
+        std::unordered_map<const Xaction<config>*, std::shared_ptr<Xaction<config>>> forkedXactions;
+        auto forkXaction =
+            [&forkedXactions](const std::shared_ptr<Xaction<config>>& xaction)
+                -> std::shared_ptr<Xaction<config>>
+            {
+                if (!xaction)
+                    return nullptr;
+
+                auto iter = forkedXactions.find(xaction.get());
+                if (iter != forkedXactions.end())
+                    return iter->second;
+
+                std::shared_ptr<Xaction<config>> forked = xaction->Clone();
+                if (forked)
+                    forked->events = std::make_shared<typename Xaction<config>::EventHub>();
+
+                forkedXactions.emplace(xaction.get(), forked);
+                return forked;
+            };
+
         for (auto& p : txTransactions)
-            p.second = p.second->Clone();
+            p.second = forkXaction(p.second);
 
         for (auto& p : rxTransactions)
-            p.second = p.second->Clone();
+            p.second = forkXaction(p.second);
 
         for (auto& p : txDBIDTransactions)
-            p.second = p.second->Clone();
+            p.second = forkXaction(p.second);
 
         for (auto& p : txDBIDOverlappableTransactions)
-            p.second = p.second->Clone();
+            p.second = forkXaction(p.second);
 
         for (auto& p : txRetriedTransactions)
             for (auto& p1 : p.second)
-                p1 = p1->Clone();
+                p1 = forkXaction(p1);
     }
 
     template<FlitConfigurationConcept config>
@@ -2894,6 +2923,79 @@ namespace /*CHI::*/Xact {
                                                                                 // 0x7F
         
         #undef SET_REQ_XACTION
+    }
+
+    template<FlitConfigurationConcept config>
+    inline SNFJoint<config>::SNFJoint(const SNFJoint<config>& obj) noexcept
+        : Joint<config>                     (obj.type)
+        , rxTransactions                    (obj.rxTransactions)
+        , rxDBIDTransactions                (obj.rxDBIDTransactions)
+        , rxDBIDOverlappableTransactions    (obj.rxDBIDOverlappableTransactions)
+        , rxRetriedTransactions             (obj.rxRetriedTransactions)
+        , grantedPCredits                   (/*obj.grantedPCredits*/)
+        , reqDecoder                        (obj.reqDecoder)
+    {
+        std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
+            grantedPCredits);
+
+        Fork();
+    }
+
+    template<FlitConfigurationConcept config>
+    inline SNFJoint<config>& SNFJoint<config>::operator=(const SNFJoint<config>& obj) noexcept
+    {
+        this->type = obj.type;
+        this->events = std::make_shared<typename Joint<config>::EventHub>();
+
+        rxTransactions                  = obj.rxTransactions;
+        rxDBIDTransactions              = obj.rxDBIDTransactions;
+        rxDBIDOverlappableTransactions  = obj.rxDBIDOverlappableTransactions;
+        rxRetriedTransactions           = obj.rxRetriedTransactions;
+    //  grantedPCredits                 = obj.grantedPCredits;
+        reqDecoder                      = obj.reqDecoder;
+
+        std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
+            grantedPCredits);
+
+        Fork();
+        return *this;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void SNFJoint<config>::Fork() noexcept
+    {
+        std::unordered_map<const Xaction<config>*, std::shared_ptr<Xaction<config>>> forkedXactions;
+        auto forkXaction =
+            [&forkedXactions](const std::shared_ptr<Xaction<config>>& xaction)
+                -> std::shared_ptr<Xaction<config>>
+            {
+                if (!xaction)
+                    return nullptr;
+
+                auto iter = forkedXactions.find(xaction.get());
+                if (iter != forkedXactions.end())
+                    return iter->second;
+
+                std::shared_ptr<Xaction<config>> forked = xaction->Clone();
+                if (forked)
+                    forked->events = std::make_shared<typename Xaction<config>::EventHub>();
+
+                forkedXactions.emplace(xaction.get(), forked);
+                return forked;
+            };
+
+        for (auto& p : rxTransactions)
+            p.second = forkXaction(p.second);
+
+        for (auto& p : rxDBIDTransactions)
+            p.second = forkXaction(p.second);
+
+        for (auto& p : rxDBIDOverlappableTransactions)
+            p.second = forkXaction(p.second);
+
+        for (auto& p : rxRetriedTransactions)
+            for (auto& p1 : p.second)
+                p1 = forkXaction(p1);
     }
 
     template<FlitConfigurationConcept config>
