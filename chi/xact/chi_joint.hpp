@@ -3572,7 +3572,7 @@ namespace /*CHI::*/Xact {
                     {
                         auto xactionDBID = xactionDBIDIter->second;
                         if (xactionDBID->GetFirst().flit.req.TxnID() == xaction->GetFirst().flit.req.TxnID())
-                            rxTransactions.erase(xactionDBIDIter);
+                            rxDBIDTransactions.erase(xactionDBIDIter);
                     }
                 }
             }
