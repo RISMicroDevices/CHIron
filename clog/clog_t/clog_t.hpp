@@ -318,6 +318,8 @@ namespace CLog::CLogT {
                 static constexpr const char* RXRSP  = "RXRSP";
                 static constexpr const char* RXDAT  = "RXDAT";
                 static constexpr const char* RXSNP  = "RXSNP";
+                static constexpr const char* TXREQ_BeforeSAM  = "TXREQ_BeforeSAM";
+                static constexpr const char* RXREQ_BeforeSAM  = "RXREQ_BeforeSAM";
                 //
                 bool Write(
                     std::ostream&       os,
@@ -1162,6 +1164,8 @@ namespace CLog::CLogT {
                         case Channel::RXRSP:    os << RXRSP;    break;
                         case Channel::RXDAT:    os << RXDAT;    break;
                         case Channel::RXSNP:    os << RXSNP;    break;
+                        case Channel::TXREQ_BeforeSAM: os << TXREQ_BeforeSAM; break;
+                        case Channel::RXREQ_BeforeSAM: os << RXREQ_BeforeSAM; break;
                         default:                return false;
                     }
 
@@ -1219,7 +1223,9 @@ namespace CLog::CLogT {
                         {RXREQ, Channel::RXREQ},
                         {RXRSP, Channel::RXRSP},
                         {RXDAT, Channel::RXDAT},
-                        {RXSNP, Channel::RXSNP}
+                        {RXSNP, Channel::RXSNP},
+                        {TXREQ_BeforeSAM, Channel::TXREQ_BeforeSAM},
+                        {RXREQ_BeforeSAM, Channel::RXREQ_BeforeSAM}
                     };
 
                     if (!shared_details::ReadMapped(map, term, channel))

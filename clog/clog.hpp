@@ -52,6 +52,9 @@ namespace CLog {
         RXRSP   = 5,
         RXDAT   = 6,
         RXSNP   = 7,
+
+        TXREQ_BeforeSAM = 8,
+        RXREQ_BeforeSAM = 9
     };
 
     /*

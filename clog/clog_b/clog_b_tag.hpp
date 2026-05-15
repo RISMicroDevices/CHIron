@@ -696,6 +696,8 @@ namespace CLog::CLogB {
                 case Channel::RXRSP:
                 case Channel::RXDAT:
                 case Channel::RXSNP:
+                case Channel::TXREQ_BeforeSAM:
+                case Channel::RXREQ_BeforeSAM:
                     break;
 
                 default:
