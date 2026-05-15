@@ -1014,14 +1014,17 @@ namespace /*CHI::*/Xact {
             case XactScope::Requester:
                 if (!IsFromRequester(glbl))
                     return false;
+                break;
 
             case XactScope::Home:
                 if (!IsFromHome(glbl))
                     return false;
+                break;
 
             case XactScope::Subordinate:
                 if (!IsFromSubordinate(glbl))
                     return false;
+                break;
 
             [[unlikely]] default:
                 return false;
@@ -1038,14 +1041,17 @@ namespace /*CHI::*/Xact {
             case XactScope::Requester:
                 if (!IsToRequester(glbl))
                     return false;
-            
+                break;
+
             case XactScope::Home:
                 if (!IsToHome(glbl))
                     return false;
+                break;
             
             case XactScope::Subordinate:
                 if (!IsToSubordinate(glbl))
                     return false;
+                break;
 
             [[unlikely]] default:
                 return false;
