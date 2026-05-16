@@ -825,6 +825,15 @@ namespace CLog::CLogB {
                 delete[] recordBlockCompressed;
             }
         }
+        else
+        {
+            // write compressed
+            v = 0;
+            os.write(reinterpret_cast<char*>(&v), 4);
+
+            // write records
+            os.write(reinterpret_cast<const char*>(recordBlock.c_str()), recordBlock.size());
+        }
     }
 }
 
