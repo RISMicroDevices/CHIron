@@ -1,0 +1,87 @@
+CloganGUI Third-Party Licenses
+Qt Community / Open-Source Build
+================================
+
+This notice file is intended for CloganGUI redistributables built against a
+Qt 6 Community / open-source installation. The exact Qt version and the exact
+deployed Qt libraries and plugins depend on the Qt installation selected at
+build time.
+
+This distribution may include, depending on platform and deployment output:
+- Qt 6 Core
+- Qt 6 Gui
+- Qt 6 Widgets
+- Qt 6 Network
+- Qt 6 Svg
+- Qt platform, style, image format, TLS, and related runtime plugins
+- Qt Advanced Docking System 4.5.0
+
+1. Qt 6 Community / Open-Source Runtime
+---------------------------------------
+
+Copyright:
+- The Qt Toolkit is Copyright (C) The Qt Company Ltd. and other contributors.
+
+Official Qt licensing information:
+- https://doc.qt.io/qt-6/licensing.html
+
+Official LGPLv3 text published by Qt:
+- https://doc.qt.io/qt-6/lgpl.html
+
+Official Qt source distribution locations:
+- https://download.qt.io/official_releases/qt/
+- https://code.qt.io/cgit/
+
+Qt modules used directly by CloganGUI:
+- Qt Core
+  https://doc.qt.io/qt-6/qtcore-index.html
+- Qt Gui
+  https://doc.qt.io/qt-6/qtgui-index.html
+- Qt Widgets
+  https://doc.qt.io/qt-6/qtwidgets-index.html
+
+Qt modules commonly added by Qt deployment tools for this application:
+- Qt Network
+  https://doc.qt.io/qt-6/qtnetwork-index.html
+- Qt Svg
+  https://doc.qt.io/qt-6/qtsvg-index.html
+
+Per the official Qt module documentation for the modules listed above, these
+modules are available under commercial licenses from The Qt Company and, in
+addition, under the GNU Lesser General Public License, version 3, or the GNU
+General Public License, version 2.
+
+Qt also contains third-party code under additional licenses. Review the
+"Licenses and Attributions" sections for the exact Qt version and exact modules
+and plugins redistributed in your package.
+
+Qt's general license and attribution index:
+- https://doc.qt.io/qt-6/licenses-used-in-qt.html
+
+2. Qt Advanced Docking System 4.5.0
+-----------------------------------
+
+Project:
+- https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System
+
+License:
+- GNU Lesser General Public License v2.1
+
+Local source-tree license files used by this project:
+- third_party/Qt-Advanced-Docking-System/LICENSE
+- third_party/Qt-Advanced-Docking-System/gnu-lgpl-v2.1.md
+
+This application builds against the vendored copy under:
+- third_party/Qt-Advanced-Docking-System
+
+3. Redistribution Notes
+-----------------------
+
+- This file is a summary notice to help redistribution. It does not replace the
+  applicable license texts for Qt, Qt third-party attributions, or the
+  Qt-Advanced-Docking-System library.
+- If you redistribute a Qt Community build of CloganGUI, you are responsible
+  for complying with the license terms that apply to the exact Qt modules and
+  plugins included in the package.
+- To identify the exact Qt build used for a package, inspect the bundled Qt
+  libraries/frameworks/plugins and the corresponding build logs.
