@@ -326,8 +326,8 @@ namespace CHI {
             DENIED_CHANNEL_RXRSP
             - Title Message: "Denied channel RXRSP"
             - Further Message: "Unexpected flit on channel RXRSP: {Print({FiredResponseFlit})}"
-            - Source: [Joint]
-            - Subject: [Joint, FiredResponseFlit]
+            - Source: [RNCacheStateMap, Joint]
+            - Subject: [RNCacheStateMap/Joint, FiredResponseFlit]
             */
             inline static constexpr ExplanationBack<config> DENIED_CHANNEL_RXRSP = (
                 "DENIED_CHANNEL_RXRSP",
@@ -934,8 +934,6 @@ namespace CHI {
                 [](auto) -> std::vector<Flit::Key> { return {}; }
             );
 
-            // TODO
-
             /*
             DENIED_REQ_OPCODE
             - Title Message: "Denied REQ opcode"
@@ -969,7 +967,7 @@ namespace CHI {
             DENIED_RSP_OPCODE
             - Title Message: "Denied RSP opcode"
             - Further Message: "Unexpected opcode: {RSP.Opcode} (Decode({RSP.Opcode}))"
-            - Source: [Xaction]
+            - Source: [RNCacheStateMap, Joint, Xaction]
             - Subject: [Xaction, FiredResponseFlit]
             - Subject Key: 1. RSP.Opcode
             */
@@ -994,6 +992,63 @@ namespace CHI {
                 }
             );
 
+            /*
+            DENIED_DAT_OPCODE
+            - Title Message: "Denied DAT opcode"
+            - Further Message: "Unexpected opcode: {DAT.Opcode} (Decode({DAT.Opcode}))"
+            - Source: [RNCacheStateMap, Xaction]
+            - Subject: [Xaction, FiredResponseFlit]
+            - Subject Key: 1. DAT.Opcode
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_OPCODE = (
+                "DENIED_DAT_OPCODE",
+                Xact::XactDenial::DENIED_DAT_OPCODE,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT opcode"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            return std::format("Unexpected opcode: {:#x} ({})",
+                                uint64_t(subject.obj.firedFlitResponse->flit.dat.Opcode()),
+                                Opcodes::DAT::Decoder<Flits::DAT<config>>::INSTANCE.Decode(subject.obj.firedFlitResponse->flit.dat.Opcode()).GetName("<unknown>"));
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::Opcode };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_SNP_OPCODE
+            - Title Message: "Denied SNP opcode"
+            - Further Message: "Unexpected opcode: {SNP.Opcode} (Decode({SNP.Opcode}))"
+            - Source: [Xaction]
+            - Subject: [Xaction, FiredRequestFlit]
+            - Subject Key: 1. SNP.Opcode
+            */
+            inline static constexpr ExplanationBack<config> DENIED_SNP_OPCODE = (
+                "DENIED_SNP_OPCODE",
+                Xact::XactDenial::DENIED_SNP_OPCODE,
+                [](auto, SourceEnum source) -> std::string { return "Denied SNP opcode"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsSNP()) {
+                            return std::format("Unexpected opcode: {:#x} ({})",
+                                uint64_t(subject.obj.firedFlitRequest->flit.snp.Opcode()),
+                                Opcodes::SNP::Decoder<Flits::SNP<config>>::INSTANCE.Decode(subject.obj.firedFlitRequest->flit.snp.Opcode()).GetName("<unknown>"));
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::Opcode };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
 
 
         // TODO
