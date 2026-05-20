@@ -1940,8 +1940,9 @@ namespace /*CHI::*/Xact {
         const FiredRequestFlit<config>& flit,
         const std::string&              message) noexcept
     {
-        this->events->OnDeniedRequestFlit(XactionDeniedRequestFlitEvent<config>(
-            *this, denial, flit, message));
+        if (this->events)
+            this->events->OnDeniedRequestFlit(XactionDeniedRequestFlitEvent<config>(
+                *this, denial, flit, message));
         return denial;
     }
 
@@ -1951,8 +1952,9 @@ namespace /*CHI::*/Xact {
         const FiredResponseFlit<config>&    flit,
         const std::string&                  message) noexcept
     {
-        this->events->OnDeniedResponseFlit(XactionDeniedResponseFlitEvent<config>(
-            *this, denial, flit, message));
+        if (this->events)
+            this->events->OnDeniedResponseFlit(XactionDeniedResponseFlitEvent<config>(
+                *this, denial, flit, message));
         return denial;
     }
 }
