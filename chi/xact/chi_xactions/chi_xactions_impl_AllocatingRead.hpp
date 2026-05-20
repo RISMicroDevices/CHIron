@@ -295,6 +295,18 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionAllocatingRead<config>::GetDWTSrcIDSource(const Global<config>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionAllocatingRead<config>::GetDWTTgtIDSource(const Global<config>& glbl) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
     inline XactDenialEnum XactionAllocatingRead<config>::NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (this->IsComplete(glbl))
