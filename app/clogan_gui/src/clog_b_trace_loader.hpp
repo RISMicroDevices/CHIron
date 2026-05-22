@@ -207,8 +207,31 @@ struct CLogBTraceCacheLineLifetime {
 using CLogBTraceCacheLineLifetimeCallback =
     std::function<bool(CLogBTraceCacheLineLifetime lifetime)>;
 
+struct CLogBTraceCacheLineStateQuery {
+    std::uint32_t rnNodeId = (std::numeric_limits<std::uint32_t>::max)();
+    std::uint64_t lineAddress = 0;
+};
+
+struct CLogBTraceCacheLineStateSpan {
+    std::uint32_t rnNodeId = (std::numeric_limits<std::uint32_t>::max)();
+    QString rnNodeType;
+    std::uint64_t lineAddress = 0;
+    qint64 startTimestamp = 0;
+    qint64 endTimestamp = 0;
+    std::uint64_t startLogicalRow = 0;
+    std::uint64_t endLogicalRow = 0;
+    std::uint8_t stateMask = 0;
+    QString stateText;
+    bool openEnded = false;
+};
+
+using CLogBTraceCacheLineStateSpanCallback =
+    std::function<bool(CLogBTraceCacheLineStateSpan span)>;
+
 class CLogBTraceLoader final {
 public:
+    static std::uint64_t normalizeCacheLineAddress(std::uint64_t address) noexcept;
+
     static bool scanFile(const QString& filePath,
                          CLogBTraceMetadata& metadata,
                          CLogBTraceLoadError& error,
@@ -315,6 +338,21 @@ public:
                                         CLogBTraceLoadError& error,
                                         const CLogBTraceLoadCallbacks& callbacks = {},
                                         std::stop_token stopToken = {});
+
+    static bool buildCacheLineStateSpans(const QString& filePath,
+                                         const CLogBTraceMetadata& metadata,
+                                         CLogBTraceCacheLineStateQuery query,
+                                         std::vector<CLogBTraceCacheLineStateSpan>& spans,
+                                         CLogBTraceLoadError& error,
+                                         const CLogBTraceLoadCallbacks& callbacks = {},
+                                         std::stop_token stopToken = {});
+    static bool buildCacheLineStateSpans(const QString& filePath,
+                                         const CLogBTraceMetadata& metadata,
+                                         CLogBTraceCacheLineStateQuery query,
+                                         const CLogBTraceCacheLineStateSpanCallback& spanCallback,
+                                         CLogBTraceLoadError& error,
+                                         const CLogBTraceLoadCallbacks& callbacks = {},
+                                         std::stop_token stopToken = {});
 
     static bool collectFastRecordRowsMatchingFilter(const CLogBTraceMetadata& metadata,
                                                     const CLogBTraceFastFilter& filter,

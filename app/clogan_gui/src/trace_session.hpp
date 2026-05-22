@@ -136,6 +136,12 @@ public:
                   CLogBTraceLoadError& error,
                   const CLogBTraceLoadCallbacks& callbacks = {},
                   std::stop_token stopToken = {});
+    bool readRowsDirect(std::uint64_t beginRow,
+                        std::uint64_t rowCount,
+                        std::vector<FlitRecord>& rows,
+                        CLogBTraceLoadError& error,
+                        const CLogBTraceLoadCallbacks& callbacks = {},
+                        std::stop_token stopToken = {}) const;
     bool collectRowsForTransportMask(std::size_t blockIndex,
                                      CLogBTraceChannelMask enabledMask,
                                      std::vector<int>& logicalRows,

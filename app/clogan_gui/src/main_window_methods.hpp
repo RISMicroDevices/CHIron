@@ -47,9 +47,43 @@
     const std::vector<ClipboardEntry>* clipboardEntriesForScope(ClipboardScope scope) const;
     bool insertClipboardRows(ClipboardScope scope,
                              const std::vector<std::pair<int, FlitRecord>>& rows,
-                             QString* message = nullptr);
+                             QString* message = nullptr,
+                             ClipboardInsertOrdering ordering = ClipboardInsertOrdering::SortByTimestamp);
+    ClipboardInsertResult insertClipboardRowsDetailed(
+        ClipboardScope scope,
+        const std::vector<std::pair<int, FlitRecord>>& rows,
+        QString* message = nullptr,
+        ClipboardInsertOrdering ordering = ClipboardInsertOrdering::SortByTimestamp,
+        int preSkippedDuplicates = 0);
+    bool insertClipboardRowsFromSession(quint64 sourceSessionId,
+                                        ClipboardScope scope,
+                                        const std::vector<std::pair<int, FlitRecord>>& rows,
+                                        QString* message = nullptr,
+                                        ClipboardInsertOrdering ordering = ClipboardInsertOrdering::SortByTimestamp);
+    ClipboardInsertResult insertClipboardRowsFromSessionDetailed(
+        quint64 sourceSessionId,
+        ClipboardScope scope,
+        const std::vector<std::pair<int, FlitRecord>>& rows,
+        QString* message = nullptr,
+        ClipboardInsertOrdering ordering = ClipboardInsertOrdering::SortByTimestamp,
+        int preSkippedDuplicates = 0);
     void insertSelectedFlitToClipboard(ClipboardScope scope);
     void insertSelectedXactionToClipboard(ClipboardScope scope);
+    bool insertXactionsWithSelectedAddressToClipboard(ClipboardScope scope,
+                                                      ClipboardXactionAddressInsertMode mode);
+    void finishClipboardXactionAddressInsert(quint64 generation,
+                                             quint64 sourceSessionId,
+                                             ClipboardScope scope,
+                                             std::vector<std::pair<int, FlitRecord>> rows,
+                                             int preSkippedDuplicates,
+                                             bool cancelled,
+                                             QString errorText);
+    void cancelClipboardXactionAddressInsert();
+    void cancelClipboardXactionAddressInsertForSession(quint64 sessionId);
+    void updateClipboardInsertProgress(bool active,
+                                       const QString& text = QString(),
+                                       std::uint64_t completedRecords = 0,
+                                       std::uint64_t totalRecords = 0);
     void showClipboardDock();
     void handleClipboardRowActivated(const ClipboardEntry& entry);
     void saveClipboard();

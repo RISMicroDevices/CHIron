@@ -2446,6 +2446,43 @@ bool TraceSession::readRows(const std::uint64_t beginRow,
     return true;
 }
 
+bool TraceSession::readRowsDirect(const std::uint64_t beginRow,
+                                  const std::uint64_t rowCount,
+                                  std::vector<FlitRecord>& rows,
+                                  CLogBTraceLoadError& error,
+                                  const CLogBTraceLoadCallbacks& callbacks,
+                                  std::stop_token stopToken) const
+{
+    rows.clear();
+    error = {};
+
+    if (beginRow > metadata_.totalRecords) {
+        error.summary = QStringLiteral("Requested row range starts beyond the end of the trace.");
+        return false;
+    }
+
+    const std::uint64_t clampedRowCount = std::min<std::uint64_t>(
+        rowCount,
+        metadata_.totalRecords - beginRow);
+    if (clampedRowCount == 0) {
+        return true;
+    }
+
+    if (!CLogBTraceLoader::loadRows(filePath_,
+                                    metadata_,
+                                    beginRow,
+                                    clampedRowCount,
+                                    rows,
+                                    error,
+                                    callbacks,
+                                    stopToken)) {
+        return false;
+    }
+
+    applyXactionIndexToRows(beginRow, rows);
+    return true;
+}
+
 bool TraceSession::collectRowsForTransportMask(const std::size_t blockIndex,
                                                const CLogBTraceChannelMask enabledMask,
                                                std::vector<int>& logicalRows,

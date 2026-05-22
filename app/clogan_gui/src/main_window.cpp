@@ -32,6 +32,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
         if (!session) {
             continue;
         }
+        cancelClipboardXactionAddressInsertForSession(session->id);
         cancelXactionIndexingForSession(*session, true);
         cancelStatisticsComputationForSession(*session);
     }
@@ -806,6 +807,41 @@ QString MainWindow::testClipboardOpcodeAt(const int visibleRow) const
     return record ? record->opcode : QString();
 }
 
+QString MainWindow::testClipboardTxnIdAt(const int visibleRow) const
+{
+    if (!clipboardWidget_ || !clipboardWidget_->model()) {
+        return {};
+    }
+    const FlitRecord* record = clipboardWidget_->model()->recordAt(visibleRow);
+    return record ? record->txnId : QString();
+}
+
+bool MainWindow::testClipboardRowTransactionHighlighted(const int visibleRow) const
+{
+    if (!clipboardWidget_ || !clipboardWidget_->model()) {
+        return false;
+    }
+    return clipboardWidget_->model()->isTransactionHighlightedRow(visibleRow);
+}
+
+bool MainWindow::testClickClipboardRow(const int visibleRow)
+{
+    if (!clipboardWidget_ || !clipboardWidget_->tableView() || !clipboardWidget_->model()) {
+        return false;
+    }
+    FlitTableModel* model = clipboardWidget_->model();
+    if (visibleRow < 0 || visibleRow >= model->visibleCount()) {
+        return false;
+    }
+    QTableView* table = clipboardWidget_->tableView();
+    const QModelIndex target = model->index(visibleRow, FlitTableModel::OpcodeColumn);
+    table->selectionModel()->setCurrentIndex(target,
+                                             QItemSelectionModel::ClearAndSelect
+                                                 | QItemSelectionModel::Rows);
+    Q_EMIT table->clicked(target);
+    return true;
+}
+
 bool MainWindow::testEditClipboardTimestampAt(const int visibleRow, const qint64 timestamp)
 {
     if (!clipboardWidget_ || !clipboardWidget_->model()) {
@@ -842,6 +878,67 @@ bool MainWindow::testInsertSelectedFlitToClipboard(const ClipboardScope scope)
         ? testClipboardRowCount()
         : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
     return after > before;
+}
+
+bool MainWindow::testInsertSelectedXactionToClipboard(const ClipboardScope scope)
+{
+    const int before = testClipboardScope() == scope
+        ? testClipboardRowCount()
+        : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
+    insertSelectedXactionToClipboard(scope);
+    const int after = testClipboardScope() == scope
+        ? testClipboardRowCount()
+        : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
+    return after > before;
+}
+
+bool MainWindow::testInsertAllXactionsWithSelectedAddressToClipboard(const ClipboardScope scope)
+{
+    const int before = testClipboardScope() == scope
+        ? testClipboardRowCount()
+        : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
+    const bool started =
+        insertXactionsWithSelectedAddressToClipboard(scope, ClipboardXactionAddressInsertMode::All);
+    const int after = testClipboardScope() == scope
+        ? testClipboardRowCount()
+        : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
+    return started || after > before;
+}
+
+bool MainWindow::testInsertLaterXactionsWithSelectedAddressToClipboard(const ClipboardScope scope)
+{
+    const int before = testClipboardScope() == scope
+        ? testClipboardRowCount()
+        : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
+    const bool started =
+        insertXactionsWithSelectedAddressToClipboard(scope, ClipboardXactionAddressInsertMode::Later);
+    const int after = testClipboardScope() == scope
+        ? testClipboardRowCount()
+        : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
+    return started || after > before;
+}
+
+bool MainWindow::testInsertThisAndLaterXactionsWithSelectedAddressToClipboard(const ClipboardScope scope)
+{
+    const int before = testClipboardScope() == scope
+        ? testClipboardRowCount()
+        : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
+    const bool started =
+        insertXactionsWithSelectedAddressToClipboard(scope, ClipboardXactionAddressInsertMode::ThisAndLater);
+    const int after = testClipboardScope() == scope
+        ? testClipboardRowCount()
+        : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
+    return started || after > before;
+}
+
+bool MainWindow::testClipboardXactionAddressInsertActive() const noexcept
+{
+    return clipboardXactionAddressInsertActive_;
+}
+
+bool MainWindow::testClipboardInsertProgressVisible() const noexcept
+{
+    return clipboardInsertProgressBar_ && clipboardInsertProgressBar_->isVisible();
 }
 
 bool MainWindow::testDeleteClipboardRow(const int visibleRow)
@@ -899,6 +996,189 @@ void MainWindow::testSetClipboardSearchMode(const FlitTableModel::SearchMode mod
     if (clipboardWidget_) {
         clipboardWidget_->testSetSearchMode(mode);
     }
+}
+
+void MainWindow::testSetTraceCacheMinimapVisible(const bool visible)
+{
+    if (traceCacheMinimap_) {
+        traceCacheMinimap_->setMapVisible(visible);
+    }
+}
+
+bool MainWindow::testTraceCacheMinimapVisible() const noexcept
+{
+    return traceCacheMinimap_ && traceCacheMinimap_->testMapVisible();
+}
+
+QRect MainWindow::testTraceCacheMinimapGeometry() const
+{
+    return traceCacheMinimap_ ? traceCacheMinimap_->testOverlayGeometry() : QRect();
+}
+
+bool MainWindow::testAddTraceCacheMinimapLane(const std::uint32_t rnNodeId, const std::uint64_t address)
+{
+    return traceCacheMinimap_ && traceCacheMinimap_->addLane(rnNodeId, address);
+}
+
+int MainWindow::testTraceCacheMinimapLaneCount() const noexcept
+{
+    return traceCacheMinimap_ ? traceCacheMinimap_->testLaneCount() : 0;
+}
+
+int MainWindow::testTraceCacheMinimapSegmentCount(const int laneIndex) const noexcept
+{
+    return traceCacheMinimap_ ? traceCacheMinimap_->testSegmentCount(laneIndex) : 0;
+}
+
+QVariantMap MainWindow::testTraceCacheMinimapLaneAt(const int laneIndex) const
+{
+    return traceCacheMinimap_ ? traceCacheMinimap_->testLaneAt(laneIndex) : QVariantMap();
+}
+
+QVariantMap MainWindow::testTraceCacheMinimapSegmentAt(const int laneIndex, const int segmentIndex) const
+{
+    return traceCacheMinimap_ ? traceCacheMinimap_->testSegmentAt(laneIndex, segmentIndex) : QVariantMap();
+}
+
+QRect MainWindow::testTraceCacheMinimapLaneRect(const int laneIndex) const
+{
+    return traceCacheMinimap_ ? traceCacheMinimap_->testLaneRect(laneIndex) : QRect();
+}
+
+QRect MainWindow::testTraceCacheMinimapTagRect(const int laneIndex) const
+{
+    return traceCacheMinimap_ ? traceCacheMinimap_->testTagRect(laneIndex) : QRect();
+}
+
+bool MainWindow::testTraceCacheMinimapJumpAvailable(
+    const int laneIndex,
+    const int state,
+    const int direction,
+    const int referenceRow) const
+{
+    return traceCacheMinimap_
+        && traceCacheMinimap_->testJumpActionAvailable(
+            laneIndex,
+            static_cast<TraceCacheLineMinimap::JumpState>(state),
+            static_cast<TraceCacheLineMinimap::JumpDirection>(direction),
+            referenceRow);
+}
+
+bool MainWindow::testTriggerTraceCacheMinimapJump(
+    const int laneIndex,
+    const int state,
+    const int direction,
+    const int referenceRow)
+{
+    return traceCacheMinimap_
+        && traceCacheMinimap_->testTriggerJumpAction(
+            laneIndex,
+            static_cast<TraceCacheLineMinimap::JumpState>(state),
+            static_cast<TraceCacheLineMinimap::JumpDirection>(direction),
+            referenceRow);
+}
+
+bool MainWindow::testTraceCacheMinimapChangeJumpAvailable(
+    const int laneIndex,
+    const int direction,
+    const int referenceRow) const
+{
+    return traceCacheMinimap_
+        && traceCacheMinimap_->testChangeJumpActionAvailable(laneIndex, direction, referenceRow);
+}
+
+bool MainWindow::testTriggerTraceCacheMinimapChangeJump(
+    const int laneIndex,
+    const int direction,
+    const int referenceRow)
+{
+    return traceCacheMinimap_
+        && traceCacheMinimap_->testTriggerChangeJumpAction(laneIndex, direction, referenceRow);
+}
+
+void MainWindow::testRemoveTraceCacheMinimapLane(const int laneIndex)
+{
+    if (traceCacheMinimap_) {
+        traceCacheMinimap_->testRemoveLaneAt(laneIndex);
+    }
+}
+
+void MainWindow::testSetClipboardCacheMinimapVisible(const bool visible)
+{
+    if (clipboardCacheMinimap_) {
+        clipboardCacheMinimap_->setMapVisible(visible);
+    }
+}
+
+bool MainWindow::testClipboardCacheMinimapVisible() const noexcept
+{
+    return clipboardCacheMinimap_ && clipboardCacheMinimap_->testMapVisible();
+}
+
+bool MainWindow::testAddClipboardCacheMinimapLane(const std::uint32_t rnNodeId, const std::uint64_t address)
+{
+    return clipboardCacheMinimap_ && clipboardCacheMinimap_->addLane(rnNodeId, address);
+}
+
+int MainWindow::testClipboardCacheMinimapLaneCount() const noexcept
+{
+    return clipboardCacheMinimap_ ? clipboardCacheMinimap_->testLaneCount() : 0;
+}
+
+int MainWindow::testClipboardCacheMinimapSegmentCount(const int laneIndex) const noexcept
+{
+    return clipboardCacheMinimap_ ? clipboardCacheMinimap_->testSegmentCount(laneIndex) : 0;
+}
+
+QVariantMap MainWindow::testClipboardCacheMinimapSegmentAt(const int laneIndex, const int segmentIndex) const
+{
+    return clipboardCacheMinimap_ ? clipboardCacheMinimap_->testSegmentAt(laneIndex, segmentIndex) : QVariantMap();
+}
+
+bool MainWindow::testClipboardCacheMinimapJumpAvailable(
+    const int laneIndex,
+    const int state,
+    const int direction,
+    const int referenceRow) const
+{
+    return clipboardCacheMinimap_
+        && clipboardCacheMinimap_->testJumpActionAvailable(
+            laneIndex,
+            static_cast<TraceCacheLineMinimap::JumpState>(state),
+            static_cast<TraceCacheLineMinimap::JumpDirection>(direction),
+            referenceRow);
+}
+
+bool MainWindow::testTriggerClipboardCacheMinimapJump(
+    const int laneIndex,
+    const int state,
+    const int direction,
+    const int referenceRow)
+{
+    return clipboardCacheMinimap_
+        && clipboardCacheMinimap_->testTriggerJumpAction(
+            laneIndex,
+            static_cast<TraceCacheLineMinimap::JumpState>(state),
+            static_cast<TraceCacheLineMinimap::JumpDirection>(direction),
+            referenceRow);
+}
+
+bool MainWindow::testClipboardCacheMinimapChangeJumpAvailable(
+    const int laneIndex,
+    const int direction,
+    const int referenceRow) const
+{
+    return clipboardCacheMinimap_
+        && clipboardCacheMinimap_->testChangeJumpActionAvailable(laneIndex, direction, referenceRow);
+}
+
+bool MainWindow::testTriggerClipboardCacheMinimapChangeJump(
+    const int laneIndex,
+    const int direction,
+    const int referenceRow)
+{
+    return clipboardCacheMinimap_
+        && clipboardCacheMinimap_->testTriggerChangeJumpAction(laneIndex, direction, referenceRow);
 }
 
 int MainWindow::testLatencyDiffSessionCount() const noexcept

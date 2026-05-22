@@ -17,6 +17,8 @@ class QToolButton;
 
 namespace CHIron::Gui {
 
+class TraceCacheLineMinimap;
+
 struct ClipboardSourceKey {
     quint64 sessionId = 0;
     int logicalRow = -1;
@@ -63,6 +65,7 @@ public:
     bool entryModified(int logicalRow) const;
     std::vector<ClipboardEntry> currentEntriesSnapshot() const;
     std::optional<ClipboardEntry> entryForVisibleRow(int visibleRow) const;
+    void setCacheMinimap(TraceCacheLineMinimap* minimap);
 
 #ifdef CHIRON_GUI_ENABLE_MAIN_WINDOW_TEST_API
     void testSetOpcodeFilter(const QString& text);
@@ -88,6 +91,9 @@ private:
     QToolButton* txButton_ = nullptr;
     QToolButton* rxButton_ = nullptr;
     QToolButton* nodeLabelsButton_ = nullptr;
+    QToolButton* cacheMapButton_ = nullptr;
+    QToolButton* cacheMapAddButton_ = nullptr;
+    QToolButton* cacheMapFadeButton_ = nullptr;
     QToolButton* clearButton_ = nullptr;
     QToolButton* saveButton_ = nullptr;
     QToolButton* modeButton_ = nullptr;
@@ -107,6 +113,7 @@ private:
     bool toolbarFolded_ = true;
     bool readOnly_ = true;
     bool syncingModel_ = false;
+    TraceCacheLineMinimap* cacheMinimap_ = nullptr;
 
 private:
     void buildUi();
@@ -122,6 +129,7 @@ private:
                               const QString& label,
                               const QString& placeholder,
                               int width);
+    void showAddCacheMapLineDialog();
 };
 
 }  // namespace CHIron::Gui

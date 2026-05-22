@@ -6397,6 +6397,224 @@ private:
     std::unordered_map<CacheLineKey, ActiveCacheLineLifetime, CacheLineKeyHash> active_;
 };
 
+struct ActiveCacheLineStateSpan {
+    qint64 startTimestamp = 0;
+    std::uint64_t startLogicalRow = 0;
+    std::uint8_t stateMask = 0;
+    QString stateText;
+};
+
+template<typename Config>
+class EbCacheLineStateReplay final {
+public:
+    EbCacheLineStateReplay(CLogBTraceCacheLineStateQuery query,
+                           const CLogBTraceCacheLineStateSpanCallback& callback)
+        : query_(query)
+        , callback_(callback)
+    {
+        query_.lineAddress = normalizedCacheLineAddress(query_.lineAddress);
+    }
+
+    bool replay(const CLogBTraceMetadata& metadata,
+                const EbCacheReplayRecord<Config>& replayRecord,
+                const std::uint64_t logicalRow,
+                CLogBTraceLoadError& error)
+    {
+        const DecodedEbRecord& decodedRecord = replayRecord.decodedRecord;
+        if (static_cast<std::uint32_t>(decodedRecord.nodeId) != query_.rnNodeId) {
+            return true;
+        }
+
+        const auto nodeType = ebXactionNodeTypeForRecord(metadata.nodeTypes, decodedRecord);
+        if (!nodeType || !ebXactionUseRnfJoint(*nodeType)) {
+            return true;
+        }
+        if (!replayRecord.processed
+            || replayRecord.result.denial != CHI::Eb::Xact::XactDenial::ACCEPTED) {
+            return true;
+        }
+
+        CHI::Eb::Xact::RNCacheStateMap<Config>& stateMap =
+            stateMap_;
+        const std::uint64_t time = static_cast<std::uint64_t>(
+            std::max<qint64>(0, decodedRecord.timestamp));
+        bool sampled = false;
+        std::uint64_t address = 0;
+
+        std::visit([&](const auto& flit) {
+            using T = std::decay_t<decltype(flit)>;
+            if constexpr (std::is_same_v<T, FlexibleReqFlit>) {
+                if (decodedRecord.direction != FlitDirection::Tx) {
+                    return;
+                }
+                const auto xactionFlit = makeEbXactionReqFlit<Config>(flit);
+                address = normalizedCacheLineAddress(static_cast<std::uint64_t>(xactionFlit.Addr()));
+                if (stateMap.NextTXREQ(address, time, xactionFlit) == CHI::Eb::Xact::XactDenial::ACCEPTED) {
+                    sampled = true;
+                }
+            } else if constexpr (std::is_same_v<T, FlexibleRspFlit>) {
+                if (!replayRecord.result.xaction) {
+                    return;
+                }
+                address = normalizedCacheLineAddress(xactionFirstAddress(*replayRecord.result.xaction));
+                const auto xactionFlit = makeEbXactionRspFlit<Config>(flit);
+                CHI::Eb::Xact::XactDenialEnum denial = nullptr;
+                if (decodedRecord.direction == FlitDirection::Rx
+                    && replayRecord.result.xaction->GetFirst().IsREQ()) {
+                    denial = stateMap.NextRXRSP(address, time, *replayRecord.result.xaction, xactionFlit);
+                } else if (decodedRecord.direction == FlitDirection::Tx
+                           && replayRecord.result.xaction->GetFirst().IsSNP()) {
+                    denial = stateMap.NextTXRSP(address, time, *replayRecord.result.xaction, xactionFlit);
+                }
+                sampled = denial == CHI::Eb::Xact::XactDenial::ACCEPTED;
+            } else if constexpr (std::is_same_v<T, FlexibleDatFlit>) {
+                if (!replayRecord.result.xaction) {
+                    return;
+                }
+                address = normalizedCacheLineAddress(xactionFirstAddress(*replayRecord.result.xaction));
+                const auto xactionFlit = makeEbXactionDatFlit<Config>(flit);
+                CHI::Eb::Xact::XactDenialEnum denial = nullptr;
+                if (decodedRecord.direction == FlitDirection::Rx
+                    && replayRecord.result.xaction->GetFirst().IsREQ()) {
+                    denial = stateMap.NextRXDAT(address, time, *replayRecord.result.xaction, xactionFlit);
+                } else if (decodedRecord.direction == FlitDirection::Tx
+                           && replayRecord.result.xaction->GetFirst().IsSNP()) {
+                    denial = stateMap.NextTXDAT(address, time, *replayRecord.result.xaction, xactionFlit);
+                }
+                sampled = denial == CHI::Eb::Xact::XactDenial::ACCEPTED;
+            } else if constexpr (std::is_same_v<T, FlexibleSnpFlit>) {
+                if (decodedRecord.direction != FlitDirection::Rx) {
+                    return;
+                }
+                const auto xactionFlit = makeEbXactionSnpFlit<Config>(flit);
+                address = normalizedCacheLineAddress(static_cast<std::uint64_t>(xactionFlit.Addr()) << 3U);
+                if (stateMap.NextRXSNP(address, time, xactionFlit) == CHI::Eb::Xact::XactDenial::ACCEPTED) {
+                    sampled = true;
+                }
+            }
+        }, decodedRecord.flit);
+
+        if (!sampled || address != query_.lineAddress) {
+            return true;
+        }
+
+        rnNodeType_ = QString::fromStdString(CLog::NodeTypeToString(*nodeType));
+        const CHI::Eb::Xact::CacheState state = stateMap.Get(address);
+        return updateState(decodedRecord.timestamp, logicalRow, state, error);
+    }
+
+    bool closeOpenSpan(const CLogBTraceMetadata& metadata, CLogBTraceLoadError& error)
+    {
+        if (!active_) {
+            return true;
+        }
+
+        const std::uint64_t finalRow = metadata.totalRecords == 0 ? 0 : metadata.totalRecords - 1;
+        CLogBTraceCacheLineStateSpan span;
+        span.rnNodeId = query_.rnNodeId;
+        span.rnNodeType = rnNodeType_.trimmed().isEmpty() ? QStringLiteral("RN") : rnNodeType_;
+        span.lineAddress = query_.lineAddress;
+        span.startTimestamp = active_->startTimestamp;
+        span.endTimestamp = metadata.lastTimestamp;
+        span.startLogicalRow = active_->startLogicalRow;
+        span.endLogicalRow = finalRow;
+        span.stateMask = active_->stateMask;
+        span.stateText = active_->stateText;
+        span.openEnded = true;
+        active_.reset();
+        return emitSpan(std::move(span), error);
+    }
+
+private:
+    bool updateState(const qint64 timestamp,
+                     const std::uint64_t logicalRow,
+                     const CHI::Eb::Xact::CacheState state,
+                     CLogBTraceLoadError& error)
+    {
+        const bool alive = cacheStateAlive(state);
+        const std::uint8_t stateMask = cacheStateMask(state);
+        const QString stateText = cacheStateText(state);
+
+        if (!alive) {
+            if (!active_) {
+                return true;
+            }
+            CLogBTraceCacheLineStateSpan span;
+            span.rnNodeId = query_.rnNodeId;
+            span.rnNodeType = rnNodeType_.trimmed().isEmpty() ? QStringLiteral("RN") : rnNodeType_;
+            span.lineAddress = query_.lineAddress;
+            span.startTimestamp = active_->startTimestamp;
+            span.endTimestamp = timestamp;
+            span.startLogicalRow = active_->startLogicalRow;
+            span.endLogicalRow = logicalRow;
+            span.stateMask = active_->stateMask;
+            span.stateText = active_->stateText;
+            span.openEnded = false;
+            active_.reset();
+            return emitSpan(std::move(span), error);
+        }
+
+        if (!active_) {
+            active_ = ActiveCacheLineStateSpan{
+                .startTimestamp = timestamp,
+                .startLogicalRow = logicalRow,
+                .stateMask = stateMask,
+                .stateText = stateText,
+            };
+            return true;
+        }
+
+        if (active_->stateMask == stateMask && active_->stateText == stateText) {
+            return true;
+        }
+
+        CLogBTraceCacheLineStateSpan span;
+        span.rnNodeId = query_.rnNodeId;
+        span.rnNodeType = rnNodeType_.trimmed().isEmpty() ? QStringLiteral("RN") : rnNodeType_;
+        span.lineAddress = query_.lineAddress;
+        span.startTimestamp = active_->startTimestamp;
+        span.endTimestamp = timestamp;
+        span.startLogicalRow = active_->startLogicalRow;
+        span.endLogicalRow = logicalRow;
+        span.stateMask = active_->stateMask;
+        span.stateText = active_->stateText;
+        span.openEnded = false;
+        if (!emitSpan(std::move(span), error)) {
+            return false;
+        }
+
+        active_ = ActiveCacheLineStateSpan{
+            .startTimestamp = timestamp,
+            .startLogicalRow = logicalRow,
+            .stateMask = stateMask,
+            .stateText = stateText,
+        };
+        return true;
+    }
+
+    bool emitSpan(CLogBTraceCacheLineStateSpan span, CLogBTraceLoadError& error) const
+    {
+        if (span.endTimestamp < span.startTimestamp) {
+            span.endTimestamp = span.startTimestamp;
+        }
+        if (span.endLogicalRow < span.startLogicalRow) {
+            span.endLogicalRow = span.startLogicalRow;
+        }
+        if (!callback_ || callback_(std::move(span))) {
+            return true;
+        }
+        setCancelledLoadError(error);
+        return false;
+    }
+
+private:
+    CLogBTraceCacheLineStateQuery query_;
+    CLogBTraceCacheLineStateSpanCallback callback_;
+    CHI::Eb::Xact::RNCacheStateMap<Config> stateMap_;
+    QString rnNodeType_;
+    std::optional<ActiveCacheLineStateSpan> active_;
+};
+
 template<typename Config>
 bool buildEbCacheLineLifetimes(const QString& resolvedFilePath,
                                const CLogBTraceMetadata& metadata,
@@ -6501,6 +6719,121 @@ bool buildEbCacheLineLifetimes(const QString& resolvedFilePath,
     }
 
     if (!lifetimeReplay.closeOpenLifetimes(metadata, error)) {
+        return false;
+    }
+    if (callbacks.stageProgress) {
+        callbacks.stageProgress(totalRecords, totalRecords);
+    }
+    reportProgress(callbacks.progress, totalBytes, totalBytes);
+    reportStage(callbacks.stage, CLogBTraceLoadStage::Completed, 1, totalRecords);
+    return true;
+}
+
+template<typename Config>
+bool buildEbCacheLineStateSpans(const QString& resolvedFilePath,
+                                const CLogBTraceMetadata& metadata,
+                                const EbMeasures& measures,
+                                CLogBTraceCacheLineStateQuery query,
+                                const CLogBTraceCacheLineStateSpanCallback& spanCallback,
+                                CLogBTraceLoadError& error,
+                                const CLogBTraceLoadCallbacks& callbacks,
+                                std::stop_token stopToken)
+{
+    const QString flitReport = buildFlitReport(metadata.parameters, measures);
+    EbXactionIndexThreadState<Config> state;
+    initializeEbXactionIndexState(state, metadata.nodeTypes);
+    EbCacheLineStateReplay<Config> stateReplay(query, spanCallback);
+
+    const std::size_t totalRecords =
+        static_cast<std::size_t>(std::min<std::uint64_t>(
+            metadata.totalRecords,
+            static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)())));
+    reportStage(callbacks.stage, CLogBTraceLoadStage::Decoding, 1, totalRecords);
+    if (callbacks.stageProgress) {
+        callbacks.stageProgress(0, totalRecords);
+    }
+    reportProgress(callbacks.progress, 0, 0);
+
+    std::uint64_t processedRows = 0;
+    std::uint64_t processedBytes = 0;
+    std::uint64_t totalBytes = 0;
+    for (const CLogBTraceBlockSummary& block : metadata.blocks) {
+        totalBytes += block.serializedSize;
+    }
+    reportProgress(callbacks.progress, 0, totalBytes);
+
+    for (std::size_t blockIndex = 0; blockIndex < metadata.blocks.size(); ++blockIndex) {
+        if (stopToken.stop_requested()) {
+            setCancelledLoadError(error);
+            return false;
+        }
+
+        std::shared_ptr<CLog::CLogB::TagCHIRecords> block;
+        if (!CLogBTraceLoader::loadBlockRecords(resolvedFilePath,
+                                                metadata,
+                                                blockIndex,
+                                                block,
+                                                error,
+                                                callbacks,
+                                                stopToken)) {
+            return false;
+        }
+        if (!block) {
+            continue;
+        }
+
+        std::vector<qulonglong> recordTimestamps;
+        std::size_t failedRecordIndex = 0;
+        if (!buildRecordTimestamps(*block, recordTimestamps, failedRecordIndex)) {
+            setLoadError(error,
+                         CLogBTraceLoadError::Type::Generic,
+                         QStringLiteral("Failed to reconstruct timestamps for Cache-line state replay."),
+                         QStringLiteral("Timestamp deltas overflowed or were malformed in block %1 near local record %2.")
+                             .arg(static_cast<qulonglong>(blockIndex))
+                             .arg(static_cast<qulonglong>(failedRecordIndex)));
+            return false;
+        }
+
+        const std::size_t recordCount = std::min(block->records.size(), recordTimestamps.size());
+        for (std::size_t localIndex = 0; localIndex < recordCount; ++localIndex) {
+            if (stopToken.stop_requested()) {
+                setCancelledLoadError(error);
+                return false;
+            }
+
+            EbCacheReplayRecord<Config> replayRecord;
+            if (!processEbCacheReplaySourceRecord(metadata,
+                                                  measures,
+                                                  flitReport,
+                                                  *block,
+                                                  block->records[localIndex],
+                                                  localIndex,
+                                                  recordTimestamps[localIndex],
+                                                  state,
+                                                  replayRecord,
+                                                  error)) {
+                return false;
+            }
+
+            const std::uint64_t logicalRow =
+                metadata.blocks[blockIndex].rowStart + static_cast<std::uint64_t>(localIndex);
+            if (!stateReplay.replay(metadata, replayRecord, logicalRow, error)) {
+                return false;
+            }
+
+            ++processedRows;
+            if ((processedRows % kXactionMergeProgressBatchSize) == 0U && callbacks.stageProgress) {
+                callbacks.stageProgress(static_cast<std::size_t>(
+                                            std::min<std::uint64_t>(processedRows, totalRecords)),
+                                        totalRecords);
+            }
+        }
+
+        processedBytes += metadata.blocks[blockIndex].serializedSize;
+        reportProgress(callbacks.progress, processedBytes, totalBytes);
+    }
+
+    if (!stateReplay.closeOpenSpan(metadata, error)) {
         return false;
     }
     if (callbacks.stageProgress) {
@@ -7235,9 +7568,14 @@ bool decodeSingleRawRecord(const CLogBTraceMetadata& metadata,
 
 }  // namespace
 
+std::uint64_t CLogBTraceLoader::normalizeCacheLineAddress(const std::uint64_t address) noexcept
+{
+    return normalizedCacheLineAddress(address);
+}
+
 bool CLogBTraceLoader::scanFile(const QString& filePath,
-                                CLogBTraceMetadata& metadata,
-                                CLogBTraceLoadError& error,
+                                 CLogBTraceMetadata& metadata,
+                                 CLogBTraceLoadError& error,
                                 const CLogBTraceLoadCallbacks& callbacks,
                                 std::stop_token stopToken)
 {
@@ -8123,6 +8461,112 @@ bool CLogBTraceLoader::buildCacheLineLifetimes(
                                                                error,
                                                                callbacks,
                                                                stopToken);
+    }
+}
+
+bool CLogBTraceLoader::buildCacheLineStateSpans(
+    const QString& filePath,
+    const CLogBTraceMetadata& metadata,
+    CLogBTraceCacheLineStateQuery query,
+    std::vector<CLogBTraceCacheLineStateSpan>& spans,
+    CLogBTraceLoadError& error,
+    const CLogBTraceLoadCallbacks& callbacks,
+    std::stop_token stopToken)
+{
+    spans.clear();
+    const auto spanCallback = [&spans](CLogBTraceCacheLineStateSpan span) {
+        spans.push_back(std::move(span));
+        return true;
+    };
+    if (!buildCacheLineStateSpans(filePath, metadata, query, spanCallback, error, callbacks, stopToken)) {
+        spans.clear();
+        return false;
+    }
+    std::sort(spans.begin(), spans.end(), [](const auto& lhs, const auto& rhs) {
+        if (lhs.rnNodeId != rhs.rnNodeId) {
+            return lhs.rnNodeId < rhs.rnNodeId;
+        }
+        if (lhs.lineAddress != rhs.lineAddress) {
+            return lhs.lineAddress < rhs.lineAddress;
+        }
+        if (lhs.startLogicalRow != rhs.startLogicalRow) {
+            return lhs.startLogicalRow < rhs.startLogicalRow;
+        }
+        return lhs.endLogicalRow < rhs.endLogicalRow;
+    });
+    return true;
+}
+
+bool CLogBTraceLoader::buildCacheLineStateSpans(
+    const QString& filePath,
+    const CLogBTraceMetadata& metadata,
+    CLogBTraceCacheLineStateQuery query,
+    const CLogBTraceCacheLineStateSpanCallback& spanCallback,
+    CLogBTraceLoadError& error,
+    const CLogBTraceLoadCallbacks& callbacks,
+    std::stop_token stopToken)
+{
+    error = {};
+    query.lineAddress = normalizeCacheLineAddress(query.lineAddress);
+
+    if (stopToken.stop_requested()) {
+        setCancelledLoadError(error);
+        return false;
+    }
+
+    if (query.rnNodeId == (std::numeric_limits<std::uint32_t>::max)()) {
+        setLoadError(error,
+                     CLogBTraceLoadError::Type::Generic,
+                     QStringLiteral("A valid RN node id is required for Cache-line state replay."));
+        return false;
+    }
+
+    if (metadata.parameters.GetIssue() != CLog::Issue::Eb) {
+        return true;
+    }
+
+    const QString resolvedFilePath = resolveTraceFilePath(filePath, metadata);
+    if (resolvedFilePath.isEmpty()) {
+        setLoadError(error,
+                     CLogBTraceLoadError::Type::Generic,
+                     QStringLiteral("No trace file path was provided for Cache-line state replay."));
+        return false;
+    }
+
+    EbMeasures measures;
+    if (!prepareEbTraceDecoding(metadata.parameters, measures, error)) {
+        return false;
+    }
+
+    switch (metadata.parameters.GetDataWidth()) {
+    case 128:
+        return buildEbCacheLineStateSpans<EbXactionConfig<128>>(resolvedFilePath,
+                                                                metadata,
+                                                                measures,
+                                                                query,
+                                                                spanCallback,
+                                                                error,
+                                                                callbacks,
+                                                                stopToken);
+    case 256:
+        return buildEbCacheLineStateSpans<EbXactionConfig<256>>(resolvedFilePath,
+                                                                metadata,
+                                                                measures,
+                                                                query,
+                                                                spanCallback,
+                                                                error,
+                                                                callbacks,
+                                                                stopToken);
+    case 512:
+    default:
+        return buildEbCacheLineStateSpans<EbXactionConfig<512>>(resolvedFilePath,
+                                                                metadata,
+                                                                measures,
+                                                                query,
+                                                                spanCallback,
+                                                                error,
+                                                                callbacks,
+                                                                stopToken);
     }
 }
 

@@ -1367,6 +1367,109 @@ TransactionTraceFixture makeIndexedReadNoSnpTrace(const QString& fileName,
     return fixture;
 }
 
+TransactionTraceFixture makeIndexedReadNoSnpAddressPatternTrace(
+    const QString& fileName,
+    const std::vector<std::uint64_t>& addresses,
+    const bool reverseTransactionTimestamps = false)
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+    using DatFlit = CHI::Eb::Flits::DAT<XactTestConfig>;
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set patterned test NodeIDWidth."));
+    expect(params.SetReqAddrWidth(52), QStringLiteral("Failed to set patterned test ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(32), QStringLiteral("Failed to set patterned test ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(32), QStringLiteral("Failed to set patterned test DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set patterned test DataWidth."));
+    params.SetDataCheckPresent(true);
+    params.SetPoisonPresent(true);
+    params.SetMPAMPresent(true);
+
+    const auto serializeReq = [](const ReqFlit& flit, TestFlitBitWriter& writer) {
+        appendEbReqFlitForTest(flit, writer);
+    };
+    const auto serializeDat = [](const DatFlit& flit, TestFlitBitWriter& writer) {
+        appendEbDatFlitForTest(flit, writer);
+    };
+
+    std::vector<CLog::CLogB::TagCHIRecords::Record> records;
+    records.reserve(addresses.size() * 3);
+    for (int index = 0; index < static_cast<int>(addresses.size()); ++index) {
+        const std::uint32_t baseShift = reverseTransactionTimestamps
+            ? static_cast<std::uint32_t>((addresses.size() - static_cast<std::size_t>(index)) * 10U)
+            : 1U;
+        ReqFlit request{};
+        request.TgtID() = 16;
+        request.SrcID() = static_cast<std::uint16_t>(1 + (index % 4));
+        request.TxnID() = static_cast<std::uint16_t>(index & 0xFF);
+        request.Opcode() = CHI::Eb::Opcodes::REQ::ReadNoSnp;
+        request.Size() = CHI::Eb::Sizes::B64;
+        request.Addr() = addresses[static_cast<std::size_t>(index)];
+        request.AllowRetry() = 1;
+
+        DatFlit data0{};
+        data0.TgtID() = request.SrcID();
+        data0.SrcID() = 16;
+        data0.TxnID() = request.TxnID();
+        data0.HomeNID() = 16;
+        data0.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+        data0.RespErr() = CHI::Eb::RespErrs::OK;
+        data0.Resp() = CHI::Eb::Resps::CompData_UC;
+        data0.DBID() = static_cast<std::uint16_t>(index & 0xFF);
+        data0.DataID() = 0;
+        data0.BE() = 0xFFFFFFFFU;
+
+        DatFlit data2 = data0;
+        data2.DataID() = 2;
+
+        records.push_back(makeSerializedRecord(CLog::Channel::TXREQ,
+                                                request.SrcID(),
+                                                baseShift,
+                                                request,
+                                                serializeReq));
+        records.push_back(makeSerializedRecord(CLog::Channel::RXDAT,
+                                                request.SrcID(),
+                                                baseShift + 1U,
+                                                data0,
+                                                serializeDat));
+        records.push_back(makeSerializedRecord(CLog::Channel::RXDAT,
+                                                request.SrcID(),
+                                                baseShift + 2U,
+                                                data2,
+                                                serializeDat));
+    }
+
+    TransactionTraceFixture fixture;
+    expect(fixture.tempDir.isValid(), QStringLiteral("Temporary directory creation failed."));
+    fixture.tracePath = fixture.tempDir.filePath(fileName);
+    fixture.transactionCount = static_cast<int>(addresses.size());
+    writeTraceWithTopology(fixture.tracePath,
+                           params,
+                           {
+                               {CLog::NodeType::RN_F, 1},
+                               {CLog::NodeType::RN_F, 2},
+                               {CLog::NodeType::RN_F, 3},
+                               {CLog::NodeType::RN_F, 4},
+                               {CLog::NodeType::HN_F, 16},
+                           },
+                           std::move(records));
+
+    CHIron::Gui::CLogBTraceLoadError error;
+    std::shared_ptr<CHIron::Gui::TraceSession> session;
+    expect(CHIron::Gui::TraceSession::open(fixture.tracePath, session, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Patterned trace session should open.")
+               : error.summary);
+    expect(session != nullptr, QStringLiteral("Patterned trace session should be created."));
+    expect(session->buildXactionIndex(error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Patterned trace should build an xaction index.")
+               : error.summary);
+    return fixture;
+}
+
 TransactionTraceFixture makeCacheReadCleanTrace(const QString& fileName,
                                                 const int transactionCount)
 {
@@ -1457,6 +1560,131 @@ TransactionTraceFixture makeCacheReadCleanTrace(const QString& fileName,
     return fixture;
 }
 
+TransactionTraceFixture makeCacheStateRoundTripTrace(const QString& fileName)
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+    using SnpFlit = CHI::Eb::Flits::SNP<XactTestConfig>;
+    using RspFlit = CHI::Eb::Flits::RSP<XactTestConfig>;
+    using DatFlit = CHI::Eb::Flits::DAT<XactTestConfig>;
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set cache round-trip NodeIDWidth."));
+    expect(params.SetReqAddrWidth(52), QStringLiteral("Failed to set cache round-trip ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(32), QStringLiteral("Failed to set cache round-trip ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(32), QStringLiteral("Failed to set cache round-trip DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set cache round-trip DataWidth."));
+    params.SetDataCheckPresent(true);
+    params.SetPoisonPresent(true);
+    params.SetMPAMPresent(true);
+
+    const auto serializeReq = [](const ReqFlit& flit, TestFlitBitWriter& writer) {
+        appendEbReqFlitForTest(flit, writer);
+    };
+    const auto serializeSnp = [](const SnpFlit& flit, TestFlitBitWriter& writer) {
+        appendEbSnpFlitForTest(flit, writer);
+    };
+    const auto serializeRsp = [](const RspFlit& flit, TestFlitBitWriter& writer) {
+        appendEbRspFlitForTest(flit, writer);
+    };
+    const auto serializeDat = [](const DatFlit& flit, TestFlitBitWriter& writer) {
+        appendEbDatFlitForTest(flit, writer);
+    };
+
+    std::vector<CLog::CLogB::TagCHIRecords::Record> records;
+    records.reserve(8);
+
+    auto appendReadClean = [&](const std::uint16_t txnId,
+                               const std::uint8_t resp,
+                               const std::uint16_t dbid) {
+        ReqFlit request{};
+        request.TgtID() = 16;
+        request.SrcID() = 1;
+        request.TxnID() = txnId;
+        request.Opcode() = CHI::Eb::Opcodes::REQ::ReadClean;
+        request.Size() = CHI::Eb::Sizes::B64;
+        request.Addr() = 0x1000;
+        request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_Allocate;
+        request.SnpAttr() = CHI::Eb::SnpAttrs::Snoopable;
+        request.AllowRetry() = 1;
+        request.ExpCompAck() = 1;
+
+        DatFlit data0{};
+        data0.TgtID() = request.SrcID();
+        data0.SrcID() = 16;
+        data0.TxnID() = request.TxnID();
+        data0.HomeNID() = 16;
+        data0.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+        data0.RespErr() = CHI::Eb::RespErrs::OK;
+        data0.Resp() = resp;
+        data0.DBID() = dbid;
+        data0.DataID() = 0;
+        data0.BE() = 0xFFFFFFFFU;
+
+        DatFlit data2 = data0;
+        data2.DataID() = 2;
+
+        records.push_back(makeSerializedRecord(CLog::Channel::TXREQ,
+                                                request.SrcID(),
+                                                1,
+                                                request,
+                                                serializeReq));
+        records.push_back(makeSerializedRecord(CLog::Channel::RXDAT,
+                                                request.SrcID(),
+                                                1,
+                                                data0,
+                                                serializeDat));
+        records.push_back(makeSerializedRecord(CLog::Channel::RXDAT,
+                                                request.SrcID(),
+                                                1,
+                                                data2,
+                                                serializeDat));
+    };
+
+    appendReadClean(1, CHI::Eb::Resps::CompData_UC, 11);
+
+    SnpFlit invalidate{};
+    invalidate.SrcID() = 16;
+    invalidate.TxnID() = 2;
+    invalidate.Opcode() = CHI::Eb::Opcodes::SNP::SnpMakeInvalid;
+    invalidate.DoNotGoToSD() = 1;
+    invalidate.Addr() = 0x1000 >> 3U;
+    records.push_back(makeSerializedRecord(CLog::Channel::RXSNP,
+                                            1,
+                                            1,
+                                            invalidate,
+                                            serializeSnp));
+
+    RspFlit invalidateResponse{};
+    invalidateResponse.TgtID() = 16;
+    invalidateResponse.SrcID() = 1;
+    invalidateResponse.TxnID() = invalidate.TxnID();
+    invalidateResponse.Opcode() = CHI::Eb::Opcodes::RSP::SnpResp;
+    invalidateResponse.RespErr() = CHI::Eb::RespErrs::OK;
+    invalidateResponse.Resp() = CHI::Eb::Resps::Snoop::I;
+    records.push_back(makeSerializedRecord(CLog::Channel::TXRSP,
+                                            1,
+                                            1,
+                                            invalidateResponse,
+                                            serializeRsp));
+
+    appendReadClean(3, CHI::Eb::Resps::CompData_UC, 13);
+
+    TransactionTraceFixture fixture;
+    expect(fixture.tempDir.isValid(), QStringLiteral("Temporary directory creation failed."));
+    fixture.tracePath = fixture.tempDir.filePath(fileName);
+    fixture.transactionCount = 3;
+    writeTraceWithTopology(fixture.tracePath,
+                           params,
+                           {
+                               {CLog::NodeType::RN_F, 1},
+                               {CLog::NodeType::HN_F, 16},
+                           },
+                           std::move(records));
+    return fixture;
+}
+
 void testCacheLineLifetimeReplayBuildsReadCleanOpenEndedLifetimes()
 {
     TransactionTraceFixture fixture =
@@ -1522,6 +1750,730 @@ void testCacheLineLifetimeReplayBuildsReadCleanOpenEndedLifetimes()
                     metadata.totalRecords - 1,
                     QStringLiteral("Open-ended cache lifetimes should close at the final logical row."));
     }
+}
+
+void testCacheLineStateReplayBuildsRequestedRnAddressSpans()
+{
+    TransactionTraceFixture fixture =
+        makeCacheReadCleanTrace(QStringLiteral("cache_state_spans_readclean.clogb"), 4);
+
+    CHIron::Gui::CLogBTraceLoadError error;
+    CHIron::Gui::CLogBTraceMetadata metadata;
+    expect(CHIron::Gui::CLogBTraceLoader::scanFile(fixture.tracePath, metadata, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Cache state replay fixture should scan as CLog.B.")
+               : error.summary);
+
+    std::vector<CHIron::Gui::CLogBTraceCacheLineStateSpan> spans;
+    const std::uint64_t lineAddress =
+        CHIron::Gui::CLogBTraceLoader::normalizeCacheLineAddress(0x1000 + 7);
+    expect(CHIron::Gui::CLogBTraceLoader::buildCacheLineStateSpans(
+               fixture.tracePath,
+               metadata,
+               CHIron::Gui::CLogBTraceCacheLineStateQuery{
+                   .rnNodeId = 1,
+                   .lineAddress = lineAddress,
+               },
+               spans,
+               error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Cache state replay should build spans for the requested RN/address.")
+               : error.summary);
+
+    expectEqual(static_cast<int>(spans.size()),
+                1,
+                QStringLiteral("ReadClean CompData_UC should create one state span for the requested RN/address."));
+    const auto& span = spans.front();
+    expectEqual(static_cast<int>(span.rnNodeId),
+                1,
+                QStringLiteral("State spans should retain the requested RN id."));
+    expectEqual(static_cast<int>(span.lineAddress),
+                0x1000,
+                QStringLiteral("State replay should normalize byte addresses to 64-byte cache lines."));
+    expect(span.stateText.contains(QStringLiteral("UC")),
+           QStringLiteral("State replay should report the observed RN cache state."));
+    expect(span.openEnded,
+           QStringLiteral("Still-live cache state spans should close at EOF as open-ended."));
+    expectEqual(static_cast<std::uint64_t>(span.endLogicalRow),
+                metadata.totalRecords - 1,
+                QStringLiteral("Open-ended cache state spans should close at the final logical row."));
+
+    std::vector<CHIron::Gui::CLogBTraceCacheLineStateSpan> missingSpans;
+    expect(CHIron::Gui::CLogBTraceLoader::buildCacheLineStateSpans(
+               fixture.tracePath,
+               metadata,
+               CHIron::Gui::CLogBTraceCacheLineStateQuery{
+                   .rnNodeId = 2,
+                   .lineAddress = lineAddress,
+               },
+               missingSpans,
+               error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Cache state replay should accept queries with no matching state.")
+               : error.summary);
+    expect(missingSpans.empty(),
+           QStringLiteral("State replay should filter out other RN lanes for the same address."));
+}
+
+void waitForTraceCacheMinimapLane(CHIron::Gui::MainWindow& window,
+                                  const int laneIndex,
+                                  const QString& context)
+{
+    const bool ready = waitForCondition([&window, laneIndex]() {
+        const QVariantMap lane = window.testTraceCacheMinimapLaneAt(laneIndex);
+        return !lane.isEmpty() && !lane.value(QStringLiteral("building")).toBool();
+    }, 5000);
+    expect(ready, context);
+}
+
+void waitForClipboardCacheMinimapLane(CHIron::Gui::MainWindow& window,
+                                      const int laneIndex,
+                                      const QString& context)
+{
+    const bool ready = waitForCondition([&window, laneIndex]() {
+        return window.testClipboardCacheMinimapLaneCount() > laneIndex
+            && window.testClipboardCacheMinimapSegmentCount(laneIndex) > 0;
+    }, 5000);
+    expect(ready, context);
+}
+
+void waitForClipboardAddressInsert(CHIron::Gui::MainWindow& window, const QString& context)
+{
+    const bool ready = waitForCondition([&window]() {
+        return !window.testClipboardXactionAddressInsertActive();
+    }, 10000);
+    expect(ready, context);
+}
+
+void testTraceCacheMinimapMainTraceBuildsLaneOverlayAndSegments()
+{
+    TransactionTraceFixture fixture =
+        makeCacheReadCleanTrace(QStringLiteral("trace_cache_minimap_main.clogb"), 4);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(!window.testTraceCacheMinimapVisible(),
+           QStringLiteral("Main trace Cache Map should be hidden by default."));
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Cache Map source trace should load."));
+    QApplication::processEvents();
+
+    expect(window.testAddTraceCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding a main trace Cache Map lane should accept decimal/hex-normalizable addresses."));
+    waitForTraceCacheMinimapLane(window,
+                                 0,
+                                 QStringLiteral("Main trace Cache Map lane should finish building."));
+
+    expect(window.testTraceCacheMinimapVisible(),
+           QStringLiteral("Adding a lane should show the main trace Cache Map overlay."));
+    expectEqual(window.testTraceCacheMinimapLaneCount(),
+                1,
+                QStringLiteral("Main trace Cache Map should contain the requested lane."));
+    const QRect geometry = window.testTraceCacheMinimapGeometry();
+    expect(geometry.isValid() && geometry.width() > 0 && geometry.height() > 0,
+           QStringLiteral("Main trace Cache Map overlay should have visible geometry beside the table scrollbar."));
+    const QVariantMap lane = window.testTraceCacheMinimapLaneAt(0);
+    expectEqual(lane.value(QStringLiteral("rnNodeId")).toInt(),
+                1,
+                QStringLiteral("Cache Map lane should retain the requested RN id."));
+    expectEqual(static_cast<int>(lane.value(QStringLiteral("lineAddress")).toULongLong()),
+                0x1000,
+                QStringLiteral("Cache Map lane should display the normalized cache-line address."));
+    expect(window.testTraceCacheMinimapSegmentCount(0) > 0,
+           QStringLiteral("Main trace Cache Map should paint at least one state segment for the requested line."));
+    const QVariantMap segment = window.testTraceCacheMinimapSegmentAt(0, 0);
+    expect(segment.value(QStringLiteral("stateText")).toString().contains(QStringLiteral("UC")),
+           QStringLiteral("Cache Map segment should expose the cache-state label."));
+    expect(segment.value(QStringLiteral("color")).value<QColor>() == QColor(QStringLiteral("#86EFAC")),
+           QStringLiteral("Cache Map UC state should use its fixed lane color."));
+    expect(segment.value(QStringLiteral("height")).toInt() > 0,
+           QStringLiteral("Cache Map segment should have a drawable vertical span."));
+}
+
+void testTraceCacheMinimapTagsStackAndAnchorToLaneRightEdge()
+{
+    TransactionTraceFixture fixture =
+        makeCacheReadCleanTrace(QStringLiteral("trace_cache_minimap_tags.clogb"), 4);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Cache Map tag-layout source trace should load."));
+    expect(window.testAddTraceCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding the first Cache Map lane should succeed."));
+    waitForTraceCacheMinimapLane(window,
+                                 0,
+                                 QStringLiteral("First Cache Map lane should finish building."));
+    expect(window.testAddTraceCacheMinimapLane(2, 0x113F),
+           QStringLiteral("Adding the second Cache Map lane should succeed."));
+    waitForTraceCacheMinimapLane(window,
+                                 1,
+                                 QStringLiteral("Second Cache Map lane should finish building."));
+
+    const QRect firstTag = window.testTraceCacheMinimapTagRect(0);
+    const QRect secondTag = window.testTraceCacheMinimapTagRect(1);
+    const QRect firstLane = window.testTraceCacheMinimapLaneRect(0);
+    const QRect secondLane = window.testTraceCacheMinimapLaneRect(1);
+    const QRect minimapGeometry = window.testTraceCacheMinimapGeometry();
+    expect(firstTag.isValid() && secondTag.isValid(),
+           QStringLiteral("Cache Map lane tags should have valid rectangles."));
+    expect(!firstTag.intersects(secondTag),
+           QStringLiteral("Cache Map lane tags should stack without overlap."));
+    expectEqual(firstTag.right(),
+                firstLane.right(),
+                QStringLiteral("The first Cache Map tag should stick to its lane right edge."));
+    expectEqual(secondTag.right(),
+                secondLane.right(),
+                QStringLiteral("The second Cache Map tag should stick to its lane right edge."));
+    expect(firstLane.intersects(firstTag),
+           QStringLiteral("The first Cache Map lane should extend under its top tag."));
+    expect(secondLane.intersects(secondTag),
+           QStringLiteral("The second Cache Map lane should extend under its top tag."));
+    expectEqual(firstLane.top(),
+                0,
+                QStringLiteral("Cache Map lane borders should start at the top of the overlay."));
+    expectEqual(firstLane.height(),
+                minimapGeometry.height(),
+                QStringLiteral("Cache Map lane borders should span the full overlay height."));
+}
+
+void testTraceCacheMinimapAddingLaneDuringBuildFinishesBoth()
+{
+    TransactionTraceFixture fixture =
+        makeCacheReadCleanTrace(QStringLiteral("trace_cache_minimap_add_during_build.clogb"), 64);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Cache Map concurrent-add source trace should load."));
+    expect(window.testAddTraceCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding the first Cache Map lane should start building."));
+    expect(window.testAddTraceCacheMinimapLane(2, 0x113F),
+           QStringLiteral("Adding a second Cache Map lane during the first build should succeed."));
+
+    waitForTraceCacheMinimapLane(window,
+                                 0,
+                                 QStringLiteral("The interrupted first Cache Map lane should still finish building."));
+    waitForTraceCacheMinimapLane(window,
+                                 1,
+                                 QStringLiteral("The second Cache Map lane should finish building."));
+
+    const QVariantMap firstLane = window.testTraceCacheMinimapLaneAt(0);
+    const QVariantMap secondLane = window.testTraceCacheMinimapLaneAt(1);
+    expect(firstLane.value(QStringLiteral("hasBuildResult")).toBool(),
+           QStringLiteral("The first Cache Map lane should retain a completed build result."));
+    expect(secondLane.value(QStringLiteral("hasBuildResult")).toBool(),
+           QStringLiteral("The second Cache Map lane should retain a completed build result."));
+    expect(window.testTraceCacheMinimapSegmentCount(0) > 0,
+           QStringLiteral("The first Cache Map lane should have visible state segments after interruption."));
+    expect(window.testTraceCacheMinimapSegmentCount(1) > 0,
+           QStringLiteral("The second Cache Map lane should have visible state segments."));
+}
+
+void testTraceCacheMinimapDeletingLaneKeepsRemainingBuildResult()
+{
+    TransactionTraceFixture fixture =
+        makeCacheReadCleanTrace(QStringLiteral("trace_cache_minimap_delete_lane.clogb"), 4);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Cache Map delete-lane source trace should load."));
+    expect(window.testAddTraceCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding the first Cache Map lane should succeed."));
+    waitForTraceCacheMinimapLane(window,
+                                 0,
+                                 QStringLiteral("First Cache Map lane should finish before deletion."));
+    expect(window.testAddTraceCacheMinimapLane(2, 0x113F),
+           QStringLiteral("Adding the second Cache Map lane should succeed."));
+    waitForTraceCacheMinimapLane(window,
+                                 1,
+                                 QStringLiteral("Second Cache Map lane should finish before deletion."));
+
+    window.testRemoveTraceCacheMinimapLane(0);
+    QApplication::processEvents();
+
+    expectEqual(window.testTraceCacheMinimapLaneCount(),
+                1,
+                QStringLiteral("Deleting one Cache Map lane should leave the other lane."));
+    const QVariantMap remainingLane = window.testTraceCacheMinimapLaneAt(0);
+    expect(!remainingLane.value(QStringLiteral("building")).toBool(),
+           QStringLiteral("Deleting a completed Cache Map lane should not rebuild the remaining lane."));
+    expect(remainingLane.value(QStringLiteral("hasBuildResult")).toBool(),
+           QStringLiteral("Deleting a completed Cache Map lane should preserve the remaining lane build result."));
+    expect(window.testTraceCacheMinimapSegmentCount(0) > 0,
+           QStringLiteral("Deleting a completed Cache Map lane should preserve remaining visible segments."));
+}
+
+void testTraceCacheMinimapStateJumpActions()
+{
+    constexpr int kJumpStateUC = 0;
+    constexpr int kJumpStateSC = 4;
+    constexpr int kJumpDirectionFirst = 0;
+    constexpr int kJumpDirectionPrevious = 1;
+    constexpr int kJumpDirectionNext = 2;
+    constexpr int kJumpDirectionLast = 3;
+
+    TransactionTraceFixture fixture =
+        makeCacheStateRoundTripTrace(QStringLiteral("trace_cache_minimap_state_jumps.clogb"));
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Cache Map state-jump fixture should load."));
+    expect(window.testAddTraceCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding a Cache Map state-jump lane should succeed."));
+    waitForTraceCacheMinimapLane(window,
+                                 0,
+                                 QStringLiteral("Cache Map state-jump lane should build."));
+    expectEqual(window.testTraceCacheMinimapSegmentCount(0),
+                2,
+                QStringLiteral("State-jump fixture should expose two UC spans."));
+
+    const QVariantMap firstSegment = window.testTraceCacheMinimapSegmentAt(0, 0);
+    const QVariantMap secondSegment = window.testTraceCacheMinimapSegmentAt(0, 1);
+    const int firstRow = static_cast<int>(firstSegment.value(QStringLiteral("startLogicalRow")).toULongLong());
+    const int secondRow = static_cast<int>(secondSegment.value(QStringLiteral("startLogicalRow")).toULongLong());
+
+    expect(window.testTraceCacheMinimapJumpAvailable(0, kJumpStateUC, kJumpDirectionFirst, 0),
+           QStringLiteral("First UC should be enabled for a lane with UC segments."));
+    expect(window.testTraceCacheMinimapJumpAvailable(0, kJumpStateUC, kJumpDirectionLast, 0),
+           QStringLiteral("Last UC should be enabled for a lane with UC segments."));
+    expect(!window.testTraceCacheMinimapJumpAvailable(0, kJumpStateSC, kJumpDirectionFirst, 0),
+           QStringLiteral("First SC should be disabled when the lane has no SC segments."));
+    expect(!window.testTraceCacheMinimapJumpAvailable(0, kJumpStateUC, kJumpDirectionPrevious, firstRow),
+           QStringLiteral("Previous UC should be disabled before the first UC segment."));
+    expect(window.testTraceCacheMinimapJumpAvailable(0, kJumpStateUC, kJumpDirectionNext, firstRow),
+           QStringLiteral("Next UC should be enabled when a later UC segment exists."));
+
+    expect(window.testTriggerTraceCacheMinimapJump(0, kJumpStateUC, kJumpDirectionFirst, secondRow),
+           QStringLiteral("Triggering First UC should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                firstRow,
+                QStringLiteral("First UC should jump to the first matching segment."));
+
+    expect(window.testTriggerTraceCacheMinimapJump(0, kJumpStateUC, kJumpDirectionNext, firstRow),
+           QStringLiteral("Triggering Next UC should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                secondRow,
+                QStringLiteral("Next UC should jump to the next matching segment after the reference row."));
+
+    expect(window.testTriggerTraceCacheMinimapJump(0, kJumpStateUC, kJumpDirectionPrevious, secondRow),
+           QStringLiteral("Triggering Previous UC should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                firstRow,
+                QStringLiteral("Previous UC should jump to the previous matching segment before the reference row."));
+
+    expect(window.testTriggerTraceCacheMinimapJump(0, kJumpStateUC, kJumpDirectionLast, firstRow),
+           QStringLiteral("Triggering Last UC should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                secondRow,
+                QStringLiteral("Last UC should jump to the last matching segment."));
+}
+
+void testTraceCacheMinimapChangeJumpActions()
+{
+    constexpr int kChangeDirectionFirst = 0;
+    constexpr int kChangeDirectionPrevious = 1;
+    constexpr int kChangeDirectionNext = 2;
+    constexpr int kChangeDirectionLast = 3;
+
+    TransactionTraceFixture fixture =
+        makeCacheStateRoundTripTrace(QStringLiteral("trace_cache_minimap_change_jumps.clogb"));
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Cache Map change-jump fixture should load."));
+    expect(window.testAddTraceCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding a Cache Map change-jump lane should succeed."));
+    waitForTraceCacheMinimapLane(window,
+                                 0,
+                                 QStringLiteral("Cache Map change-jump lane should build."));
+    expectEqual(window.testTraceCacheMinimapSegmentCount(0),
+                2,
+                QStringLiteral("Change-jump fixture should expose two coalesced spans."));
+
+    const QVariantMap firstSegment = window.testTraceCacheMinimapSegmentAt(0, 0);
+    const QVariantMap secondSegment = window.testTraceCacheMinimapSegmentAt(0, 1);
+    const int firstRow = static_cast<int>(firstSegment.value(QStringLiteral("startLogicalRow")).toULongLong());
+    const int invalidRow = static_cast<int>(firstSegment.value(QStringLiteral("endLogicalRow")).toULongLong());
+    const int secondRow = static_cast<int>(secondSegment.value(QStringLiteral("startLogicalRow")).toULongLong());
+    expect(secondSegment.value(QStringLiteral("openEnded")).toBool(),
+           QStringLiteral("The second round-trip segment should be open-ended."));
+
+    expect(window.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionFirst, firstRow),
+           QStringLiteral("First change should include the initial I-to-live transition."));
+    expect(window.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionPrevious, secondRow),
+           QStringLiteral("Previous change should include the live-to-I transition before the second span."));
+    expect(window.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionNext, firstRow),
+           QStringLiteral("Next change should include the live-to-I transition after the first span."));
+    expect(window.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionLast, firstRow),
+           QStringLiteral("Last change should be enabled when the lane has a change segment."));
+    expect(!window.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionNext, secondRow),
+           QStringLiteral("Next change should be disabled after the final open-ended I-to-live transition."));
+
+    expect(window.testTriggerTraceCacheMinimapChangeJump(0, kChangeDirectionFirst, firstRow),
+           QStringLiteral("Triggering First change should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                firstRow,
+                QStringLiteral("First change should jump to the initial I-to-live row."));
+
+    expect(window.testTriggerTraceCacheMinimapChangeJump(0, kChangeDirectionPrevious, secondRow),
+           QStringLiteral("Triggering Previous change should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                invalidRow,
+                QStringLiteral("Previous change should jump to the live-to-I row before the second span."));
+
+    expect(window.testTriggerTraceCacheMinimapChangeJump(0, kChangeDirectionNext, firstRow),
+           QStringLiteral("Triggering Next change should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                invalidRow,
+                QStringLiteral("Next change should jump to the first live-to-I row."));
+
+    expect(window.testTriggerTraceCacheMinimapChangeJump(0, kChangeDirectionLast, firstRow),
+           QStringLiteral("Triggering Last change should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                secondRow,
+                QStringLiteral("Last change should jump to the final I-to-live row for an open-ended span."));
+
+    TransactionTraceFixture singleSpanFixture =
+        makeCacheReadCleanTrace(QStringLiteral("trace_cache_minimap_change_single.clogb"), 1);
+    CHIron::Gui::MainWindow singleSpanWindow;
+    singleSpanWindow.resize(1200, 720);
+    singleSpanWindow.show();
+    QApplication::processEvents();
+
+    expect(singleSpanWindow.testLoadTraceFile(singleSpanFixture.tracePath),
+           QStringLiteral("Single-span Cache Map fixture should load."));
+    expect(singleSpanWindow.testAddTraceCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding a single-span Cache Map lane should succeed."));
+    waitForTraceCacheMinimapLane(singleSpanWindow,
+                                 0,
+                                 QStringLiteral("Single-span Cache Map lane should build."));
+    expectEqual(singleSpanWindow.testTraceCacheMinimapSegmentCount(0),
+                1,
+                QStringLiteral("Single-span fixture should expose one coalesced span."));
+    const QVariantMap singleSegment = singleSpanWindow.testTraceCacheMinimapSegmentAt(0, 0);
+    const int singleStartRow =
+        static_cast<int>(singleSegment.value(QStringLiteral("startLogicalRow")).toULongLong());
+    expect(singleSpanWindow.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionFirst, 0),
+           QStringLiteral("First change should be enabled for a one-segment lane with an I-to-live transition."));
+    expect(!singleSpanWindow.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionPrevious, 0),
+           QStringLiteral("Previous change should be disabled for a one-segment lane."));
+    expect(singleSpanWindow.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionNext, 0),
+           QStringLiteral("Next change should find the initial I-to-live transition before its row."));
+    expect(!singleSpanWindow.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionNext, singleStartRow),
+           QStringLiteral("Next change should be disabled after the only I-to-live transition."));
+    expect(singleSpanWindow.testTraceCacheMinimapChangeJumpAvailable(0, kChangeDirectionLast, 0),
+           QStringLiteral("Last change should be enabled for a one-segment lane with an I-to-live transition."));
+}
+
+void testTraceCacheMinimapClipboardBuildsFromSourceRows()
+{
+    TransactionTraceFixture fixture =
+        makeCacheReadCleanTrace(QStringLiteral("trace_cache_minimap_clipboard.clogb"), 2);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(!window.testClipboardCacheMinimapVisible(),
+           QStringLiteral("Clipboard Cache Map should be hidden by default."));
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard Cache Map source trace should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    window.testSelectLogicalRow(1);
+    expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Clipboard Cache Map should have a source-backed row to map."));
+    QApplication::processEvents();
+
+    expect(window.testAddClipboardCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding a Clipboard Cache Map lane should succeed."));
+    waitForClipboardCacheMinimapLane(window,
+                                     0,
+                                     QStringLiteral("Clipboard Cache Map lane should build from the source trace session."));
+
+    expect(window.testClipboardCacheMinimapVisible(),
+           QStringLiteral("Adding a Clipboard lane should show the Clipboard Cache Map overlay."));
+    expectEqual(window.testClipboardCacheMinimapLaneCount(),
+                1,
+                QStringLiteral("Clipboard Cache Map should contain the requested lane."));
+}
+
+void testTraceCacheMinimapClipboardStateJumpActions()
+{
+    constexpr int kJumpStateUC = 0;
+    constexpr int kJumpStateSC = 4;
+    constexpr int kJumpDirectionFirst = 0;
+    constexpr int kJumpDirectionNext = 2;
+
+    TransactionTraceFixture fixture =
+        makeCacheStateRoundTripTrace(QStringLiteral("trace_cache_minimap_clipboard_state_jumps.clogb"));
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard Cache Map state-jump fixture should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    const int rowsToInsert[] = {1, 6};
+    for (const int logicalRow : rowsToInsert) {
+        window.testSelectLogicalRow(logicalRow);
+        expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+               QStringLiteral("Clipboard state-jump source row %1 insertion should succeed.").arg(logicalRow));
+    }
+    QApplication::processEvents();
+
+    expect(window.testAddClipboardCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding a Clipboard Cache Map state-jump lane should succeed."));
+    waitForClipboardCacheMinimapLane(window,
+                                     0,
+                                     QStringLiteral("Clipboard Cache Map state-jump lane should build."));
+    expectEqual(window.testClipboardCacheMinimapSegmentCount(0),
+                2,
+                QStringLiteral("Clipboard state-jump fixture should expose two projected UC spans."));
+
+    expect(window.testClipboardCacheMinimapJumpAvailable(0, kJumpStateUC, kJumpDirectionNext, 0),
+           QStringLiteral("Clipboard Next UC should be enabled after the first visible row."));
+    expect(!window.testClipboardCacheMinimapJumpAvailable(0, kJumpStateSC, kJumpDirectionFirst, 0),
+           QStringLiteral("Clipboard First SC should be disabled when the lane has no SC segments."));
+
+    expect(window.testTriggerClipboardCacheMinimapJump(0, kJumpStateUC, kJumpDirectionNext, 0),
+           QStringLiteral("Triggering Clipboard Next UC should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                6,
+                QStringLiteral("Clipboard Next UC should activate the second projected Clipboard row."));
+
+    expect(window.testTriggerClipboardCacheMinimapJump(0, kJumpStateUC, kJumpDirectionFirst, 1),
+           QStringLiteral("Triggering Clipboard First UC should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                1,
+                QStringLiteral("Clipboard First UC should activate the first projected Clipboard row."));
+}
+
+void testTraceCacheMinimapClipboardChangeJumpActions()
+{
+    constexpr int kChangeDirectionFirst = 0;
+    constexpr int kChangeDirectionPrevious = 1;
+    constexpr int kChangeDirectionNext = 2;
+    constexpr int kChangeDirectionLast = 3;
+
+    TransactionTraceFixture fixture =
+        makeCacheStateRoundTripTrace(QStringLiteral("trace_cache_minimap_clipboard_change_jumps.clogb"));
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard Cache Map change-jump fixture should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    const int rowsToInsert[] = {1, 6};
+    for (const int logicalRow : rowsToInsert) {
+        window.testSelectLogicalRow(logicalRow);
+        expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+               QStringLiteral("Clipboard change-jump source row %1 insertion should succeed.").arg(logicalRow));
+    }
+    QApplication::processEvents();
+
+    expect(window.testAddClipboardCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding a Clipboard Cache Map change-jump lane should succeed."));
+    waitForClipboardCacheMinimapLane(window,
+                                     0,
+                                     QStringLiteral("Clipboard Cache Map change-jump lane should build."));
+    expectEqual(window.testClipboardCacheMinimapSegmentCount(0),
+                2,
+                QStringLiteral("Clipboard change-jump fixture should expose two projected same-state spans."));
+
+    const QVariantMap firstSegment = window.testClipboardCacheMinimapSegmentAt(0, 0);
+    const QVariantMap secondSegment = window.testClipboardCacheMinimapSegmentAt(0, 1);
+    expectEqual(firstSegment.value(QStringLiteral("stateText")).toString(),
+                secondSegment.value(QStringLiteral("stateText")).toString(),
+                QStringLiteral("The Clipboard fixture should return to the same displayed state."));
+    expect(secondSegment.value(QStringLiteral("splitBefore")).toBool(),
+           QStringLiteral("The second Clipboard segment should be a split change even with matching text/color."));
+
+    expect(window.testClipboardCacheMinimapChangeJumpAvailable(0, kChangeDirectionFirst, 0),
+           QStringLiteral("Clipboard First change should include the initial I-to-live transition."));
+    expect(window.testClipboardCacheMinimapChangeJumpAvailable(0, kChangeDirectionPrevious, 1),
+           QStringLiteral("Clipboard Previous change should include the first projected I-to-live transition."));
+    expect(window.testClipboardCacheMinimapChangeJumpAvailable(0, kChangeDirectionNext, 0),
+           QStringLiteral("Clipboard Next change should include the next projected I-to-live transition."));
+    expect(window.testClipboardCacheMinimapChangeJumpAvailable(0, kChangeDirectionLast, 0),
+           QStringLiteral("Clipboard Last change should be enabled when a later projected segment exists."));
+
+    expect(window.testTriggerClipboardCacheMinimapChangeJump(0, kChangeDirectionFirst, 0),
+           QStringLiteral("Triggering Clipboard First change should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                1,
+                QStringLiteral("Clipboard First change should activate the first projected I-to-live row."));
+
+    expect(window.testTriggerClipboardCacheMinimapChangeJump(0, kChangeDirectionNext, 0),
+           QStringLiteral("Triggering Clipboard Next change should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                6,
+                QStringLiteral("Clipboard Next change should activate the second projected source row."));
+
+    expect(window.testTriggerClipboardCacheMinimapChangeJump(0, kChangeDirectionLast, 0),
+           QStringLiteral("Triggering Clipboard Last change should succeed."));
+    expectEqual(window.testSelectedLogicalRow(),
+                6,
+                QStringLiteral("Clipboard Last change should activate the final projected source row."));
+}
+
+void testTraceCacheMinimapClipboardMergesRowsInsideSameSourceState()
+{
+    TransactionTraceFixture fixture =
+        makeCacheReadCleanTrace(QStringLiteral("trace_cache_minimap_clipboard_merge.clogb"), 1);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard Cache Map merge fixture should load."));
+    expect(window.testAddTraceCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Main trace Cache Map lane should be available for comparison."));
+    waitForTraceCacheMinimapLane(window,
+                                 0,
+                                 QStringLiteral("Main trace Cache Map lane should build before comparison."));
+    const QVariantMap mainSegment = window.testTraceCacheMinimapSegmentAt(0, 0);
+
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    window.testSelectLogicalRow(1);
+    expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("First Clipboard data row insertion should succeed."));
+    window.testSelectLogicalRow(2);
+    expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Second Clipboard data row insertion should succeed."));
+    QApplication::processEvents();
+
+    expect(window.testAddClipboardCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding a Clipboard Cache Map merge lane should succeed."));
+    waitForClipboardCacheMinimapLane(window,
+                                     0,
+                                     QStringLiteral("Clipboard Cache Map merge lane should build."));
+
+    expectEqual(window.testClipboardCacheMinimapSegmentCount(0),
+                1,
+                QStringLiteral("Clipboard rows in the same unchanged source state should draw one segment."));
+    const QVariantMap clipboardSegment = window.testClipboardCacheMinimapSegmentAt(0, 0);
+    expectEqual(clipboardSegment.value(QStringLiteral("startVisibleRow")).toInt(),
+                0,
+                QStringLiteral("Merged Clipboard segment should start at the first visible Clipboard row."));
+    expectEqual(clipboardSegment.value(QStringLiteral("endVisibleRow")).toInt(),
+                1,
+                QStringLiteral("Merged Clipboard segment should end at the last visible Clipboard row."));
+    expectEqual(clipboardSegment.value(QStringLiteral("stateText")).toString(),
+                mainSegment.value(QStringLiteral("stateText")).toString(),
+                QStringLiteral("Clipboard Cache Map state text should match the main trace projection."));
+    expectEqual(clipboardSegment.value(QStringLiteral("stateMask")).toInt(),
+                mainSegment.value(QStringLiteral("stateMask")).toInt(),
+                QStringLiteral("Clipboard Cache Map state mask should match the main trace projection."));
+    expectEqual(clipboardSegment.value(QStringLiteral("color")).value<QColor>().name(),
+                mainSegment.value(QStringLiteral("color")).value<QColor>().name(),
+                QStringLiteral("Clipboard Cache Map state color should match the main trace projection."));
+    expect(!clipboardSegment.value(QStringLiteral("splitBefore")).toBool(),
+           QStringLiteral("The first Clipboard segment should not draw a split-before line."));
+}
+
+void testTraceCacheMinimapClipboardSlicesStateReturnTransitions()
+{
+    TransactionTraceFixture fixture =
+        makeCacheStateRoundTripTrace(QStringLiteral("trace_cache_minimap_clipboard_roundtrip.clogb"));
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard Cache Map round-trip fixture should load."));
+    expect(window.testAddTraceCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Main trace Cache Map round-trip lane should be available."));
+    waitForTraceCacheMinimapLane(window,
+                                 0,
+                                 QStringLiteral("Main trace Cache Map round-trip lane should build."));
+    expectEqual(window.testTraceCacheMinimapSegmentCount(0),
+                2,
+                QStringLiteral("Main trace fixture should produce two UC spans separated by invalidation."));
+
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    const int rowsToInsert[] = {1, 6};
+    for (const int logicalRow : rowsToInsert) {
+        window.testSelectLogicalRow(logicalRow);
+        expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+               QStringLiteral("Round-trip Clipboard source row %1 insertion should succeed.").arg(logicalRow));
+    }
+    QApplication::processEvents();
+
+    expect(window.testAddClipboardCacheMinimapLane(1, 0x103F),
+           QStringLiteral("Adding a Clipboard Cache Map round-trip lane should succeed."));
+    waitForClipboardCacheMinimapLane(window,
+                                     0,
+                                     QStringLiteral("Clipboard Cache Map round-trip lane should build."));
+    expectEqual(window.testClipboardCacheMinimapSegmentCount(0),
+                2,
+                QStringLiteral("Clipboard Cache Map should keep returned source states sliced."));
+
+    for (int index = 0; index < 2; ++index) {
+        const QVariantMap mainSegment = window.testTraceCacheMinimapSegmentAt(0, index);
+        const QVariantMap clipboardSegment = window.testClipboardCacheMinimapSegmentAt(0, index);
+        expectEqual(clipboardSegment.value(QStringLiteral("stateText")).toString(),
+                    mainSegment.value(QStringLiteral("stateText")).toString(),
+                    QStringLiteral("Clipboard round-trip state text should match the source span."));
+        expectEqual(clipboardSegment.value(QStringLiteral("stateMask")).toInt(),
+                    mainSegment.value(QStringLiteral("stateMask")).toInt(),
+                    QStringLiteral("Clipboard round-trip state mask should match the source span."));
+        expectEqual(clipboardSegment.value(QStringLiteral("startVisibleRow")).toInt(),
+                    index,
+                    QStringLiteral("Each sliced Clipboard segment should map to its visible row."));
+        expectEqual(clipboardSegment.value(QStringLiteral("endVisibleRow")).toInt(),
+                    index,
+                    QStringLiteral("Each sliced Clipboard segment should map to its visible row."));
+    }
+
+    const QVariantMap first = window.testClipboardCacheMinimapSegmentAt(0, 0);
+    const QVariantMap second = window.testClipboardCacheMinimapSegmentAt(0, 1);
+    expectEqual(first.value(QStringLiteral("stateText")).toString(),
+                second.value(QStringLiteral("stateText")).toString(),
+                QStringLiteral("The fixture should return to the original cache state."));
+    expect(first.value(QStringLiteral("color")).value<QColor>().name()
+               == second.value(QStringLiteral("color")).value<QColor>().name(),
+           QStringLiteral("Returned state should reuse the same fixed state color."));
+    expect(!first.value(QStringLiteral("splitBefore")).toBool(),
+           QStringLiteral("The first returned-state Clipboard segment should not expose a split-before marker."));
+    expect(second.value(QStringLiteral("splitBefore")).toBool(),
+           QStringLiteral("A returned-state Clipboard segment should still expose a split-before marker."));
+
+    window.testActivateClipboardRow(second.value(QStringLiteral("startVisibleRow")).toInt());
+    expectEqual(window.testSelectedLogicalRow(),
+                6,
+                QStringLiteral("Clipboard minimap segment activation should still jump through the Clipboard row source."));
 }
 
 void testConfigurationGuessMatchesStoredFlitLengths()
@@ -2007,20 +2959,20 @@ void testClipboardWidgetOrderingDuplicatesFilteringAndDeletion()
     expectEqual(window.testClipboardRowCount(),
                 4,
                 QStringLiteral("Session Clipboard should contain all inserted source rows."));
-    expect(window.testClipboardTimestampAt(0) == 100,
-           QStringLiteral("Clipboard rows should sort by timestamp after insertion."));
-    expect(window.testClipboardTimestampAt(1) == 200,
-           QStringLiteral("Clipboard timestamp ordering should keep the first 200 timestamp row next."));
+    expect(window.testClipboardTimestampAt(0) == 300,
+           QStringLiteral("Unedited Clipboard rows should preserve main-trace source order instead of timestamp sorting."));
+    expect(window.testClipboardTimestampAt(1) == 100,
+           QStringLiteral("Second Clipboard row should remain the second source row."));
     expect(window.testClipboardTimestampAt(2) == 200,
-           QStringLiteral("Clipboard timestamp ordering should keep equal timestamp rows together."));
-    expect(window.testClipboardTimestampAt(3) == 300,
-           QStringLiteral("Clipboard rows should end with the latest timestamp."));
-    expectEqual(window.testClipboardOpcodeAt(1),
-                QStringLiteral("CompData"),
-                QStringLiteral("Equal timestamp Clipboard rows should preserve insertion order."));
+           QStringLiteral("Third Clipboard row should remain the third source row."));
+    expect(window.testClipboardTimestampAt(3) == 200,
+           QStringLiteral("Fourth Clipboard row should remain the fourth source row."));
     expectEqual(window.testClipboardOpcodeAt(2),
                 QStringLiteral("CompData"),
-                QStringLiteral("Equal timestamp Clipboard rows should preserve later inserts after earlier ones."));
+                QStringLiteral("Main-trace subset ordering should keep the first DAT source row next."));
+    expectEqual(window.testClipboardOpcodeAt(3),
+                QStringLiteral("CompData"),
+                QStringLiteral("Main-trace subset ordering should keep the later DAT source row last."));
 
     window.testSelectLogicalRow(2);
     expect(!window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
@@ -2049,6 +3001,358 @@ void testClipboardWidgetOrderingDuplicatesFilteringAndDeletion()
     expectEqual(window.testVisibleTraceRowCount(),
                 mainTraceRowsBeforeDelete,
                 QStringLiteral("Deleting from Clipboard should not alter the main trace."));
+}
+
+void testClipboardSingleClickHighlightsRelatedTransactionRows()
+{
+    std::vector<CHIron::Gui::FlitRecord> rows = buildFilterTestRows();
+    rows[0].transactionGroupKey = QStringLiteral("xaction|1");
+    rows[1].transactionGroupKey = QStringLiteral("xaction|1");
+    rows[2].transactionGroupKey = QStringLiteral("xaction|1");
+    rows[3].transactionGroupKey = QStringLiteral("xaction|2");
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testApplyTraceRows(std::move(rows), QStringLiteral("clipboard_highlight.clogb")),
+           QStringLiteral("Clipboard transaction highlight fixture should open."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    for (int row = 0; row < 3; ++row) {
+        window.testSelectLogicalRow(row);
+        expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+               QStringLiteral("Clipboard transaction highlight row insertion should succeed."));
+    }
+
+    expect(window.testClickClipboardRow(1),
+           QStringLiteral("Single-clicking a Clipboard row should be delivered to the Clipboard table."));
+    QApplication::processEvents();
+    expect(window.testClipboardRowTransactionHighlighted(0),
+           QStringLiteral("Clipboard click should highlight an earlier related transaction row."));
+    expect(window.testClipboardRowTransactionHighlighted(1),
+           QStringLiteral("Clipboard click should highlight the clicked row."));
+    expect(window.testClipboardRowTransactionHighlighted(2),
+           QStringLiteral("Clipboard click should highlight later related transaction rows."));
+    expect(!window.testClipboardRowTransactionHighlighted(3),
+           QStringLiteral("Clipboard click should leave unrelated transaction rows unhighlighted."));
+}
+
+void testClipboardInsertSelectedIndexedTransaction()
+{
+    TransactionTraceFixture fixture =
+        makeIndexedReadNoSnpAddressPatternTrace(QStringLiteral("clipboard_insert_xaction.clogb"),
+                                                {0x1000, 0x1040});
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Selected transaction Clipboard insertion trace should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    window.testSelectLogicalRow(0);
+    expect(window.testInsertSelectedXactionToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Selected transaction insertion should add the transaction rows."));
+    expectEqual(window.testClipboardRowCount(),
+                3,
+                QStringLiteral("Selected transaction insertion should add exactly one three-flit transaction."));
+    expectEqual(window.testClipboardOpcodeAt(0),
+                QStringLiteral("ReadNoSnp"),
+                QStringLiteral("Inserted transaction should start with its request flit."));
+    expectEqual(window.testClipboardOpcodeAt(1),
+                QStringLiteral("CompData"),
+                QStringLiteral("Inserted transaction should include its first data beat."));
+    expectEqual(window.testClipboardOpcodeAt(2),
+                QStringLiteral("CompData"),
+                QStringLiteral("Inserted transaction should include its second data beat."));
+}
+
+void testClipboardInsertTransactionsWithSameAddressModes()
+{
+    TransactionTraceFixture fixture =
+        makeIndexedReadNoSnpAddressPatternTrace(QStringLiteral("clipboard_insert_address.clogb"),
+                                                {0x1000, 0x1040, 0x103F, 0x1080, 0x1008});
+
+    {
+        CHIron::Gui::MainWindow window;
+        window.resize(1200, 720);
+        window.show();
+        QApplication::processEvents();
+        expect(window.testLoadTraceFile(fixture.tracePath),
+               QStringLiteral("All-address Clipboard insertion trace should load."));
+        window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+        window.testSelectLogicalRow(6);
+        expect(window.testInsertAllXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
+               QStringLiteral("All same-address insertion should add matching transactions."));
+        expect(window.testClipboardInsertProgressVisible(),
+               QStringLiteral("Async same-address insertion should expose status-bar progress."));
+        waitForClipboardAddressInsert(window,
+                                      QStringLiteral("All same-address insertion should finish in the background."));
+        expectEqual(window.testClipboardRowCount(),
+                    9,
+                    QStringLiteral("All same-address insertion should add three matching transactions."));
+        expect(window.testInsertAllXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
+               QStringLiteral("Repeating all same-address insertion should still run and skip duplicate source rows."));
+        waitForClipboardAddressInsert(window,
+                                      QStringLiteral("Duplicate all-address insertion should finish in the background."));
+        expectEqual(window.testClipboardRowCount(),
+                    9,
+                    QStringLiteral("Duplicate same-address insertion should not grow the Clipboard."));
+    }
+
+    {
+        CHIron::Gui::MainWindow window;
+        window.resize(1200, 720);
+        window.show();
+        QApplication::processEvents();
+        expect(window.testLoadTraceFile(fixture.tracePath),
+               QStringLiteral("Later-address Clipboard insertion trace should load."));
+        window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+        window.testSelectLogicalRow(6);
+        expect(window.testInsertLaterXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
+               QStringLiteral("Later same-address insertion should add later matching transactions."));
+        waitForClipboardAddressInsert(window,
+                                      QStringLiteral("Later same-address insertion should finish in the background."));
+        expectEqual(window.testClipboardRowCount(),
+                    3,
+                    QStringLiteral("Later same-address insertion should include only one later matching transaction."));
+    }
+
+    {
+        CHIron::Gui::MainWindow window;
+        window.resize(1200, 720);
+        window.show();
+        QApplication::processEvents();
+        expect(window.testLoadTraceFile(fixture.tracePath),
+               QStringLiteral("This-and-later-address Clipboard insertion trace should load."));
+        window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Global);
+        window.testSelectLogicalRow(6);
+        expect(window.testInsertThisAndLaterXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Global),
+               QStringLiteral("This-and-later same-address insertion should support Global Clipboard."));
+        waitForClipboardAddressInsert(window,
+                                      QStringLiteral("This-and-later same-address insertion should finish in the background."));
+        expectEqual(window.testClipboardRowCount(),
+                    6,
+                    QStringLiteral("This-and-later same-address insertion should include selected and later matching transactions."));
+    }
+}
+
+void testClipboardInsertTransactionsWithSameAddressSparseNonmatches()
+{
+    std::vector<std::uint64_t> addresses;
+    addresses.reserve(96);
+    for (int index = 0; index < 96; ++index) {
+        addresses.push_back(index % 24 == 0
+                                ? 0x4000 + static_cast<std::uint64_t>(index % 3) * 8
+                                : 0x8000 + static_cast<std::uint64_t>(index) * 0x40);
+    }
+    TransactionTraceFixture fixture =
+        makeIndexedReadNoSnpAddressPatternTrace(QStringLiteral("clipboard_sparse_address.clogb"),
+                                                addresses);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Sparse same-address Clipboard insertion trace should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    window.testSelectLogicalRow(0);
+    expect(window.testInsertAllXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Sparse same-address insertion should start."));
+    waitForClipboardAddressInsert(window,
+                                  QStringLiteral("Sparse same-address insertion should finish in the background."));
+
+    expectEqual(window.testClipboardRowCount(),
+                12,
+                QStringLiteral("Sparse same-address insertion should include only the four same-line transactions."));
+    expectEqual(window.testClipboardTxnIdAt(0),
+                QStringLiteral("0"),
+                QStringLiteral("Sparse insertion should preserve the first matching transaction."));
+    expectEqual(window.testClipboardTxnIdAt(3),
+                QStringLiteral("24"),
+                QStringLiteral("Sparse insertion should preserve the second matching transaction."));
+    expectEqual(window.testClipboardTxnIdAt(6),
+                QStringLiteral("48"),
+                QStringLiteral("Sparse insertion should preserve the third matching transaction."));
+    expectEqual(window.testClipboardTxnIdAt(9),
+                QStringLiteral("72"),
+                QStringLiteral("Sparse insertion should preserve the fourth matching transaction."));
+}
+
+void testClipboardBatchInsertionSkipsExistingRowsWithoutReordering()
+{
+    TransactionTraceFixture fixture =
+        makeIndexedReadNoSnpAddressPatternTrace(QStringLiteral("clipboard_batch_duplicate_skip.clogb"),
+                                                {0x1000, 0x103F, 0x1008});
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard duplicate skip trace should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+
+    window.testSelectLogicalRow(0);
+    expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Duplicate skip setup should insert the first request flit."));
+    window.testSelectLogicalRow(3);
+    expect(window.testInsertAllXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Duplicate-aware batch insertion should start."));
+    waitForClipboardAddressInsert(window,
+                                  QStringLiteral("Duplicate-aware batch insertion should finish in the background."));
+
+    expectEqual(window.testClipboardRowCount(),
+                9,
+                QStringLiteral("Duplicate-aware batch insertion should add the remaining rows only once."));
+    expectEqual(window.testClipboardTxnIdAt(0),
+                QStringLiteral("0"),
+                QStringLiteral("Existing Clipboard row should stay at the front."));
+    expectEqual(window.testClipboardOpcodeAt(0),
+                QStringLiteral("ReadNoSnp"),
+                QStringLiteral("Existing Clipboard row should remain unchanged."));
+    expectEqual(window.testClipboardOpcodeAt(1),
+                QStringLiteral("CompData"),
+                QStringLiteral("Batch insertion should append the first missing row after the existing duplicate."));
+    expectEqual(window.testClipboardTxnIdAt(3),
+                QStringLiteral("1"),
+                QStringLiteral("Batch insertion should keep later transactions in logical order."));
+    expectEqual(window.testClipboardTxnIdAt(6),
+                QStringLiteral("2"),
+                QStringLiteral("Batch insertion should keep the final transaction in logical order."));
+}
+
+void testClipboardBatchInsertionPreservesLogicalOrder()
+{
+    TransactionTraceFixture fixture =
+        makeIndexedReadNoSnpAddressPatternTrace(QStringLiteral("clipboard_batch_order.clogb"),
+                                                {0x1000, 0x103F, 0x1008},
+                                                true);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard batch ordering trace should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+
+    window.testSelectLogicalRow(6);
+    expect(window.testInsertAllXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Batch insertion should start for ordering regression."));
+    waitForClipboardAddressInsert(window,
+                                  QStringLiteral("Batch ordering insertion should finish in the background."));
+
+    expectEqual(window.testClipboardRowCount(),
+                9,
+                QStringLiteral("Batch ordering insertion should add all same-line transactions."));
+    expectEqual(window.testClipboardOpcodeAt(0),
+                QStringLiteral("ReadNoSnp"),
+                QStringLiteral("Batch order should start at the earliest logical request."));
+    expectEqual(window.testClipboardTxnIdAt(0),
+                QStringLiteral("0"),
+                QStringLiteral("Batch insertion should preserve the first logical transaction."));
+    expectEqual(window.testClipboardTxnIdAt(3),
+                QStringLiteral("1"),
+                QStringLiteral("Batch insertion should preserve the second logical transaction."));
+    expectEqual(window.testClipboardTxnIdAt(6),
+                QStringLiteral("2"),
+                QStringLiteral("Batch insertion should preserve the third logical transaction."));
+    expectEqual(window.testClipboardOpcodeAt(3),
+                QStringLiteral("ReadNoSnp"),
+                QStringLiteral("Batch order should keep the second transaction contiguous."));
+    expectEqual(window.testClipboardOpcodeAt(6),
+                QStringLiteral("ReadNoSnp"),
+                QStringLiteral("Batch order should keep the third transaction contiguous."));
+}
+
+void testClipboardBatchInsertionMergesExistingSubsetByLogicalRow()
+{
+    TransactionTraceFixture fixture =
+        makeIndexedReadNoSnpAddressPatternTrace(QStringLiteral("clipboard_batch_merge_subset.clogb"),
+                                                {0x1000, 0x103F, 0x1008},
+                                                true);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard batch subset merge trace should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+
+    window.testSelectLogicalRow(6);
+    expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Subset merge setup should insert a later source row first."));
+    window.testSelectLogicalRow(0);
+    expect(window.testInsertAllXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Subset merge batch insertion should start."));
+    waitForClipboardAddressInsert(window,
+                                  QStringLiteral("Subset merge batch insertion should finish in the background."));
+
+    expectEqual(window.testClipboardRowCount(),
+                9,
+                QStringLiteral("Subset merge insertion should contain all same-line rows exactly once."));
+    expectEqual(window.testClipboardTxnIdAt(0),
+                QStringLiteral("0"),
+                QStringLiteral("Subset merge should restore earliest transaction to the front."));
+    expectEqual(window.testClipboardTxnIdAt(3),
+                QStringLiteral("1"),
+                QStringLiteral("Subset merge should place the middle transaction next."));
+    expectEqual(window.testClipboardTxnIdAt(6),
+                QStringLiteral("2"),
+                QStringLiteral("Subset merge should keep the originally inserted later transaction in source order."));
+}
+
+void testClipboardInsertionSortsOnlyEditedRows()
+{
+    TransactionTraceFixture fixture =
+        makeIndexedReadNoSnpAddressPatternTrace(QStringLiteral("clipboard_edited_local_sort.clogb"),
+                                                {0x1000, 0x1040});
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard edited local sort fixture should open."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+
+    for (int row = 0; row < 3; ++row) {
+        window.testSelectLogicalRow(row);
+        expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+               QStringLiteral("Edited local sort setup insertion should succeed."));
+    }
+    window.testSetClipboardReadOnly(false);
+    expect(window.testEditClipboardTimestampAt(1, 1000),
+           QStringLiteral("Edited local sort should edit one Clipboard row."));
+    expect(window.testClipboardEntryModified(1),
+           QStringLiteral("Edited local sort should mark the edited row."));
+
+    window.testSelectLogicalRow(3);
+    expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Edited local sort should allow another insertion."));
+
+    expectEqual(static_cast<int>(window.testClipboardTimestampAt(0)),
+                1,
+                QStringLiteral("Unedited first row should stay in source order."));
+    expectEqual(static_cast<int>(window.testClipboardTimestampAt(1)),
+                1000,
+                QStringLiteral("Edited row should remain in the edited-row slot after localized sorting."));
+    expectEqual(static_cast<int>(window.testClipboardTimestampAt(2)),
+                6,
+                QStringLiteral("Unedited third row should stay in source order."));
+    expectEqual(static_cast<int>(window.testClipboardTimestampAt(3)),
+                7,
+                QStringLiteral("New unedited row should be merged into the unedited source-order subset."));
 }
 
 void testClipboardReadOnlyEditableModifiedAndNavigation()
@@ -10961,6 +12265,14 @@ int main(int argc, char* argv[])
         {QStringLiteral("MainWindowTraceToolbarFoldsAndUnfolds"), testMainWindowTraceToolbarFoldsAndUnfolds},
         {QStringLiteral("MainWindowKeepsIndependentTraceSessions"), testMainWindowKeepsIndependentTraceSessions},
         {QStringLiteral("ClipboardWidgetOrderingDuplicatesFilteringAndDeletion"), testClipboardWidgetOrderingDuplicatesFilteringAndDeletion},
+        {QStringLiteral("ClipboardSingleClickHighlightsRelatedTransactionRows"), testClipboardSingleClickHighlightsRelatedTransactionRows},
+        {QStringLiteral("ClipboardInsertSelectedIndexedTransaction"), testClipboardInsertSelectedIndexedTransaction},
+        {QStringLiteral("ClipboardInsertTransactionsWithSameAddressModes"), testClipboardInsertTransactionsWithSameAddressModes},
+        {QStringLiteral("ClipboardInsertTransactionsWithSameAddressSparseNonmatches"), testClipboardInsertTransactionsWithSameAddressSparseNonmatches},
+        {QStringLiteral("ClipboardBatchInsertionSkipsExistingRowsWithoutReordering"), testClipboardBatchInsertionSkipsExistingRowsWithoutReordering},
+        {QStringLiteral("ClipboardBatchInsertionPreservesLogicalOrder"), testClipboardBatchInsertionPreservesLogicalOrder},
+        {QStringLiteral("ClipboardBatchInsertionMergesExistingSubsetByLogicalRow"), testClipboardBatchInsertionMergesExistingSubsetByLogicalRow},
+        {QStringLiteral("ClipboardInsertionSortsOnlyEditedRows"), testClipboardInsertionSortsOnlyEditedRows},
         {QStringLiteral("ClipboardReadOnlyEditableModifiedAndNavigation"), testClipboardReadOnlyEditableModifiedAndNavigation},
         {QStringLiteral("ClipboardCsvSaveIncludesFilteredRows"), testClipboardCsvSaveIncludesFilteredRows},
         {QStringLiteral("ClipboardCLogBSaveAvailabilityAndRoundTrip"), testClipboardCLogBSaveAvailabilityAndRoundTrip},
@@ -10992,6 +12304,18 @@ int main(int argc, char* argv[])
         {QStringLiteral("ReadNoSnpTransactionHighlightIncludesAllCompDataBeats"), testReadNoSnpTransactionHighlightIncludesAllCompDataBeats},
         {QStringLiteral("XactionIndexPersistsRowsAfterChunkWriteFlush"), testXactionIndexPersistsRowsAfterChunkWriteFlush},
         {QStringLiteral("CacheLineLifetimeReplayBuildsReadCleanOpenEndedLifetimes"), testCacheLineLifetimeReplayBuildsReadCleanOpenEndedLifetimes},
+        {QStringLiteral("CacheLineStateReplayBuildsRequestedRnAddressSpans"), testCacheLineStateReplayBuildsRequestedRnAddressSpans},
+        {QStringLiteral("TraceCacheMinimapMainTraceBuildsLaneOverlayAndSegments"), testTraceCacheMinimapMainTraceBuildsLaneOverlayAndSegments},
+        {QStringLiteral("TraceCacheMinimapTagsStackAndAnchorToLaneRightEdge"), testTraceCacheMinimapTagsStackAndAnchorToLaneRightEdge},
+        {QStringLiteral("TraceCacheMinimapAddingLaneDuringBuildFinishesBoth"), testTraceCacheMinimapAddingLaneDuringBuildFinishesBoth},
+        {QStringLiteral("TraceCacheMinimapDeletingLaneKeepsRemainingBuildResult"), testTraceCacheMinimapDeletingLaneKeepsRemainingBuildResult},
+        {QStringLiteral("TraceCacheMinimapStateJumpActions"), testTraceCacheMinimapStateJumpActions},
+        {QStringLiteral("TraceCacheMinimapChangeJumpActions"), testTraceCacheMinimapChangeJumpActions},
+        {QStringLiteral("TraceCacheMinimapClipboardBuildsFromSourceRows"), testTraceCacheMinimapClipboardBuildsFromSourceRows},
+        {QStringLiteral("TraceCacheMinimapClipboardStateJumpActions"), testTraceCacheMinimapClipboardStateJumpActions},
+        {QStringLiteral("TraceCacheMinimapClipboardChangeJumpActions"), testTraceCacheMinimapClipboardChangeJumpActions},
+        {QStringLiteral("TraceCacheMinimapClipboardMergesRowsInsideSameSourceState"), testTraceCacheMinimapClipboardMergesRowsInsideSameSourceState},
+        {QStringLiteral("TraceCacheMinimapClipboardSlicesStateReturnTransitions"), testTraceCacheMinimapClipboardSlicesStateReturnTransitions},
         {QStringLiteral("BeforeSamRequestChannelsDisplayAsReqWithMarker"), testBeforeSamRequestChannelsDisplayAsReqWithMarker},
         {QStringLiteral("SuggestedFilterWorkerCountIsBounded"), testSuggestedFilterWorkerCountIsBounded},
         {QStringLiteral("FastIndexDescriptorValidationRejectsCorruption"), testFastIndexDescriptorValidationRejectsCorruption},

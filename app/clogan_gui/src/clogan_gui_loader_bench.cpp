@@ -50,6 +50,7 @@ struct BenchmarkOptions {
     bool xactionIndexOnly = false;
     bool transactionSpansOnly = false;
     bool transactionSpanScanOnly = false;
+    bool clipboardBatchScanOnly = false;
     bool transactionRenderOnly = false;
     bool editableModeOnly = false;
 };
@@ -80,6 +81,13 @@ struct BenchmarkSample {
     double transactionSpanBuildOnlyMs = 0.0;
     double transactionSpanSortMs = 0.0;
     double transactionSpanLayoutMs = 0.0;
+    qint64 clipboardBatchScanNs = 0;
+    qint64 clipboardBatchCollectNs = 0;
+    qint64 clipboardBatchDecodeNs = 0;
+    std::uint64_t clipboardBatchAnchorCount = 0;
+    std::uint64_t clipboardBatchMatchingOrdinalCount = 0;
+    std::uint64_t clipboardBatchCollectedRows = 0;
+    std::uint64_t clipboardBatchDecodedRows = 0;
     qint64 transactionRenderNs = 0;
     qint64 editablePrepareNs = 0;
     qint64 editableFirstCellNs = 0;
@@ -153,6 +161,170 @@ std::size_t transactionSpanBenchWorkerCount(const std::uint64_t rowCount)
     return static_cast<std::size_t>(std::min<std::uint64_t>(
         std::min<std::uint64_t>(kMaxWorkers, static_cast<std::uint64_t>(hardware)),
         workLimited));
+}
+
+bool fastRecordHasClipboardAddress(const CHIron::Gui::CLogBTraceFastRecordInfo& record) noexcept
+{
+    return record.address != (std::numeric_limits<std::uint64_t>::max)();
+}
+
+bool fastRecordIsClipboardRequestOrigin(const CHIron::Gui::CLogBTraceFastRecordInfo& record) noexcept
+{
+    switch (static_cast<CLog::Channel>(record.channel)) {
+    case CLog::Channel::TXREQ:
+    case CLog::Channel::TXREQ_BeforeSAM:
+    case CLog::Channel::RXREQ_BeforeSAM:
+    case CLog::Channel::RXREQ:
+    case CLog::Channel::TXSNP:
+    case CLog::Channel::RXSNP:
+        return true;
+    case CLog::Channel::TXRSP:
+    case CLog::Channel::TXDAT:
+    case CLog::Channel::RXRSP:
+    case CLog::Channel::RXDAT:
+        return false;
+    }
+    return false;
+}
+
+bool runClipboardBatchScanMicrobench(const std::shared_ptr<CHIron::Gui::TraceSession>& session,
+                                     BenchmarkSample& sample,
+                                     QTextStream& err)
+{
+    if (!session) {
+        err << "No session for Clipboard batch scan benchmark.\n";
+        err.flush();
+        return false;
+    }
+    if (!session->isXactionIndexComplete()) {
+        err << "Xaction index is not complete for Clipboard batch scan benchmark.\n";
+        err.flush();
+        return false;
+    }
+
+    struct Slice {
+        std::size_t blockIndex = 0;
+        std::uint64_t beginRow = 0;
+        std::uint64_t rowCount = 0;
+        std::size_t localBegin = 0;
+    };
+
+    constexpr std::uint64_t kSliceRows = 262144;
+    std::vector<Slice> slices;
+    for (std::size_t blockIndex = 0; blockIndex < session->metadata().blocks.size(); ++blockIndex) {
+        const CHIron::Gui::CLogBTraceBlockSummary& block = session->metadata().blocks[blockIndex];
+        for (std::uint64_t localBegin = 0; localBegin < block.recordCount;) {
+            const std::uint64_t rowCount = std::min<std::uint64_t>(kSliceRows, block.recordCount - localBegin);
+            slices.push_back(Slice{blockIndex,
+                                   block.rowStart + localBegin,
+                                   rowCount,
+                                   static_cast<std::size_t>(localBegin)});
+            localBegin += rowCount;
+        }
+    }
+
+    std::unordered_map<std::uint64_t, std::uint64_t> anchorRowByOrdinal;
+    std::unordered_map<std::uint64_t, std::uint64_t> lineByOrdinal;
+    CHIron::Gui::CLogBTraceLoadError readError;
+    QElapsedTimer timer;
+    timer.start();
+    for (const Slice& slice : slices) {
+        std::vector<CHIron::Gui::CLogBTraceFastRecordInfo> fastRecords;
+        std::vector<CHIron::Gui::TraceSession::XactionRowCompactInfo> compactInfos;
+        if (!session->readFastRecords(slice.blockIndex,
+                                      slice.localBegin,
+                                      static_cast<std::size_t>(slice.rowCount),
+                                      fastRecords,
+                                      readError)
+            || fastRecords.size() < static_cast<std::size_t>(slice.rowCount)) {
+            err << "Clipboard batch scan fast-record read failed: " << readError.summary << "\n";
+            err.flush();
+            return false;
+        }
+        if (!session->xactionRowCompactInfoRange(slice.beginRow, slice.rowCount, compactInfos)
+            || compactInfos.size() < static_cast<std::size_t>(slice.rowCount)) {
+            err << "Clipboard batch scan compact xaction read failed.\n";
+            err.flush();
+            return false;
+        }
+        for (std::size_t rowIndex = 0; rowIndex < static_cast<std::size_t>(slice.rowCount); ++rowIndex) {
+            const std::uint64_t ordinal = compactInfos[rowIndex].xactionOrdinal;
+            if (ordinal == 0) {
+                continue;
+            }
+            const CHIron::Gui::CLogBTraceFastRecordInfo& fast = fastRecords[rowIndex];
+            if (!fastRecordIsClipboardRequestOrigin(fast) || !fastRecordHasClipboardAddress(fast)) {
+                continue;
+            }
+            const std::uint64_t logicalRow = slice.beginRow + static_cast<std::uint64_t>(rowIndex);
+            const auto found = anchorRowByOrdinal.find(ordinal);
+            if (found == anchorRowByOrdinal.end() || logicalRow < found->second) {
+                anchorRowByOrdinal[ordinal] = logicalRow;
+                lineByOrdinal[ordinal] =
+                    CHIron::Gui::CLogBTraceLoader::normalizeCacheLineAddress(fast.address);
+            }
+        }
+    }
+    sample.clipboardBatchScanNs = timer.nsecsElapsed();
+    sample.clipboardBatchAnchorCount = static_cast<std::uint64_t>(anchorRowByOrdinal.size());
+
+    if (lineByOrdinal.empty()) {
+        sample.rowCount = static_cast<qsizetype>(session->totalRows());
+        return true;
+    }
+
+    const std::uint64_t selectedLine = lineByOrdinal.begin()->second;
+    std::unordered_set<std::uint64_t> matchingOrdinals;
+    for (const auto& [ordinal, line] : lineByOrdinal) {
+        if (line == selectedLine) {
+            matchingOrdinals.insert(ordinal);
+        }
+    }
+    sample.clipboardBatchMatchingOrdinalCount = static_cast<std::uint64_t>(matchingOrdinals.size());
+
+    std::vector<std::uint64_t> logicalRows;
+    timer.restart();
+    for (const Slice& slice : slices) {
+        std::vector<CHIron::Gui::TraceSession::XactionRowCompactInfo> compactInfos;
+        if (!session->xactionRowCompactInfoRange(slice.beginRow, slice.rowCount, compactInfos)
+            || compactInfos.size() < static_cast<std::size_t>(slice.rowCount)) {
+            err << "Clipboard batch collect compact xaction read failed.\n";
+            err.flush();
+            return false;
+        }
+        for (std::size_t rowIndex = 0; rowIndex < static_cast<std::size_t>(slice.rowCount); ++rowIndex) {
+            if (matchingOrdinals.find(compactInfos[rowIndex].xactionOrdinal) != matchingOrdinals.end()) {
+                logicalRows.push_back(slice.beginRow + static_cast<std::uint64_t>(rowIndex));
+            }
+        }
+    }
+    sample.clipboardBatchCollectNs = timer.nsecsElapsed();
+    std::sort(logicalRows.begin(), logicalRows.end());
+    logicalRows.erase(std::unique(logicalRows.begin(), logicalRows.end()), logicalRows.end());
+    sample.clipboardBatchCollectedRows = static_cast<std::uint64_t>(logicalRows.size());
+
+    timer.restart();
+    std::uint64_t decodedRows = 0;
+    for (std::size_t index = 0; index < logicalRows.size();) {
+        const std::uint64_t beginRow = logicalRows[index];
+        std::uint64_t count = 1;
+        while (index + static_cast<std::size_t>(count) < logicalRows.size()
+               && logicalRows[index + static_cast<std::size_t>(count)] == beginRow + count) {
+            ++count;
+        }
+        std::vector<CHIron::Gui::FlitRecord> rows;
+        if (!session->readRows(beginRow, count, rows, readError)) {
+            err << "Clipboard batch decode failed: " << readError.summary << "\n";
+            err.flush();
+            return false;
+        }
+        decodedRows += static_cast<std::uint64_t>(rows.size());
+        index += static_cast<std::size_t>(count);
+    }
+    sample.clipboardBatchDecodeNs = timer.nsecsElapsed();
+    sample.clipboardBatchDecodedRows = decodedRows;
+    sample.rowCount = static_cast<qsizetype>(session->totalRows());
+    return true;
 }
 
 bool runTransactionSpanScanMicrobench(const std::shared_ptr<CHIron::Gui::TraceSession>& session,
@@ -389,7 +561,7 @@ void printUsage(QTextStream& stream, const QString& executableName)
               " [--opcode-filter TEXT] [--src-filter TEXT] [--tgt-filter TEXT]"
               " [--txn-filter TEXT] [--dbid-filter TEXT] [--addr-filter TEXT]"
               " [--no-view] [--skip-model] [--scan-only] [--xaction-index-only]"
-              " [--editable-mode-only] [--transaction-spans-only] [--transaction-span-scan-only] [--transaction-render-only]"
+              " [--editable-mode-only] [--transaction-spans-only] [--transaction-span-scan-only] [--clipboard-batch-scan-only] [--transaction-render-only]"
               " [--transaction-render-repeats N] [--transaction-render-vertical-steps N]\n";
     stream << "Measures metadata scan time, row decode time, model/filter population time, trace-table sizing time, optional Xaction indexing time, and Transaction span build time.\n";
 }
@@ -450,6 +622,13 @@ std::optional<BenchmarkOptions> parseArguments(const QStringList& args, QTextStr
 
         if (argument == QLatin1String("--transaction-span-scan-only")) {
             options.transactionSpanScanOnly = true;
+            options.includeModel = false;
+            options.includeView = false;
+            continue;
+        }
+
+        if (argument == QLatin1String("--clipboard-batch-scan-only")) {
+            options.clipboardBatchScanOnly = true;
             options.includeModel = false;
             options.includeView = false;
             continue;
@@ -739,6 +918,27 @@ BenchmarkSample runSample(const BenchmarkOptions& options)
         return sample;
     }
 
+    if (options.clipboardBatchScanOnly) {
+        if (!session->isXactionIndexComplete()) {
+            if (!session->buildXactionIndex(error)) {
+                QTextStream err(stderr);
+                err << "Xaction index build failed: " << error.summary << "\n";
+                if (!error.informativeText.isEmpty()) {
+                    err << error.informativeText << "\n";
+                }
+                if (!error.detailedText.isEmpty()) {
+                    err << error.detailedText << "\n";
+                }
+                std::exit(2);
+            }
+        }
+        QTextStream err(stderr);
+        if (!runClipboardBatchScanMicrobench(session, sample, err)) {
+            std::exit(2);
+        }
+        return sample;
+    }
+
     if (options.transactionRenderOnly) {
         if (!session->isXactionIndexComplete()) {
             if (!session->buildXactionIndex(error)) {
@@ -968,6 +1168,31 @@ void printTransactionSpanSummary(QTextStream& out, const BenchmarkSample& sample
     }
 }
 
+void printClipboardBatchSummary(QTextStream& out, const BenchmarkSample& sample)
+{
+    if (sample.clipboardBatchScanNs == 0
+        && sample.clipboardBatchCollectNs == 0
+        && sample.clipboardBatchDecodeNs == 0) {
+        return;
+    }
+
+    out << "    Clipboard batch scan: scan "
+        << formatMilliseconds(sample.clipboardBatchScanNs)
+        << " ms, collect "
+        << formatMilliseconds(sample.clipboardBatchCollectNs)
+        << " ms, decode "
+        << formatMilliseconds(sample.clipboardBatchDecodeNs)
+        << " ms, anchors "
+        << sample.clipboardBatchAnchorCount
+        << ", matching ordinals "
+        << sample.clipboardBatchMatchingOrdinalCount
+        << ", rows "
+        << sample.clipboardBatchCollectedRows
+        << ", decoded "
+        << sample.clipboardBatchDecodedRows
+        << "\n";
+}
+
 void printEditableSummary(QTextStream& out, const BenchmarkSample& sample)
 {
     if (sample.editablePrepareNs == 0 && sample.editableFirstCellNs == 0) {
@@ -1053,13 +1278,15 @@ int main(int argc, char* argv[])
                                     ? QStringLiteral("Transaction spans only")
                                     : (options->transactionSpanScanOnly
                                            ? QStringLiteral("Transaction span scan only")
-                                           : (options->transactionRenderOnly
-                                                  ? QStringLiteral("Transaction render only")
-                                                  : (options->includeModel
-                                                         ? (options->includeView
-                                                                ? QStringLiteral("loader + table attach")
-                                                                : QStringLiteral("loader + model"))
-                                                         : QStringLiteral("loader only")))))));
+                                           : (options->clipboardBatchScanOnly
+                                                  ? QStringLiteral("Clipboard batch scan only")
+                                                  : (options->transactionRenderOnly
+                                                         ? QStringLiteral("Transaction render only")
+                                                         : (options->includeModel
+                                                                ? (options->includeView
+                                                                       ? QStringLiteral("loader + table attach")
+                                                                       : QStringLiteral("loader + model"))
+                                                                : QStringLiteral("loader only"))))))));
     out << "Mode:  " << mode << "\n";
     if (options->reqOnly || options->txOnly) {
         QStringList filterModes;
@@ -1121,6 +1348,7 @@ int main(int argc, char* argv[])
             << formatMilliseconds(warmup.rowLoadNs) << " ms\n";
         printXactionStageSummary(out, warmup);
         printTransactionSpanSummary(out, warmup);
+        printClipboardBatchSummary(out, warmup);
     }
 
     BenchmarkSeries series;
@@ -1149,6 +1377,7 @@ int main(int argc, char* argv[])
             << formatRecordsPerSecond(sample.rowCount, sample.rowLoadNs).rightJustified(10, QLatin1Char(' ')) << "\n";
         printXactionStageSummary(out, sample);
         printTransactionSpanSummary(out, sample);
+        printClipboardBatchSummary(out, sample);
         printEditableSummary(out, sample);
     }
 
@@ -1166,6 +1395,12 @@ int main(int argc, char* argv[])
         averageNanoseconds(series, &BenchmarkSample::transactionSpanBuildNs);
     const qint64 averageTransactionRenderNs =
         averageNanoseconds(series, &BenchmarkSample::transactionRenderNs);
+    const qint64 averageClipboardBatchScanNs =
+        averageNanoseconds(series, &BenchmarkSample::clipboardBatchScanNs);
+    const qint64 averageClipboardBatchCollectNs =
+        averageNanoseconds(series, &BenchmarkSample::clipboardBatchCollectNs);
+    const qint64 averageClipboardBatchDecodeNs =
+        averageNanoseconds(series, &BenchmarkSample::clipboardBatchDecodeNs);
     const qint64 averageSetRowsNs = averageNanoseconds(series, &BenchmarkSample::setRowsNs);
     const qint64 averageFilterNs = averageNanoseconds(series, &BenchmarkSample::filterNs);
     const qint64 averageResizeNs = averageNanoseconds(series, &BenchmarkSample::resizeColumnsNs);
@@ -1201,6 +1436,9 @@ int main(int argc, char* argv[])
     averageSample.xactionWritingDirectoriesNs = averageXactionWritingDirectoriesNs;
     averageSample.transactionSpanBuildNs = averageTransactionSpanBuildNs;
     averageSample.transactionRenderNs = averageTransactionRenderNs;
+    averageSample.clipboardBatchScanNs = averageClipboardBatchScanNs;
+    averageSample.clipboardBatchCollectNs = averageClipboardBatchCollectNs;
+    averageSample.clipboardBatchDecodeNs = averageClipboardBatchDecodeNs;
     averageSample.editablePrepareNs = averageEditablePrepareNs;
     averageSample.editableFirstCellNs = averageEditableFirstCellNs;
     if (!series.samples.empty()) {
@@ -1211,6 +1449,11 @@ int main(int argc, char* argv[])
         averageSample.transactionRenderDense = series.samples.front().transactionRenderDense;
         averageSample.transactionRenderRepeats = series.samples.front().transactionRenderRepeats;
         averageSample.transactionRenderVerticalSteps = series.samples.front().transactionRenderVerticalSteps;
+        averageSample.clipboardBatchAnchorCount = series.samples.front().clipboardBatchAnchorCount;
+        averageSample.clipboardBatchMatchingOrdinalCount =
+            series.samples.front().clipboardBatchMatchingOrdinalCount;
+        averageSample.clipboardBatchCollectedRows = series.samples.front().clipboardBatchCollectedRows;
+        averageSample.clipboardBatchDecodedRows = series.samples.front().clipboardBatchDecodedRows;
         for (const BenchmarkSample& sample : series.samples) {
             averageSample.transactionSpanMetadataMs += sample.transactionSpanMetadataMs;
             averageSample.transactionSpanScanMs += sample.transactionSpanScanMs;
@@ -1235,6 +1478,7 @@ int main(int argc, char* argv[])
     }
     printXactionStageSummary(out, averageSample);
     printTransactionSpanSummary(out, averageSample);
+    printClipboardBatchSummary(out, averageSample);
     printEditableSummary(out, averageSample);
 
     return 0;

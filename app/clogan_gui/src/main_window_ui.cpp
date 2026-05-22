@@ -203,6 +203,10 @@ void MainWindow::buildUi()
     deniedFlitsButton_ = makeToggle(QStringLiteral("Denied"), false);
     deniedFlitsButton_->setEnabled(false);
     nodeLabelsButton_ = makeToggle(QStringLiteral("Node Labels"));
+    traceCacheMapButton_ = makeToggle(QStringLiteral("Show"), false);
+    traceCacheMapAddButton_ = makeToggle(QStringLiteral("Add"), false);
+    traceCacheMapAddButton_->setCheckable(false);
+    traceCacheMapFadeButton_ = makeToggle(QStringLiteral("Fade"), true);
 
     QHBoxLayout* summaryRowLayout = addToolbarRow(QStringLiteral("Summary"), false);
     traceToolbarSummaryLayout_ = summaryRowLayout;
@@ -315,6 +319,8 @@ void MainWindow::buildUi()
     addToggleGroup(directionGroup.layout, {txButton_, rxButton_});
     const ToolbarGroup xactionFilterGroup = addToolbarGroup(filtersRowLayout, QStringLiteral("Xaction"));
     xactionFilterGroup.layout->addWidget(deniedFlitsButton_);
+    const ToolbarGroup viewFilterGroup = addToolbarGroup(filtersRowLayout, QStringLiteral("View"));
+    viewFilterGroup.layout->addWidget(nodeLabelsButton_);
     filtersRowLayout->addStretch(1);
 
     QHBoxLayout* searchRowLayout = addToolbarRow(QStringLiteral("Search"), false);
@@ -420,8 +426,17 @@ void MainWindow::buildUi()
     setHint(addressFilterEdit_, QStringLiteral("Filter rows by address text. Supports decimal or 0x-prefixed hex."));
     setHint(nodeLabelsButton_,
             QStringLiteral("Show or hide topology node type labels beside node ID fields."));
-    searchRowLayout->addWidget(nodeLabelsButton_);
-    traceToolbarFoldableSearchWidgets_.append(nodeLabelsButton_);
+    const ToolbarGroup cacheMapGroup = addToolbarGroup(searchRowLayout, QStringLiteral("Cache Map"));
+    traceToolbarFoldableSearchWidgets_.append(cacheMapGroup.frame);
+    setHint(traceCacheMapButton_,
+            QStringLiteral("Show or hide the cache-line state minimap beside the trace scrollbar."));
+    setHint(traceCacheMapAddButton_,
+            QStringLiteral("Add an RN/address cache-line state lane to the minimap."));
+    setHint(traceCacheMapFadeButton_,
+            QStringLiteral("Fade the cache-line state minimap when the mouse is outside it."));
+    cacheMapGroup.layout->addWidget(traceCacheMapButton_);
+    cacheMapGroup.layout->addWidget(traceCacheMapAddButton_);
+    cacheMapGroup.layout->addWidget(traceCacheMapFadeButton_);
     fieldToggleButton_ = new QToolButton(traceToolbar);
     fieldToggleButton_->setText(QStringLiteral("CHI Fields"));
     fieldToggleButton_->setObjectName(QStringLiteral("actionButton"));
@@ -540,6 +555,10 @@ void MainWindow::buildUi()
 
     traceContentStack_->addWidget(traceEmptyState_);
     traceContentStack_->addWidget(flitView_);
+    traceCacheMinimap_ = new TraceCacheLineMinimap(flitView_,
+                                                   TraceCacheLineMinimap::HostMode::MainTrace,
+                                                   flitView_->parentWidget());
+    traceCacheMinimap_->setFlitModel(flitModel_);
     tracePanelLayout->addWidget(traceContentHost, 1);
 
     detailView_ = new QTableView(dockManager_);
@@ -820,6 +839,10 @@ void MainWindow::buildUi()
     transactionStack_->addWidget(transactionEmptyWidget_);
 
     clipboardWidget_ = new ClipboardWidget(dockManager_);
+    clipboardCacheMinimap_ = new TraceCacheLineMinimap(clipboardWidget_->tableView(),
+                                                       TraceCacheLineMinimap::HostMode::Clipboard,
+                                                       clipboardWidget_->tableView()->parentWidget());
+    clipboardWidget_->setCacheMinimap(clipboardCacheMinimap_);
     connect(clipboardWidget_, &ClipboardWidget::scopeChanged, this, [this](ClipboardScope) {
         bindClipboardWidgetToActiveScope();
     });
@@ -1038,10 +1061,24 @@ void MainWindow::buildUi()
     xactionIndexProgressBar_->setValue(0);
     xactionIndexProgressBar_->hide();
 
+    clipboardInsertProgressLabel_ = new QLabel(this);
+    clipboardInsertProgressLabel_->setObjectName(QStringLiteral("secondaryLabel"));
+    clipboardInsertProgressLabel_->hide();
+
+    clipboardInsertProgressBar_ = new QProgressBar(this);
+    clipboardInsertProgressBar_->setTextVisible(false);
+    clipboardInsertProgressBar_->setFixedWidth(180);
+    clipboardInsertProgressBar_->setFixedHeight(16);
+    clipboardInsertProgressBar_->setRange(0, 1000);
+    clipboardInsertProgressBar_->setValue(0);
+    clipboardInsertProgressBar_->hide();
+
     statusBar()->addPermanentWidget(filterProgressLabel_);
     statusBar()->addPermanentWidget(filterProgressBar_);
     statusBar()->addPermanentWidget(xactionIndexProgressLabel_);
     statusBar()->addPermanentWidget(xactionIndexProgressBar_);
+    statusBar()->addPermanentWidget(clipboardInsertProgressLabel_);
+    statusBar()->addPermanentWidget(clipboardInsertProgressBar_);
 
     connect(openButton, &QPushButton::clicked, this, &MainWindow::openTraceFile);
     connect(reloadButton, &QPushButton::clicked, this, &MainWindow::reloadTrace);
@@ -1197,6 +1234,122 @@ void MainWindow::wireSignals()
                                  2500);
         scheduleDiagnosticsSnapshotRefresh();
     });
+    connect(traceCacheMapButton_, &QToolButton::toggled, this, [this](const bool checked) {
+        traceCacheMapButton_->setText(checked ? QStringLiteral("Hide") : QStringLiteral("Show"));
+        if (traceCacheMinimap_) {
+            traceCacheMinimap_->setMapVisible(checked);
+        }
+        scheduleDiagnosticsSnapshotRefresh();
+    });
+    connect(traceCacheMapFadeButton_, &QToolButton::toggled, this, [this](const bool checked) {
+        if (traceCacheMinimap_) {
+            traceCacheMinimap_->setFadeWhenInactive(checked);
+        }
+        scheduleDiagnosticsSnapshotRefresh();
+    });
+    connect(traceCacheMapAddButton_, &QToolButton::clicked, this, [this]() {
+        if (!traceCacheMinimap_) {
+            return;
+        }
+        QDialog dialog(this);
+        dialog.setWindowTitle(QStringLiteral("Add Cache Map Line"));
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* row = new QWidget(&dialog);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        auto* rnCombo = new QComboBox(row);
+        rnCombo->setEditable(true);
+        rnCombo->lineEdit()->setPlaceholderText(QStringLiteral("RN id"));
+        const std::vector<TraceCacheLineMinimap::RnNodeChoice> rnChoices =
+            traceCacheMinimap_->availableRnNodeChoices();
+        for (const TraceCacheLineMinimap::RnNodeChoice& choice : rnChoices) {
+            rnCombo->addItem(choice.label, static_cast<qulonglong>(choice.nodeId));
+        }
+        auto* addressEdit = new QLineEdit(row);
+        addressEdit->setPlaceholderText(QStringLiteral("Address"));
+        rowLayout->addWidget(new QLabel(QStringLiteral("RN"), row));
+        rowLayout->addWidget(rnCombo);
+        rowLayout->addWidget(new QLabel(QStringLiteral("Address"), row));
+        rowLayout->addWidget(addressEdit);
+        layout->addWidget(row);
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        layout->addWidget(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        if (dialog.exec() != QDialog::Accepted) {
+            return;
+        }
+        std::uint64_t rn = 0;
+        std::uint64_t address = 0;
+        bool rnOk = false;
+        if (rnCombo->currentIndex() >= 0
+            && rnCombo->currentText() == rnCombo->itemText(rnCombo->currentIndex())) {
+            const QVariant selectedRn = rnCombo->currentData();
+            if (selectedRn.isValid()) {
+                rn = selectedRn.toULongLong(&rnOk);
+            }
+        }
+        if (!rnOk) {
+            rnOk = TraceCacheLineMinimap::parseIntegerText(rnCombo->currentText(), rn);
+        }
+        if (!rnOk
+            || rn > static_cast<std::uint64_t>((std::numeric_limits<std::uint32_t>::max)())
+            || !TraceCacheLineMinimap::parseIntegerText(addressEdit->text(), address)) {
+            statusBar()->showMessage(QStringLiteral("Cache Map requires a valid RN id and address."), 3000);
+            return;
+        }
+        traceCacheMinimap_->addLane(static_cast<std::uint32_t>(rn), address);
+        if (traceCacheMapButton_) {
+            const QSignalBlocker blocker(traceCacheMapButton_);
+            traceCacheMapButton_->setChecked(true);
+            traceCacheMapButton_->setText(QStringLiteral("Hide"));
+        }
+        scheduleDiagnosticsSnapshotRefresh();
+    });
+    if (traceCacheMinimap_) {
+        connect(traceCacheMinimap_, &TraceCacheLineMinimap::logicalRowActivated,
+                this, &MainWindow::jumpToLogicalTraceRow);
+        connect(traceCacheMinimap_, &TraceCacheLineMinimap::statusMessageRequested,
+                this, [this](const QString& text, const int timeoutMs) {
+                    statusBar()->showMessage(text, timeoutMs);
+                });
+        connect(traceCacheMinimap_, &TraceCacheLineMinimap::mapVisibilityChanged,
+                this, [this](const bool visible) {
+                    if (!traceCacheMapButton_) {
+                        return;
+                    }
+                    const QSignalBlocker blocker(traceCacheMapButton_);
+                    traceCacheMapButton_->setChecked(visible);
+                    traceCacheMapButton_->setText(visible ? QStringLiteral("Hide")
+                                                          : QStringLiteral("Show"));
+                    scheduleDiagnosticsSnapshotRefresh();
+                });
+    }
+    if (clipboardCacheMinimap_) {
+        connect(clipboardCacheMinimap_, &TraceCacheLineMinimap::clipboardRowActivated,
+                this, [this](const int visibleRow) {
+                    if (!clipboardWidget_ || !clipboardWidget_->tableView() || !clipboardWidget_->model()) {
+                        return;
+                    }
+                    if (visibleRow < 0 || visibleRow >= clipboardWidget_->model()->visibleCount()) {
+                        return;
+                    }
+                    QTableView* table = clipboardWidget_->tableView();
+                    const QModelIndex target = clipboardWidget_->model()->index(visibleRow, 0);
+                    table->selectionModel()->setCurrentIndex(target,
+                                                             QItemSelectionModel::ClearAndSelect
+                                                                 | QItemSelectionModel::Rows);
+                    table->selectRow(visibleRow);
+                    const std::optional<ClipboardEntry> entry = clipboardWidget_->entryForVisibleRow(visibleRow);
+                    if (entry) {
+                        handleClipboardRowActivated(*entry);
+                    }
+                });
+        connect(clipboardCacheMinimap_, &TraceCacheLineMinimap::statusMessageRequested,
+                this, [this](const QString& text, const int timeoutMs) {
+                    statusBar()->showMessage(text, timeoutMs);
+                });
+    }
 
     wireTraceModelSignals(flitModel_, detailModel_);
     wireTraceSelectionModel();

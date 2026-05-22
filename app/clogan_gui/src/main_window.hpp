@@ -55,6 +55,7 @@ class LatencyWidget;
 class LatencyDiffWidget;
 class TransactionWidget;
 class ClipboardWidget;
+class TraceCacheLineMinimap;
 class TraceSession;
 
 class MainWindow final : public QMainWindow {
@@ -154,15 +155,61 @@ public:
     int testClipboardVisibleRowCount() const noexcept;
     qint64 testClipboardTimestampAt(int visibleRow) const noexcept;
     QString testClipboardOpcodeAt(int visibleRow) const;
+    QString testClipboardTxnIdAt(int visibleRow) const;
+    bool testClipboardRowTransactionHighlighted(int visibleRow) const;
+    bool testClickClipboardRow(int visibleRow);
     bool testEditClipboardTimestampAt(int visibleRow, qint64 timestamp);
     void testActivateClipboardRow(int visibleRow);
     bool testInsertSelectedFlitToClipboard(ClipboardScope scope);
+    bool testInsertSelectedXactionToClipboard(ClipboardScope scope);
+    bool testInsertAllXactionsWithSelectedAddressToClipboard(ClipboardScope scope);
+    bool testInsertLaterXactionsWithSelectedAddressToClipboard(ClipboardScope scope);
+    bool testInsertThisAndLaterXactionsWithSelectedAddressToClipboard(ClipboardScope scope);
+    bool testClipboardXactionAddressInsertActive() const noexcept;
+    bool testClipboardInsertProgressVisible() const noexcept;
     bool testDeleteClipboardRow(int visibleRow);
     bool testSaveClipboardCsv(const QString& path);
     bool testSaveClipboardCLogB(const QString& path);
     bool testClipboardCLogBSaveAvailable() const;
     void testSetClipboardOpcodeFilter(const QString& text);
     void testSetClipboardSearchMode(FlitTableModel::SearchMode mode);
+    void testSetTraceCacheMinimapVisible(bool visible);
+    bool testTraceCacheMinimapVisible() const noexcept;
+    QRect testTraceCacheMinimapGeometry() const;
+    bool testAddTraceCacheMinimapLane(std::uint32_t rnNodeId, std::uint64_t address);
+    int testTraceCacheMinimapLaneCount() const noexcept;
+    int testTraceCacheMinimapSegmentCount(int laneIndex) const noexcept;
+    QVariantMap testTraceCacheMinimapLaneAt(int laneIndex) const;
+    QVariantMap testTraceCacheMinimapSegmentAt(int laneIndex, int segmentIndex) const;
+    QRect testTraceCacheMinimapLaneRect(int laneIndex) const;
+    QRect testTraceCacheMinimapTagRect(int laneIndex) const;
+    bool testTraceCacheMinimapJumpAvailable(int laneIndex,
+                                            int state,
+                                            int direction,
+                                            int referenceRow) const;
+    bool testTriggerTraceCacheMinimapJump(int laneIndex,
+                                          int state,
+                                          int direction,
+                                          int referenceRow);
+    bool testTraceCacheMinimapChangeJumpAvailable(int laneIndex, int direction, int referenceRow) const;
+    bool testTriggerTraceCacheMinimapChangeJump(int laneIndex, int direction, int referenceRow);
+    void testRemoveTraceCacheMinimapLane(int laneIndex);
+    void testSetClipboardCacheMinimapVisible(bool visible);
+    bool testClipboardCacheMinimapVisible() const noexcept;
+    bool testAddClipboardCacheMinimapLane(std::uint32_t rnNodeId, std::uint64_t address);
+    int testClipboardCacheMinimapLaneCount() const noexcept;
+    int testClipboardCacheMinimapSegmentCount(int laneIndex) const noexcept;
+    QVariantMap testClipboardCacheMinimapSegmentAt(int laneIndex, int segmentIndex) const;
+    bool testClipboardCacheMinimapJumpAvailable(int laneIndex,
+                                                int state,
+                                                int direction,
+                                                int referenceRow) const;
+    bool testTriggerClipboardCacheMinimapJump(int laneIndex,
+                                              int state,
+                                              int direction,
+                                              int referenceRow);
+    bool testClipboardCacheMinimapChangeJumpAvailable(int laneIndex, int direction, int referenceRow) const;
+    bool testTriggerClipboardCacheMinimapChangeJump(int laneIndex, int direction, int referenceRow);
     int testLatencyDiffSessionCount() const noexcept;
     bool testBuildDefaultLatencyDiff();
     bool testLatencyDiffHasReport() const noexcept;

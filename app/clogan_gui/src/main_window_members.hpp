@@ -1,3 +1,21 @@
+    enum class ClipboardXactionAddressInsertMode {
+        All = 0,
+        Later,
+        ThisAndLater
+    };
+
+    enum class ClipboardInsertOrdering {
+        SortByTimestamp = 0,
+        PreserveInputOrder
+    };
+
+    struct ClipboardInsertResult {
+        int inserted = 0;
+        int skipped = 0;
+
+        bool insertedAny() const noexcept { return inserted > 0; }
+    };
+
     ads::CDockManager* dockManager_ = nullptr;
     ads::CDockWidget* topologyDock_ = nullptr;
     ads::CDockWidget* timelineDock_ = nullptr;
@@ -12,6 +30,8 @@
     FlitDetailsModel* detailModel_ = nullptr;
     QTableView* flitView_ = nullptr;
     QTableView* detailView_ = nullptr;
+    TraceCacheLineMinimap* traceCacheMinimap_ = nullptr;
+    TraceCacheLineMinimap* clipboardCacheMinimap_ = nullptr;
     QWidget* traceToolbar_ = nullptr;
     QWidget* traceToolbarContent_ = nullptr;
     QHBoxLayout* traceToolbarSummaryLayout_ = nullptr;
@@ -68,6 +88,9 @@
     QToolButton* rxButton_ = nullptr;
     QToolButton* deniedFlitsButton_ = nullptr;
     QToolButton* nodeLabelsButton_ = nullptr;
+    QToolButton* traceCacheMapButton_ = nullptr;
+    QToolButton* traceCacheMapAddButton_ = nullptr;
+    QToolButton* traceCacheMapFadeButton_ = nullptr;
     QToolButton* searchModeButton_ = nullptr;
     QToolButton* searchPreviousButton_ = nullptr;
     QToolButton* searchNextButton_ = nullptr;
@@ -104,6 +127,8 @@
     QProgressBar* filterProgressBar_ = nullptr;
     QLabel* xactionIndexProgressLabel_ = nullptr;
     QProgressBar* xactionIndexProgressBar_ = nullptr;
+    QLabel* clipboardInsertProgressLabel_ = nullptr;
+    QProgressBar* clipboardInsertProgressBar_ = nullptr;
     QStackedLayout* traceContentStack_ = nullptr;
     QWidget* traceEmptyState_ = nullptr;
     QPushButton* traceEmptyStateButton_ = nullptr;
@@ -196,3 +221,8 @@
     bool statisticsComputed_ = false;
     bool xactionIndexActive_ = false;
     bool xactionDebugMode_ = false;
+    bool clipboardXactionAddressInsertActive_ = false;
+    quint64 clipboardXactionAddressInsertGeneration_ = 0;
+    quint64 clipboardXactionAddressInsertSessionId_ = 0;
+    ClipboardScope clipboardXactionAddressInsertScope_ = ClipboardScope::Session;
+    std::shared_ptr<std::stop_source> clipboardXactionAddressInsertStopSource_;

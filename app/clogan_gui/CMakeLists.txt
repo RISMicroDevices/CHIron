@@ -94,6 +94,8 @@ add_executable(CloganGUI
     src/flit_table_model.hpp
     src/flit_details_model.cpp
     src/flit_details_model.hpp
+    src/trace_cache_line_minimap.cpp
+    src/trace_cache_line_minimap.hpp
     src/cache_widget.cpp
     src/cache_widget.hpp
     src/address_widget.cpp
@@ -211,6 +213,8 @@ if(CHIRON_GUI_BUILD_TESTS)
         src/flit_table_model.hpp
         src/flit_details_model.cpp
         src/flit_details_model.hpp
+        src/trace_cache_line_minimap.cpp
+        src/trace_cache_line_minimap.hpp
         src/cache_widget.cpp
         src/cache_widget.hpp
         src/address_widget.cpp
@@ -274,6 +278,7 @@ if(CHIRON_GUI_BUILD_TESTS)
         CHIRON_GUI_ENABLE_TIMELINE_TEST_API
         CHIRON_GUI_ENABLE_ADDRESS_TEST_API
         CHIRON_GUI_ENABLE_CACHE_TEST_API
+        CHIRON_GUI_ENABLE_TRACE_CACHE_MINIMAP_TEST_API
         CHIRON_GUI_ENABLE_LATENCY_DIFF_TEST_API
         CHIRON_GUI_ENABLE_LATENCY_TEST_API
         CHIRON_GUI_ENABLE_TRANSACTION_TEST_API

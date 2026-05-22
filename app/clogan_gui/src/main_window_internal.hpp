@@ -14,6 +14,7 @@
 #include "latency_diff_widget.hpp"
 #include "latency_widget.hpp"
 #include "timeline_widget.hpp"
+#include "trace_cache_line_minimap.hpp"
 #include "transaction_widget.hpp"
 #include "trace_session.hpp"
 
@@ -36,6 +37,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QCompleter>
 #include <QCoreApplication>
 #include <QBrush>

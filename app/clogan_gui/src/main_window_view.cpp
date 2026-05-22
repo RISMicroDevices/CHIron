@@ -457,6 +457,45 @@ void MainWindow::updateXactionIndexProgress(const bool active,
     xactionIndexProgressBar_->show();
 }
 
+void MainWindow::updateClipboardInsertProgress(const bool active,
+                                               const QString& text,
+                                               const std::uint64_t completedRecords,
+                                               const std::uint64_t totalRecords)
+{
+    if (!clipboardInsertProgressLabel_ || !clipboardInsertProgressBar_) {
+        return;
+    }
+
+    if (!active) {
+        clipboardInsertProgressLabel_->hide();
+        clipboardInsertProgressBar_->hide();
+        clipboardInsertProgressBar_->setRange(0, 1000);
+        clipboardInsertProgressBar_->setValue(0);
+        return;
+    }
+
+    clipboardInsertProgressLabel_->setText(text.isEmpty()
+                                               ? QStringLiteral("Clipboard insert")
+                                               : text);
+    if (totalRecords == 0) {
+        clipboardInsertProgressBar_->setRange(0, 0);
+    } else if (totalRecords <= static_cast<std::uint64_t>((std::numeric_limits<int>::max)())) {
+        const int maximum = static_cast<int>(totalRecords);
+        clipboardInsertProgressBar_->setRange(0, maximum);
+        clipboardInsertProgressBar_->setValue(static_cast<int>(
+            std::min<std::uint64_t>(completedRecords, totalRecords)));
+    } else {
+        constexpr int kScaledMaximum = 1000;
+        const std::uint64_t clampedCompleted = std::min(completedRecords, totalRecords);
+        clipboardInsertProgressBar_->setRange(0, kScaledMaximum);
+        clipboardInsertProgressBar_->setValue(static_cast<int>(
+            (clampedCompleted * static_cast<std::uint64_t>(kScaledMaximum)) / totalRecords));
+    }
+
+    clipboardInsertProgressLabel_->show();
+    clipboardInsertProgressBar_->show();
+}
+
 void MainWindow::setTraceToolbarFolded(const bool folded)
 {
     const bool stateChanged = folded != traceToolbarFolded_;

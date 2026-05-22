@@ -2,10 +2,14 @@
 
 #include "channel_badge_painter.hpp"
 #include "gui_format.hpp"
+#include "trace_cache_line_minimap.hpp"
 
 #include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFontDatabase>
 #include <QFrame>
 #include <QHeaderView>
@@ -17,6 +21,7 @@
 #include <QPushButton>
 #include <QShortcut>
 #include <QSignalBlocker>
+#include <QStatusBar>
 #include <QStyle>
 #include <QStyledItemDelegate>
 #include <QTableView>
@@ -486,6 +491,32 @@ std::optional<ClipboardEntry> ClipboardWidget::entryForVisibleRow(const int visi
     return (*entries_)[static_cast<std::size_t>(logicalRow)];
 }
 
+void ClipboardWidget::setCacheMinimap(TraceCacheLineMinimap* minimap)
+{
+    cacheMinimap_ = minimap;
+    if (cacheMapButton_) {
+        cacheMapButton_->setEnabled(cacheMinimap_ != nullptr);
+    }
+    if (cacheMapAddButton_) {
+        cacheMapAddButton_->setEnabled(cacheMinimap_ != nullptr);
+    }
+    if (cacheMapFadeButton_) {
+        cacheMapFadeButton_->setEnabled(cacheMinimap_ != nullptr);
+    }
+    if (cacheMinimap_) {
+        connect(cacheMinimap_, &TraceCacheLineMinimap::mapVisibilityChanged,
+                this, [this](const bool visible) {
+                    if (!cacheMapButton_) {
+                        return;
+                    }
+                    const QSignalBlocker blocker(cacheMapButton_);
+                    cacheMapButton_->setChecked(visible);
+                    cacheMapButton_->setText(visible ? QStringLiteral("Hide")
+                                                     : QStringLiteral("Show"));
+                });
+    }
+}
+
 void ClipboardWidget::setScope(const ClipboardScope scope)
 {
     if (scope_ == scope) {
@@ -688,6 +719,17 @@ void ClipboardWidget::buildUi()
     QHBoxLayout* viewGroup = addGroup(filtersRow, QStringLiteral("View"));
     nodeLabelsButton_ = makeToggle(QStringLiteral("Node Labels"));
     viewGroup->addWidget(nodeLabelsButton_);
+    QHBoxLayout* cacheMapGroup = addGroup(filtersRow, QStringLiteral("Cache Map"));
+    cacheMapButton_ = makeToggle(QStringLiteral("Show"), false);
+    cacheMapButton_->setEnabled(false);
+    cacheMapGroup->addWidget(cacheMapButton_);
+    cacheMapAddButton_ = makeToggle(QStringLiteral("Add"), false);
+    cacheMapAddButton_->setCheckable(false);
+    cacheMapAddButton_->setEnabled(false);
+    cacheMapGroup->addWidget(cacheMapAddButton_);
+    cacheMapFadeButton_ = makeToggle(QStringLiteral("Fade"), true);
+    cacheMapFadeButton_->setEnabled(false);
+    cacheMapGroup->addWidget(cacheMapFadeButton_);
     filtersRow->addStretch(1);
 
     QHBoxLayout* searchRow = addRow(QStringLiteral("Search"));
@@ -795,6 +837,18 @@ void ClipboardWidget::wireSignals()
         model_->setNodeLabelsVisible(checked);
         resizeColumnsToTraceDefaults();
     });
+    connect(cacheMapButton_, &QToolButton::toggled, this, [this](const bool checked) {
+        cacheMapButton_->setText(checked ? QStringLiteral("Hide") : QStringLiteral("Show"));
+        if (cacheMinimap_) {
+            cacheMinimap_->setMapVisible(checked);
+        }
+    });
+    connect(cacheMapFadeButton_, &QToolButton::toggled, this, [this](const bool checked) {
+        if (cacheMinimap_) {
+            cacheMinimap_->setFadeWhenInactive(checked);
+        }
+    });
+    connect(cacheMapAddButton_, &QToolButton::clicked, this, &ClipboardWidget::showAddCacheMapLineDialog);
     connect(model_, &FlitTableModel::rowsEdited, this, [this]() {
         if (syncingModel_) {
             return;
@@ -805,6 +859,13 @@ void ClipboardWidget::wireSignals()
     });
     connect(model_, &FlitTableModel::modelReset, this, [this]() {
         updateBadges();
+    });
+    connect(table_, &QTableView::clicked, this, [this](const QModelIndex& index) {
+        if (!index.isValid()) {
+            model_->clearTransactionHighlight();
+            return;
+        }
+        model_->setTransactionHighlightFromVisibleRow(index.row());
     });
     connect(table_, &QTableView::doubleClicked, this, [this](const QModelIndex& index) {
         if (!readOnly_ || !index.isValid()) {
@@ -905,6 +966,67 @@ void ClipboardWidget::showRowContextMenu(const QPoint& position)
         Q_EMIT saveRequested();
     } else if (selected == deleteAction) {
         deleteSelectedRows();
+    }
+}
+
+void ClipboardWidget::showAddCacheMapLineDialog()
+{
+    if (!cacheMinimap_) {
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Add Cache Map Line"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* form = new QFrame(&dialog);
+    auto* formLayout = new QHBoxLayout(form);
+    formLayout->setContentsMargins(0, 0, 0, 0);
+    auto* rnCombo = new QComboBox(form);
+    rnCombo->setEditable(true);
+    rnCombo->lineEdit()->setPlaceholderText(QStringLiteral("RN id"));
+    const std::vector<TraceCacheLineMinimap::RnNodeChoice> rnChoices =
+        cacheMinimap_->availableRnNodeChoices();
+    for (const TraceCacheLineMinimap::RnNodeChoice& choice : rnChoices) {
+        rnCombo->addItem(choice.label, static_cast<qulonglong>(choice.nodeId));
+    }
+    auto* addressEdit = new QLineEdit(form);
+    addressEdit->setPlaceholderText(QStringLiteral("Address"));
+    formLayout->addWidget(new QLabel(QStringLiteral("RN"), form));
+    formLayout->addWidget(rnCombo);
+    formLayout->addWidget(new QLabel(QStringLiteral("Address"), form));
+    formLayout->addWidget(addressEdit);
+    layout->addWidget(form);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    std::uint64_t rn = 0;
+    std::uint64_t address = 0;
+    bool rnOk = false;
+    if (rnCombo->currentIndex() >= 0
+        && rnCombo->currentText() == rnCombo->itemText(rnCombo->currentIndex())) {
+        const QVariant selectedRn = rnCombo->currentData();
+        if (selectedRn.isValid()) {
+            rn = selectedRn.toULongLong(&rnOk);
+        }
+    }
+    if (!rnOk) {
+        rnOk = TraceCacheLineMinimap::parseIntegerText(rnCombo->currentText(), rn);
+    }
+    if (!rnOk
+        || rn > static_cast<std::uint64_t>((std::numeric_limits<std::uint32_t>::max)())
+        || !TraceCacheLineMinimap::parseIntegerText(addressEdit->text(), address)) {
+        return;
+    }
+    cacheMinimap_->addLane(static_cast<std::uint32_t>(rn), address);
+    if (cacheMapButton_) {
+        const QSignalBlocker blocker(cacheMapButton_);
+        cacheMapButton_->setChecked(true);
+        cacheMapButton_->setText(QStringLiteral("Hide"));
     }
 }
 
