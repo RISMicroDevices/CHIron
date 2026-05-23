@@ -1560,7 +1560,7 @@ namespace /*CHI::*/Xact {
         firstDBID = false;
 
         if (!rspFlit.IsRSP()) [[unlikely]]
-            return XactDenial::DENIED_CHANNEL_NOT_RSP;
+            return this->ResponseFlitDenied(XactDenial::DENIED_CHANNEL_NOT_RSP, rspFlit);
 
         XactDenialEnum denial = NextRSPNoRecord(glbl, rspFlit, hasDBID, firstDBID);
 
