@@ -344,7 +344,7 @@ namespace /*CHI::*/Xact {
                 }
                 else
                     return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
-                        "RSP opcode is not expected for Independent Stash transactions");
+                        "This RSP Opcode is not expected for Independent Stash transactions");
 
                 //
                 if (glbl.CHECK_FIELD_MAPPING.enable)
@@ -359,7 +359,7 @@ namespace /*CHI::*/Xact {
         }
 
         return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
-            "RSP opcode is not expected for Independent Stash transactions");
+            "This RSP Opcode is not expected for Independent Stash transactions");
     }
 
     template<FlitConfigurationConcept config>

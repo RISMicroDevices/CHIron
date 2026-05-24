@@ -330,7 +330,7 @@ namespace /*CHI::*/Xact  {
         }
 
         return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
-            "RSP opcode is not expected for Home Snoop transactions");
+            "This RSP Opcode is not expected for Home Snoop transactions");
     }
 
     template<FlitConfigurationConcept config>
@@ -388,7 +388,8 @@ namespace /*CHI::*/Xact  {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_DAT_OPCODE;
+        return this->ResponseFlitDenied(XactDenial::DENIED_DAT_OPCODE, datFlit,
+            "This DAT Opcode is not expected for Home Snoop transactions");
     }
 }
 

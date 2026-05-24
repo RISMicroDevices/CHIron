@@ -215,7 +215,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline std::optional<typename Flits::REQ<config>::tgtid_t> XactionHomeRead<config>::GetPrimaryTgtIDNonREQ(const Global<config>& glbl) const noexcept
     {
-        const FiredResponseFlit<config>* optSource;
+        const FiredResponseFlit<config>* optSource = GetPrimaryTgtIDSourceNonREQ(glbl);
 
         if (!optSource)
             return std::nullopt;
@@ -321,7 +321,7 @@ namespace /*CHI::*/Xact {
         }
 
         return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
-            "RSP opcode is not expected for Home Read transactions");
+            "This RSP Opcode is not expected for Home Read transactions");
     }
 
     template<FlitConfigurationConcept config>
@@ -390,7 +390,8 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 
-        return XactDenial::DENIED_DAT_OPCODE;
+        return this->ResponseFlitDenied(XactDenial::DENIED_DAT_OPCODE, datFlit,
+            "This DAT Opcode is not expected for Home Read transactions");
     }
 }
 

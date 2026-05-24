@@ -365,7 +365,7 @@ namespace /*CHI::*/Xact {
         }
 
         return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
-            "RSP opcode is not expected for Write Zero transactions");
+            "This RSP Opcode is not expected for Write Zero transactions");
     }
 
     template<FlitConfigurationConcept config>

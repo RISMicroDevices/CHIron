@@ -538,7 +538,7 @@ namespace /*CHI::*/Xact {
         }
 
         return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
-            "RSP opcode is not expected for Dataless transactions");
+            "This RSP Opcode is not expected for Dataless transactions");
     }
 
     template<FlitConfigurationConcept config>
