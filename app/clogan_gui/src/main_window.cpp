@@ -941,6 +941,20 @@ bool MainWindow::testClipboardInsertProgressVisible() const noexcept
     return clipboardInsertProgressBar_ && clipboardInsertProgressBar_->isVisible();
 }
 
+bool MainWindow::testClipboardInsertCancelVisible() const noexcept
+{
+    return clipboardInsertCancelButton_ && clipboardInsertCancelButton_->isVisible();
+}
+
+bool MainWindow::testCancelClipboardXactionAddressInsert()
+{
+    if (!clipboardXactionAddressInsertActive_) {
+        return false;
+    }
+    cancelClipboardXactionAddressInsert();
+    return true;
+}
+
 bool MainWindow::testDeleteClipboardRow(const int visibleRow)
 {
     if (!clipboardWidget_ || !clipboardWidget_->tableView() || !clipboardWidget_->model()) {

@@ -167,6 +167,8 @@ public:
     bool testInsertThisAndLaterXactionsWithSelectedAddressToClipboard(ClipboardScope scope);
     bool testClipboardXactionAddressInsertActive() const noexcept;
     bool testClipboardInsertProgressVisible() const noexcept;
+    bool testClipboardInsertCancelVisible() const noexcept;
+    bool testCancelClipboardXactionAddressInsert();
     bool testDeleteClipboardRow(int visibleRow);
     bool testSaveClipboardCsv(const QString& path);
     bool testSaveClipboardCLogB(const QString& path);

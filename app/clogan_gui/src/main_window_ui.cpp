@@ -1073,16 +1073,24 @@ void MainWindow::buildUi()
     clipboardInsertProgressBar_->setValue(0);
     clipboardInsertProgressBar_->hide();
 
+    clipboardInsertCancelButton_ = new QPushButton(QStringLiteral("Cancel"), this);
+    clipboardInsertCancelButton_->setObjectName(QStringLiteral("secondaryButton"));
+    clipboardInsertCancelButton_->setFixedHeight(20);
+    clipboardInsertCancelButton_->setToolTip(QStringLiteral("Cancel the running Clipboard insertion."));
+    clipboardInsertCancelButton_->hide();
+
     statusBar()->addPermanentWidget(filterProgressLabel_);
     statusBar()->addPermanentWidget(filterProgressBar_);
     statusBar()->addPermanentWidget(xactionIndexProgressLabel_);
     statusBar()->addPermanentWidget(xactionIndexProgressBar_);
     statusBar()->addPermanentWidget(clipboardInsertProgressLabel_);
     statusBar()->addPermanentWidget(clipboardInsertProgressBar_);
+    statusBar()->addPermanentWidget(clipboardInsertCancelButton_);
 
     connect(openButton, &QPushButton::clicked, this, &MainWindow::openTraceFile);
     connect(reloadButton, &QPushButton::clicked, this, &MainWindow::reloadTrace);
     connect(traceEmptyStateButton_, &QPushButton::clicked, this, &MainWindow::openTraceFile);
+    connect(clipboardInsertCancelButton_, &QPushButton::clicked, this, &MainWindow::cancelClipboardXactionAddressInsert);
     connect(traceToolbarFoldButton_, &QToolButton::toggled, this, &MainWindow::setTraceToolbarFolded);
     connect(sessionTabBar_, &QTabBar::currentChanged, this, [this](const int index) {
         if (switchingTraceSession_ || index < 0 || !sessionTabBar_) {

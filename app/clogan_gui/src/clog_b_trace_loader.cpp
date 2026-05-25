@@ -6186,6 +6186,55 @@ std::uint64_t xactionFirstAddress(const CHI::Eb::Xact::Xaction<Config>& xaction)
     return static_cast<std::uint64_t>(first.flit.snp.Addr()) << 3U;
 }
 
+bool ebXactionDenialIsFieldMapping(const CHI::Eb::Xact::XactDenialEnum denial) noexcept
+{
+    if (!denial) {
+        return false;
+    }
+
+    const int category = denial->value & 0xFFFF0000;
+    return category >= 0x00100000 && category <= 0x00130000;
+}
+
+template<typename Config>
+bool cacheReplayCanSampleAcceptedFlit(const EbCacheReplayRecord<Config>& replayRecord) noexcept
+{
+    return replayRecord.processed
+        && replayRecord.result.denial == CHI::Eb::Xact::XactDenial::ACCEPTED;
+}
+
+template<typename Config>
+bool cacheReplayCanSampleResponseFlit(const EbCacheReplayRecord<Config>& replayRecord) noexcept
+{
+    return replayRecord.processed
+        && replayRecord.result.xaction
+        && (replayRecord.result.denial == CHI::Eb::Xact::XactDenial::ACCEPTED
+            || ebXactionDenialIsFieldMapping(replayRecord.result.denial));
+}
+
+template<typename Config>
+std::optional<CHI::Eb::Xact::CacheState> currentDatCacheState(
+    CHI::Eb::Xact::RNCacheStateMap<Config>& stateMap,
+    const std::uint64_t address,
+    const std::uint64_t time,
+    const CHI::Eb::Xact::Xaction<Config>& xaction,
+    const CHI::Eb::Flits::DAT<Config>& flit,
+    const FlitDirection direction,
+    CHI::Eb::Xact::XactDenialEnum& denial)
+{
+    denial = nullptr;
+    if (direction == FlitDirection::Rx && xaction.GetFirst().IsREQ()) {
+        denial = stateMap.NextRXDAT(address, time, xaction, flit);
+    } else if (direction == FlitDirection::Tx) {
+        denial = stateMap.NextTXDAT(address, time, xaction, flit);
+    }
+
+    if (denial == CHI::Eb::Xact::XactDenial::ACCEPTED) {
+        return stateMap.Get(address);
+    }
+    return std::nullopt;
+}
+
 template<typename Config>
 class EbCacheLifetimeReplay final {
 public:
@@ -6204,8 +6253,8 @@ public:
         if (!nodeType || !ebXactionUseRnfJoint(*nodeType)) {
             return true;
         }
-        if (!replayRecord.processed
-            || replayRecord.result.denial != CHI::Eb::Xact::XactDenial::ACCEPTED) {
+        if (!cacheReplayCanSampleAcceptedFlit(replayRecord)
+            && !cacheReplayCanSampleResponseFlit(replayRecord)) {
             return true;
         }
 
@@ -6215,10 +6264,14 @@ public:
             std::max<qint64>(0, decodedRecord.timestamp));
         bool sampled = false;
         std::uint64_t address = 0;
+        std::optional<CHI::Eb::Xact::CacheState> datState;
 
         std::visit([&](const auto& flit) {
             using T = std::decay_t<decltype(flit)>;
             if constexpr (std::is_same_v<T, FlexibleReqFlit>) {
+                if (!cacheReplayCanSampleAcceptedFlit(replayRecord)) {
+                    return;
+                }
                 if (decodedRecord.direction != FlitDirection::Tx) {
                     return;
                 }
@@ -6228,7 +6281,7 @@ public:
                     sampled = true;
                 }
             } else if constexpr (std::is_same_v<T, FlexibleRspFlit>) {
-                if (!replayRecord.result.xaction) {
+                if (!cacheReplayCanSampleResponseFlit(replayRecord)) {
                     return;
                 }
                 address = normalizedCacheLineAddress(xactionFirstAddress(*replayRecord.result.xaction));
@@ -6243,21 +6296,28 @@ public:
                 }
                 sampled = denial == CHI::Eb::Xact::XactDenial::ACCEPTED;
             } else if constexpr (std::is_same_v<T, FlexibleDatFlit>) {
-                if (!replayRecord.result.xaction) {
+                if (!cacheReplayCanSampleResponseFlit(replayRecord)) {
                     return;
                 }
                 address = normalizedCacheLineAddress(xactionFirstAddress(*replayRecord.result.xaction));
                 const auto xactionFlit = makeEbXactionDatFlit<Config>(flit);
                 CHI::Eb::Xact::XactDenialEnum denial = nullptr;
-                if (decodedRecord.direction == FlitDirection::Rx
-                    && replayRecord.result.xaction->GetFirst().IsREQ()) {
-                    denial = stateMap.NextRXDAT(address, time, *replayRecord.result.xaction, xactionFlit);
-                } else if (decodedRecord.direction == FlitDirection::Tx
-                           && replayRecord.result.xaction->GetFirst().IsSNP()) {
-                    denial = stateMap.NextTXDAT(address, time, *replayRecord.result.xaction, xactionFlit);
+                if (const auto dataState = currentDatCacheState<Config>(stateMap,
+                                                                         address,
+                                                                         time,
+                                                                         *replayRecord.result.xaction,
+                                                                         xactionFlit,
+                                                                         decodedRecord.direction,
+                                                                         denial)) {
+                    sampled = true;
+                    datState = *dataState;
+                    return;
                 }
                 sampled = denial == CHI::Eb::Xact::XactDenial::ACCEPTED;
             } else if constexpr (std::is_same_v<T, FlexibleSnpFlit>) {
+                if (!cacheReplayCanSampleAcceptedFlit(replayRecord)) {
+                    return;
+                }
                 if (decodedRecord.direction != FlitDirection::Rx) {
                     return;
                 }
@@ -6273,7 +6333,7 @@ public:
             return true;
         }
 
-        const CHI::Eb::Xact::CacheState state = stateMap.Get(address);
+        const CHI::Eb::Xact::CacheState state = datState.value_or(stateMap.Get(address));
         return updateLine(static_cast<std::uint32_t>(decodedRecord.nodeId),
                           QString::fromStdString(CLog::NodeTypeToString(*nodeType)),
                           address,
@@ -6429,8 +6489,8 @@ public:
         if (!nodeType || !ebXactionUseRnfJoint(*nodeType)) {
             return true;
         }
-        if (!replayRecord.processed
-            || replayRecord.result.denial != CHI::Eb::Xact::XactDenial::ACCEPTED) {
+        if (!cacheReplayCanSampleAcceptedFlit(replayRecord)
+            && !cacheReplayCanSampleResponseFlit(replayRecord)) {
             return true;
         }
 
@@ -6440,10 +6500,14 @@ public:
             std::max<qint64>(0, decodedRecord.timestamp));
         bool sampled = false;
         std::uint64_t address = 0;
+        std::optional<CHI::Eb::Xact::CacheState> datState;
 
         std::visit([&](const auto& flit) {
             using T = std::decay_t<decltype(flit)>;
             if constexpr (std::is_same_v<T, FlexibleReqFlit>) {
+                if (!cacheReplayCanSampleAcceptedFlit(replayRecord)) {
+                    return;
+                }
                 if (decodedRecord.direction != FlitDirection::Tx) {
                     return;
                 }
@@ -6453,7 +6517,7 @@ public:
                     sampled = true;
                 }
             } else if constexpr (std::is_same_v<T, FlexibleRspFlit>) {
-                if (!replayRecord.result.xaction) {
+                if (!cacheReplayCanSampleResponseFlit(replayRecord)) {
                     return;
                 }
                 address = normalizedCacheLineAddress(xactionFirstAddress(*replayRecord.result.xaction));
@@ -6468,21 +6532,28 @@ public:
                 }
                 sampled = denial == CHI::Eb::Xact::XactDenial::ACCEPTED;
             } else if constexpr (std::is_same_v<T, FlexibleDatFlit>) {
-                if (!replayRecord.result.xaction) {
+                if (!cacheReplayCanSampleResponseFlit(replayRecord)) {
                     return;
                 }
                 address = normalizedCacheLineAddress(xactionFirstAddress(*replayRecord.result.xaction));
                 const auto xactionFlit = makeEbXactionDatFlit<Config>(flit);
                 CHI::Eb::Xact::XactDenialEnum denial = nullptr;
-                if (decodedRecord.direction == FlitDirection::Rx
-                    && replayRecord.result.xaction->GetFirst().IsREQ()) {
-                    denial = stateMap.NextRXDAT(address, time, *replayRecord.result.xaction, xactionFlit);
-                } else if (decodedRecord.direction == FlitDirection::Tx
-                           && replayRecord.result.xaction->GetFirst().IsSNP()) {
-                    denial = stateMap.NextTXDAT(address, time, *replayRecord.result.xaction, xactionFlit);
+                if (const auto dataState = currentDatCacheState<Config>(stateMap,
+                                                                         address,
+                                                                         time,
+                                                                         *replayRecord.result.xaction,
+                                                                         xactionFlit,
+                                                                         decodedRecord.direction,
+                                                                         denial)) {
+                    sampled = true;
+                    datState = *dataState;
+                    return;
                 }
                 sampled = denial == CHI::Eb::Xact::XactDenial::ACCEPTED;
             } else if constexpr (std::is_same_v<T, FlexibleSnpFlit>) {
+                if (!cacheReplayCanSampleAcceptedFlit(replayRecord)) {
+                    return;
+                }
                 if (decodedRecord.direction != FlitDirection::Rx) {
                     return;
                 }
@@ -6499,7 +6570,7 @@ public:
         }
 
         rnNodeType_ = QString::fromStdString(CLog::NodeTypeToString(*nodeType));
-        const CHI::Eb::Xact::CacheState state = stateMap.Get(address);
+        const CHI::Eb::Xact::CacheState state = datState.value_or(stateMap.Get(address));
         return updateState(decodedRecord.timestamp, logicalRow, state, error);
     }
 

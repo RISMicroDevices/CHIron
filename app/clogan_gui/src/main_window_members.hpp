@@ -129,6 +129,7 @@
     QProgressBar* xactionIndexProgressBar_ = nullptr;
     QLabel* clipboardInsertProgressLabel_ = nullptr;
     QProgressBar* clipboardInsertProgressBar_ = nullptr;
+    QPushButton* clipboardInsertCancelButton_ = nullptr;
     QStackedLayout* traceContentStack_ = nullptr;
     QWidget* traceEmptyState_ = nullptr;
     QPushButton* traceEmptyStateButton_ = nullptr;

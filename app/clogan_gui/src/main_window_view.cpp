@@ -469,6 +469,10 @@ void MainWindow::updateClipboardInsertProgress(const bool active,
     if (!active) {
         clipboardInsertProgressLabel_->hide();
         clipboardInsertProgressBar_->hide();
+        if (clipboardInsertCancelButton_) {
+            clipboardInsertCancelButton_->hide();
+            clipboardInsertCancelButton_->setEnabled(true);
+        }
         clipboardInsertProgressBar_->setRange(0, 1000);
         clipboardInsertProgressBar_->setValue(0);
         return;
@@ -494,6 +498,11 @@ void MainWindow::updateClipboardInsertProgress(const bool active,
 
     clipboardInsertProgressLabel_->show();
     clipboardInsertProgressBar_->show();
+    if (clipboardInsertCancelButton_) {
+        clipboardInsertCancelButton_->show();
+        clipboardInsertCancelButton_->setEnabled(clipboardXactionAddressInsertStopSource_
+                                                 && !clipboardXactionAddressInsertStopSource_->stop_requested());
+    }
 }
 
 void MainWindow::setTraceToolbarFolded(const bool folded)
