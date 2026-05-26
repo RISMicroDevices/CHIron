@@ -1050,8 +1050,179 @@ namespace CHI {
                 }
             );
 
+            /*
+            DENIED_REQ_OPCODE_NOT_SUPPORTED
+            - Title Message: "Denied unsupported REQ opcode by component"
+            - Further Message: "Opcode {REQ.Opcode} (Decode({REQ.Opcode})) decoded but not supported by component"
+            - Source: [Xaction, Joint, RNCacheStateMap]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. REQ.Opcode
+            */
+            inline static constexpr ExplanationBack<config> DENIED_REQ_OPCODE_NOT_SUPPORTED = (
+                "DENIED_REQ_OPCODE_NOT_SUPPORTED",
+                Xact::XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED,
+                [](auto, SourceEnum source) -> std::string { return "Denied unsupported REQ opcode by component"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsREQ()) {
+                            return std::format("REQ Opcode {:#x} ({}) decoded but not supported by component",
+                                uint64_t(subject.obj.firedFlitRequest->flit.req.Opcode()),
+                                Opcodes::REQ::Decoder<Flits::REQ<config>>::INSTANCE.Decode(subject.obj.firedFlitRequest->flit.req.Opcode()).GetName("<unknown>"));
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::Opcode };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
 
-        // TODO
+            /*
+            DENIED_RSP_OPCODE_NOT_SUPPORTED
+            - Title Message: "Denied unsupported RSP opcode by component"
+            - Further Message: "Opcode {RSP.Opcode} (Decode({RSP.Opcode})) decoded but not supported by component"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.Opcode
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_OPCODE_NOT_SUPPORTED = (
+                "DENIED_RSP_OPCODE_NOT_SUPPORTED",
+                Xact::XactDenial::DENIED_RSP_OPCODE_NOT_SUPPORTED,
+                [](auto, SourceEnum source) -> std::string { return "Denied unsupported RSP opcode by component"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            return std::format("RSP Opcode {:#x} ({}) decoded but not supported by component",
+                                uint64_t(subject.obj.firedFlitResponse->flit.rsp.Opcode()),
+                                Opcodes::RSP::Decoder<Flits::RSP<config>>::INSTANCE.Decode(subject.obj.firedFlitResponse->flit.rsp.Opcode()).GetName("<unknown>"));
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::Opcode };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_OPCODE_NOT_SUPPORTED
+            - Title Message: "Denied unsupported DAT opcode by component"
+            - Further Message: "Opcode {DAT.Opcode} (Decode({DAT.Opcode})) decoded but not supported by component"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.Opcode
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_OPCODE_NOT_SUPPORTED = (
+                "DENIED_DAT_OPCODE_NOT_SUPPORTED",
+                Xact::XactDenial::DENIED_DAT_OPCODE_NOT_SUPPORTED,
+                [](auto, SourceEnum source) -> std::string { return "Denied unsupported DAT opcode by component"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            return std::format("DAT Opcode {:#x} ({}) decoded but not supported by component",
+                                uint64_t(subject.obj.firedFlitResponse->flit.dat.Opcode()),
+                                Opcodes::DAT::Decoder<Flits::DAT<config>>::INSTANCE.Decode(subject.obj.firedFlitResponse->flit.dat.Opcode()).GetName("<unknown>"));
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::Opcode };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_SNP_OPCODE_NOT_SUPPORTED
+            - Title Message: "Denied unsupported SNP opcode by component"
+            - Further Message: "Opcode {SNP.Opcode} (Decode({SNP.Opcode})) decoded but not supported by component"
+            - Source: [Xaction, Joint, RNCacheStateMap]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. SNP.Opcode
+            */
+            inline static constexpr ExplanationBack<config> DENIED_SNP_OPCODE_NOT_SUPPORTED = (
+                "DENIED_SNP_OPCODE_NOT_SUPPORTED",
+                Xact::XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED,
+                [](auto, SourceEnum source) -> std::string { return "Denied unsupported SNP opcode by component"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsSNP()) {
+                            return std::format("SNP Opcode {:#x} ({}) decoded but not supported by component",
+                                uint64_t(subject.obj.firedFlitRequest->flit.snp.Opcode()),
+                                Opcodes::SNP::Decoder<Flits::SNP<config>>::INSTANCE.Decode(subject.obj.firedFlitRequest->flit.snp.Opcode()).GetName("<unknown>"));
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::Opcode };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_REQ_OPCODE_NOT_DECODED
+            - Title Message: "Denied unrecognized REQ opcode"
+            - Further Message: "REQ Opcode {REQ.Opcode} could not be decoded"
+            - Source: [Joint, RNCacheStateMap]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. REQ.Opcode
+            */
+            inline static constexpr ExplanationBack<config> DENIED_REQ_OPCODE_NOT_DECODED = (
+                "DENIED_REQ_OPCODE_NOT_DECODED",
+                Xact::XactDenial::DENIED_REQ_OPCODE_NOT_DECODED,
+                [](auto, SourceEnum source) -> std::string { return "Denied unrecognized REQ opcode"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsREQ()) {
+                            return std::format("REQ Opcode {:#x} could not be decoded",
+                                uint64_t(subject.obj.firedFlitRequest->flit.req.Opcode()));
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::Opcode };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_SNP_OPCODE_NOT_DECODED
+            - Title Message: "Denied unrecognized SNP opcode"
+            - Further Message: "SNP Opcode {SNP.Opcode} could not be decoded"
+            - Source: [Joint, RNCacheStateMap]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. SNP.Opcode
+            */
+            inline static constexpr ExplanationBack<config> DENIED_SNP_OPCODE_NOT_DECODED = (
+                "DENIED_SNP_OPCODE_NOT_DECODED",
+                Xact::XactDenial::DENIED_SNP_OPCODE_NOT_DECODED,
+                [](auto, SourceEnum source) -> std::string { return "Denied unrecognized SNP opcode"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsSNP()) {
+                            return std::format("SNP Opcode {:#x} could not be decoded",
+                                uint64_t(subject.obj.firedFlitRequest->flit.snp.Opcode()));
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::Opcode };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            // TODO
         };
     }
 /*
