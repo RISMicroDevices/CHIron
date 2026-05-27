@@ -1808,6 +1808,11 @@ namespace /*CHI::*/Xact {
         //
         FiredRequestFlit<config> firedSnpFlit(XactScope::Requester, false, time, snpFlit, snpTgtId);
 
+        // *NOTICE: The SNP route is accurately checked here.
+        //          The check inside xaction was impossible to be accurate, since TgtID not included in SNP flit.
+        if (!glbl.TOPOLOGY.IsRequester(snpTgtId) || !glbl.TOPOLOGY.IsHome(snpFlit.SrcID()))
+            return this->RequestDeniedByJoint(XactDenial::DENIED_SNP_NOT_FROM_HN_TO_RN, firedSnpFlit);
+
         //
         if (rxTransactions.contains(key))
             return this->RequestDeniedByJoint(XactDenial::DENIED_SNP_TXNID_IN_USE, firedSnpFlit, rxTransactions[key]);
