@@ -2,7 +2,9 @@
 #include "main_window_internal.hpp"
 
 #include <QComboBox>
+#include <QElapsedTimer>
 #include <QFormLayout>
+#include <QLoggingCategory>
 #include <QSet>
 #include <QSpinBox>
 #include <QWizard>
@@ -15,6 +17,8 @@
 
 namespace CHIron::Gui {
 using namespace MainWindowDetail;
+
+Q_LOGGING_CATEGORY(clipboardInsertLog, "clogan.clipboard.insert")
 
 namespace {
 
@@ -54,14 +58,67 @@ struct ClipboardXactionAddressScanResult {
     std::uint64_t scannedRows = 0;
 };
 
-struct ClipboardXactionAddressBatchRows {
-    std::vector<std::pair<int, FlitRecord>> rows;
-    int preSkippedDuplicates = 0;
-};
-
 constexpr std::uint8_t kClipboardXactionRowProcessed = 1U << 0;
 constexpr std::uint8_t kClipboardXactionRowIndexed = 1U << 1;
 constexpr std::uint8_t kClipboardXactionRowProcessedByJoint = 1U << 2;
+constexpr std::size_t kClipboardInsertApplyChunkRows = 1024;
+constexpr qint64 kClipboardInsertApplyChunkBudgetMs = 2;
+constexpr qint64 kClipboardGuiStallWarnMs = 16;
+constexpr std::uint64_t kClipboardWorkerYieldEveryChunks = 4;
+
+void SetClipboardWorkerThreadPriority() noexcept
+{
+#ifdef Q_OS_WIN
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#endif
+}
+
+void ClipboardWorkerCooperativeYield(std::uint64_t& completedChunks) noexcept
+{
+    ++completedChunks;
+    if ((completedChunks % kClipboardWorkerYieldEveryChunks) == 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } else {
+        std::this_thread::yield();
+    }
+}
+
+void ReleaseClipboardBatchRowsAsync(std::vector<std::pair<int, FlitRecord>> rows)
+{
+    if (rows.empty()) {
+        return;
+    }
+    std::thread cleanupThread([rows = std::move(rows)]() mutable {
+        SetClipboardWorkerThreadPriority();
+        rows.clear();
+        rows.shrink_to_fit();
+    });
+    cleanupThread.detach();
+}
+
+void ReleaseClipboardEntriesAsync(std::vector<ClipboardEntry> entries)
+{
+    if (entries.empty()) {
+        return;
+    }
+    std::thread cleanupThread([entries = std::move(entries)]() mutable {
+        SetClipboardWorkerThreadPriority();
+        entries.clear();
+        entries.shrink_to_fit();
+    });
+    cleanupThread.detach();
+}
+
+void LogClipboardGuiWork(const char* stage, const std::chrono::steady_clock::time_point started)
+{
+    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started).count();
+    if (elapsedMs >= kClipboardGuiStallWarnMs) {
+        qCWarning(clipboardInsertLog).nospace()
+            << "Clipboard insertion GUI stage \"" << stage << "\" took "
+            << elapsedMs << " ms.";
+    }
+}
 
 bool ParametersEqual(const CLog::Parameters& lhs, const CLog::Parameters& rhs)
 {
@@ -74,6 +131,252 @@ bool ParametersEqual(const CLog::Parameters& lhs, const CLog::Parameters& rhs)
         && lhs.IsDataCheckPresent() == rhs.IsDataCheckPresent()
         && lhs.IsPoisonPresent() == rhs.IsPoisonPresent()
         && lhs.IsMPAMPresent() == rhs.IsMPAMPresent();
+}
+
+void OrderClipboardEntriesForInsertion(std::vector<ClipboardEntry>& entries,
+                                       quint64 sourceSessionId,
+                                       int ordering,
+                                       std::size_t insertionStartIndex);
+
+bool ClipboardEntriesAreSourceSortedForSession(const std::vector<ClipboardEntry>& entries,
+                                               quint64 sourceSessionId);
+
+bool ClipboardEntryModifiedForOrdering(const ClipboardEntry& entry);
+
+void SortClipboardEntriesBySourceRow(std::vector<ClipboardEntry>& entries);
+
+std::optional<CLogBTraceMetadata> ClipboardMetadataForCLogBSave(
+    const std::vector<ClipboardEntry>& entries,
+    const std::unordered_map<quint64, CLogBTraceMetadata>& metadataBySession)
+{
+    if (entries.empty()) {
+        return std::nullopt;
+    }
+
+    std::optional<CLogBTraceMetadata> merged;
+    for (const ClipboardEntry& entry : entries) {
+        if (!entry.record.rawRecordAvailable
+            || entry.record.rawFlitLength == 0
+            || entry.record.rawFlitWords.empty()) {
+            return std::nullopt;
+        }
+
+        const auto metadataIt = metadataBySession.find(entry.source.sessionId);
+        if (metadataIt == metadataBySession.end()) {
+            return std::nullopt;
+        }
+        const CLogBTraceMetadata& metadata = metadataIt->second;
+
+        if (!merged) {
+            merged = metadata;
+            merged->blocks.clear();
+            merged->totalRecords = static_cast<std::uint64_t>(entries.size());
+            merged->firstTimestamp = entries.front().record.timestamp;
+            merged->lastTimestamp = entries.back().record.timestamp;
+            merged->channelCounts = {};
+        } else {
+            if (!ParametersEqual(merged->parameters, metadata.parameters)) {
+                return std::nullopt;
+            }
+            for (const auto& [nodeId, nodeType] : metadata.nodeTypes) {
+                const auto found = merged->nodeTypes.find(nodeId);
+                if (found != merged->nodeTypes.end() && found->second != nodeType) {
+                    return std::nullopt;
+                }
+                merged->nodeTypes.insert_or_assign(nodeId, nodeType);
+            }
+            for (const auto& [nodeId, annotation] : metadata.nodeAnnotations) {
+                merged->nodeAnnotations.emplace(nodeId, annotation);
+            }
+        }
+    }
+    return merged;
+}
+
+struct ClipboardPreparedInsert {
+    std::vector<ClipboardEntry> target;
+    std::vector<ClipboardEntry> appended;
+    std::optional<CLogBTraceMetadata> metadata;
+    std::uint64_t nextSequence = 0;
+    int inserted = 0;
+    int skipped = 0;
+    bool appendOnly = false;
+    bool mergeBySource = false;
+};
+
+struct ClipboardAppendPrepareContext {
+    std::vector<int> existingLogicalRows;
+    std::uint64_t nextSequence = 0;
+    int maxLogicalRow = -1;
+    bool sourceSorted = true;
+    bool hasModifiedEntries = false;
+    bool canUseDeltaPrepare = true;
+};
+
+ClipboardPreparedInsert PrepareClipboardInsertTarget(
+    std::vector<ClipboardEntry> baseEntries,
+    std::vector<std::pair<int, FlitRecord>> rows,
+    const quint64 sourceSessionId,
+    const int ordering,
+    const int preSkippedDuplicates,
+    const std::unordered_map<quint64, CLogBTraceMetadata>& metadataBySession,
+    std::stop_token stopToken)
+{
+    ClipboardPreparedInsert prepared;
+    prepared.target = std::move(baseEntries);
+    prepared.skipped = std::max(0, preSkippedDuplicates);
+
+    const std::size_t insertionStartIndex = prepared.target.size();
+    prepared.target.reserve(prepared.target.size() + rows.size());
+    QSet<qulonglong> existingRows;
+    existingRows.reserve(static_cast<int>(prepared.target.size() + rows.size()));
+    std::uint64_t nextSequence = 0;
+    for (const ClipboardEntry& entry : prepared.target) {
+        nextSequence = std::max<std::uint64_t>(nextSequence, entry.sequence + 1);
+        if (entry.source.sessionId == sourceSessionId && entry.source.logicalRow >= 0) {
+            existingRows.insert(static_cast<qulonglong>(entry.source.logicalRow));
+        }
+    }
+    const std::uint64_t baseNextSequence = nextSequence;
+
+    for (const auto& [logicalRow, record] : rows) {
+        if (stopToken.stop_requested()) {
+            prepared.target.resize(insertionStartIndex);
+            prepared.inserted = 0;
+            nextSequence = baseNextSequence;
+            break;
+        }
+        const qulonglong logicalRowKey = static_cast<qulonglong>(logicalRow);
+        if (existingRows.contains(logicalRowKey)) {
+            ++prepared.skipped;
+            continue;
+        }
+        existingRows.insert(logicalRowKey);
+        prepared.target.push_back(ClipboardEntry{
+            .source = ClipboardSourceKey{
+                .sessionId = sourceSessionId,
+                .logicalRow = logicalRow,
+            },
+            .sequence = nextSequence++,
+            .record = record,
+            .originalRecord = record,
+        });
+        ++prepared.inserted;
+    }
+
+    if (prepared.inserted > 0) {
+        OrderClipboardEntriesForInsertion(prepared.target,
+                                          sourceSessionId,
+                                          ordering,
+                                          insertionStartIndex);
+    }
+    if (!metadataBySession.empty()) {
+        prepared.metadata = ClipboardMetadataForCLogBSave(prepared.target, metadataBySession);
+    }
+    prepared.nextSequence = nextSequence;
+    return prepared;
+}
+
+ClipboardPreparedInsert PrepareClipboardAppendOnlyInsert(
+    ClipboardAppendPrepareContext context,
+    std::vector<std::pair<int, FlitRecord>> rows,
+    const quint64 sourceSessionId,
+    const int preSkippedDuplicates,
+    std::stop_token stopToken)
+{
+    ClipboardPreparedInsert prepared;
+    prepared.appendOnly = context.canUseDeltaPrepare;
+    prepared.skipped = std::max(0, preSkippedDuplicates);
+    prepared.nextSequence = context.nextSequence;
+    prepared.appended.reserve(rows.size());
+
+    if (!context.canUseDeltaPrepare) {
+        prepared.appendOnly = false;
+        prepared.mergeBySource = false;
+        return prepared;
+    }
+
+    std::sort(context.existingLogicalRows.begin(), context.existingLogicalRows.end());
+    context.existingLogicalRows.erase(std::unique(context.existingLogicalRows.begin(),
+                                                 context.existingLogicalRows.end()),
+                                      context.existingLogicalRows.end());
+    std::unordered_set<int> appendedLogicalRows;
+    appendedLogicalRows.reserve(rows.size());
+
+    for (const auto& [logicalRow, record] : rows) {
+        if (stopToken.stop_requested()) {
+            prepared.appended.clear();
+            prepared.inserted = 0;
+            prepared.nextSequence = context.nextSequence;
+            break;
+        }
+        if (std::binary_search(context.existingLogicalRows.begin(),
+                               context.existingLogicalRows.end(),
+                               logicalRow)
+            || !appendedLogicalRows.insert(logicalRow).second) {
+            ++prepared.skipped;
+            continue;
+        }
+        prepared.appended.push_back(ClipboardEntry{
+            .source = ClipboardSourceKey{
+                .sessionId = sourceSessionId,
+                .logicalRow = logicalRow,
+            },
+            .sequence = prepared.nextSequence++,
+            .record = record,
+            .originalRecord = record,
+        });
+        ++prepared.inserted;
+    }
+
+    if (!ClipboardEntriesAreSourceSortedForSession(prepared.appended, sourceSessionId)) {
+        SortClipboardEntriesBySourceRow(prepared.appended);
+    }
+    const bool appendedSourceSorted = true;
+    if (context.sourceSorted
+        && !context.hasModifiedEntries
+        && appendedSourceSorted
+        && (prepared.appended.empty()
+            || context.maxLogicalRow < 0
+            || context.maxLogicalRow <= prepared.appended.front().source.logicalRow)) {
+        return prepared;
+    }
+
+    prepared.appendOnly = false;
+    prepared.mergeBySource =
+        context.sourceSorted
+        && !context.hasModifiedEntries
+        && appendedSourceSorted;
+    return prepared;
+}
+
+ClipboardAppendPrepareContext CaptureClipboardAppendPrepareContext(
+    const std::vector<ClipboardEntry>& entries,
+    const quint64 sourceSessionId,
+    const std::optional<bool> knownHasModifiedEntries = std::nullopt)
+{
+    ClipboardAppendPrepareContext context;
+    context.existingLogicalRows.reserve(entries.size());
+    context.hasModifiedEntries = knownHasModifiedEntries.value_or(false);
+
+    int previousLogicalRow = -1;
+    for (const ClipboardEntry& entry : entries) {
+        context.nextSequence = std::max<std::uint64_t>(context.nextSequence, entry.sequence + 1);
+        if (entry.source.sessionId != sourceSessionId || entry.source.logicalRow < 0) {
+            context.sourceSorted = false;
+        } else {
+            context.existingLogicalRows.push_back(entry.source.logicalRow);
+            context.maxLogicalRow = std::max(context.maxLogicalRow, entry.source.logicalRow);
+            if (entry.source.logicalRow < previousLogicalRow) {
+                context.sourceSorted = false;
+            }
+            previousLogicalRow = entry.source.logicalRow;
+        }
+        if (!knownHasModifiedEntries && ClipboardEntryModifiedForOrdering(entry)) {
+            context.hasModifiedEntries = true;
+        }
+    }
+    return context;
 }
 
 bool FieldEntriesEqualForClipboard(const FieldEntry& lhs, const FieldEntry& rhs)
@@ -793,6 +1096,9 @@ FlitRecord ClipboardRecordFromFastRecord(const CLogBTraceMetadata& metadata,
             : ((rowRef.compactFlags & kClipboardXactionRowProcessed) != 0
                    ? XactionIndexState::Denied
                    : XactionIndexState::NotStarted);
+    record.rawRecordAvailable = false;
+    record.rawFlitLength = 0;
+    record.rawFlitWords.clear();
     if (ClipboardTransportIsBeforeSam(transportChannel)) {
         record.channelTag = QStringLiteral("Before SAM");
         record.dimTarget = true;
@@ -801,6 +1107,7 @@ FlitRecord ClipboardRecordFromFastRecord(const CLogBTraceMetadata& metadata,
 }
 
 bool ClipboardReadFastRecordsForSlice(const std::shared_ptr<TraceSession>& session,
+                                      const std::shared_ptr<const TraceSession::TraceSessionSnapshot>& sessionSnapshot,
                                       const ClipboardXactionAddressSlice& slice,
                                       std::vector<CLogBTraceFastRecordInfo>& fastRecords,
                                       CLogBTraceLoadError& error,
@@ -812,7 +1119,11 @@ bool ClipboardReadFastRecordsForSlice(const std::shared_ptr<TraceSession>& sessi
         error.summary = QStringLiteral("No trace session is available for Clipboard insertion.");
         return false;
     }
-    if (slice.blockIndex >= session->metadata().blocks.size()) {
+    if (!sessionSnapshot) {
+        error.summary = QStringLiteral("Trace session snapshot is not available for Clipboard insertion.");
+        return false;
+    }
+    if (slice.blockIndex >= sessionSnapshot->metadata.blocks.size()) {
         error.summary = QStringLiteral("Clipboard insertion scan block is out of range.");
         return false;
     }
@@ -822,17 +1133,18 @@ bool ClipboardReadFastRecordsForSlice(const std::shared_ptr<TraceSession>& sessi
     }
 
     const std::size_t rowCount = static_cast<std::size_t>(slice.rowCount);
-    if (session->readFastRecordsFromIndex(slice.blockIndex,
-                                          slice.localBegin,
-                                          rowCount,
-                                          fastRecords)
+    if (session->readFastRecordsFromSnapshot(sessionSnapshot,
+                                             slice.blockIndex,
+                                             slice.localBegin,
+                                             rowCount,
+                                             fastRecords)
         && fastRecords.size() >= rowCount) {
         return true;
     }
 
     std::shared_ptr<CLog::CLogB::TagCHIRecords> block;
-    if (!CLogBTraceLoader::loadBlockRecords(session->filePath(),
-                                            session->metadata(),
+    if (!CLogBTraceLoader::loadBlockRecords(sessionSnapshot->filePath,
+                                            sessionSnapshot->metadata,
                                             slice.blockIndex,
                                             block,
                                             error,
@@ -846,7 +1158,7 @@ bool ClipboardReadFastRecordsForSlice(const std::shared_ptr<TraceSession>& sessi
     }
 
     std::vector<CLogBTraceFastRecordInfo> blockFastRecords;
-    if (!CLogBTraceLoader::buildBlockFastRecords(session->metadata(),
+    if (!CLogBTraceLoader::buildBlockFastRecords(sessionSnapshot->metadata,
                                                 slice.blockIndex,
                                                 *block,
                                                 blockFastRecords,
@@ -919,16 +1231,12 @@ std::size_t ClipboardXactionAddressWorkerCount(const std::size_t sliceCount) noe
     if (sliceCount <= 1) {
         return 1;
     }
-    const unsigned int hardware = std::max(1U, std::thread::hardware_concurrency());
-    const std::size_t uiFriendlyHardware =
-        hardware > 2U ? static_cast<std::size_t>(hardware - 1U)
-                      : static_cast<std::size_t>(hardware);
-    constexpr std::size_t kMaxWorkers = 6;
-    return std::min<std::size_t>({sliceCount, kMaxWorkers, uiFriendlyHardware});
+    return 1;
 }
 
 bool ClipboardCollectFastXactionAnchors(
     const std::shared_ptr<TraceSession>& session,
+    const std::shared_ptr<const TraceSession::TraceSessionSnapshot>& sessionSnapshot,
     const std::vector<ClipboardXactionAddressSlice>& slices,
     std::stop_token stopToken,
     const std::function<void(std::uint64_t completedRows)>& progressCallback,
@@ -937,7 +1245,7 @@ bool ClipboardCollectFastXactionAnchors(
 {
     result = {};
     error = {};
-    if (!session) {
+    if (!session || !sessionSnapshot) {
         error.summary = QStringLiteral("No trace session is available for Clipboard insertion.");
         return false;
     }
@@ -953,6 +1261,8 @@ bool ClipboardCollectFastXactionAnchors(
     CLogBTraceLoadError firstError;
 
     const auto worker = [&]() {
+        SetClipboardWorkerThreadPriority();
+        std::uint64_t yieldChunks = 0;
         std::unordered_map<std::uint64_t, XactionAddressAnchor> localAnchors;
         std::unordered_set<std::uint64_t> localOrdinals;
         std::vector<CLogBTraceFastRecordInfo> fastRecords;
@@ -976,6 +1286,7 @@ bool ClipboardCollectFastXactionAnchors(
             compactInfos.clear();
             localError = {};
             if (!ClipboardReadFastRecordsForSlice(session,
+                                                  sessionSnapshot,
                                                   slice,
                                                   fastRecords,
                                                   localError,
@@ -983,7 +1294,8 @@ bool ClipboardCollectFastXactionAnchors(
                 if (localError.summary.isEmpty()) {
                     localError.summary = QStringLiteral("Could not read fast records for Clipboard insertion.");
                 }
-            } else if (!session->xactionRowCompactInfoRange(slice.beginRow,
+            } else if (!session->xactionRowCompactInfoRange(sessionSnapshot,
+                                                            slice.beginRow,
                                                             slice.rowCount,
                                                             compactInfos)) {
                 localError.summary =
@@ -1037,6 +1349,7 @@ bool ClipboardCollectFastXactionAnchors(
                 progressCallback(localScannedRows);
                 localScannedRows = 0;
             }
+            ClipboardWorkerCooperativeYield(yieldChunks);
         }
 
         const std::lock_guard lock(mergeMutex);
@@ -1079,6 +1392,7 @@ bool ClipboardCollectFastXactionAnchors(
 
 bool ClipboardCollectMatchingXactionRows(
     const std::shared_ptr<TraceSession>& session,
+    const std::shared_ptr<const TraceSession::TraceSessionSnapshot>& sessionSnapshot,
     const std::vector<ClipboardXactionAddressLogicalSlice>& slices,
     const std::unordered_set<std::uint64_t>& matchingOrdinals,
     const std::unordered_set<std::uint64_t>& existingClipboardRows,
@@ -1091,7 +1405,7 @@ bool ClipboardCollectMatchingXactionRows(
     includedRows.clear();
     preSkippedDuplicates = 0;
     errorText.clear();
-    if (!session || slices.empty() || matchingOrdinals.empty()) {
+    if (!session || !sessionSnapshot || slices.empty() || matchingOrdinals.empty()) {
         return true;
     }
 
@@ -1104,6 +1418,8 @@ bool ClipboardCollectMatchingXactionRows(
     std::vector<std::vector<ClipboardXactionAddressRowRef>> rowsBySlice(slices.size());
 
     const auto worker = [&]() {
+        SetClipboardWorkerThreadPriority();
+        std::uint64_t yieldChunks = 0;
         std::vector<ClipboardXactionAddressRowRef> localRows;
         std::vector<TraceSession::XactionRowCompactInfo> compactInfos;
         std::uint64_t localCompletedRows = 0;
@@ -1122,7 +1438,8 @@ bool ClipboardCollectMatchingXactionRows(
             const ClipboardXactionAddressLogicalSlice& slice = slices[sliceIndex];
             localRows.clear();
             compactInfos.clear();
-            if (!session->xactionRowCompactInfoRange(slice.beginRow,
+            if (!session->xactionRowCompactInfoRange(sessionSnapshot,
+                                                     slice.beginRow,
                                                      slice.rowCount,
                                                      compactInfos)
                 || compactInfos.size() < static_cast<std::size_t>(slice.rowCount)) {
@@ -1164,6 +1481,7 @@ bool ClipboardCollectMatchingXactionRows(
                 localCompletedRows = 0;
             }
             rowsBySlice[sliceIndex] = std::move(localRows);
+            ClipboardWorkerCooperativeYield(yieldChunks);
         }
         if (progressCallback && localCompletedRows > 0) {
             progressCallback(localCompletedRows);
@@ -1208,6 +1526,7 @@ bool ClipboardCollectMatchingXactionRows(
 
 bool ClipboardDecodeRowsInChunks(
     const std::shared_ptr<TraceSession>& session,
+    const std::shared_ptr<const TraceSession::TraceSessionSnapshot>& sessionSnapshot,
     const std::vector<std::uint64_t>& includedLogicalRows,
     std::stop_token stopToken,
     const std::function<void(std::uint64_t completedRows)>& progressCallback,
@@ -1216,7 +1535,7 @@ bool ClipboardDecodeRowsInChunks(
 {
     rows.clear();
     errorText.clear();
-    if (!session || includedLogicalRows.empty()) {
+    if (!session || !sessionSnapshot || includedLogicalRows.empty()) {
         return true;
     }
 
@@ -1252,6 +1571,8 @@ bool ClipboardDecodeRowsInChunks(
     QString firstError;
 
     const auto worker = [&]() {
+        SetClipboardWorkerThreadPriority();
+        std::uint64_t yieldChunks = 0;
         CLogBTraceLoadError error;
         std::vector<FlitRecord> decodedRows;
         std::uint64_t localCompletedRows = 0;
@@ -1269,7 +1590,8 @@ bool ClipboardDecodeRowsInChunks(
 
             const Run& run = runs[runIndex];
             decodedRows.clear();
-            if (!session->readRowsDirect(run.beginRow,
+            if (!session->readRowsDirect(sessionSnapshot,
+                                         run.beginRow,
                                          run.count,
                                          decodedRows,
                                          error,
@@ -1316,6 +1638,7 @@ bool ClipboardDecodeRowsInChunks(
                 progressCallback(localCompletedRows);
                 localCompletedRows = 0;
             }
+            ClipboardWorkerCooperativeYield(yieldChunks);
         }
 
         if (progressCallback && localCompletedRows > 0) {
@@ -1349,6 +1672,7 @@ bool ClipboardDecodeRowsInChunks(
 
 bool ClipboardMaterializeRowsFromFastIndex(
     const std::shared_ptr<TraceSession>& session,
+    const std::shared_ptr<const TraceSession::TraceSessionSnapshot>& sessionSnapshot,
     const std::vector<ClipboardXactionAddressRowRef>& includedRows,
     std::stop_token stopToken,
     const std::function<void(std::uint64_t completedRows)>& progressCallback,
@@ -1357,12 +1681,12 @@ bool ClipboardMaterializeRowsFromFastIndex(
 {
     rows.clear();
     errorText.clear();
-    if (!session || includedRows.empty()) {
+    if (!session || !sessionSnapshot || includedRows.empty()) {
         return true;
     }
 
     rows.resize(includedRows.size());
-    const CLogBTraceMetadata& metadata = session->metadata();
+    const CLogBTraceMetadata& metadata = sessionSnapshot->metadata;
     std::size_t rowIndex = 0;
     for (std::size_t blockIndex = 0;
          blockIndex < metadata.blocks.size() && rowIndex < includedRows.size();
@@ -1400,21 +1724,19 @@ bool ClipboardMaterializeRowsFromFastIndex(
 
         std::vector<CLogBTraceFastRecordInfo> fastRecords;
         CLogBTraceLoadError fastError;
-        bool haveFastRecords =
-            session->readFastRecordsFromIndex(blockIndex, localBegin, localCount, fastRecords)
+        const bool haveFastRecords =
+            ClipboardReadFastRecordsForSlice(session,
+                                            sessionSnapshot,
+                                            ClipboardXactionAddressSlice{
+                                                .blockIndex = blockIndex,
+                                                .beginRow = firstLogicalRow,
+                                                .rowCount = localCount,
+                                                .localBegin = localBegin,
+                                            },
+                                            fastRecords,
+                                            fastError,
+                                            stopToken)
             && fastRecords.size() >= localCount;
-        if (!haveFastRecords) {
-            fastRecords.clear();
-            fastError = {};
-            haveFastRecords =
-                session->readFastRecords(blockIndex,
-                                         localBegin,
-                                         localCount,
-                                         fastRecords,
-                                         fastError,
-                                         stopToken)
-                && fastRecords.size() >= localCount;
-        }
 
         if (haveFastRecords) {
             for (std::size_t index = blockRowBeginIndex; index < blockRowEndIndex; ++index) {
@@ -1433,6 +1755,7 @@ bool ClipboardMaterializeRowsFromFastIndex(
             if (progressCallback) {
                 progressCallback(static_cast<std::uint64_t>(blockRowEndIndex - blockRowBeginIndex));
             }
+            std::this_thread::yield();
             continue;
         }
 
@@ -1443,6 +1766,7 @@ bool ClipboardMaterializeRowsFromFastIndex(
         }
         std::vector<std::pair<int, FlitRecord>> decodedRows;
         if (!ClipboardDecodeRowsInChunks(session,
+                                         sessionSnapshot,
                                          fallbackRows,
                                          stopToken,
                                          progressCallback,
@@ -1463,6 +1787,7 @@ bool ClipboardMaterializeRowsFromFastIndex(
         for (std::size_t offset = 0; offset < decodedRows.size(); ++offset) {
             rows[blockRowBeginIndex + offset] = std::move(decodedRows[offset]);
         }
+        std::this_thread::yield();
     }
 
     if (rowIndex < includedRows.size()) {
@@ -1493,13 +1818,14 @@ bool ClipboardModeMatchesXactionAddressAnchor(
 }
 
 bool XactionAddressAnchorFromRows(const std::shared_ptr<TraceSession>& session,
+                                  const std::shared_ptr<const TraceSession::TraceSessionSnapshot>& sessionSnapshot,
                                   const std::vector<std::uint64_t>& logicalRows,
                                   const std::uint64_t ordinal,
                                   XactionAddressAnchor& anchor,
                                   CLogBTraceLoadError& error,
                                   std::stop_token stopToken)
 {
-    if (!session || logicalRows.empty()) {
+    if (!session || !sessionSnapshot || logicalRows.empty()) {
         return false;
     }
 
@@ -1517,7 +1843,7 @@ bool XactionAddressAnchorFromRows(const std::shared_ptr<TraceSession>& session,
         }
 
         std::vector<FlitRecord> rows;
-        if (!session->readRowsDirect(logicalRow, 1, rows, error, {}, stopToken)) {
+        if (!session->readRowsDirect(sessionSnapshot, logicalRow, 1, rows, error, {}, stopToken)) {
             return false;
         }
         if (rows.empty()) {
@@ -3415,146 +3741,440 @@ const std::vector<ClipboardEntry>* MainWindow::clipboardEntriesForScope(const Cl
     return session ? &session->clipboardEntries : nullptr;
 }
 
-bool MainWindow::insertClipboardRows(const ClipboardScope scope,
-                                     const std::vector<std::pair<int, FlitRecord>>& rows,
-                                     QString* message,
-                                     const ClipboardInsertOrdering ordering)
+bool MainWindow::startClipboardRowsInsertAsync(const quint64 sourceSessionId,
+                                               const ClipboardScope scope,
+                                               std::vector<std::pair<int, FlitRecord>> rows,
+                                               const ClipboardInsertOrdering ordering,
+                                               const int preSkippedDuplicates)
 {
-    return insertClipboardRowsDetailed(scope, rows, message, ordering).insertedAny();
-}
+    if (rows.empty() && preSkippedDuplicates <= 0) {
+        statusBar()->showMessage(QStringLiteral("No flit rows are available for Clipboard insertion."), 3000);
+        return false;
+    }
+    if (clipboardXactionAddressInsertActive_) {
+        statusBar()->showMessage(QStringLiteral("A Clipboard insertion is already running."), 2500);
+        return false;
+    }
 
-MainWindow::ClipboardInsertResult MainWindow::insertClipboardRowsDetailed(
-    const ClipboardScope scope,
-    const std::vector<std::pair<int, FlitRecord>>& rows,
-    QString* message,
-    const ClipboardInsertOrdering ordering,
-    const int preSkippedDuplicates)
-{
-    TraceViewSession* session = activeTraceViewSession();
-    return session ? insertClipboardRowsFromSessionDetailed(session->id,
-                                                           scope,
-                                                           rows,
-                                                           message,
-                                                           ordering,
-                                                           preSkippedDuplicates)
-                   : ClipboardInsertResult{};
-}
-
-bool MainWindow::insertClipboardRowsFromSession(const quint64 sourceSessionId,
-                                                const ClipboardScope scope,
-                                                const std::vector<std::pair<int, FlitRecord>>& rows,
-                                                QString* message,
-                                                const ClipboardInsertOrdering ordering)
-{
-    return insertClipboardRowsFromSessionDetailed(sourceSessionId, scope, rows, message, ordering).insertedAny();
-}
-
-MainWindow::ClipboardInsertResult MainWindow::insertClipboardRowsFromSessionDetailed(
-    const quint64 sourceSessionId,
-    const ClipboardScope scope,
-    const std::vector<std::pair<int, FlitRecord>>& rows,
-    QString* message,
-    const ClipboardInsertOrdering ordering,
-    const int preSkippedDuplicates)
-{
     TraceViewSession* sourceSession = traceViewSessionById(sourceSessionId);
     std::vector<ClipboardEntry>* target =
         scope == ClipboardScope::Global
             ? &globalClipboardEntries_
             : (sourceSession ? &sourceSession->clipboardEntries : nullptr);
-    if (!sourceSession || !target || rows.empty()) {
-        if (message) {
-            if (preSkippedDuplicates > 0) {
-                const QString scopeText = scope == ClipboardScope::Global
-                    ? QStringLiteral("global Clipboard")
-                    : QStringLiteral("session Clipboard");
-                *message = QStringLiteral("Skipped %1 duplicate flit row%2 for the %3.")
-                               .arg(preSkippedDuplicates)
-                               .arg(preSkippedDuplicates == 1 ? QString() : QStringLiteral("s"))
-                               .arg(scopeText);
-            } else {
-                *message = QStringLiteral("No flit rows are available for Clipboard insertion.");
-            }
-        }
-        return ClipboardInsertResult{.inserted = 0, .skipped = preSkippedDuplicates};
+    if (!sourceSession || !target) {
+        statusBar()->showMessage(QStringLiteral("The source trace session for this Clipboard insertion is no longer open."),
+                                 4500);
+        return false;
     }
 
     if (clipboardWidget_ && clipboardWidget_->entries() == target) {
-        clipboardWidget_->syncEntriesFromModel();
+        const auto syncStart = std::chrono::steady_clock::now();
+        clipboardWidget_->syncDirtyEntriesFromModel();
+        LogClipboardGuiWork("pre-insert dirty row sync", syncStart);
     }
 
-    QSet<qulonglong> existingRows;
-    existingRows.reserve(static_cast<int>(target->size() + rows.size()));
-    for (const ClipboardEntry& entry : *target) {
-        if (entry.source.sessionId == sourceSessionId && entry.source.logicalRow >= 0) {
-            existingRows.insert(static_cast<qulonglong>(entry.source.logicalRow));
+    const quint64 generation = ++clipboardXactionAddressInsertGeneration_;
+    clipboardXactionAddressInsertActive_ = true;
+    clipboardXactionAddressInsertSessionId_ = sourceSessionId;
+    clipboardXactionAddressInsertScope_ = scope;
+    clipboardXactionAddressInsertStopSource_ = std::make_shared<std::stop_source>();
+
+    auto state = std::make_unique<ClipboardInsertApplyState>();
+    state->generation = generation;
+    state->sourceSessionId = sourceSessionId;
+    state->scope = scope;
+    state->inputRowCount = static_cast<std::uint64_t>(rows.size());
+    state->skipped = std::max(0, preSkippedDuplicates);
+    state->target = target;
+    state->refreshClipboardWidget = clipboardWidget_
+        && clipboardWidget_->scope() == scope
+        && state->inputRowCount != 0;
+    state->insertionStartIndex = state->target->size();
+    state->prepareActive = true;
+
+    clipboardInsertApplyState_ = std::move(state);
+    updateClipboardInsertProgress(true,
+                                  QStringLiteral("Clipboard insert: preparing rows"),
+                                  0,
+                                  clipboardInsertApplyState_->inputRowCount);
+
+    ClipboardInsertApplyState& applyState = *clipboardInsertApplyState_;
+    const std::shared_ptr<std::stop_source> stopSource = clipboardXactionAddressInsertStopSource_;
+    const auto baseSnapshotStart = std::chrono::steady_clock::now();
+    std::vector<ClipboardEntry> baseEntries = applyState.target ? *applyState.target : std::vector<ClipboardEntry>{};
+    LogClipboardGuiWork("pre-insert base clipboard snapshot", baseSnapshotStart);
+    const int preparedSkippedBase = applyState.skipped;
+    std::unordered_map<quint64, CLogBTraceMetadata> metadataBySession;
+    if (scope == ClipboardScope::Global && applyState.refreshClipboardWidget) {
+        metadataBySession.reserve(traceSessions_.size());
+        for (const std::unique_ptr<TraceViewSession>& session : traceSessions_) {
+            if (!session) {
+                continue;
+            }
+            if (session->flitModel && session->flitModel->traceMetadata()) {
+                metadataBySession.emplace(session->id, *session->flitModel->traceMetadata());
+            } else if (session->traceSession) {
+                metadataBySession.emplace(session->id, session->traceSession->metadata());
+            } else if (session->editableMetadata) {
+                metadataBySession.emplace(session->id, *session->editableMetadata);
+            }
         }
     }
 
-    ClipboardInsertResult result;
-    result.skipped = std::max(0, preSkippedDuplicates);
-    const std::size_t insertionStartIndex = target->size();
-    for (const auto& [logicalRow, record] : rows) {
-        const ClipboardSourceKey source{
-            .sessionId = sourceSessionId,
-            .logicalRow = logicalRow,
-        };
-        const qulonglong logicalRowKey = static_cast<qulonglong>(logicalRow);
-        if (existingRows.contains(logicalRowKey)) {
-            ++result.skipped;
-            continue;
+    QPointer<MainWindow> window(this);
+    std::thread prepareThread([window,
+                               generation,
+                               sourceSessionId,
+                               ordering,
+                               stopSource,
+                               baseEntries = std::move(baseEntries),
+                               rows = std::move(rows),
+                               preparedSkippedBase,
+                               metadataBySession = std::move(metadataBySession)]() mutable {
+        SetClipboardWorkerThreadPriority();
+        QString prepareError;
+        ClipboardPreparedInsert prepared;
+        try {
+            prepared = PrepareClipboardInsertTarget(std::move(baseEntries),
+                                                    std::move(rows),
+                                                    sourceSessionId,
+                                                    static_cast<int>(ordering),
+                                                    preparedSkippedBase,
+                                                    metadataBySession,
+                                                    stopSource ? stopSource->get_token() : std::stop_token{});
+        } catch (const std::bad_alloc&) {
+            prepareError = QStringLiteral("Clipboard insertion ran out of memory while preparing rows.");
+        } catch (const std::exception& exception) {
+            prepareError = QStringLiteral("Clipboard insertion failed while preparing rows: %1")
+                               .arg(QString::fromLocal8Bit(exception.what()));
+        } catch (...) {
+            prepareError = QStringLiteral("Clipboard insertion failed unexpectedly while preparing rows.");
         }
-        existingRows.insert(logicalRowKey);
-        target->push_back(ClipboardEntry{
-            .source = source,
-            .sequence = nextClipboardSequence_++,
-            .record = record,
-            .originalRecord = record,
-        });
-        ++result.inserted;
+        if (window.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(window.data(),
+                                  [window,
+                                   generation,
+                                   sourceSessionId,
+                                   preparedTarget = std::move(prepared.target),
+                                   preparedAppended = std::move(prepared.appended),
+                                   appendOnly = prepared.appendOnly,
+                                   mergeBySource = prepared.mergeBySource,
+                                   preparedNextSequence = prepared.nextSequence,
+                                   inserted = prepared.inserted,
+                                   skipped = prepared.skipped,
+                                   prepareError = std::move(prepareError),
+                                   preparedMetadata = std::move(prepared.metadata)]() mutable {
+                                      if (window.isNull()) {
+                                          return;
+                                      }
+                                      window->finishClipboardInsertPrepare(generation,
+                                                                           sourceSessionId,
+                                                                           std::move(preparedTarget),
+                                                                           std::move(preparedAppended),
+                                                                           appendOnly,
+                                                                           mergeBySource,
+                                                                           preparedNextSequence,
+                                                                           inserted,
+                                                                           skipped,
+                                                                           std::move(preparedMetadata),
+                                                                           std::move(prepareError));
+                                  },
+                                  Qt::QueuedConnection);
+    });
+    prepareThread.detach();
+    return true;
+}
+
+void MainWindow::processClipboardInsertApplyChunk()
+{
+    if (!clipboardInsertApplyState_) {
+        return;
     }
 
-    OrderClipboardEntriesForInsertion(*target,
-                                      sourceSessionId,
-                                      static_cast<int>(ordering),
-                                      insertionStartIndex);
+    const auto stageStart = std::chrono::steady_clock::now();
+    ClipboardInsertApplyState& state = *clipboardInsertApplyState_;
+    if (state.generation != clipboardXactionAddressInsertGeneration_
+        || state.sourceSessionId != clipboardXactionAddressInsertSessionId_) {
+        if (state.refreshingClipboardWidget && clipboardWidget_) {
+            clipboardWidget_->abortIncrementalRefreshFromEntries();
+        }
+        clipboardInsertApplyState_.reset();
+        return;
+    }
 
-    if (clipboardWidget_ && clipboardWidget_->scope() == scope) {
-        std::optional<CLogBTraceMetadata> globalMetadata;
+    if (state.prepareActive) {
+        updateClipboardInsertProgress(true,
+                                      QStringLiteral("Clipboard insert: preparing rows"),
+                                      0,
+                                      state.inputRowCount);
+        return;
+    }
+
+    if (state.inserted <= 0
+        && state.target
+        && state.preparedTarget.empty()
+        && state.preparedAppended.empty()) {
+        state.refreshClipboardWidget = false;
+    }
+
+    if ((state.appendOnly || state.mergeBySource)
+        && state.target
+        && (!state.preparedAppended.empty() || !state.preparedTarget.empty())) {
+        if (!state.preparedAppended.empty()
+            && state.preparedTarget.empty()
+            && state.mergeExistingIndex == 0
+            && state.mergeAppendIndex == 0) {
+            state.preparedTarget.reserve(state.target->size() + state.preparedAppended.size());
+        }
+
+        QElapsedTimer budgetTimer;
+        budgetTimer.start();
+        std::size_t publishedThisChunk = 0;
+        while (budgetTimer.elapsed() < kClipboardInsertApplyChunkBudgetMs) {
+            if (state.mergeExistingIndex >= state.target->size()
+                && state.mergeAppendIndex >= state.preparedAppended.size()) {
+                break;
+            }
+            if (publishedThisChunk >= kClipboardInsertApplyChunkRows) {
+                break;
+            }
+            const bool takeAppend =
+                state.mergeAppendIndex < state.preparedAppended.size()
+                && (state.mergeExistingIndex >= state.target->size()
+                    || ClipboardEntrySourceRowLess(state.preparedAppended[state.mergeAppendIndex],
+                                                  (*state.target)[state.mergeExistingIndex]));
+            if (takeAppend) {
+                state.preparedTarget.push_back(std::move(state.preparedAppended[state.mergeAppendIndex++]));
+            } else {
+                state.preparedTarget.push_back((*state.target)[state.mergeExistingIndex++]);
+            }
+            ++publishedThisChunk;
+        }
+
+        const std::uint64_t mergedRows =
+            static_cast<std::uint64_t>(state.mergeExistingIndex + state.mergeAppendIndex);
+        const std::uint64_t mergeTotal =
+            static_cast<std::uint64_t>(state.target->size() + state.preparedAppended.size());
+        updateClipboardInsertProgress(true,
+                                      QStringLiteral("Clipboard insert: publishing rows"),
+                                      mergedRows,
+                                      mergeTotal);
+        if (mergedRows < mergeTotal) {
+            QTimer::singleShot(1, this, [this]() {
+                processClipboardInsertApplyChunk();
+            });
+            return;
+        }
+        state.preparedAppended.clear();
+        state.preparedAppended.shrink_to_fit();
+        std::vector<ClipboardEntry> oldTarget;
+        oldTarget.swap(*state.target);
+        state.target->swap(state.preparedTarget);
+        ReleaseClipboardEntriesAsync(std::move(oldTarget));
+    } else if (state.target && !state.preparedTarget.empty()) {
+        std::vector<ClipboardEntry> oldTarget;
+        oldTarget.swap(*state.target);
+        *state.target = std::move(state.preparedTarget);
+        ReleaseClipboardEntriesAsync(std::move(oldTarget));
+    }
+
+    if (state.refreshClipboardWidget
+        && !state.refreshingClipboardWidget
+        && clipboardWidget_) {
+        TraceViewSession* sourceSession = traceViewSessionById(state.sourceSessionId);
         const CLogBTraceMetadata* metadata = nullptr;
-        if (scope == ClipboardScope::Session) {
+        if (state.scope == ClipboardScope::Session && sourceSession) {
             metadata = sourceSession->flitModel ? sourceSession->flitModel->traceMetadata() : nullptr;
         } else {
-            globalMetadata = metadataForClipboardCLogBSave(*target);
-            metadata = globalMetadata ? &*globalMetadata : nullptr;
+            state.globalMetadata = std::move(state.preparedGlobalMetadata);
+            metadata = state.globalMetadata ? &*state.globalMetadata : nullptr;
         }
-        clipboardWidget_->setEntries(target, metadata);
+        const auto refreshStart = std::chrono::steady_clock::now();
+        if (state.appendOnly) {
+            clipboardWidget_->beginAppendRefreshFromEntries(state.target,
+                                                            metadata,
+                                                            state.insertionStartIndex);
+            state.nextRefreshIndex = state.insertionStartIndex;
+        } else {
+            clipboardWidget_->beginIncrementalRefreshFromEntries(state.target, metadata, true);
+            state.nextRefreshIndex = 0;
+        }
+        LogClipboardGuiWork("begin incremental refresh", refreshStart);
+        state.refreshingClipboardWidget = true;
+        state.incrementalWidgetRefresh = true;
     }
 
-    if (message) {
-        const QString scopeText = scope == ClipboardScope::Global
-            ? QStringLiteral("global Clipboard")
-            : QStringLiteral("session Clipboard");
-        if (result.inserted > 0 && result.skipped > 0) {
-            *message = QStringLiteral("Inserted %1 flit row%2 into the %3; skipped %4 duplicate%5.")
-                           .arg(result.inserted)
-                           .arg(result.inserted == 1 ? QString() : QStringLiteral("s"))
-                           .arg(scopeText)
-                           .arg(result.skipped)
-                           .arg(result.skipped == 1 ? QString() : QStringLiteral("s"));
-        } else if (result.inserted > 0) {
-            *message = QStringLiteral("Inserted %1 flit row%2 into the %3.")
-                           .arg(result.inserted)
-                           .arg(result.inserted == 1 ? QString() : QStringLiteral("s"))
-                           .arg(scopeText);
-        } else {
-            *message = QStringLiteral("Skipped %1 duplicate flit row%2 for the %3.")
-                           .arg(result.skipped)
-                           .arg(result.skipped == 1 ? QString() : QStringLiteral("s"))
-                           .arg(scopeText);
+    if (state.refreshingClipboardWidget && state.incrementalWidgetRefresh && state.target) {
+        const std::size_t totalEntries = state.target->size();
+        QElapsedTimer budgetTimer;
+        budgetTimer.start();
+        do {
+            const std::size_t refreshEndIndex =
+                std::min(totalEntries, state.nextRefreshIndex + kClipboardInsertApplyChunkRows);
+            if (refreshEndIndex <= state.nextRefreshIndex) {
+                break;
+            }
+            const auto refreshStart = std::chrono::steady_clock::now();
+            state.incrementalWidgetRefresh =
+                clipboardWidget_->appendEntryRowsIncrementally(
+                    state.nextRefreshIndex,
+                    refreshEndIndex - state.nextRefreshIndex);
+            LogClipboardGuiWork("append refresh rows", refreshStart);
+            state.nextRefreshIndex = refreshEndIndex;
+        } while (state.incrementalWidgetRefresh
+                 && state.nextRefreshIndex < totalEntries
+                 && budgetTimer.elapsed() < kClipboardInsertApplyChunkBudgetMs);
+        updateClipboardInsertProgress(true,
+                                      QStringLiteral("Clipboard insert: updating view"),
+                                      state.appendOnly
+                                          ? static_cast<std::uint64_t>(
+                                                state.nextRefreshIndex - state.insertionStartIndex)
+                                          : static_cast<std::uint64_t>(state.nextRefreshIndex),
+                                      state.appendOnly
+                                          ? static_cast<std::uint64_t>(
+                                                totalEntries - state.insertionStartIndex)
+                                          : static_cast<std::uint64_t>(totalEntries));
+        if (state.incrementalWidgetRefresh && state.nextRefreshIndex < totalEntries) {
+            QTimer::singleShot(1, this, [this]() {
+                processClipboardInsertApplyChunk();
+            });
+            return;
         }
     }
-    return result;
+
+    if (state.refreshingClipboardWidget && !state.incrementalWidgetRefresh) {
+        if (clipboardWidget_) {
+            clipboardWidget_->abortIncrementalRefreshFromEntries();
+        }
+        state.refreshingClipboardWidget = false;
+        QTimer::singleShot(0, this, [this]() {
+            finishClipboardInsertApply();
+        });
+        return;
+    }
+
+    LogClipboardGuiWork("apply chunk", stageStart);
+    finishClipboardInsertApply();
+}
+
+void MainWindow::finishClipboardInsertApply()
+{
+    if (!clipboardInsertApplyState_) {
+        return;
+    }
+
+    std::unique_ptr<ClipboardInsertApplyState> state = std::move(clipboardInsertApplyState_);
+
+    TraceViewSession* sourceSession = traceViewSessionById(state->sourceSessionId);
+    if (state->refreshClipboardWidget && clipboardWidget_) {
+        if (state->incrementalWidgetRefresh) {
+            clipboardWidget_->finishIncrementalRefreshFromEntries();
+        } else {
+            const CLogBTraceMetadata* metadata = nullptr;
+            if (state->scope == ClipboardScope::Session && sourceSession) {
+                metadata = sourceSession->flitModel ? sourceSession->flitModel->traceMetadata() : nullptr;
+            } else {
+                metadata = state->globalMetadata ? &*state->globalMetadata : nullptr;
+            }
+            clipboardWidget_->setEntries(state->target, metadata);
+        }
+    }
+    const QString scopeText = state->scope == ClipboardScope::Global
+        ? QStringLiteral("global Clipboard")
+        : QStringLiteral("session Clipboard");
+    if (state->inserted > 0 && state->skipped > 0) {
+        state->finalMessage = QStringLiteral("Inserted %1 flit row%2 into the %3; skipped %4 duplicate%5.")
+                                  .arg(state->inserted)
+                                  .arg(state->inserted == 1 ? QString() : QStringLiteral("s"))
+                                  .arg(scopeText)
+                                  .arg(state->skipped)
+                                  .arg(state->skipped == 1 ? QString() : QStringLiteral("s"));
+    } else if (state->inserted > 0) {
+        state->finalMessage = QStringLiteral("Inserted %1 flit row%2 into the %3.")
+                                  .arg(state->inserted)
+                                  .arg(state->inserted == 1 ? QString() : QStringLiteral("s"))
+                                  .arg(scopeText);
+    } else {
+        state->finalMessage = QStringLiteral("Skipped %1 duplicate flit row%2 for the %3.")
+                                  .arg(state->skipped)
+                                  .arg(state->skipped == 1 ? QString() : QStringLiteral("s"))
+                                  .arg(scopeText);
+    }
+
+    clipboardXactionAddressInsertActive_ = false;
+    clipboardXactionAddressInsertSessionId_ = 0;
+    clipboardXactionAddressInsertStopSource_.reset();
+    updateClipboardInsertProgress(false);
+
+    showClipboardDock();
+    statusBar()->showMessage(state->finalMessage, 3000);
+}
+
+void MainWindow::finishClipboardInsertPrepare(const quint64 generation,
+                                              const quint64 sourceSessionId,
+                                              std::vector<ClipboardEntry> preparedTarget,
+                                              std::vector<ClipboardEntry> preparedAppended,
+                                              const bool appendOnly,
+                                              const bool mergeBySource,
+                                              const std::uint64_t preparedNextSequence,
+                                              const int inserted,
+                                              const int skipped,
+                                              std::optional<CLogBTraceMetadata> preparedGlobalMetadata,
+                                              QString errorText)
+{
+    const auto stageStart = std::chrono::steady_clock::now();
+    if (!clipboardInsertApplyState_) {
+        return;
+    }
+    ClipboardInsertApplyState& state = *clipboardInsertApplyState_;
+    if (generation != clipboardXactionAddressInsertGeneration_
+        || sourceSessionId != clipboardXactionAddressInsertSessionId_
+        || generation != state.generation
+        || sourceSessionId != state.sourceSessionId) {
+        return;
+    }
+
+    state.prepareActive = false;
+    if (!errorText.isEmpty()) {
+        clipboardInsertApplyState_.reset();
+        clipboardXactionAddressInsertActive_ = false;
+        clipboardXactionAddressInsertSessionId_ = 0;
+        clipboardXactionAddressInsertStopSource_.reset();
+        updateClipboardInsertProgress(false);
+        statusBar()->showMessage(errorText, 6000);
+        return;
+    }
+
+    state.appendOnly = appendOnly;
+    state.mergeBySource = mergeBySource;
+    state.preparedTarget = std::move(preparedTarget);
+    state.preparedAppended = std::move(preparedAppended);
+    state.preparedNextSequence = preparedNextSequence;
+    state.inserted = inserted;
+    state.skipped = skipped;
+    state.preparedGlobalMetadata = std::move(preparedGlobalMetadata);
+    if (state.inserted <= 0
+        && state.target
+        && state.preparedTarget.empty()
+        && state.preparedAppended.empty()) {
+        state.refreshClipboardWidget = false;
+    }
+    nextClipboardSequence_ = std::max(nextClipboardSequence_, state.preparedNextSequence);
+
+    const std::uint64_t preparedSize =
+        state.appendOnly
+            ? static_cast<std::uint64_t>(state.preparedAppended.size())
+            : static_cast<std::uint64_t>(state.preparedTarget.size());
+    updateClipboardInsertProgress(true,
+                                  QStringLiteral("Clipboard insert: updating view"),
+                                  0,
+                                  preparedSize);
+    QTimer::singleShot(0, this, [this]() {
+        processClipboardInsertApplyChunk();
+    });
+    LogClipboardGuiWork("finish prepare", stageStart);
 }
 
 void MainWindow::insertSelectedFlitToClipboard(const ClipboardScope scope)
@@ -3571,10 +4191,14 @@ void MainWindow::insertSelectedFlitToClipboard(const ClipboardScope scope)
     if (logicalRow < 0 || !record) {
         return;
     }
-    QString message;
-    insertClipboardRows(scope, {{logicalRow, *record}}, &message);
-    showClipboardDock();
-    statusBar()->showMessage(message, 3000);
+    TraceViewSession* sourceSession = activeTraceViewSession();
+    if (!sourceSession) {
+        return;
+    }
+    startClipboardRowsInsertAsync(sourceSession->id,
+                                  scope,
+                                  {{logicalRow, *record}},
+                                  ClipboardInsertOrdering::SortByTimestamp);
 }
 
 void MainWindow::insertSelectedXactionToClipboard(const ClipboardScope scope)
@@ -3600,23 +4224,116 @@ void MainWindow::insertSelectedXactionToClipboard(const ClipboardScope scope)
         return;
     }
 
-    const std::vector<std::uint64_t> logicalRows = currentTraceSession_->xactionRowsForGroup(xactionKey);
-    std::vector<std::pair<int, FlitRecord>> rows;
-    rows.reserve(logicalRows.size());
-    for (const std::uint64_t logicalRow64 : logicalRows) {
-        if (logicalRow64 > static_cast<std::uint64_t>((std::numeric_limits<int>::max)())) {
-            continue;
-        }
-        const int logicalRow = static_cast<int>(logicalRow64);
-        if (const FlitRecord* relatedRecord = flitModel_->recordForLogicalRow(logicalRow)) {
-            rows.push_back({logicalRow, *relatedRecord});
-        }
+    bool ok = false;
+    const std::uint64_t selectedOrdinal =
+        xactionKey.sliced(QStringLiteral("xaction|").size()).toULongLong(&ok);
+    if (!ok || selectedOrdinal == 0) {
+        statusBar()->showMessage(QStringLiteral("The selected flit has an invalid indexed xaction key."), 3000);
+        return;
+    }
+    TraceViewSession* sourceSession = activeTraceViewSession();
+    if (!sourceSession || !sourceSession->traceSession) {
+        return;
+    }
+    if (clipboardXactionAddressInsertActive_) {
+        statusBar()->showMessage(QStringLiteral("A Clipboard insertion is already running."), 2500);
+        return;
     }
 
-    QString message;
-    insertClipboardRows(scope, rows, &message);
-    showClipboardDock();
-    statusBar()->showMessage(message, 3000);
+    const quint64 sourceSessionId = sourceSession->id;
+    const quint64 generation = ++clipboardXactionAddressInsertGeneration_;
+    clipboardXactionAddressInsertActive_ = true;
+    clipboardXactionAddressInsertSessionId_ = sourceSessionId;
+    clipboardXactionAddressInsertScope_ = scope;
+    clipboardXactionAddressInsertStopSource_ = std::make_shared<std::stop_source>();
+    const std::shared_ptr<std::stop_source> stopSource = clipboardXactionAddressInsertStopSource_;
+    const std::shared_ptr<TraceSession> session = sourceSession->traceSession;
+    const auto sessionSnapshot = session->snapshot();
+    updateClipboardInsertProgress(true,
+                                  QStringLiteral("Clipboard insert: collecting xaction rows"),
+                                  0,
+                                  0);
+
+    QPointer<MainWindow> window(this);
+    std::thread worker([window,
+                        session,
+                        sessionSnapshot,
+                        sourceSessionId,
+                        scope,
+                        selectedOrdinal,
+                        generation,
+                        stopSource]() mutable {
+        SetClipboardWorkerThreadPriority();
+        std::vector<std::pair<int, FlitRecord>> rows;
+        QString errorText;
+        bool cancelled = false;
+        try {
+            if (!sessionSnapshot) {
+                errorText = QStringLiteral("Trace session snapshot is not available for Clipboard insertion.");
+            } else {
+                const std::vector<std::uint64_t> logicalRows =
+                    session->xactionRowsForOrdinal(sessionSnapshot, selectedOrdinal);
+                rows.reserve(logicalRows.size());
+                for (const std::uint64_t logicalRow64 : logicalRows) {
+                    if (stopSource && stopSource->get_token().stop_requested()) {
+                        cancelled = true;
+                        break;
+                    }
+                    if (logicalRow64 > static_cast<std::uint64_t>((std::numeric_limits<int>::max)())) {
+                        continue;
+                    }
+                    std::vector<FlitRecord> decoded;
+                    CLogBTraceLoadError readError;
+                    if (!session->readRowsDirect(sessionSnapshot,
+                                                 logicalRow64,
+                                                 1,
+                                                 decoded,
+                                                 readError,
+                                                 {},
+                                                 stopSource ? stopSource->get_token() : std::stop_token{})) {
+                        errorText = readError.summary.isEmpty()
+                            ? QStringLiteral("Clipboard insertion failed while reading an xaction row.")
+                            : readError.summary;
+                        break;
+                    }
+                    if (!decoded.empty()) {
+                        rows.push_back({static_cast<int>(logicalRow64), std::move(decoded.front())});
+                    }
+                }
+            }
+        } catch (const std::bad_alloc&) {
+            errorText = QStringLiteral("Clipboard insertion ran out of memory while collecting xaction rows.");
+        } catch (const std::exception& exception) {
+            errorText = QStringLiteral("Clipboard insertion failed while collecting xaction rows: %1")
+                            .arg(QString::fromLocal8Bit(exception.what()));
+        } catch (...) {
+            errorText = QStringLiteral("Clipboard insertion failed unexpectedly while collecting xaction rows.");
+        }
+        if (window.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(window.data(),
+                                  [window,
+                                   generation,
+                                   sourceSessionId,
+                                   scope,
+                                   rows = std::move(rows),
+                                   cancelled,
+                                   errorText = std::move(errorText)]() mutable {
+                                      if (window.isNull()) {
+                                          return;
+                                      }
+                                      window->finishClipboardXactionAddressInsert(generation,
+                                                                                  sourceSessionId,
+                                                                                  scope,
+                                                                                  std::move(rows),
+                                                                                  0,
+                                                                                  cancelled,
+                                                                                  std::move(errorText));
+                                  },
+                                  Qt::QueuedConnection);
+    });
+    worker.detach();
 }
 
 bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
@@ -3632,24 +4349,10 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
         return false;
     }
     const QModelIndex current = flitView_->selectionModel()->currentIndex();
-    const FlitRecord* record = current.isValid() ? flitModel_->recordAt(current.row()) : nullptr;
-    if (!record || !currentTraceSession_->isXactionIndexComplete()) {
+    const int selectedLogicalRow = current.isValid() ? flitModel_->logicalRowAt(current.row()) : -1;
+    if (selectedLogicalRow < 0 || !currentTraceSession_->isXactionIndexComplete()) {
         statusBar()->showMessage(QStringLiteral("Build the xaction index before inserting transactions by address."),
                                  3000);
-        return false;
-    }
-
-    const QString selectedXactionKey = XactionKeyForClipboardRecord(*record);
-    if (selectedXactionKey.isEmpty()) {
-        statusBar()->showMessage(QStringLiteral("The selected flit is not part of an indexed xaction."), 3000);
-        return false;
-    }
-    bool selectedOrdinalOk = false;
-    const std::uint64_t selectedOrdinal =
-        selectedXactionKey.sliced(QStringLiteral("xaction|").size()).toULongLong(&selectedOrdinalOk);
-
-    if (!selectedOrdinalOk || selectedOrdinal == 0) {
-        statusBar()->showMessage(QStringLiteral("The selected flit is not part of an indexed xaction."), 3000);
         return false;
     }
 
@@ -3658,28 +4361,77 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
         return false;
     }
     const std::shared_ptr<TraceSession> session = currentTraceSession_;
+    const std::shared_ptr<const TraceSession::TraceSessionSnapshot> sessionSnapshot = session->snapshot();
+    if (!sessionSnapshot) {
+        statusBar()->showMessage(QStringLiteral("Trace session snapshot is not available for Clipboard insertion."),
+                                 3000);
+        return false;
+    }
     const quint64 sourceSessionId = sourceViewSession->id;
-    std::unordered_set<std::uint64_t> existingClipboardRows;
-    if (std::vector<ClipboardEntry>* targetEntries =
-            scope == ClipboardScope::Global
-                ? &globalClipboardEntries_
-                : &sourceViewSession->clipboardEntries) {
-        if (clipboardWidget_ && clipboardWidget_->entries() == targetEntries) {
-            clipboardWidget_->syncEntriesFromModel();
-        }
-        existingClipboardRows.reserve(targetEntries->size());
-        for (const ClipboardEntry& entry : *targetEntries) {
-            if (entry.source.sessionId == sourceSessionId && entry.source.logicalRow >= 0) {
-                existingClipboardRows.insert(static_cast<std::uint64_t>(entry.source.logicalRow));
+
+    std::vector<ClipboardEntry>* targetEntries =
+        scope == ClipboardScope::Global
+            ? &globalClipboardEntries_
+            : &sourceViewSession->clipboardEntries;
+    if (clipboardWidget_ && clipboardWidget_->entries() == targetEntries) {
+        const auto syncStart = std::chrono::steady_clock::now();
+        clipboardWidget_->syncDirtyEntriesFromModel();
+        LogClipboardGuiWork("pre-address-insert dirty row sync", syncStart);
+    }
+    const auto baseSnapshotStart = std::chrono::steady_clock::now();
+    std::optional<bool> knownHasModifiedEntries;
+    if (clipboardWidget_ && clipboardWidget_->entries() == targetEntries) {
+        knownHasModifiedEntries = clipboardWidget_->hasModifiedRows();
+    }
+    ClipboardAppendPrepareContext appendContext =
+        targetEntries
+            ? CaptureClipboardAppendPrepareContext(*targetEntries,
+                                                   sourceSessionId,
+                                                   knownHasModifiedEntries)
+            : ClipboardAppendPrepareContext{};
+    std::vector<ClipboardEntry> fallbackBaseEntries;
+    if (!appendContext.sourceSorted || appendContext.hasModifiedEntries) {
+        appendContext.canUseDeltaPrepare = false;
+        fallbackBaseEntries = targetEntries ? *targetEntries : std::vector<ClipboardEntry>{};
+    }
+    LogClipboardGuiWork("pre-address-insert base clipboard index snapshot", baseSnapshotStart);
+
+    std::unordered_map<quint64, CLogBTraceMetadata> metadataBySession;
+    if (scope == ClipboardScope::Global
+        && clipboardWidget_
+        && clipboardWidget_->scope() == scope) {
+        metadataBySession.reserve(traceSessions_.size());
+        for (const std::unique_ptr<TraceViewSession>& viewSession : traceSessions_) {
+            if (!viewSession) {
+                continue;
+            }
+            if (viewSession->flitModel && viewSession->flitModel->traceMetadata()) {
+                metadataBySession.emplace(viewSession->id, *viewSession->flitModel->traceMetadata());
+            } else if (viewSession->traceSession) {
+                metadataBySession.emplace(viewSession->id, viewSession->traceSession->metadata());
+            } else if (viewSession->editableMetadata) {
+                metadataBySession.emplace(viewSession->id, *viewSession->editableMetadata);
             }
         }
     }
+
     auto stopSource = std::make_shared<std::stop_source>();
     const quint64 generation = ++clipboardXactionAddressInsertGeneration_;
     clipboardXactionAddressInsertActive_ = true;
     clipboardXactionAddressInsertSessionId_ = sourceSessionId;
     clipboardXactionAddressInsertScope_ = scope;
     clipboardXactionAddressInsertStopSource_ = stopSource;
+
+    auto state = std::make_unique<ClipboardInsertApplyState>();
+    state->generation = generation;
+    state->sourceSessionId = sourceSessionId;
+    state->scope = scope;
+    state->target = targetEntries;
+    state->refreshClipboardWidget = clipboardWidget_ && clipboardWidget_->scope() == scope;
+    state->insertionStartIndex = targetEntries ? targetEntries->size() : 0;
+    state->prepareActive = true;
+    clipboardInsertApplyState_ = std::move(state);
+
     updateClipboardInsertProgress(true,
                                   QStringLiteral("Clipboard insert"),
                                   0,
@@ -3693,10 +4445,14 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
                         sourceSessionId,
                         scope,
                         mode,
-                        selectedOrdinal,
-                        existingClipboardRows = std::move(existingClipboardRows),
+                        selectedLogicalRow,
+                        sessionSnapshot,
+                        appendContext = std::move(appendContext),
+                        fallbackBaseEntries = std::move(fallbackBaseEntries),
+                        metadataBySession = std::move(metadataBySession),
                         generation,
                         stopSource]() mutable {
+        SetClipboardWorkerThreadPriority();
         struct ProgressState {
             std::atomic<std::uint64_t> completed = 0;
             std::atomic<std::uint64_t> total = 0;
@@ -3707,7 +4463,8 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
         };
 
         auto progressState = std::make_shared<ProgressState>();
-        ClipboardXactionAddressBatchRows batchRows;
+        std::vector<std::pair<int, FlitRecord>> batchRows;
+        ClipboardPreparedInsert prepared;
         QString errorText;
         bool cancelled = false;
 
@@ -3769,10 +4526,31 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
         };
 
         try {
+            const std::stop_token stopToken = stopSource->get_token();
+            std::uint64_t yieldChunks = 0;
             const std::vector<ClipboardXactionAddressSlice> slices =
                 ClipboardXactionAddressSlices(session);
             const std::vector<ClipboardXactionAddressLogicalSlice> logicalSlices =
                 ClipboardXactionAddressLogicalSlices(session);
+            std::uint64_t selectedOrdinal = 0;
+            if (sessionSnapshot) {
+                std::vector<TraceSession::XactionRowCompactInfo> selectedCompactInfos;
+                if (!session->xactionRowCompactInfoRange(sessionSnapshot,
+                                                         static_cast<std::uint64_t>(selectedLogicalRow),
+                                                         1,
+                                                         selectedCompactInfos)
+                    || selectedCompactInfos.empty()) {
+                    errorText =
+                        QStringLiteral("Could not read the selected transaction index row for Clipboard insertion.");
+                } else {
+                    selectedOrdinal = selectedCompactInfos.front().xactionOrdinal;
+                }
+            }
+            if (!sessionSnapshot) {
+                errorText = QStringLiteral("Trace session snapshot is not available for Clipboard insertion.");
+            } else if (selectedOrdinal == 0 && errorText.isEmpty()) {
+                errorText = QStringLiteral("The selected flit is not part of an indexed xaction.");
+            }
             const std::uint64_t totalScanRows =
                 static_cast<std::uint64_t>(std::min<std::uint64_t>(
                     session->totalRows(),
@@ -3786,7 +4564,6 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
             postProgress(true);
 
             CLogBTraceLoadError error;
-            const std::stop_token stopToken = stopSource->get_token();
             ClipboardXactionAddressScanResult scanResult;
             std::atomic<std::uint64_t> scanCompletedRows = 0;
             const auto scanProgress = [&](const std::uint64_t completedRows) {
@@ -3796,12 +4573,14 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
                 progressState->completed.store(total, std::memory_order_relaxed);
                 postProgress();
             };
-            if (!ClipboardCollectFastXactionAnchors(session,
-                                                    slices,
-                                                    stopToken,
-                                                    scanProgress,
-                                                    scanResult,
-                                                    error)) {
+            if (errorText.isEmpty()
+                && !ClipboardCollectFastXactionAnchors(session,
+                                                       sessionSnapshot,
+                                                       slices,
+                                                       stopToken,
+                                                       scanProgress,
+                                                       scanResult,
+                                                       error)) {
                 errorText = error.informativeText.isEmpty()
                     ? error.summary
                     : error.summary + QStringLiteral(" ") + error.informativeText;
@@ -3816,8 +4595,9 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
                     selectedAnchor = selectedFastAnchor->second;
                 } else {
                     const std::vector<std::uint64_t> selectedRows =
-                        session->xactionRowsForOrdinal(selectedOrdinal);
+                        session->xactionRowsForOrdinal(sessionSnapshot, selectedOrdinal);
                     if (!XactionAddressAnchorFromRows(session,
+                                                     sessionSnapshot,
                                                      selectedRows,
                                                      selectedOrdinal,
                                                      selectedAnchor,
@@ -3869,10 +4649,11 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
                                 continue;
                             }
                             const std::vector<std::uint64_t> xactionRows =
-                                session->xactionRowsForOrdinal(ordinal);
+                                session->xactionRowsForOrdinal(sessionSnapshot, ordinal);
                             XactionAddressAnchor candidate;
                             error = {};
                             if (XactionAddressAnchorFromRows(session,
+                                                             sessionSnapshot,
                                                              xactionRows,
                                                              ordinal,
                                                              candidate,
@@ -3890,6 +4671,7 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
                                 break;
                             }
                             ++fallbackCompleted;
+                            ClipboardWorkerCooperativeYield(yieldChunks);
                             progressState->completed.store(fallbackCompleted, std::memory_order_relaxed);
                             postProgress();
                         }
@@ -3899,6 +4681,7 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
 
             if (!cancelled && errorText.isEmpty()) {
                 std::vector<ClipboardXactionAddressRowRef> includedRows;
+                int ignoredPreSkippedDuplicates = 0;
                 {
                     const std::lock_guard lock(progressState->textMutex);
                     progressState->text = QStringLiteral("Clipboard insert: collecting rows");
@@ -3916,13 +4699,14 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
                     postProgress();
                 };
                 if (!ClipboardCollectMatchingXactionRows(session,
+                                                         sessionSnapshot,
                                                          logicalSlices,
                                                          matchingOrdinals,
-                                                         existingClipboardRows,
+                                                         {},
                                                          stopToken,
                                                          collectProgress,
                                                          includedRows,
-                                                         batchRows.preSkippedDuplicates,
+                                                         ignoredPreSkippedDuplicates,
                                                          errorText)) {
                     cancelled = stopToken.stop_requested();
                 }
@@ -3946,14 +4730,52 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
                         postProgress();
                     };
                     if (!ClipboardMaterializeRowsFromFastIndex(session,
+                                                               sessionSnapshot,
                                                                includedRows,
                                                                stopToken,
                                                                readProgress,
-                                                               batchRows.rows,
+                                                               batchRows,
                                                                errorText)) {
                         cancelled = stopToken.stop_requested();
                     }
                 }
+            }
+            if (!cancelled && errorText.isEmpty() && stopToken.stop_requested()) {
+                cancelled = true;
+            }
+            if (!cancelled && errorText.isEmpty()) {
+                {
+                    const std::lock_guard lock(progressState->textMutex);
+                    progressState->text = QStringLiteral("Clipboard insert: preparing rows");
+                }
+                progressState->completed.store(0, std::memory_order_relaxed);
+                progressState->total.store(static_cast<std::uint64_t>(batchRows.size()),
+                                           std::memory_order_relaxed);
+                postProgress(true);
+                if (!appendContext.canUseDeltaPrepare) {
+                    prepared = PrepareClipboardInsertTarget(std::move(fallbackBaseEntries),
+                                                            std::move(batchRows),
+                                                            sourceSessionId,
+                                                            static_cast<int>(ClipboardInsertOrdering::PreserveInputOrder),
+                                                            0,
+                                                            metadataBySession,
+                                                            stopToken);
+                } else {
+                    prepared = PrepareClipboardAppendOnlyInsert(std::move(appendContext),
+                                                                std::move(batchRows),
+                                                                sourceSessionId,
+                                                                0,
+                                                                stopToken);
+                }
+                const std::uint64_t preparedRows =
+                    static_cast<std::uint64_t>(prepared.appendOnly || prepared.mergeBySource
+                                                   ? prepared.appended.size()
+                                                   : prepared.target.size());
+                progressState->completed.store(preparedRows,
+                                               std::memory_order_relaxed);
+                progressState->total.store(preparedRows,
+                                           std::memory_order_relaxed);
+                postProgress(true);
             }
         } catch (const std::bad_alloc&) {
             errorText = QStringLiteral("Clipboard transaction insertion ran out of memory.");
@@ -3972,21 +4794,52 @@ bool MainWindow::insertXactionsWithSelectedAddressToClipboard(
                                   [window,
                                    generation,
                                    sourceSessionId,
-                                   scope,
-                                   rows = std::move(batchRows.rows),
-                                   preSkippedDuplicates = batchRows.preSkippedDuplicates,
+                                   preparedTarget = std::move(prepared.target),
+                                   preparedAppended = std::move(prepared.appended),
+                                   appendOnly = prepared.appendOnly,
+                                   mergeBySource = prepared.mergeBySource,
+                                   preparedNextSequence = prepared.nextSequence,
+                                   inserted = prepared.inserted,
+                                   skipped = prepared.skipped,
+                                   preparedMetadata = std::move(prepared.metadata),
                                    cancelled,
                                    errorText = std::move(errorText)]() mutable {
                                       if (window.isNull()) {
                                           return;
                                       }
-                                      window->finishClipboardXactionAddressInsert(generation,
-                                                                                  sourceSessionId,
-                                                                                  scope,
-                                                                                  std::move(rows),
-                                                                                  preSkippedDuplicates,
-                                                                                  cancelled,
-                                                                                  std::move(errorText));
+                                      if (generation != window->clipboardXactionAddressInsertGeneration_
+                                          || sourceSessionId != window->clipboardXactionAddressInsertSessionId_) {
+                                          ReleaseClipboardEntriesAsync(std::move(preparedTarget));
+                                          ReleaseClipboardEntriesAsync(std::move(preparedAppended));
+                                          return;
+                                      }
+                                      const bool stopAlreadyRequested =
+                                          window->clipboardXactionAddressInsertStopSource_
+                                          && window->clipboardXactionAddressInsertStopSource_->stop_requested();
+                                      if (cancelled || stopAlreadyRequested) {
+                                          ReleaseClipboardEntriesAsync(std::move(preparedTarget));
+                                          ReleaseClipboardEntriesAsync(std::move(preparedAppended));
+                                          window->clipboardInsertApplyState_.reset();
+                                          window->clipboardXactionAddressInsertActive_ = false;
+                                          window->clipboardXactionAddressInsertSessionId_ = 0;
+                                          window->clipboardXactionAddressInsertStopSource_.reset();
+                                          window->updateClipboardInsertProgress(false);
+                                          window->statusBar()->showMessage(
+                                              QStringLiteral("Clipboard transaction insertion cancelled."),
+                                              3000);
+                                          return;
+                                      }
+                                      window->finishClipboardInsertPrepare(generation,
+                                                                           sourceSessionId,
+                                                                           std::move(preparedTarget),
+                                                                           std::move(preparedAppended),
+                                                                           appendOnly,
+                                                                           mergeBySource,
+                                                                           preparedNextSequence,
+                                                                           inserted,
+                                                                           skipped,
+                                                                           std::move(preparedMetadata),
+                                                                           std::move(errorText));
                                   },
                                   Qt::QueuedConnection);
     });
@@ -4004,42 +4857,53 @@ void MainWindow::finishClipboardXactionAddressInsert(const quint64 generation,
 {
     if (generation != clipboardXactionAddressInsertGeneration_
         || sourceSessionId != clipboardXactionAddressInsertSessionId_) {
+        ReleaseClipboardBatchRowsAsync(std::move(rows));
         return;
     }
 
     const bool stopAlreadyRequested =
         clipboardXactionAddressInsertStopSource_
         && clipboardXactionAddressInsertStopSource_->stop_requested();
-    clipboardXactionAddressInsertActive_ = false;
-    clipboardXactionAddressInsertSessionId_ = 0;
-    clipboardXactionAddressInsertStopSource_.reset();
-    updateClipboardInsertProgress(false);
 
     if (cancelled || stopAlreadyRequested) {
+        ReleaseClipboardBatchRowsAsync(std::move(rows));
+        clipboardXactionAddressInsertActive_ = false;
+        clipboardXactionAddressInsertSessionId_ = 0;
+        clipboardXactionAddressInsertStopSource_.reset();
+        updateClipboardInsertProgress(false);
         statusBar()->showMessage(QStringLiteral("Clipboard transaction insertion cancelled."), 3000);
         return;
     }
     if (!errorText.isEmpty()) {
+        ReleaseClipboardBatchRowsAsync(std::move(rows));
+        clipboardXactionAddressInsertActive_ = false;
+        clipboardXactionAddressInsertSessionId_ = 0;
+        clipboardXactionAddressInsertStopSource_.reset();
+        updateClipboardInsertProgress(false);
         statusBar()->showMessage(errorText, 6000);
         return;
     }
 
     TraceViewSession* sourceSession = traceViewSessionById(sourceSessionId);
     if (!sourceSession) {
+        ReleaseClipboardBatchRowsAsync(std::move(rows));
+        clipboardXactionAddressInsertActive_ = false;
+        clipboardXactionAddressInsertSessionId_ = 0;
+        clipboardXactionAddressInsertStopSource_.reset();
+        updateClipboardInsertProgress(false);
         statusBar()->showMessage(QStringLiteral("The source trace session for this Clipboard insertion is no longer open."),
                                  4500);
         return;
     }
 
-    QString message;
-    insertClipboardRowsFromSessionDetailed(sourceSessionId,
-                                           scope,
-                                           rows,
-                                           &message,
-                                           ClipboardInsertOrdering::PreserveInputOrder,
-                                           preSkippedDuplicates);
-    showClipboardDock();
-    statusBar()->showMessage(message, 3000);
+    clipboardXactionAddressInsertActive_ = false;
+    clipboardXactionAddressInsertSessionId_ = 0;
+    clipboardXactionAddressInsertStopSource_.reset();
+    startClipboardRowsInsertAsync(sourceSessionId,
+                                  scope,
+                                  std::move(rows),
+                                  ClipboardInsertOrdering::PreserveInputOrder,
+                                  preSkippedDuplicates);
 }
 
 void MainWindow::cancelClipboardXactionAddressInsert()
@@ -4726,16 +5590,7 @@ bool MainWindow::loadTraceFile(const QString& filePath,
                     const std::size_t workerCount,
                     const std::size_t totalRecords) {
                     loadStage.store(stage, std::memory_order_relaxed);
-                    if (workerCount > 0 || stage == CLogBTraceLoadStage::Opening
-                        || stage == CLogBTraceLoadStage::Parsing
-                        || stage == CLogBTraceLoadStage::Finalizing
-                        || stage == CLogBTraceLoadStage::FinalizingIndexDebug
-                        || stage == CLogBTraceLoadStage::FinalizingIndexLayout
-                        || stage == CLogBTraceLoadStage::FinalizingIndexRows
-                        || stage == CLogBTraceLoadStage::FinalizingIndexRowDirectory
-                        || stage == CLogBTraceLoadStage::Completed) {
-                        activeWorkerCount.store(workerCount, std::memory_order_relaxed);
-                    }
+                    activeWorkerCount.store(workerCount, std::memory_order_relaxed);
                     stageTotalRecords.store(totalRecords, std::memory_order_relaxed);
                     stageCompletedRecords.store(0, std::memory_order_relaxed);
                 };
@@ -4816,22 +5671,38 @@ bool MainWindow::loadTraceFile(const QString& filePath,
             const std::size_t totalStageRecords = stageTotalRecords.load(std::memory_order_relaxed);
             const std::size_t completedStageRecords = stageCompletedRecords.load(std::memory_order_relaxed);
 
-            if (totalBytes == 0) {
-                progressBar->setRange(0, 0);
-            } else {
+            const bool useStageProgress =
+                LoadStageUsesStageProgress(stage) && totalStageRecords > 0;
+            const auto setScaledProgress = [progressBar](const std::uint64_t completed,
+                                                         const std::uint64_t total) {
+                if (total == 0) {
+                    progressBar->setRange(0, 0);
+                    return;
+                }
                 const std::uint64_t clampedMaximum = std::min<std::uint64_t>(
-                    totalBytes,
+                    total,
                     static_cast<std::uint64_t>(std::numeric_limits<int>::max()));
-                if (progressBar->maximum() != static_cast<int>(clampedMaximum)) {
+                if (progressBar->maximum() != static_cast<int>(clampedMaximum)
+                    || progressBar->minimum() != 0) {
                     progressBar->setRange(0, static_cast<int>(clampedMaximum));
                 }
-                const int progressValue = totalBytes <= static_cast<std::uint64_t>(std::numeric_limits<int>::max())
-                    ? static_cast<int>(std::min<std::uint64_t>(processedBytes, clampedMaximum))
-                    : static_cast<int>(
-                        std::min<std::uint64_t>(
-                            (processedBytes * clampedMaximum) / totalBytes,
-                            clampedMaximum));
+                const int progressValue = total <= static_cast<std::uint64_t>(std::numeric_limits<int>::max())
+                    ? static_cast<int>(std::min<std::uint64_t>(completed, clampedMaximum))
+                    : static_cast<int>(std::min<long double>(
+                        (static_cast<long double>(completed) * static_cast<long double>(clampedMaximum))
+                            / static_cast<long double>(total),
+                        static_cast<long double>(clampedMaximum)));
                 progressBar->setValue(progressValue);
+            };
+
+            if (useStageProgress) {
+                setScaledProgress(static_cast<std::uint64_t>(
+                                      std::min(completedStageRecords, totalStageRecords)),
+                                  static_cast<std::uint64_t>(totalStageRecords));
+            } else if (totalBytes == 0) {
+                progressBar->setRange(0, 0);
+            } else {
+                setScaledProgress(processedBytes, totalBytes);
             }
 
             const qint64 currentSampleTimeMs = metricsTimer.elapsed();
@@ -4863,12 +5734,29 @@ bool MainWindow::loadTraceFile(const QString& filePath,
                 ? QStringLiteral("Cancelling trace load...")
                 : LoadStageText(stage, workerCount);
             statusLabel->setText(stageText);
-            detailLabel->setText(totalBytes == 0
-                                     ? QStringLiteral("%1 / %2 records in current stage")
-                                           .arg(completedStageRecords)
-                                           .arg(totalStageRecords)
-                                     : QStringLiteral("%1 of %2 read")
-                                           .arg(FormatBytes(processedBytes), FormatBytes(totalBytes)));
+            if (useStageProgress) {
+                const QString unit = LoadStageProgressUnit(stage, totalStageRecords);
+                const QString stageDetail = QStringLiteral("%1 / %2 %3 in current stage")
+                                                .arg(completedStageRecords)
+                                                .arg(totalStageRecords)
+                                                .arg(unit);
+                detailLabel->setText(totalBytes == 0
+                                         ? stageDetail
+                                         : QStringLiteral("%1 (%2 of %3 read)")
+                                               .arg(stageDetail,
+                                                    FormatBytes(processedBytes),
+                                                    FormatBytes(totalBytes)));
+            } else if (totalBytes == 0 && totalStageRecords > 0) {
+                detailLabel->setText(QStringLiteral("%1 / %2 %3 in current stage")
+                                         .arg(completedStageRecords)
+                                         .arg(totalStageRecords)
+                                         .arg(LoadStageProgressUnit(stage, totalStageRecords)));
+            } else if (totalBytes == 0) {
+                detailLabel->setText(QStringLiteral("Preparing trace load state."));
+            } else {
+                detailLabel->setText(QStringLiteral("%1 of %2 read")
+                                         .arg(FormatBytes(processedBytes), FormatBytes(totalBytes)));
+            }
             if (stage == CLogBTraceLoadStage::Decoding || stage == CLogBTraceLoadStage::Formatting
                 || stage == CLogBTraceLoadStage::Finalizing
                 || stage == CLogBTraceLoadStage::FinalizingIndexDebug

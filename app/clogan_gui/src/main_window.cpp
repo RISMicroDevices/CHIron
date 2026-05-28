@@ -1,6 +1,9 @@
 #include "cache_widget.hpp"
 #include "main_window_internal.hpp"
 
+#include <QApplication>
+#include <QElapsedTimer>
+
 #include <cstdint>
 
 namespace CHIron::Gui {
@@ -874,6 +877,11 @@ bool MainWindow::testInsertSelectedFlitToClipboard(const ClipboardScope scope)
         ? testClipboardRowCount()
         : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
     insertSelectedFlitToClipboard(scope);
+    QElapsedTimer waitTimer;
+    waitTimer.start();
+    while (clipboardXactionAddressInsertActive_ && waitTimer.elapsed() < 5000) {
+        QApplication::processEvents();
+    }
     const int after = testClipboardScope() == scope
         ? testClipboardRowCount()
         : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
@@ -886,6 +894,11 @@ bool MainWindow::testInsertSelectedXactionToClipboard(const ClipboardScope scope
         ? testClipboardRowCount()
         : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);
     insertSelectedXactionToClipboard(scope);
+    QElapsedTimer waitTimer;
+    waitTimer.start();
+    while (clipboardXactionAddressInsertActive_ && waitTimer.elapsed() < 5000) {
+        QApplication::processEvents();
+    }
     const int after = testClipboardScope() == scope
         ? testClipboardRowCount()
         : (clipboardEntriesForScope(scope) ? static_cast<int>(clipboardEntriesForScope(scope)->size()) : 0);

@@ -15,6 +15,8 @@
 #include "trace_statistics.hpp"
 #include "trace_session_fast_index_utils.hpp"
 
+#include "chi_eb/xact/chi_eb_joint.hpp"
+#include "chi_eb/xact/chi_eb_xact_state.hpp"
 #include "chi_eb/util/chi_eb_util_flit.hpp"
 
 #include <QColor>
@@ -34,6 +36,7 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QThread>
 #include <QStringList>
 #include <QTreeWidget>
@@ -1560,6 +1563,119 @@ TransactionTraceFixture makeCacheReadCleanTrace(const QString& fileName,
     return fixture;
 }
 
+TransactionTraceFixture makeCacheWriteEvictOrEvictCopyBackTrace(const QString& fileName,
+                                                                 const bool invalidCopyBackReservedFields = false)
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+    using RspFlit = CHI::Eb::Flits::RSP<XactTestConfig>;
+    using DatFlit = CHI::Eb::Flits::DAT<XactTestConfig>;
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set cache write test NodeIDWidth."));
+    expect(params.SetReqAddrWidth(52), QStringLiteral("Failed to set cache write test ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(32), QStringLiteral("Failed to set cache write test ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(32), QStringLiteral("Failed to set cache write test DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set cache write test DataWidth."));
+    params.SetDataCheckPresent(true);
+    params.SetPoisonPresent(true);
+    params.SetMPAMPresent(true);
+
+    const auto serializeReq = [](const ReqFlit& flit, TestFlitBitWriter& writer) {
+        appendEbReqFlitForTest(flit, writer);
+    };
+    const auto serializeRsp = [](const RspFlit& flit, TestFlitBitWriter& writer) {
+        appendEbRspFlitForTest(flit, writer);
+    };
+    const auto serializeDat = [](const DatFlit& flit, TestFlitBitWriter& writer) {
+        appendEbDatFlitForTest(flit, writer);
+    };
+
+    std::vector<CLog::CLogB::TagCHIRecords::Record> records;
+    records.reserve(6);
+
+    ReqFlit read{};
+    read.TgtID() = 16;
+    read.SrcID() = 1;
+    read.TxnID() = 1;
+    read.Opcode() = CHI::Eb::Opcodes::REQ::ReadClean;
+    read.Size() = CHI::Eb::Sizes::B64;
+    read.Addr() = 0x1000;
+    read.MemAttr() = CHI::Eb::MemAttrs::WriteBack_Allocate;
+    read.SnpAttr() = CHI::Eb::SnpAttrs::Snoopable;
+    read.AllowRetry() = 1;
+    read.ExpCompAck() = 1;
+
+    DatFlit readData{};
+    readData.TgtID() = read.SrcID();
+    readData.SrcID() = read.TgtID();
+    readData.TxnID() = read.TxnID();
+    readData.HomeNID() = read.TgtID();
+    readData.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+    readData.RespErr() = CHI::Eb::RespErrs::OK;
+    readData.Resp() = CHI::Eb::Resps::CompData_UC;
+    readData.DBID() = 11;
+    readData.DataID() = 0;
+    readData.BE() = 0xFFFFFFFFU;
+    DatFlit readDataRepeat = readData;
+    readDataRepeat.DataID() = 2;
+
+    ReqFlit writeEvict{};
+    writeEvict.TgtID() = 16;
+    writeEvict.SrcID() = 1;
+    writeEvict.TxnID() = 2;
+    writeEvict.Opcode() = CHI::Eb::Opcodes::REQ::WriteEvictOrEvict;
+    writeEvict.Size() = CHI::Eb::Sizes::B64;
+    writeEvict.Addr() = read.Addr();
+    writeEvict.MemAttr() = CHI::Eb::MemAttrs::WriteBack_Allocate;
+    writeEvict.SnpAttr() = CHI::Eb::SnpAttrs::Snoopable;
+    writeEvict.AllowRetry() = 1;
+    writeEvict.ExpCompAck() = 1;
+
+    RspFlit compDbid{};
+    compDbid.TgtID() = writeEvict.SrcID();
+    compDbid.SrcID() = writeEvict.TgtID();
+    compDbid.TxnID() = writeEvict.TxnID();
+    compDbid.Opcode() = CHI::Eb::Opcodes::RSP::CompDBIDResp;
+    compDbid.RespErr() = CHI::Eb::RespErrs::OK;
+    compDbid.DBID() = 0;
+
+    DatFlit copyBack{};
+    copyBack.TgtID() = writeEvict.TgtID();
+    copyBack.SrcID() = writeEvict.SrcID();
+    copyBack.TxnID() = compDbid.DBID();
+    copyBack.HomeNID() = static_cast<std::uint64_t>(invalidCopyBackReservedFields ? 16 : 0);
+    copyBack.Opcode() = CHI::Eb::Opcodes::DAT::CopyBackWrData;
+    copyBack.RespErr() = CHI::Eb::RespErrs::OK;
+    copyBack.Resp() = CHI::Eb::Resps::CopyBackWrData_SC;
+    copyBack.DataID() = 0;
+    copyBack.BE() = 0xFFFFFFFFU;
+    DatFlit copyBackRepeat = copyBack;
+    copyBackRepeat.DataID() = 2;
+
+    records.push_back(makeSerializedRecord(CLog::Channel::TXREQ, 1, 1, read, serializeReq));
+    records.push_back(makeSerializedRecord(CLog::Channel::RXDAT, 1, 1, readData, serializeDat));
+    records.push_back(makeSerializedRecord(CLog::Channel::RXDAT, 1, 1, readDataRepeat, serializeDat));
+    records.push_back(makeSerializedRecord(CLog::Channel::TXREQ, 1, 1, writeEvict, serializeReq));
+    records.push_back(makeSerializedRecord(CLog::Channel::RXRSP, 1, 1, compDbid, serializeRsp));
+    records.push_back(makeSerializedRecord(CLog::Channel::TXDAT, 1, 1, copyBack, serializeDat));
+    records.push_back(makeSerializedRecord(CLog::Channel::TXDAT, 1, 1, copyBackRepeat, serializeDat));
+
+    TransactionTraceFixture fixture;
+    expect(fixture.tempDir.isValid(), QStringLiteral("Temporary directory creation failed."));
+    fixture.tracePath = fixture.tempDir.filePath(fileName);
+    fixture.transactionCount = 2;
+    writeTraceWithTopology(fixture.tracePath,
+                           params,
+                           {
+                               {CLog::NodeType::RN_F, 1},
+                               {CLog::NodeType::HN_F, 16},
+                           },
+                           std::move(records));
+    return fixture;
+}
+
 TransactionTraceFixture makeCacheStateRoundTripTrace(const QString& fileName)
 {
     using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
@@ -1813,6 +1929,205 @@ void testCacheLineStateReplayBuildsRequestedRnAddressSpans()
                : error.summary);
     expect(missingSpans.empty(),
            QStringLiteral("State replay should filter out other RN lanes for the same address."));
+}
+
+void testCacheLineStateReplayAppliesReqTxdatCopyBack()
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+    using RspFlit = CHI::Eb::Flits::RSP<XactTestConfig>;
+    using DatFlit = CHI::Eb::Flits::DAT<XactTestConfig>;
+
+    CHI::Eb::Xact::Global<XactTestConfig> global;
+    global.TOPOLOGY.SetNode(1, CHI::Eb::Xact::NodeType::RN_F, "RN_F");
+    global.TOPOLOGY.SetNode(16, CHI::Eb::Xact::NodeType::HN_F, "HN_F");
+    CHI::Eb::Xact::RNFJoint<XactTestConfig> rnJoint;
+    CHI::Eb::Xact::RNCacheStateMap<XactTestConfig> stateMap;
+
+    ReqFlit read{};
+    read.TgtID() = 16;
+    read.SrcID() = 1;
+    read.TxnID() = 1;
+    read.Opcode() = CHI::Eb::Opcodes::REQ::ReadClean;
+    read.Size() = CHI::Eb::Sizes::B64;
+    read.Addr() = 0x1000;
+    read.MemAttr() = CHI::Eb::MemAttrs::WriteBack_Allocate;
+    read.SnpAttr() = CHI::Eb::SnpAttrs::Snoopable;
+    read.AllowRetry() = 1;
+    read.ExpCompAck() = 1;
+
+    expect(stateMap.NextTXREQ(0x1000, 1, read) == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core state map should accept ReadClean TXREQ."));
+    std::shared_ptr<CHI::Eb::Xact::Xaction<XactTestConfig>> readXaction;
+    expect(rnJoint.NextTXREQ(global, 1, read, &readXaction) == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core RN joint should accept ReadClean TXREQ."));
+
+    DatFlit readData{};
+    readData.TgtID() = read.SrcID();
+    readData.SrcID() = read.TgtID();
+    readData.TxnID() = read.TxnID();
+    readData.HomeNID() = read.TgtID();
+    readData.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+    readData.RespErr() = CHI::Eb::RespErrs::OK;
+    readData.Resp() = CHI::Eb::Resps::CompData_UC;
+    readData.DBID() = 11;
+    readData.DataID() = 0;
+    readData.BE() = 0xFFFFFFFFU;
+    expect(rnJoint.NextRXDAT(global, 2, readData, &readXaction) == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core RN joint should accept ReadClean CompData."));
+    expect(stateMap.NextRXDAT(0x1000, 2, *readXaction, readData) == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core state map should accept ReadClean CompData."));
+
+    ReqFlit writeEvict{};
+    writeEvict.TgtID() = 16;
+    writeEvict.SrcID() = 1;
+    writeEvict.TxnID() = 2;
+    writeEvict.Opcode() = CHI::Eb::Opcodes::REQ::WriteEvictOrEvict;
+    writeEvict.Size() = CHI::Eb::Sizes::B64;
+    writeEvict.Addr() = read.Addr();
+    writeEvict.MemAttr() = CHI::Eb::MemAttrs::WriteBack_Allocate;
+    writeEvict.SnpAttr() = CHI::Eb::SnpAttrs::Snoopable;
+    writeEvict.AllowRetry() = 1;
+    writeEvict.ExpCompAck() = 1;
+    expect(stateMap.NextTXREQ(0x1000, 4, writeEvict) == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core state map should accept WriteEvictOrEvict TXREQ."));
+    std::shared_ptr<CHI::Eb::Xact::Xaction<XactTestConfig>> writeXaction;
+    expect(rnJoint.NextTXREQ(global, 4, writeEvict, &writeXaction) == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core RN joint should accept WriteEvictOrEvict TXREQ."));
+
+    RspFlit compDbid{};
+    compDbid.TgtID() = writeEvict.SrcID();
+    compDbid.SrcID() = writeEvict.TgtID();
+    compDbid.TxnID() = writeEvict.TxnID();
+    compDbid.Opcode() = CHI::Eb::Opcodes::RSP::CompDBIDResp;
+    compDbid.RespErr() = CHI::Eb::RespErrs::OK;
+    compDbid.DBID() = 0;
+    expect(rnJoint.NextRXRSP(global, 5, compDbid, &writeXaction) == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core RN joint should accept CompDBIDResp."));
+    expect(stateMap.NextRXRSP(0x1000, 5, *writeXaction, compDbid) == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core state map should accept CompDBIDResp."));
+
+    DatFlit copyBack{};
+    copyBack.TgtID() = writeEvict.TgtID();
+    copyBack.SrcID() = writeEvict.SrcID();
+    copyBack.TxnID() = compDbid.DBID();
+    copyBack.HomeNID() = 0;
+    copyBack.Opcode() = CHI::Eb::Opcodes::DAT::CopyBackWrData;
+    copyBack.RespErr() = CHI::Eb::RespErrs::OK;
+    copyBack.Resp() = CHI::Eb::Resps::CopyBackWrData_SC;
+    copyBack.DataID() = 0;
+    copyBack.BE() = 0xFFFFFFFFU;
+    const auto coreTxdatDenial = rnJoint.NextTXDAT(global, 6, copyBack, &writeXaction);
+    expect(coreTxdatDenial == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core RN joint should accept CopyBackWrData. denial=%1")
+               .arg(coreTxdatDenial ? QString::fromLatin1(coreTxdatDenial->name)
+                                    : QStringLiteral("null")));
+    expect(stateMap.NextTXDAT(0x1000, 6, *writeXaction, copyBack) == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("Core state map should accept CopyBackWrData."));
+    expectEqual(QString::fromStdString(stateMap.Get(0x1000).ToString()),
+                QStringLiteral("I"),
+                QStringLiteral("Core RNCacheStateMap should invalidate on WriteEvictOrEvict CopyBackWrData."));
+
+    TransactionTraceFixture fixture =
+        makeCacheWriteEvictOrEvictCopyBackTrace(QStringLiteral("cache_state_writeevict_txdat.clogb"));
+
+    CHIron::Gui::CLogBTraceLoadError error;
+    CHIron::Gui::CLogBTraceMetadata metadata;
+    expect(CHIron::Gui::CLogBTraceLoader::scanFile(fixture.tracePath, metadata, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("WriteEvict cache replay fixture should scan as CLog.B.")
+               : error.summary);
+
+    std::vector<CHIron::Gui::CLogBTraceCacheLineStateSpan> spans;
+    expect(CHIron::Gui::CLogBTraceLoader::buildCacheLineStateSpans(
+               fixture.tracePath,
+               metadata,
+               CHIron::Gui::CLogBTraceCacheLineStateQuery{
+                   .rnNodeId = 1,
+                   .lineAddress = 0x1000,
+               },
+               spans,
+               error),
+           error.summary.isEmpty()
+               ? QStringLiteral("WriteEvict cache replay should build spans.")
+               : error.summary);
+
+    expect(!spans.empty(),
+           QStringLiteral("WriteEvict CopyBackWrData should produce at least one live source span before I."));
+    const auto& span = spans.back();
+    QStringList spanDump;
+    for (const auto& producedSpan : spans) {
+        spanDump.push_back(QStringLiteral("%1-%2 %3 open=%4")
+                               .arg(static_cast<qulonglong>(producedSpan.startLogicalRow))
+                               .arg(static_cast<qulonglong>(producedSpan.endLogicalRow))
+                               .arg(producedSpan.stateText)
+                               .arg(producedSpan.openEnded ? QStringLiteral("true")
+                                                           : QStringLiteral("false")));
+    }
+    expect(!span.openEnded,
+           QStringLiteral("CopyBackWrData on requester TXDAT should invalidate the cache-line state. spans=%1")
+               .arg(spanDump.join(QStringLiteral("; "))));
+    expectEqual(static_cast<std::uint64_t>(span.endLogicalRow),
+                static_cast<std::uint64_t>(5),
+                QStringLiteral("State span should close on the first CopyBackWrData beat."));
+    for (const auto& liveSpan : spans) {
+        expect(!liveSpan.openEnded,
+               QStringLiteral("WriteEvict CopyBackWrData should not leave any live UC/SC span open to EOF."));
+    }
+
+    std::vector<CHIron::Gui::CLogBTraceCacheLineLifetime> lifetimes;
+    expect(CHIron::Gui::CLogBTraceLoader::buildCacheLineLifetimes(
+               fixture.tracePath,
+               metadata,
+               lifetimes,
+               error),
+           error.summary.isEmpty()
+               ? QStringLiteral("WriteEvict cache replay should build lifetimes.")
+               : error.summary);
+    expectEqual(static_cast<int>(lifetimes.size()),
+                1,
+                QStringLiteral("Lifetime replay should also close on requester TXDAT CopyBackWrData."));
+    expect(!lifetimes.front().openEnded,
+           QStringLiteral("Lifetime replay should not leave WriteEvict CopyBackWrData live to EOF."));
+    expectEqual(static_cast<std::uint64_t>(lifetimes.front().endLogicalRow),
+                static_cast<std::uint64_t>(5),
+                QStringLiteral("Lifetime should close on the first CopyBackWrData beat."));
+}
+
+void testCacheLineStateReplayToleratesNonStateDatFieldDenials()
+{
+    TransactionTraceFixture fixture =
+        makeCacheWriteEvictOrEvictCopyBackTrace(QStringLiteral("cache_state_writeevict_field_denial.clogb"),
+                                                true);
+
+    CHIron::Gui::CLogBTraceLoadError error;
+    CHIron::Gui::CLogBTraceMetadata metadata;
+    expect(CHIron::Gui::CLogBTraceLoader::scanFile(fixture.tracePath, metadata, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("WriteEvict field-denial cache replay fixture should scan as CLog.B.")
+               : error.summary);
+
+    std::vector<CHIron::Gui::CLogBTraceCacheLineStateSpan> spans;
+    expect(CHIron::Gui::CLogBTraceLoader::buildCacheLineStateSpans(
+               fixture.tracePath,
+               metadata,
+               CHIron::Gui::CLogBTraceCacheLineStateQuery{
+                   .rnNodeId = 1,
+                   .lineAddress = 0x1000,
+               },
+               spans,
+               error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Cache replay should tolerate non-state DAT field denials.")
+               : error.summary);
+
+    expect(!spans.empty(),
+           QStringLiteral("Field-denied CopyBackWrData fixture should produce a live span before invalidation."));
+    expect(!spans.back().openEnded,
+           QStringLiteral("Cache replay should still apply CopyBackWrData state transition when only DAT fields are denied."));
+    expectEqual(static_cast<std::uint64_t>(spans.back().endLogicalRow),
+                static_cast<std::uint64_t>(5),
+                QStringLiteral("Field-denied CopyBackWrData should close the state span on the first beat."));
 }
 
 void waitForTraceCacheMinimapLane(CHIron::Gui::MainWindow& window,
@@ -3093,6 +3408,8 @@ void testClipboardInsertTransactionsWithSameAddressModes()
         expectEqual(window.testClipboardRowCount(),
                     9,
                     QStringLiteral("All same-address insertion should add three matching transactions."));
+        expect(!window.testClipboardCLogBSaveAvailable(),
+               QStringLiteral("Fast address-batch Clipboard rows should not be immediately CLog.B-saveable."));
         expect(window.testInsertAllXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
                QStringLiteral("Repeating all same-address insertion should still run and skip duplicate source rows."));
         waitForClipboardAddressInsert(window,
@@ -3309,6 +3626,90 @@ void testClipboardBatchInsertionMergesExistingSubsetByLogicalRow()
     expectEqual(window.testClipboardTxnIdAt(6),
                 QStringLiteral("2"),
                 QStringLiteral("Subset merge should keep the originally inserted later transaction in source order."));
+}
+
+void testClipboardAddressBatchCancelControlVisible()
+{
+    TransactionTraceFixture fixture =
+        makeIndexedReadNoSnpAddressPatternTrace(QStringLiteral("clipboard_batch_cancel_button.clogb"),
+                                                {0x1000, 0x103F, 0x1008, 0x1040, 0x1004});
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard cancel control fixture should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    window.testSelectLogicalRow(0);
+    expect(window.testInsertAllXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Clipboard address batch should start for cancel control test."));
+    expect(window.testClipboardInsertProgressVisible(),
+           QStringLiteral("Clipboard address batch progress should be visible."));
+    expect(window.testClipboardInsertCancelVisible(),
+           QStringLiteral("Clipboard address batch cancel button should be visible."));
+    expect(window.testCancelClipboardXactionAddressInsert(),
+           QStringLiteral("Clipboard address batch cancel request should be accepted."));
+    waitForClipboardAddressInsert(window,
+                                  QStringLiteral("Clipboard address batch cancel should settle."));
+    expect(!window.testClipboardInsertProgressVisible(),
+           QStringLiteral("Clipboard address batch progress should hide after cancellation settles."));
+}
+
+void testClipboardSameAddressInsertionKeepsEventLoopResponsive()
+{
+    std::vector<std::uint64_t> addresses;
+    addresses.reserve(2048);
+    for (int index = 0; index < 2048; ++index) {
+        addresses.push_back(index % 2 == 0
+                                ? 0x1000 + static_cast<std::uint64_t>(index % 8) * 8
+                                : 0x8000 + static_cast<std::uint64_t>(index) * 0x40);
+    }
+    TransactionTraceFixture fixture =
+        makeIndexedReadNoSnpAddressPatternTrace(QStringLiteral("clipboard_same_address_responsive.clogb"),
+                                                addresses);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Same-address responsiveness fixture should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+    window.testSelectLogicalRow(0);
+
+    int heartbeatCount = 0;
+    qint64 maxHeartbeatGapMs = 0;
+    QElapsedTimer heartbeatTimer;
+    heartbeatTimer.start();
+    qint64 lastHeartbeatMs = heartbeatTimer.elapsed();
+    QTimer heartbeat;
+    heartbeat.setInterval(10);
+    QObject::connect(&heartbeat, &QTimer::timeout, [&]() {
+        const qint64 nowMs = heartbeatTimer.elapsed();
+        maxHeartbeatGapMs = std::max(maxHeartbeatGapMs, nowMs - lastHeartbeatMs);
+        lastHeartbeatMs = nowMs;
+        ++heartbeatCount;
+    });
+    heartbeat.start();
+
+    expect(window.testInsertAllXactionsWithSelectedAddressToClipboard(CHIron::Gui::ClipboardScope::Session),
+           QStringLiteral("Same-address responsiveness insertion should start."));
+    const bool completed = waitForCondition([&window]() {
+        return !window.testClipboardXactionAddressInsertActive();
+    }, 15000);
+    heartbeat.stop();
+
+    expect(completed, QStringLiteral("Same-address responsiveness insertion should complete."));
+    expect(heartbeatCount > 0,
+           QStringLiteral("Same-address responsiveness insertion should keep processing timer events."));
+    expect(maxHeartbeatGapMs <= 100,
+           QStringLiteral("Same-address responsiveness insertion should not block the Qt event loop for long stretches (max gap=%1 ms).")
+               .arg(maxHeartbeatGapMs));
+    expect(window.testClipboardRowCount() > 0,
+           QStringLiteral("Same-address responsiveness insertion should publish matching Clipboard rows."));
 }
 
 void testClipboardInsertionSortsOnlyEditedRows()
@@ -12272,6 +12673,8 @@ int main(int argc, char* argv[])
         {QStringLiteral("ClipboardBatchInsertionSkipsExistingRowsWithoutReordering"), testClipboardBatchInsertionSkipsExistingRowsWithoutReordering},
         {QStringLiteral("ClipboardBatchInsertionPreservesLogicalOrder"), testClipboardBatchInsertionPreservesLogicalOrder},
         {QStringLiteral("ClipboardBatchInsertionMergesExistingSubsetByLogicalRow"), testClipboardBatchInsertionMergesExistingSubsetByLogicalRow},
+        {QStringLiteral("ClipboardAddressBatchCancelControlVisible"), testClipboardAddressBatchCancelControlVisible},
+        {QStringLiteral("ClipboardSameAddressInsertionKeepsEventLoopResponsive"), testClipboardSameAddressInsertionKeepsEventLoopResponsive},
         {QStringLiteral("ClipboardInsertionSortsOnlyEditedRows"), testClipboardInsertionSortsOnlyEditedRows},
         {QStringLiteral("ClipboardReadOnlyEditableModifiedAndNavigation"), testClipboardReadOnlyEditableModifiedAndNavigation},
         {QStringLiteral("ClipboardCsvSaveIncludesFilteredRows"), testClipboardCsvSaveIncludesFilteredRows},
@@ -12305,6 +12708,8 @@ int main(int argc, char* argv[])
         {QStringLiteral("XactionIndexPersistsRowsAfterChunkWriteFlush"), testXactionIndexPersistsRowsAfterChunkWriteFlush},
         {QStringLiteral("CacheLineLifetimeReplayBuildsReadCleanOpenEndedLifetimes"), testCacheLineLifetimeReplayBuildsReadCleanOpenEndedLifetimes},
         {QStringLiteral("CacheLineStateReplayBuildsRequestedRnAddressSpans"), testCacheLineStateReplayBuildsRequestedRnAddressSpans},
+        {QStringLiteral("CacheLineStateReplayAppliesReqTxdatCopyBack"), testCacheLineStateReplayAppliesReqTxdatCopyBack},
+        {QStringLiteral("CacheLineStateReplayToleratesNonStateDatFieldDenials"), testCacheLineStateReplayToleratesNonStateDatFieldDenials},
         {QStringLiteral("TraceCacheMinimapMainTraceBuildsLaneOverlayAndSegments"), testTraceCacheMinimapMainTraceBuildsLaneOverlayAndSegments},
         {QStringLiteral("TraceCacheMinimapTagsStackAndAnchorToLaneRightEdge"), testTraceCacheMinimapTagsStackAndAnchorToLaneRightEdge},
         {QStringLiteral("TraceCacheMinimapAddingLaneDuringBuildFinishesBoth"), testTraceCacheMinimapAddingLaneDuringBuildFinishesBoth},

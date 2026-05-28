@@ -501,7 +501,8 @@ void MainWindow::updateClipboardInsertProgress(const bool active,
     if (clipboardInsertCancelButton_) {
         clipboardInsertCancelButton_->show();
         clipboardInsertCancelButton_->setEnabled(clipboardXactionAddressInsertStopSource_
-                                                 && !clipboardXactionAddressInsertStopSource_->stop_requested());
+                                                 && !clipboardXactionAddressInsertStopSource_->stop_requested()
+                                                 && !clipboardInsertApplyState_);
     }
 }
 

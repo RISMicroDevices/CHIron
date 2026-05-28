@@ -45,28 +45,11 @@
     void bindClipboardWidgetToActiveScope();
     std::vector<ClipboardEntry>* clipboardEntriesForScope(ClipboardScope scope);
     const std::vector<ClipboardEntry>* clipboardEntriesForScope(ClipboardScope scope) const;
-    bool insertClipboardRows(ClipboardScope scope,
-                             const std::vector<std::pair<int, FlitRecord>>& rows,
-                             QString* message = nullptr,
-                             ClipboardInsertOrdering ordering = ClipboardInsertOrdering::SortByTimestamp);
-    ClipboardInsertResult insertClipboardRowsDetailed(
-        ClipboardScope scope,
-        const std::vector<std::pair<int, FlitRecord>>& rows,
-        QString* message = nullptr,
-        ClipboardInsertOrdering ordering = ClipboardInsertOrdering::SortByTimestamp,
-        int preSkippedDuplicates = 0);
-    bool insertClipboardRowsFromSession(quint64 sourceSessionId,
-                                        ClipboardScope scope,
-                                        const std::vector<std::pair<int, FlitRecord>>& rows,
-                                        QString* message = nullptr,
-                                        ClipboardInsertOrdering ordering = ClipboardInsertOrdering::SortByTimestamp);
-    ClipboardInsertResult insertClipboardRowsFromSessionDetailed(
-        quint64 sourceSessionId,
-        ClipboardScope scope,
-        const std::vector<std::pair<int, FlitRecord>>& rows,
-        QString* message = nullptr,
-        ClipboardInsertOrdering ordering = ClipboardInsertOrdering::SortByTimestamp,
-        int preSkippedDuplicates = 0);
+    bool startClipboardRowsInsertAsync(quint64 sourceSessionId,
+                                       ClipboardScope scope,
+                                       std::vector<std::pair<int, FlitRecord>> rows,
+                                       ClipboardInsertOrdering ordering,
+                                       int preSkippedDuplicates = 0);
     void insertSelectedFlitToClipboard(ClipboardScope scope);
     void insertSelectedXactionToClipboard(ClipboardScope scope);
     bool insertXactionsWithSelectedAddressToClipboard(ClipboardScope scope,
@@ -78,6 +61,19 @@
                                              int preSkippedDuplicates,
                                              bool cancelled,
                                              QString errorText);
+    void finishClipboardInsertPrepare(quint64 generation,
+                                      quint64 sourceSessionId,
+                                      std::vector<ClipboardEntry> preparedTarget,
+                                      std::vector<ClipboardEntry> preparedAppended,
+                                      bool appendOnly,
+                                      bool mergeBySource,
+                                      std::uint64_t preparedNextSequence,
+                                      int inserted,
+                                      int skipped,
+                                      std::optional<CLogBTraceMetadata> preparedGlobalMetadata,
+                                      QString errorText);
+    void processClipboardInsertApplyChunk();
+    void finishClipboardInsertApply();
     void cancelClipboardXactionAddressInsert();
     void cancelClipboardXactionAddressInsertForSession(quint64 sessionId);
     void updateClipboardInsertProgress(bool active,

@@ -9,13 +9,6 @@
         PreserveInputOrder
     };
 
-    struct ClipboardInsertResult {
-        int inserted = 0;
-        int skipped = 0;
-
-        bool insertedAny() const noexcept { return inserted > 0; }
-    };
-
     ads::CDockManager* dockManager_ = nullptr;
     ads::CDockWidget* topologyDock_ = nullptr;
     ads::CDockWidget* timelineDock_ = nullptr;
@@ -227,3 +220,30 @@
     quint64 clipboardXactionAddressInsertSessionId_ = 0;
     ClipboardScope clipboardXactionAddressInsertScope_ = ClipboardScope::Session;
     std::shared_ptr<std::stop_source> clipboardXactionAddressInsertStopSource_;
+    struct ClipboardInsertApplyState {
+        quint64 generation = 0;
+        quint64 sourceSessionId = 0;
+        ClipboardScope scope = ClipboardScope::Session;
+        std::uint64_t inputRowCount = 0;
+        std::size_t nextRefreshIndex = 0;
+        std::size_t insertionStartIndex = 0;
+        bool appendOnly = false;
+        bool mergeBySource = false;
+        std::vector<ClipboardEntry> mergeExistingEntries;
+        std::size_t mergeExistingIndex = 0;
+        std::size_t mergeAppendIndex = 0;
+        std::vector<ClipboardEntry>* target = nullptr;
+        std::vector<ClipboardEntry> preparedTarget;
+        std::vector<ClipboardEntry> preparedAppended;
+        std::uint64_t preparedNextSequence = 0;
+        std::optional<CLogBTraceMetadata> preparedGlobalMetadata;
+        int inserted = 0;
+        int skipped = 0;
+        bool refreshClipboardWidget = false;
+        bool incrementalWidgetRefresh = false;
+        bool refreshingClipboardWidget = false;
+        bool prepareActive = false;
+        QString finalMessage;
+        std::optional<CLogBTraceMetadata> globalMetadata;
+    };
+    std::unique_ptr<ClipboardInsertApplyState> clipboardInsertApplyState_;

@@ -297,6 +297,23 @@ void TraceCacheLineMinimap::clearSource()
     update();
 }
 
+void TraceCacheLineMinimap::setModelUpdatesSuspended(const bool suspended)
+{
+    if (suspended) {
+        ++modelUpdatesSuspended_;
+        return;
+    }
+
+    if (modelUpdatesSuspended_ > 0) {
+        --modelUpdatesSuspended_;
+    }
+    if (modelUpdatesSuspended_ == 0 && pendingModelRefresh_) {
+        pendingModelRefresh_ = false;
+        rebuildVisibleSegments();
+        update();
+    }
+}
+
 bool TraceCacheLineMinimap::mapVisible() const noexcept
 {
     return mapVisible_;
@@ -681,22 +698,18 @@ void TraceCacheLineMinimap::updateModelConnections()
         return;
     }
     QAbstractItemModel* abstractModel = model_;
-    modelResetConnection_ = connect(abstractModel, &QAbstractItemModel::modelReset, this, [this]() {
+    const auto refreshFromModel = [this]() {
+        if (modelUpdatesSuspended_ > 0) {
+            pendingModelRefresh_ = true;
+            return;
+        }
         rebuildVisibleSegments();
         update();
-    });
-    rowsInsertedConnection_ = connect(abstractModel, &QAbstractItemModel::rowsInserted, this, [this]() {
-        rebuildVisibleSegments();
-        update();
-    });
-    rowsRemovedConnection_ = connect(abstractModel, &QAbstractItemModel::rowsRemoved, this, [this]() {
-        rebuildVisibleSegments();
-        update();
-    });
-    dataChangedConnection_ = connect(abstractModel, &QAbstractItemModel::dataChanged, this, [this]() {
-        rebuildVisibleSegments();
-        update();
-    });
+    };
+    modelResetConnection_ = connect(abstractModel, &QAbstractItemModel::modelReset, this, refreshFromModel);
+    rowsInsertedConnection_ = connect(abstractModel, &QAbstractItemModel::rowsInserted, this, refreshFromModel);
+    rowsRemovedConnection_ = connect(abstractModel, &QAbstractItemModel::rowsRemoved, this, refreshFromModel);
+    dataChangedConnection_ = connect(abstractModel, &QAbstractItemModel::dataChanged, this, refreshFromModel);
 }
 
 void TraceCacheLineMinimap::startLaneBuild(const int laneIndex)

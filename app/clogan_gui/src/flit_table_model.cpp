@@ -24,7 +24,6 @@
 #include <mutex>
 #include <new>
 #include <numeric>
-#include <thread>
 #include <utility>
 
 namespace CHIron::Gui {
@@ -1091,6 +1090,7 @@ void FlitTableModel::clear()
     traceSession_.reset();
     traceMetadataOverride_.reset();
     rows_.clear();
+    dirtySourceRows_.clear();
     editedRows_.clear();
     insertedRows_.clear();
     sparseRowRefs_.clear();
@@ -1120,6 +1120,7 @@ void FlitTableModel::setTraceSession(std::shared_ptr<TraceSession> session)
     traceSession_ = std::move(session);
     traceMetadataOverride_.reset();
     rows_.clear();
+    dirtySourceRows_.clear();
     editedRows_.clear();
     insertedRows_.clear();
     sparseRowRefs_.clear();
@@ -1206,6 +1207,7 @@ void FlitTableModel::setRows(std::vector<FlitRecord> rows)
     beginResetModel();
     traceSession_.reset();
     rows_ = std::move(rows);
+    dirtySourceRows_.clear();
     editedRows_.clear();
     insertedRows_.clear();
     sparseRowRefs_.clear();
@@ -1235,6 +1237,7 @@ void FlitTableModel::appendRows(const std::vector<FlitRecord>& rows)
     clearTransactionHighlightState();
     beginResetModel();
     traceSession_.reset();
+    dirtySourceRows_.clear();
     editedRows_.clear();
     insertedRows_.clear();
     sparseRowRefs_.clear();
@@ -1249,6 +1252,52 @@ void FlitTableModel::appendRows(const std::vector<FlitRecord>& rows)
     if (searchMode_ == SearchMode::Highlight) {
         rebuildSearchHighlightIndex();
     }
+}
+
+bool FlitTableModel::canAppendRowsIncrementally(const std::vector<FlitRecord>& rows) const
+{
+    return !rows.empty()
+        && !traceSession_
+        && !hasActiveFilters()
+        && searchMode_ != SearchMode::Highlight;
+}
+
+bool FlitTableModel::appendRowsIncrementally(const std::vector<FlitRecord>& rows)
+{
+    if (!canAppendRowsIncrementally(rows)) {
+        return false;
+    }
+
+    cancelAsyncFilterBuild();
+    clearSearchHighlightIndex(false);
+    clearTransactionHighlightState();
+
+    const int firstRow = sourceRowCount();
+    const int lastRow = firstRow + static_cast<int>(rows.size()) - 1;
+    beginInsertRows(QModelIndex(), firstRow, lastRow);
+    rows_.insert(rows_.end(), rows.begin(), rows.end());
+    dirtySourceRows_.clear();
+    identityVisibleRows_ = true;
+    identityVisibleRowCount_ = sourceRowCount();
+    for (const FlitRecord& row : rows) {
+        switch (row.channel) {
+        case FlitChannel::Req:
+            ++channelCounts_[0];
+            break;
+        case FlitChannel::Rsp:
+            ++channelCounts_[1];
+            break;
+        case FlitChannel::Dat:
+            ++channelCounts_[2];
+            break;
+        case FlitChannel::Snp:
+            ++channelCounts_[3];
+            break;
+        }
+    }
+    setDirty(editable_ || dirty_);
+    endInsertRows();
+    return true;
 }
 
 bool FlitTableModel::insertRowsAt(const int visibleRow, std::vector<FlitRecord> rows)
@@ -1412,6 +1461,7 @@ void FlitTableModel::markUndoStackClean()
         return;
     }
     undoStack_->setClean();
+    clearDirtySourceRowsSnapshot();
     updateDirtyFromUndoStack();
 }
 
@@ -1773,6 +1823,7 @@ void FlitTableModel::setEditable(const bool editable)
         editedRows_.clear();
         insertedRows_.clear();
         sparseRowRefs_.clear();
+        dirtySourceRows_.clear();
         resetUndoStack();
         setDirty(false);
         recountChannels();
@@ -1833,6 +1884,36 @@ std::vector<FlitRecord> FlitTableModel::sourceRowsSnapshot() const
     }
 
     return {};
+}
+
+std::vector<std::pair<int, FlitRecord>> FlitTableModel::takeDirtySourceRowsSnapshot()
+{
+    std::vector<std::pair<int, FlitRecord>> rows;
+    if (traceSession_ || dirtySourceRows_.isEmpty()) {
+        dirtySourceRows_.clear();
+        return rows;
+    }
+
+    std::vector<int> logicalRows;
+    logicalRows.reserve(static_cast<std::size_t>(dirtySourceRows_.size()));
+    for (const int logicalRow : std::as_const(dirtySourceRows_)) {
+        logicalRows.push_back(logicalRow);
+    }
+    std::sort(logicalRows.begin(), logicalRows.end());
+
+    rows.reserve(logicalRows.size());
+    for (const int logicalRow : logicalRows) {
+        if (logicalRow >= 0 && logicalRow < static_cast<int>(rows_.size())) {
+            rows.push_back({logicalRow, rows_[static_cast<std::size_t>(logicalRow)]});
+        }
+    }
+    dirtySourceRows_.clear();
+    return rows;
+}
+
+void FlitTableModel::clearDirtySourceRowsSnapshot()
+{
+    dirtySourceRows_.clear();
 }
 
 std::vector<FlitRecord> FlitTableModel::sparseEditedRowsSnapshot() const
@@ -2169,6 +2250,7 @@ bool FlitTableModel::applySetLogicalRowDirect(const int logicalRow, const FlitRe
             return false;
         }
         rows_[static_cast<std::size_t>(logicalRow)] = row;
+        dirtySourceRows_.insert(logicalRow);
     }
     finishRowMutationReset();
     return true;
@@ -2206,6 +2288,7 @@ bool FlitTableModel::applyInsertRowsAtLogicalRowDirect(const int logicalRow,
         rows_.insert(rows_.begin() + static_cast<std::ptrdiff_t>(logicalInsertRow),
                      rows.begin(),
                      rows.end());
+        dirtySourceRows_.clear();
         for (std::size_t index = 0; index < rows.size(); ++index) {
             const int targetLogicalRow = logicalInsertRow + static_cast<int>(index);
             entries.push_back(RowMutationEntry{
@@ -2270,6 +2353,7 @@ bool FlitTableModel::applyInsertRowsByTimestampDirect(const std::vector<FlitReco
             entries.push_back(RowMutationEntry{.logicalRow = low, .ref = ref, .row = row});
         }
     } else {
+        dirtySourceRows_.clear();
         for (const FlitRecord& row : rows) {
             const auto insertIt = std::upper_bound(
                 rows_.begin(),
@@ -2332,6 +2416,7 @@ bool FlitTableModel::applyDeleteLogicalRowDirect(const int logicalRow, RowMutati
             return false;
         }
         rows_.erase(rows_.begin() + logicalRow);
+        dirtySourceRows_.clear();
     }
     if (snapshot) {
         *snapshot = MakeSnapshot(std::vector<RowMutationEntry>{std::move(entry)});
@@ -2365,6 +2450,7 @@ bool FlitTableModel::applyRestoreRowsDirect(const RowMutationSnapshot& snapshot)
             }
         }
     } else {
+        dirtySourceRows_.clear();
         for (const RowMutationEntry& entry : snapshot.entries) {
             const int logicalRow = qBound(0, entry.logicalRow, static_cast<int>(rows_.size()));
             rows_.insert(rows_.begin() + static_cast<std::ptrdiff_t>(logicalRow), entry.row);
@@ -2395,6 +2481,7 @@ bool FlitTableModel::applyRemoveRowsDirect(const RowMutationSnapshot& snapshot)
             }
         }
     } else {
+        dirtySourceRows_.clear();
         for (auto it = snapshot.entries.rbegin(); it != snapshot.entries.rend(); ++it) {
             if (it->logicalRow >= 0 && it->logicalRow < static_cast<int>(rows_.size())) {
                 rows_.erase(rows_.begin() + it->logicalRow);

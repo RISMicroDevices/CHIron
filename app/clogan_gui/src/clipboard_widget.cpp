@@ -396,9 +396,114 @@ void ClipboardWidget::refreshFromEntries()
     model_->setEditable(!readOnly_);
     model_->markUndoStackClean();
     syncingModel_ = false;
+    modifiedBadgeDirty_ = true;
     updateBadges();
     applyTraceTableRowStyle(model_->visibleCount());
     resizeColumnsToTraceDefaults();
+}
+
+void ClipboardWidget::beginIncrementalRefreshFromEntries(std::vector<ClipboardEntry>* entries,
+                                                         const CLogBTraceMetadata* metadata,
+                                                         const bool entriesAlreadySynced)
+{
+    const bool preserveModifiedCache = entriesAlreadySynced && !modifiedBadgeDirty_;
+    if (!entriesAlreadySynced) {
+        syncEntriesFromModel();
+    }
+    entries_ = entries;
+    syncingModel_ = true;
+    if (table_) {
+        table_->setUpdatesEnabled(false);
+    }
+    if (cacheMinimap_) {
+        cacheMinimap_->setModelUpdatesSuspended(true);
+    }
+    if (model_) {
+        model_->setTraceMetadataOverride(metadata ? std::optional<CLogBTraceMetadata>(*metadata) : std::nullopt);
+        model_->setRows({});
+        model_->setEditable(!readOnly_);
+        model_->markUndoStackClean();
+    }
+    modifiedBadgeDirty_ = !preserveModifiedCache;
+}
+
+void ClipboardWidget::beginAppendRefreshFromEntries(std::vector<ClipboardEntry>* entries,
+                                                    const CLogBTraceMetadata* metadata,
+                                                    const std::size_t appendBeginIndex)
+{
+    if (!entries || !model_ || entries_ != entries) {
+        beginIncrementalRefreshFromEntries(entries, metadata, true);
+        return;
+    }
+    syncDirtyEntriesFromModel();
+    const int modelRows = model_->totalCount();
+    if (appendBeginIndex != static_cast<std::size_t>(modelRows)
+        || appendBeginIndex > entries->size()) {
+        beginIncrementalRefreshFromEntries(entries, metadata, true);
+        return;
+    }
+    entries_ = entries;
+    syncingModel_ = true;
+    if (table_) {
+        table_->setUpdatesEnabled(false);
+    }
+    if (cacheMinimap_) {
+        cacheMinimap_->setModelUpdatesSuspended(true);
+    }
+    model_->setTraceMetadataOverride(metadata ? std::optional<CLogBTraceMetadata>(*metadata) : std::nullopt);
+    model_->setEditable(!readOnly_);
+    model_->markUndoStackClean();
+    modifiedBadgeDirty_ = false;
+}
+
+bool ClipboardWidget::appendEntryRowsIncrementally(const std::size_t beginIndex,
+                                                   const std::size_t count)
+{
+    if (!entries_ || !model_ || count == 0 || beginIndex >= entries_->size()) {
+        return false;
+    }
+
+    const std::size_t endIndex = std::min(entries_->size(), beginIndex + count);
+    std::vector<FlitRecord> rows;
+    rows.reserve(endIndex - beginIndex);
+    for (std::size_t index = beginIndex; index < endIndex; ++index) {
+        rows.push_back((*entries_)[index].record);
+    }
+    if (!model_->appendRowsIncrementally(rows)) {
+        return false;
+    }
+    return true;
+}
+
+void ClipboardWidget::abortIncrementalRefreshFromEntries()
+{
+    syncingModel_ = false;
+    if (cacheMinimap_) {
+        cacheMinimap_->setModelUpdatesSuspended(false);
+    }
+    if (table_) {
+        table_->setUpdatesEnabled(true);
+        table_->viewport()->update();
+    }
+}
+
+void ClipboardWidget::finishIncrementalRefreshFromEntries()
+{
+    if (model_) {
+        model_->setEditable(!readOnly_);
+        model_->markUndoStackClean();
+    }
+    syncingModel_ = false;
+    updateBadges();
+    applyTraceTableRowStyle(model_ ? model_->visibleCount() : 0);
+    resizeColumnsToTraceDefaults();
+    if (cacheMinimap_) {
+        cacheMinimap_->setModelUpdatesSuspended(false);
+    }
+    if (table_) {
+        table_->setUpdatesEnabled(true);
+        table_->viewport()->update();
+    }
 }
 
 void ClipboardWidget::syncEntriesFromModel()
@@ -412,6 +517,36 @@ void ClipboardWidget::syncEntriesFromModel()
             (*entries_)[index].record = rows[index];
         }
     }
+    modifiedBadgeDirty_ = true;
+    updateBadges();
+}
+
+void ClipboardWidget::syncDirtyEntriesFromModel()
+{
+    if (!entries_ || syncingModel_ || !model_) {
+        return;
+    }
+    if (modifiedBadgeDirty_) {
+        (void)hasModifiedRows();
+    }
+    const std::vector<std::pair<int, FlitRecord>> rows = model_->takeDirtySourceRowsSnapshot();
+    if (rows.empty()) {
+        return;
+    }
+    bool shouldRescanModifiedRows = hasModifiedRowsCache_;
+    for (const auto& [logicalRow, row] : rows) {
+        if (logicalRow >= 0 && logicalRow < static_cast<int>(entries_->size())) {
+            (*entries_)[static_cast<std::size_t>(logicalRow)].record = row;
+            const bool modified = entryModified(logicalRow);
+            hasModifiedRowsCache_ = hasModifiedRowsCache_ || modified;
+            shouldRescanModifiedRows = shouldRescanModifiedRows && !modified;
+        }
+    }
+    if (shouldRescanModifiedRows && entries_->size() > rows.size()) {
+        hasModifiedRowsCache_ = true;
+        shouldRescanModifiedRows = false;
+    }
+    modifiedBadgeDirty_ = shouldRescanModifiedRows;
     updateBadges();
 }
 
@@ -457,12 +592,20 @@ bool ClipboardWidget::hasModifiedRows() const
     if (!entries_) {
         return false;
     }
+    if (!modifiedBadgeDirty_) {
+        return hasModifiedRowsCache_;
+    }
+    bool modified = false;
     for (std::size_t index = 0; index < entries_->size(); ++index) {
         if (entryModified(static_cast<int>(index))) {
-            return true;
+            modified = true;
+            break;
         }
     }
-    return false;
+    auto* self = const_cast<ClipboardWidget*>(this);
+    self->hasModifiedRowsCache_ = modified;
+    self->modifiedBadgeDirty_ = false;
+    return modified;
 }
 
 bool ClipboardWidget::entryModified(const int logicalRow) const
@@ -602,6 +745,7 @@ void ClipboardWidget::deleteSelectedRows()
             }
         }
     }
+    modifiedBadgeDirty_ = true;
     syncEntriesFromModel();
     Q_EMIT entriesEdited();
 }
@@ -853,7 +997,7 @@ void ClipboardWidget::wireSignals()
         if (syncingModel_) {
             return;
         }
-        syncEntriesFromModel();
+        syncDirtyEntriesFromModel();
         updateBadges();
         Q_EMIT entriesEdited();
     });

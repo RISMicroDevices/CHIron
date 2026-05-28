@@ -42,6 +42,11 @@ public:
         std::uint64_t chunkTableBytes = 0;
     };
 
+    struct XactionRowsDescriptorByOrdinal {
+        std::uint64_t ordinal = 0;
+        XactionRowsDescriptor descriptor;
+    };
+
     struct XactionRowMapChunkDescriptor {
         std::uint64_t dataOffset = 0;
         std::uint32_t storedBytes = 0;
@@ -93,6 +98,32 @@ public:
         std::uint8_t flags = 0;
     };
 
+    struct TraceSessionSnapshot {
+        QString filePath;
+        CLogBTraceMetadata metadata;
+        std::size_t pageSize = 0;
+        std::size_t maxCachedPages = 0;
+        std::size_t maxCachedBlocks = 0;
+        QString fastIndexPath;
+        bool fastIndexReadable = false;
+        bool fastIndexWritable = false;
+        std::vector<FastIndexDescriptor> fastIndexDescriptors;
+        bool xactionIndexEnabled = false;
+        bool xactionIndexStarted = false;
+        bool xactionIndexComplete = false;
+        QString xactionIndexPath;
+        std::uint64_t xactionRowTableOffset = 0;
+        std::uint64_t xactionGroupTableOffset = 0;
+        std::uint64_t xactionGroupCount = 0;
+        std::uint64_t xactionStringTableOffset = 0;
+        std::uint64_t xactionStringCount = 0;
+        std::vector<XactionRowMapChunkDescriptor> xactionRowMapChunkDescriptors;
+        std::vector<XactionDebugChunkDescriptor> xactionDebugChunkDescriptors;
+        std::vector<XactionRowsDescriptorByOrdinal> xactionRowsByOrdinalDescriptors;
+        std::unordered_map<std::uint64_t,
+                           std::shared_ptr<const std::vector<CLogBTraceFastRecordInfo>>> cachedFastRecordsByBlock;
+    };
+
     static bool open(const QString& filePath,
                      std::shared_ptr<TraceSession>& session,
                      CLogBTraceLoadError& error,
@@ -109,6 +140,7 @@ public:
     std::size_t maxCachedBlocks() const noexcept;
     std::size_t cachedPageCount() const noexcept;
     std::size_t cachedBlockCount() const noexcept;
+    std::shared_ptr<const TraceSessionSnapshot> snapshot() const noexcept;
     const QString& fastIndexPath() const noexcept;
     bool isFastIndexReadable() const noexcept;
     bool isFastIndexWritable() const noexcept;
@@ -118,6 +150,14 @@ public:
                                   std::size_t localBegin,
                                   std::size_t rowCount,
                                   std::vector<CLogBTraceFastRecordInfo>& records) const;
+    bool readFastRecordsFromSnapshot(const std::shared_ptr<const TraceSessionSnapshot>& snapshot,
+                                     std::size_t blockIndex,
+                                     std::vector<CLogBTraceFastRecordInfo>& records) const;
+    bool readFastRecordsFromSnapshot(const std::shared_ptr<const TraceSessionSnapshot>& snapshot,
+                                     std::size_t blockIndex,
+                                     std::size_t localBegin,
+                                     std::size_t rowCount,
+                                     std::vector<CLogBTraceFastRecordInfo>& records) const;
     QString optionalFieldFastIndexPath(const QString& fieldName) const;
     bool hasOptionalFieldFastIndex(const QString& fieldName);
     bool clearOptionalFieldFastIndex(const QString& fieldName,
@@ -137,6 +177,13 @@ public:
                   const CLogBTraceLoadCallbacks& callbacks = {},
                   std::stop_token stopToken = {});
     bool readRowsDirect(std::uint64_t beginRow,
+                        std::uint64_t rowCount,
+                        std::vector<FlitRecord>& rows,
+                        CLogBTraceLoadError& error,
+                        const CLogBTraceLoadCallbacks& callbacks = {},
+                        std::stop_token stopToken = {}) const;
+    bool readRowsDirect(const std::shared_ptr<const TraceSessionSnapshot>& snapshot,
+                        std::uint64_t beginRow,
                         std::uint64_t rowCount,
                         std::vector<FlitRecord>& rows,
                         CLogBTraceLoadError& error,
@@ -188,6 +235,10 @@ public:
     bool xactionRowCompactInfoRange(std::uint64_t beginRow,
                                     std::uint64_t rowCount,
                                     std::vector<XactionRowCompactInfo>& infos) const;
+    bool xactionRowCompactInfoRange(const std::shared_ptr<const TraceSessionSnapshot>& snapshot,
+                                    std::uint64_t beginRow,
+                                    std::uint64_t rowCount,
+                                    std::vector<XactionRowCompactInfo>& infos) const;
     bool xactionRowInfosForRows(const std::vector<std::uint64_t>& logicalRows,
                                 std::unordered_map<std::uint64_t, XactionIndexRowInfo>& infos,
                                 bool includeDebugStrings = true,
@@ -197,6 +248,9 @@ public:
                                    std::uint64_t rowCount,
                                    std::vector<std::uint64_t>& ordinals) const;
     std::vector<std::uint64_t> xactionRowsForOrdinal(std::uint64_t ordinal) const;
+    std::vector<std::uint64_t> xactionRowsForOrdinal(
+        const std::shared_ptr<const TraceSessionSnapshot>& snapshot,
+        std::uint64_t ordinal) const;
     std::vector<std::uint64_t> xactionRowsForGroup(const QString& groupKey) const;
     bool xactionRowInfo(std::uint64_t logicalRow, XactionIndexRowInfo& info) const;
     QString xactionDebugInfo(std::uint64_t logicalRow) const;
@@ -258,7 +312,9 @@ private:
 private:
     TraceSession(QString filePath,
                  CLogBTraceMetadata metadata,
-                 TraceSessionOptions options);
+                 TraceSessionOptions options,
+                 const CLogBTraceLoadCallbacks& callbacks = {},
+                 std::stop_token stopToken = {});
 
 private:
     bool areRowsCached(std::uint64_t beginRow, std::uint64_t rowCount) const noexcept;
@@ -300,7 +356,8 @@ private:
     void touchOptionalFieldBlock(const QString& cacheKey) noexcept;
     void clearOptionalFieldRecordCache(const QString& fieldName = QString());
     void evictOptionalFieldBlocksIfNeeded();
-    bool tryLoadXactionIndexState();
+    bool tryLoadXactionIndexState(const CLogBTraceLoadCallbacks& callbacks = {},
+                                  std::stop_token stopToken = {});
     void resetXactionIndexFiles();
     void resetXactionIndexFileState();
     bool readXactionRowRecord(std::uint64_t logicalRow,
@@ -309,11 +366,20 @@ private:
                                std::uint64_t rowCount,
                                std::vector<CLogBTraceXactionIndexRecord>& records,
                                bool includeDebugStrings = true) const;
+    bool readXactionRowRecordsFromSnapshot(const TraceSessionSnapshot& snapshot,
+                                           std::uint64_t beginRow,
+                                           std::uint64_t rowCount,
+                                           std::vector<CLogBTraceXactionIndexRecord>& records,
+                                           bool includeDebugStrings = true) const;
     bool readXactionOrdinalChunk(const QString& indexPath,
                                  const XactionRowMapChunkDescriptor& descriptor,
                                  std::vector<std::uint64_t>& ordinals) const;
     bool readXactionRowsByOrdinal(std::uint64_t ordinal,
                                   std::vector<std::uint64_t>& rows) const;
+    bool readXactionRowsByOrdinal(const TraceSessionSnapshot& snapshot,
+                                  std::uint64_t ordinal,
+                                  std::vector<std::uint64_t>& rows) const;
+    bool xactionGroupDescriptors(std::vector<XactionRowsDescriptorByOrdinal>& descriptors) const;
     bool readXactionDebugStrings(const XactionRowDebugIds& debugIds,
                                  CLogBTraceXactionIndexRecord& record) const;
     bool readXactionDebugIds(std::uint64_t logicalRow,
@@ -331,9 +397,15 @@ private:
     void touchBlock(std::uint64_t blockIndex) noexcept;
     void evictPagesIfNeeded();
     void evictBlocksIfNeeded();
-    void initializeXactionIndexState();
+    void initializeXactionIndexState(const CLogBTraceLoadCallbacks& callbacks = {},
+                                     std::stop_token stopToken = {});
     void applyXactionIndexToRows(std::uint64_t beginRow,
                                  std::vector<FlitRecord>& rows) const;
+    void applyXactionIndexToRows(const TraceSessionSnapshot& snapshot,
+                                 std::uint64_t beginRow,
+                                 std::vector<FlitRecord>& rows) const;
+    void publishSnapshot() const;
+    void publishSnapshotNoThrow() const noexcept;
 
 private:
     QString filePath_;
@@ -356,7 +428,8 @@ private:
     std::uint64_t xactionStringCount_ = 0;
     std::vector<XactionRowMapChunkDescriptor> xactionRowMapChunkDescriptors_;
     std::vector<XactionDebugChunkDescriptor> xactionDebugChunkDescriptors_;
-    QHash<std::uint64_t, XactionRowsDescriptor> xactionRowsByOrdinalDescriptors_;
+    mutable std::vector<XactionRowsDescriptorByOrdinal> xactionRowsByOrdinalDescriptors_;
+    mutable bool xactionRowsByOrdinalDescriptorsLoaded_ = false;
     mutable std::optional<std::unordered_map<std::uint64_t, QString>> cachedXactionTypesByOrdinal_;
     mutable std::optional<std::unordered_set<std::uint64_t>> cachedXactionCompletedOrdinals_;
     mutable std::unordered_map<std::uint64_t, CachedXactionOrdinalChunkEntry> cachedXactionOrdinalChunks_;
@@ -365,7 +438,6 @@ private:
     std::uint64_t cachedOptionalFieldBlockBytes_ = 0;
     std::vector<FastIndexDescriptor> fastIndexDescriptors_;
     mutable std::mutex xactionIndexMutex_;
-    QSet<std::uint64_t> xactionIndexedOrdinals_;
     mutable std::mutex optionalFieldIndexesMutex_;
     mutable std::mutex optionalFieldRecordCacheMutex_;
     QHash<QString, OptionalFieldIndexState> optionalFieldIndexes_;
@@ -376,6 +448,7 @@ private:
     std::list<std::uint64_t> lruPageIndexes_;
     std::unordered_map<std::uint64_t, CachedBlockEntry> cachedBlocks_;
     std::list<std::uint64_t> lruBlockIndexes_;
+    mutable std::shared_ptr<const TraceSessionSnapshot> snapshot_;
 };
 
 }  // namespace CHIron::Gui

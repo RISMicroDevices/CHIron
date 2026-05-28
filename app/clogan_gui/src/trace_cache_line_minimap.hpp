@@ -72,6 +72,7 @@ public:
     void setClipboardContext(ClipboardWidget* clipboard,
                              std::function<std::shared_ptr<TraceSession>(quint64)> sourceSessionResolver);
     void clearSource();
+    void setModelUpdatesSuspended(bool suspended);
 
     bool mapVisible() const noexcept;
     void setMapVisible(bool visible);
@@ -261,6 +262,8 @@ private:
     QMetaObject::Connection rowsInsertedConnection_;
     QMetaObject::Connection rowsRemovedConnection_;
     QMetaObject::Connection dataChangedConnection_;
+    int modelUpdatesSuspended_ = 0;
+    bool pendingModelRefresh_ = false;
     bool mapVisible_ = false;
     bool fadeWhenInactive_ = true;
     bool hovered_ = false;

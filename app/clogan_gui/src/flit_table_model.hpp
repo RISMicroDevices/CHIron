@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 class QUndoStack;
@@ -88,6 +89,8 @@ public:
     void setRows(std::vector<FlitRecord> rows);
     void appendRow(const FlitRecord& row);
     void appendRows(const std::vector<FlitRecord>& rows);
+    bool canAppendRowsIncrementally(const std::vector<FlitRecord>& rows) const;
+    bool appendRowsIncrementally(const std::vector<FlitRecord>& rows);
     bool insertRowsAt(int visibleRow, std::vector<FlitRecord> rows);
     bool insertRowsAtLogicalRow(int logicalRow, std::vector<FlitRecord> rows);
     bool insertRowsByTimestamp(std::vector<FlitRecord> rows);
@@ -142,6 +145,8 @@ public:
     int channelCountAll(FlitChannel channel) const noexcept;
     QVector<const FlitRecord*> visibleRows() const;
     std::vector<FlitRecord> sourceRowsSnapshot() const;
+    std::vector<std::pair<int, FlitRecord>> takeDirtySourceRowsSnapshot();
+    void clearDirtySourceRowsSnapshot();
     bool isSessionBacked() const noexcept;
     bool editable() const noexcept;
     void setEditable(bool editable);
@@ -265,6 +270,7 @@ private:
     std::shared_ptr<TraceSession> traceSession_;
     std::optional<CLogBTraceMetadata> traceMetadataOverride_;
     std::vector<FlitRecord> rows_;
+    QSet<int> dirtySourceRows_;
     QHash<int, FlitRecord> editedRows_;
     std::vector<FlitRecord> insertedRows_;
     std::vector<SourceRowRef> sparseRowRefs_;

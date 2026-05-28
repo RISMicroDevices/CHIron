@@ -386,22 +386,80 @@ inline QString LoadStageText(const CLogBTraceLoadStage stage, const std::size_t 
     case CLogBTraceLoadStage::Parsing:
         return QStringLiteral("Reading CLog.B stream structure...");
     case CLogBTraceLoadStage::Decoding:
-        return QStringLiteral("Decoding flits with %1 worker%2...")
-            .arg(workerCount)
-            .arg(workerCount == 1 ? QString() : QStringLiteral("s"));
+        return workerCount > 1
+            ? QStringLiteral("Decoding flits with %1 workers...").arg(workerCount)
+            : QStringLiteral("Decoding flits...");
     case CLogBTraceLoadStage::Formatting:
-        return QStringLiteral("Formatting decoded rows...");
+        return workerCount > 1
+            ? QStringLiteral("Formatting decoded rows with %1 workers...").arg(workerCount)
+            : QStringLiteral("Formatting decoded rows...");
+    case CLogBTraceLoadStage::Finalizing:
+        return QStringLiteral("Finalizing trace indexes...");
+    case CLogBTraceLoadStage::FinalizingIndexDebug:
+        return QStringLiteral("Validating xaction debug index...");
+    case CLogBTraceLoadStage::FinalizingIndexLayout:
+        return QStringLiteral("Checking xaction group directory...");
+    case CLogBTraceLoadStage::FinalizingIndexRows:
+        return workerCount > 0
+            ? QStringLiteral("Preparing xaction row maps with %1 workers...").arg(workerCount)
+            : QStringLiteral("Validating compact xaction row maps...");
+    case CLogBTraceLoadStage::FinalizingIndexRowDirectory:
+        return workerCount > 0
+            ? QStringLiteral("Writing xaction index directories...")
+            : QStringLiteral("Validating compact xaction index directories...");
+    case CLogBTraceLoadStage::Completed:
+        return QStringLiteral("Completing load...");
+    }
+
+    return QStringLiteral("Loading...");
+}
+
+inline bool LoadStageUsesStageProgress(const CLogBTraceLoadStage stage)
+{
+    switch (stage) {
+    case CLogBTraceLoadStage::Decoding:
+    case CLogBTraceLoadStage::Formatting:
     case CLogBTraceLoadStage::Finalizing:
     case CLogBTraceLoadStage::FinalizingIndexDebug:
     case CLogBTraceLoadStage::FinalizingIndexLayout:
     case CLogBTraceLoadStage::FinalizingIndexRows:
     case CLogBTraceLoadStage::FinalizingIndexRowDirectory:
-        return QStringLiteral("Finalizing load...");
+        return true;
+    case CLogBTraceLoadStage::Opening:
+    case CLogBTraceLoadStage::Parsing:
     case CLogBTraceLoadStage::Completed:
-        return QStringLiteral("Finishing load...");
+        return false;
     }
 
-    return QStringLiteral("Loading...");
+    return false;
+}
+
+inline QString LoadStageProgressUnit(const CLogBTraceLoadStage stage, const std::size_t count)
+{
+    const auto plural = [count](const char* singular, const char* pluralText) {
+        return QLatin1String(count == 1 ? singular : pluralText);
+    };
+
+    switch (stage) {
+    case CLogBTraceLoadStage::FinalizingIndexDebug:
+        return plural("debug chunk", "debug chunks");
+    case CLogBTraceLoadStage::FinalizingIndexLayout:
+        return plural("directory check", "directory checks");
+    case CLogBTraceLoadStage::FinalizingIndexRows:
+        return plural("row-map chunk", "row-map chunks");
+    case CLogBTraceLoadStage::FinalizingIndexRowDirectory:
+        return plural("compact directory item", "compact directory items");
+    case CLogBTraceLoadStage::Decoding:
+    case CLogBTraceLoadStage::Formatting:
+    case CLogBTraceLoadStage::Finalizing:
+        return plural("record", "records");
+    case CLogBTraceLoadStage::Opening:
+    case CLogBTraceLoadStage::Parsing:
+    case CLogBTraceLoadStage::Completed:
+        return plural("item", "items");
+    }
+
+    return plural("item", "items");
 }
 
 inline int SessionBackedColumnWidth(const int logicalColumn)

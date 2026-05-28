@@ -14,8 +14,10 @@
 #include <QPainter>
 #include <QTableView>
 #include <QTextStream>
+#include <QTimer>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstdint>
 #include <map>
@@ -24,6 +26,9 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <deque>
+#include <mutex>
+#include <condition_variable>
 #include <vector>
 
 namespace {
@@ -51,6 +56,8 @@ struct BenchmarkOptions {
     bool transactionSpansOnly = false;
     bool transactionSpanScanOnly = false;
     bool clipboardBatchScanOnly = false;
+    bool clipboardInsertBench = false;
+    QString clipboardStoreAlgorithm = QStringLiteral("double-buffer-swap");
     bool transactionRenderOnly = false;
     bool editableModeOnly = false;
 };
@@ -88,6 +95,14 @@ struct BenchmarkSample {
     std::uint64_t clipboardBatchMatchingOrdinalCount = 0;
     std::uint64_t clipboardBatchCollectedRows = 0;
     std::uint64_t clipboardBatchDecodedRows = 0;
+    qint64 clipboardInsertPrepareNs = 0;
+    qint64 clipboardInsertPublishNs = 0;
+    qint64 clipboardInsertRefreshNs = 0;
+    qint64 clipboardInsertHeartbeatMaxNs = 0;
+    qint64 clipboardInsertCancelNs = 0;
+    std::uint64_t clipboardInsertExistingRows = 0;
+    std::uint64_t clipboardInsertRows = 0;
+    QString clipboardInsertAlgorithm;
     qint64 transactionRenderNs = 0;
     qint64 editablePrepareNs = 0;
     qint64 editableFirstCellNs = 0;
@@ -102,6 +117,223 @@ struct BenchmarkSample {
 struct BenchmarkSeries {
     std::vector<BenchmarkSample> samples;
 };
+
+struct ClipboardBenchEntry {
+    std::uint64_t logicalRow = 0;
+    std::uint64_t sequence = 0;
+    qint64 timestamp = 0;
+};
+
+struct ClipboardBenchSnapshot {
+    std::vector<ClipboardBenchEntry> entries;
+};
+
+constexpr std::uint64_t kClipboardBenchExistingRows = 100000;
+constexpr std::uint64_t kClipboardBenchInsertRows = 10000;
+
+std::vector<ClipboardBenchEntry> makeClipboardBenchEntries(const std::uint64_t beginRow,
+                                                           const std::uint64_t count,
+                                                           const std::uint64_t sequenceBase)
+{
+    std::vector<ClipboardBenchEntry> entries;
+    entries.reserve(static_cast<std::size_t>(count));
+    for (std::uint64_t index = 0; index < count; ++index) {
+        entries.push_back(ClipboardBenchEntry{
+            .logicalRow = beginRow + index,
+            .sequence = sequenceBase + index,
+            .timestamp = static_cast<qint64>((beginRow + index) * 3U),
+        });
+    }
+    return entries;
+}
+
+qint64 runClipboardBenchHeartbeat(QCoreApplication& app,
+                                  const std::function<void()>& work)
+{
+    QElapsedTimer timer;
+    timer.start();
+    qint64 lastNs = timer.nsecsElapsed();
+    qint64 maxGapNs = 0;
+    QTimer heartbeat;
+    QObject::connect(&heartbeat, &QTimer::timeout, [&]() {
+        const qint64 nowNs = timer.nsecsElapsed();
+        maxGapNs = std::max(maxGapNs, nowNs - lastNs);
+        lastNs = nowNs;
+    });
+    heartbeat.start(1);
+    work();
+    for (int spin = 0; spin < 8; ++spin) {
+        app.processEvents();
+    }
+    heartbeat.stop();
+    return maxGapNs;
+}
+
+std::vector<ClipboardBenchEntry> prepareClipboardBenchVector(
+    std::vector<ClipboardBenchEntry> baseEntries,
+    const std::vector<ClipboardBenchEntry>& insertRows)
+{
+    std::unordered_set<std::uint64_t> existingRows;
+    existingRows.reserve(baseEntries.size() + insertRows.size());
+    std::uint64_t nextSequence = 0;
+    for (const ClipboardBenchEntry& entry : baseEntries) {
+        existingRows.insert(entry.logicalRow);
+        nextSequence = std::max(nextSequence, entry.sequence + 1);
+    }
+    baseEntries.reserve(baseEntries.size() + insertRows.size());
+    for (ClipboardBenchEntry entry : insertRows) {
+        if (!existingRows.insert(entry.logicalRow).second) {
+            continue;
+        }
+        entry.sequence = nextSequence++;
+        baseEntries.push_back(entry);
+    }
+    std::stable_sort(baseEntries.begin(), baseEntries.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.logicalRow < rhs.logicalRow;
+    });
+    return baseEntries;
+}
+
+qint64 refreshClipboardBenchModel(QCoreApplication& app, const std::size_t entryCount)
+{
+    QElapsedTimer timer;
+    timer.start();
+    CHIron::Gui::FlitTableModel model;
+    constexpr std::size_t kRefreshBudgetRows = 2048;
+    const std::size_t refreshRows = std::min<std::size_t>(entryCount, 50000);
+    for (std::size_t index = 0; index < refreshRows; index += kRefreshBudgetRows) {
+        std::vector<CHIron::Gui::FlitRecord> chunk;
+        chunk.resize(std::min<std::size_t>(kRefreshBudgetRows, refreshRows - index));
+        if (index == 0) {
+            model.setRows(chunk);
+        } else {
+            model.appendRowsIncrementally(chunk);
+        }
+        app.processEvents();
+    }
+    return timer.nsecsElapsed();
+}
+
+bool runClipboardInsertAlgorithmBench(const QString& algorithm,
+                                      BenchmarkSample& sample,
+                                      QTextStream& err)
+{
+    QCoreApplication* app = QCoreApplication::instance();
+    if (!app) {
+        err << "Clipboard insert benchmark requires a QCoreApplication.\n";
+        return false;
+    }
+    const std::vector<ClipboardBenchEntry> baseEntries =
+        makeClipboardBenchEntries(0, kClipboardBenchExistingRows, 1);
+    const std::vector<ClipboardBenchEntry> insertRows =
+        makeClipboardBenchEntries(kClipboardBenchExistingRows,
+                                  kClipboardBenchInsertRows,
+                                  kClipboardBenchExistingRows + 1);
+    sample.clipboardInsertAlgorithm = algorithm;
+    sample.clipboardInsertExistingRows = kClipboardBenchExistingRows;
+    sample.clipboardInsertRows = kClipboardBenchInsertRows;
+
+    QElapsedTimer timer;
+    if (algorithm == QLatin1String("baseline")) {
+        std::vector<ClipboardBenchEntry> target = baseEntries;
+        sample.clipboardInsertHeartbeatMaxNs = runClipboardBenchHeartbeat(*app, [&]() {
+            timer.restart();
+            target = prepareClipboardBenchVector(std::move(target), insertRows);
+            sample.clipboardInsertPrepareNs = timer.nsecsElapsed();
+            timer.restart();
+            sample.clipboardInsertPublishNs = timer.nsecsElapsed();
+            sample.clipboardInsertRefreshNs = refreshClipboardBenchModel(*app, target.size());
+        });
+        return true;
+    }
+
+    if (algorithm == QLatin1String("double-buffer-swap")
+        || algorithm == QLatin1String("segmented-snapshot")
+        || algorithm == QLatin1String("delta-overlay")) {
+        std::vector<ClipboardBenchEntry> published = baseEntries;
+        std::shared_ptr<const ClipboardBenchSnapshot> snapshot =
+            std::make_shared<ClipboardBenchSnapshot>(ClipboardBenchSnapshot{published});
+        sample.clipboardInsertHeartbeatMaxNs = runClipboardBenchHeartbeat(*app, [&]() {
+            std::vector<ClipboardBenchEntry> prepared;
+            std::atomic_bool done = false;
+            timer.restart();
+            std::thread worker([&]() {
+                prepared = prepareClipboardBenchVector(baseEntries, insertRows);
+                done.store(true, std::memory_order_release);
+            });
+            while (!done.load(std::memory_order_acquire)) {
+                using namespace std::chrono_literals;
+                std::this_thread::sleep_for(1ms);
+                app->processEvents();
+                if (timer.elapsed() > 60000) {
+                    break;
+                }
+            }
+            if (worker.joinable()) {
+                worker.join();
+            }
+            sample.clipboardInsertPrepareNs = timer.nsecsElapsed();
+            timer.restart();
+            if (algorithm == QLatin1String("double-buffer-swap")) {
+                published.swap(prepared);
+            } else {
+                snapshot = std::make_shared<ClipboardBenchSnapshot>(
+                    ClipboardBenchSnapshot{std::move(prepared)});
+            }
+            sample.clipboardInsertPublishNs = timer.nsecsElapsed();
+            sample.clipboardInsertRefreshNs =
+                refreshClipboardBenchModel(*app, snapshot ? snapshot->entries.size() : published.size());
+        });
+        return true;
+    }
+
+    if (algorithm == QLatin1String("single-writer-actor")
+        || algorithm == QLatin1String("pipeline-parallel")
+        || algorithm == QLatin1String("striped-lock-store")) {
+        std::vector<ClipboardBenchEntry> published = baseEntries;
+        std::mutex mutex;
+        std::condition_variable cv;
+        bool ready = false;
+        std::vector<ClipboardBenchEntry> prepared;
+        sample.clipboardInsertHeartbeatMaxNs = runClipboardBenchHeartbeat(*app, [&]() {
+            timer.restart();
+            std::thread worker([&]() {
+                std::vector<ClipboardBenchEntry> localPrepared =
+                    prepareClipboardBenchVector(baseEntries, insertRows);
+                {
+                    const std::lock_guard lock(mutex);
+                    prepared = std::move(localPrepared);
+                    ready = true;
+                }
+                cv.notify_one();
+            });
+            while (true) {
+                {
+                    std::unique_lock lock(mutex);
+                    if (ready) {
+                        break;
+                    }
+                }
+                app->processEvents();
+                using namespace std::chrono_literals;
+                std::this_thread::sleep_for(1ms);
+            }
+            worker.join();
+            sample.clipboardInsertPrepareNs = timer.nsecsElapsed();
+            timer.restart();
+            {
+                const std::lock_guard lock(mutex);
+                published = std::move(prepared);
+            }
+            sample.clipboardInsertPublishNs = timer.nsecsElapsed();
+            sample.clipboardInsertRefreshNs = refreshClipboardBenchModel(*app, published.size());
+        });
+        return true;
+    }
+
+    err << "Unknown clipboard store algorithm: " << algorithm << "\n";
+    return false;
+}
 
 QStringList argumentsFromRaw(int argc, char* argv[])
 {
@@ -561,7 +793,8 @@ void printUsage(QTextStream& stream, const QString& executableName)
               " [--opcode-filter TEXT] [--src-filter TEXT] [--tgt-filter TEXT]"
               " [--txn-filter TEXT] [--dbid-filter TEXT] [--addr-filter TEXT]"
               " [--no-view] [--skip-model] [--scan-only] [--xaction-index-only]"
-              " [--editable-mode-only] [--transaction-spans-only] [--transaction-span-scan-only] [--clipboard-batch-scan-only] [--transaction-render-only]"
+              " [--editable-mode-only] [--transaction-spans-only] [--transaction-span-scan-only] [--clipboard-batch-scan-only]"
+              " [--clipboard-insert-bench] [--clipboard-store-algorithm NAME] [--transaction-render-only]"
               " [--transaction-render-repeats N] [--transaction-render-vertical-steps N]\n";
     stream << "Measures metadata scan time, row decode time, model/filter population time, trace-table sizing time, optional Xaction indexing time, and Transaction span build time.\n";
 }
@@ -631,6 +864,23 @@ std::optional<BenchmarkOptions> parseArguments(const QStringList& args, QTextStr
             options.clipboardBatchScanOnly = true;
             options.includeModel = false;
             options.includeView = false;
+            continue;
+        }
+
+        if (argument == QLatin1String("--clipboard-insert-bench")) {
+            options.clipboardInsertBench = true;
+            options.includeModel = false;
+            options.includeView = false;
+            continue;
+        }
+
+        if (argument == QLatin1String("--clipboard-store-algorithm")) {
+            if (index + 1 >= args.size()) {
+                err << "Missing value for " << argument << ".\n";
+                return std::nullopt;
+            }
+            options.clipboardStoreAlgorithm = args[index + 1];
+            ++index;
             continue;
         }
 
@@ -939,6 +1189,15 @@ BenchmarkSample runSample(const BenchmarkOptions& options)
         return sample;
     }
 
+    if (options.clipboardInsertBench) {
+        QTextStream err(stderr);
+        if (!runClipboardInsertAlgorithmBench(options.clipboardStoreAlgorithm, sample, err)) {
+            std::exit(2);
+        }
+        sample.rowCount = static_cast<qsizetype>(session->totalRows());
+        return sample;
+    }
+
     if (options.transactionRenderOnly) {
         if (!session->isXactionIndexComplete()) {
             if (!session->buildXactionIndex(error)) {
@@ -1193,6 +1452,27 @@ void printClipboardBatchSummary(QTextStream& out, const BenchmarkSample& sample)
         << "\n";
 }
 
+void printClipboardInsertSummary(QTextStream& out, const BenchmarkSample& sample)
+{
+    if (sample.clipboardInsertAlgorithm.isEmpty()) {
+        return;
+    }
+
+    out << "    Clipboard insert [" << sample.clipboardInsertAlgorithm << "]: prepare "
+        << formatMilliseconds(sample.clipboardInsertPrepareNs)
+        << " ms, publish "
+        << formatMilliseconds(sample.clipboardInsertPublishNs)
+        << " ms, refresh "
+        << formatMilliseconds(sample.clipboardInsertRefreshNs)
+        << " ms, heartbeat max "
+        << formatMilliseconds(sample.clipboardInsertHeartbeatMaxNs)
+        << " ms, existing "
+        << sample.clipboardInsertExistingRows
+        << ", inserted "
+        << sample.clipboardInsertRows
+        << "\n";
+}
+
 void printEditableSummary(QTextStream& out, const BenchmarkSample& sample)
 {
     if (sample.editablePrepareNs == 0 && sample.editableFirstCellNs == 0) {
@@ -1277,16 +1557,18 @@ int main(int argc, char* argv[])
                              : (options->transactionSpansOnly
                                     ? QStringLiteral("Transaction spans only")
                                     : (options->transactionSpanScanOnly
-                                           ? QStringLiteral("Transaction span scan only")
-                                           : (options->clipboardBatchScanOnly
-                                                  ? QStringLiteral("Clipboard batch scan only")
-                                                  : (options->transactionRenderOnly
-                                                         ? QStringLiteral("Transaction render only")
-                                                         : (options->includeModel
-                                                                ? (options->includeView
-                                                                       ? QStringLiteral("loader + table attach")
-                                                                       : QStringLiteral("loader + model"))
-                                                                : QStringLiteral("loader only"))))))));
+                                            ? QStringLiteral("Transaction span scan only")
+                                            : (options->clipboardBatchScanOnly
+                                                   ? QStringLiteral("Clipboard batch scan only")
+                                                   : (options->clipboardInsertBench
+                                                          ? QStringLiteral("Clipboard insert benchmark")
+                                                          : (options->transactionRenderOnly
+                                                                 ? QStringLiteral("Transaction render only")
+                                                                 : (options->includeModel
+                                                                        ? (options->includeView
+                                                                               ? QStringLiteral("loader + table attach")
+                                                                               : QStringLiteral("loader + model"))
+                                                                        : QStringLiteral("loader only")))))))));
     out << "Mode:  " << mode << "\n";
     if (options->reqOnly || options->txOnly) {
         QStringList filterModes;
@@ -1336,6 +1618,9 @@ int main(int argc, char* argv[])
     } else if (options->transactionRenderOnly && options->transactionRenderRepeats > 1) {
         out << "Render repeats per sample: " << options->transactionRenderRepeats << "\n";
     }
+    if (options->clipboardInsertBench) {
+        out << "Clipboard store algorithm: " << options->clipboardStoreAlgorithm << "\n";
+    }
     out << "Warmup iterations: " << options->warmupIterations << "\n";
     out << "Measured iterations: " << options->iterations << "\n\n";
 
@@ -1362,7 +1647,9 @@ int main(int argc, char* argv[])
 
         const qint64 totalNs = sample.scanNs + sample.rowLoadNs + sample.xactionIndexNs
             + sample.transactionSpanBuildNs + sample.transactionRenderNs
-            + sample.setRowsNs + sample.filterNs + sample.resizeColumnsNs;
+            + sample.setRowsNs + sample.filterNs + sample.resizeColumnsNs
+            + sample.clipboardInsertPrepareNs + sample.clipboardInsertPublishNs
+            + sample.clipboardInsertRefreshNs;
         out << QString::number(index + 1).rightJustified(9, QLatin1Char(' ')) << "  "
             << QString::number(sample.rowCount).rightJustified(8, QLatin1Char(' ')) << "  "
             << formatMilliseconds(sample.scanNs).rightJustified(8, QLatin1Char(' ')) << "  "
@@ -1378,6 +1665,7 @@ int main(int argc, char* argv[])
         printXactionStageSummary(out, sample);
         printTransactionSpanSummary(out, sample);
         printClipboardBatchSummary(out, sample);
+        printClipboardInsertSummary(out, sample);
         printEditableSummary(out, sample);
     }
 
@@ -1401,6 +1689,14 @@ int main(int argc, char* argv[])
         averageNanoseconds(series, &BenchmarkSample::clipboardBatchCollectNs);
     const qint64 averageClipboardBatchDecodeNs =
         averageNanoseconds(series, &BenchmarkSample::clipboardBatchDecodeNs);
+    const qint64 averageClipboardInsertPrepareNs =
+        averageNanoseconds(series, &BenchmarkSample::clipboardInsertPrepareNs);
+    const qint64 averageClipboardInsertPublishNs =
+        averageNanoseconds(series, &BenchmarkSample::clipboardInsertPublishNs);
+    const qint64 averageClipboardInsertRefreshNs =
+        averageNanoseconds(series, &BenchmarkSample::clipboardInsertRefreshNs);
+    const qint64 averageClipboardInsertHeartbeatMaxNs =
+        averageNanoseconds(series, &BenchmarkSample::clipboardInsertHeartbeatMaxNs);
     const qint64 averageSetRowsNs = averageNanoseconds(series, &BenchmarkSample::setRowsNs);
     const qint64 averageFilterNs = averageNanoseconds(series, &BenchmarkSample::filterNs);
     const qint64 averageResizeNs = averageNanoseconds(series, &BenchmarkSample::resizeColumnsNs);
@@ -1408,7 +1704,9 @@ int main(int argc, char* argv[])
     const qint64 averageEditableFirstCellNs = averageNanoseconds(series, &BenchmarkSample::editableFirstCellNs);
     const qint64 averageTotalNs = averageScanNs + averageRowLoadNs + averageXactionIndexNs
         + averageTransactionSpanBuildNs + averageTransactionRenderNs
-        + averageSetRowsNs + averageFilterNs + averageResizeNs;
+        + averageSetRowsNs + averageFilterNs + averageResizeNs
+        + averageClipboardInsertPrepareNs + averageClipboardInsertPublishNs
+        + averageClipboardInsertRefreshNs;
     const qsizetype averageRows = series.samples.empty()
         ? 0
         : series.samples.front().rowCount;
@@ -1439,6 +1737,10 @@ int main(int argc, char* argv[])
     averageSample.clipboardBatchScanNs = averageClipboardBatchScanNs;
     averageSample.clipboardBatchCollectNs = averageClipboardBatchCollectNs;
     averageSample.clipboardBatchDecodeNs = averageClipboardBatchDecodeNs;
+    averageSample.clipboardInsertPrepareNs = averageClipboardInsertPrepareNs;
+    averageSample.clipboardInsertPublishNs = averageClipboardInsertPublishNs;
+    averageSample.clipboardInsertRefreshNs = averageClipboardInsertRefreshNs;
+    averageSample.clipboardInsertHeartbeatMaxNs = averageClipboardInsertHeartbeatMaxNs;
     averageSample.editablePrepareNs = averageEditablePrepareNs;
     averageSample.editableFirstCellNs = averageEditableFirstCellNs;
     if (!series.samples.empty()) {
@@ -1454,6 +1756,9 @@ int main(int argc, char* argv[])
             series.samples.front().clipboardBatchMatchingOrdinalCount;
         averageSample.clipboardBatchCollectedRows = series.samples.front().clipboardBatchCollectedRows;
         averageSample.clipboardBatchDecodedRows = series.samples.front().clipboardBatchDecodedRows;
+        averageSample.clipboardInsertAlgorithm = series.samples.front().clipboardInsertAlgorithm;
+        averageSample.clipboardInsertExistingRows = series.samples.front().clipboardInsertExistingRows;
+        averageSample.clipboardInsertRows = series.samples.front().clipboardInsertRows;
         for (const BenchmarkSample& sample : series.samples) {
             averageSample.transactionSpanMetadataMs += sample.transactionSpanMetadataMs;
             averageSample.transactionSpanScanMs += sample.transactionSpanScanMs;
@@ -1479,6 +1784,7 @@ int main(int argc, char* argv[])
     printXactionStageSummary(out, averageSample);
     printTransactionSpanSummary(out, averageSample);
     printClipboardBatchSummary(out, averageSample);
+    printClipboardInsertSummary(out, averageSample);
     printEditableSummary(out, averageSample);
 
     return 0;

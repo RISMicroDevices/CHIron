@@ -7,6 +7,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QLoggingCategory>
+#include <QThread>
 
 #include <algorithm>
 #include <array>
@@ -24,6 +26,8 @@
 #include <utility>
 
 namespace CHIron::Gui {
+
+Q_LOGGING_CATEGORY(traceSessionLog, "clogan.trace.session")
 
 namespace {
 
@@ -54,6 +58,7 @@ constexpr std::uint64_t kXactionRowMapChunkDescriptorSerializedBytes =
 constexpr std::uint64_t kXactionStringDescriptorSerializedBytes =
     sizeof(std::uint64_t) + sizeof(std::uint32_t);
 constexpr std::size_t kMaxCachedXactionOrdinalChunks = 32;
+constexpr qint64 kTraceSessionLockWarnMs = 16;
 
 enum XactionRowFlags : std::uint8_t {
     XactionRowProcessed = 1U << 0,
@@ -61,6 +66,15 @@ enum XactionRowFlags : std::uint8_t {
     XactionRowProcessedByJoint = 1U << 2,
     XactionRowComplete = 1U << 3,
 };
+
+void LogTraceSessionLockWait(const char* lockName, const qint64 waitedMs)
+{
+    if (waitedMs >= kTraceSessionLockWarnMs) {
+        qCWarning(traceSessionLog).nospace()
+            << "Waited " << waitedMs << " ms for " << lockName
+            << " on thread " << QThread::currentThread();
+    }
+}
 
 struct FastIndexHeader {
     std::array<char, 8> magic = Detail::kFastIndexMagic;
@@ -1055,65 +1069,308 @@ bool readXactionRowChunkDescriptor(QFile& file,
     return true;
 }
 
-bool readXactionRowMapChunkDescriptor(QFile& file,
-                                      const std::uint64_t descriptorTableOffset,
-                                      const std::uint64_t chunkIndex,
-                                      TraceSession::XactionRowMapChunkDescriptor& descriptor)
+bool readXactionGroupDescriptorTable(QFile& file,
+                                     const std::uint64_t descriptorTableOffset,
+                                     const std::uint64_t groupCount,
+                                     QByteArray& bytes)
 {
-    const std::uint64_t offset =
-        descriptorTableOffset + chunkIndex * kXactionRowMapChunkDescriptorSerializedBytes;
+    bytes.clear();
+    if (groupCount == 0) {
+        return true;
+    }
+    if (groupCount > (std::numeric_limits<std::uint64_t>::max)()
+            / kXactionGroupDescriptorSerializedBytes
+        || !file.seek(static_cast<qint64>(descriptorTableOffset))) {
+        return false;
+    }
+    const std::uint64_t tableBytes = groupCount * kXactionGroupDescriptorSerializedBytes;
+    if (tableBytes > static_cast<std::uint64_t>((std::numeric_limits<qsizetype>::max)())) {
+        return false;
+    }
+    bytes = file.read(static_cast<qint64>(tableBytes));
+    return bytes.size() == static_cast<qsizetype>(tableBytes);
+}
+
+bool readXactionGroupDescriptorAt(QFile& file,
+                                  const std::uint64_t descriptorTableOffset,
+                                  const std::uint64_t groupIndex,
+                                  TraceSession::XactionRowsDescriptorByOrdinal& descriptor)
+{
+    std::uint64_t offset = 0;
+    std::uint64_t byteOffset = 0;
+    if (!checkedMultiply(groupIndex, kXactionGroupDescriptorSerializedBytes, byteOffset)
+        || descriptorTableOffset > (std::numeric_limits<std::uint64_t>::max)() - byteOffset) {
+        return false;
+    }
+    offset = descriptorTableOffset + byteOffset;
     if (!file.seek(static_cast<qint64>(offset))) {
         return false;
     }
 
-    QDataStream stream(&file);
-    stream.setByteOrder(QDataStream::LittleEndian);
-    quint64 dataOffset = 0;
-    quint32 storedBytes = 0;
-    quint32 uncompressedBytes = 0;
-    quint32 rowCount = 0;
-    quint8 flags = 0;
-    stream >> dataOffset >> storedBytes >> uncompressedBytes >> rowCount >> flags;
-    if (stream.status() != QDataStream::Ok) {
+    char bytes[static_cast<std::size_t>(kXactionGroupDescriptorSerializedBytes)] = {};
+    if (file.read(bytes, static_cast<qint64>(sizeof(bytes)))
+        != static_cast<qint64>(sizeof(bytes))) {
         return false;
     }
 
-    descriptor.dataOffset = dataOffset;
-    descriptor.storedBytes = storedBytes;
-    descriptor.uncompressedBytes = uncompressedBytes;
-    descriptor.rowCount = rowCount;
-    descriptor.flags = flags;
+    const char* cursor = bytes;
+    descriptor.ordinal = readLe64(cursor);
+    cursor += sizeof(std::uint64_t);
+    descriptor.descriptor.chunkTableOffset = readLe64(cursor);
+    cursor += sizeof(std::uint64_t);
+    descriptor.descriptor.chunkCount = readLe64(cursor);
+    cursor += sizeof(std::uint64_t);
+    descriptor.descriptor.rowCount = readLe64(cursor);
+    cursor += sizeof(std::uint64_t);
+    descriptor.descriptor.chunkTableBytes = 0;
     return true;
 }
 
-bool readXactionDebugChunkDescriptor(QFile& file,
-                                     const std::uint64_t descriptorTableOffset,
-                                     const std::uint64_t chunkIndex,
-                                     TraceSession::XactionDebugChunkDescriptor& descriptor)
+bool validateXactionRowsDescriptor(const TraceSession::XactionRowsDescriptorByOrdinal& entry,
+                                   const std::uint64_t fileSize)
 {
-    const std::uint64_t offset =
-        descriptorTableOffset + chunkIndex * kXactionRowMapChunkDescriptorSerializedBytes;
-    if (!file.seek(static_cast<qint64>(offset))) {
+    if (entry.ordinal == 0
+        || entry.descriptor.chunkCount == 0
+        || entry.descriptor.rowCount == 0) {
         return false;
     }
 
-    QDataStream stream(&file);
-    stream.setByteOrder(QDataStream::LittleEndian);
-    quint64 dataOffset = 0;
-    quint32 storedBytes = 0;
-    quint32 uncompressedBytes = 0;
-    quint32 rowCount = 0;
-    quint8 flags = 0;
-    stream >> dataOffset >> storedBytes >> uncompressedBytes >> rowCount >> flags;
-    if (stream.status() != QDataStream::Ok) {
+    std::uint64_t chunkTableBytes = 0;
+    if (!checkedMultiply(entry.descriptor.chunkCount,
+                         kXactionRowChunkDescriptorSerializedBytes,
+                         chunkTableBytes)
+        || entry.descriptor.chunkTableOffset > fileSize
+        || chunkTableBytes > fileSize
+        || entry.descriptor.chunkTableOffset + chunkTableBytes > fileSize) {
         return false;
     }
 
-    descriptor.dataOffset = dataOffset;
-    descriptor.storedBytes = storedBytes;
-    descriptor.uncompressedBytes = uncompressedBytes;
-    descriptor.rowCount = rowCount;
-    descriptor.flags = flags;
+    return true;
+}
+
+TraceSession::XactionRowsDescriptor withChunkTableBytes(
+    TraceSession::XactionRowsDescriptor descriptor)
+{
+    std::uint64_t chunkTableBytes = 0;
+    if (checkedMultiply(descriptor.chunkCount,
+                        kXactionRowChunkDescriptorSerializedBytes,
+                        chunkTableBytes)) {
+        descriptor.chunkTableBytes = chunkTableBytes;
+    }
+    return descriptor;
+}
+
+bool findXactionRowsDescriptorByOrdinalOnDisk(
+    QFile& file,
+    const std::uint64_t descriptorTableOffset,
+    const std::uint64_t groupCount,
+    const std::uint64_t ordinal,
+    const std::uint64_t fileSize,
+    TraceSession::XactionRowsDescriptor& descriptor)
+{
+    descriptor = {};
+    if (ordinal == 0 || groupCount == 0) {
+        return false;
+    }
+
+    std::uint64_t begin = 0;
+    std::uint64_t end = groupCount;
+    while (begin < end) {
+        const std::uint64_t mid = begin + (end - begin) / 2;
+        TraceSession::XactionRowsDescriptorByOrdinal candidate;
+        if (!readXactionGroupDescriptorAt(file, descriptorTableOffset, mid, candidate)
+            || !validateXactionRowsDescriptor(candidate, fileSize)) {
+            return false;
+        }
+
+        if (candidate.ordinal < ordinal) {
+            begin = mid + 1;
+        } else {
+            end = mid;
+        }
+    }
+
+    if (begin >= groupCount) {
+        return false;
+    }
+
+    TraceSession::XactionRowsDescriptorByOrdinal candidate;
+    if (!readXactionGroupDescriptorAt(file, descriptorTableOffset, begin, candidate)
+        || !validateXactionRowsDescriptor(candidate, fileSize)
+        || candidate.ordinal != ordinal) {
+        return false;
+    }
+    descriptor = withChunkTableBytes(candidate.descriptor);
+    return true;
+}
+
+bool readXactionRowMapChunkDescriptorTable(
+    QFile& file,
+    const std::uint64_t descriptorTableOffset,
+    const std::uint64_t chunkCount,
+    std::vector<TraceSession::XactionRowMapChunkDescriptor>& descriptors)
+{
+    descriptors.clear();
+    if (chunkCount == 0) {
+        return true;
+    }
+    if (chunkCount > static_cast<std::uint64_t>((std::numeric_limits<int>::max)())
+        || !file.seek(static_cast<qint64>(descriptorTableOffset))) {
+        return false;
+    }
+    const std::uint64_t tableBytes = chunkCount * kXactionRowMapChunkDescriptorSerializedBytes;
+    if (tableBytes > static_cast<std::uint64_t>((std::numeric_limits<qsizetype>::max)())) {
+        return false;
+    }
+    const QByteArray bytes = file.read(static_cast<qint64>(tableBytes));
+    if (bytes.size() != static_cast<qsizetype>(tableBytes)) {
+        return false;
+    }
+
+    descriptors.resize(static_cast<std::size_t>(chunkCount));
+    const char* cursor = bytes.constData();
+    for (std::uint64_t chunkIndex = 0; chunkIndex < chunkCount; ++chunkIndex) {
+        auto& descriptor = descriptors[static_cast<std::size_t>(chunkIndex)];
+        descriptor.dataOffset = readLe64(cursor);
+        cursor += sizeof(std::uint64_t);
+        descriptor.storedBytes = readLe32(cursor);
+        cursor += sizeof(std::uint32_t);
+        descriptor.uncompressedBytes = readLe32(cursor);
+        cursor += sizeof(std::uint32_t);
+        descriptor.rowCount = readLe32(cursor);
+        cursor += sizeof(std::uint32_t);
+        descriptor.flags = static_cast<std::uint8_t>(*cursor++);
+    }
+    return true;
+}
+
+bool readXactionDebugChunkDescriptorTable(
+    QFile& file,
+    const std::uint64_t descriptorTableOffset,
+    const std::uint64_t chunkCount,
+    std::vector<TraceSession::XactionDebugChunkDescriptor>& descriptors)
+{
+    descriptors.clear();
+    if (chunkCount == 0) {
+        return true;
+    }
+    if (chunkCount > static_cast<std::uint64_t>((std::numeric_limits<int>::max)())
+        || !file.seek(static_cast<qint64>(descriptorTableOffset))) {
+        return false;
+    }
+    const std::uint64_t tableBytes = chunkCount * kXactionRowMapChunkDescriptorSerializedBytes;
+    if (tableBytes > static_cast<std::uint64_t>((std::numeric_limits<qsizetype>::max)())) {
+        return false;
+    }
+    const QByteArray bytes = file.read(static_cast<qint64>(tableBytes));
+    if (bytes.size() != static_cast<qsizetype>(tableBytes)) {
+        return false;
+    }
+
+    descriptors.resize(static_cast<std::size_t>(chunkCount));
+    const char* cursor = bytes.constData();
+    for (std::uint64_t chunkIndex = 0; chunkIndex < chunkCount; ++chunkIndex) {
+        auto& descriptor = descriptors[static_cast<std::size_t>(chunkIndex)];
+        descriptor.dataOffset = readLe64(cursor);
+        cursor += sizeof(std::uint64_t);
+        descriptor.storedBytes = readLe32(cursor);
+        cursor += sizeof(std::uint32_t);
+        descriptor.uncompressedBytes = readLe32(cursor);
+        cursor += sizeof(std::uint32_t);
+        descriptor.rowCount = readLe32(cursor);
+        cursor += sizeof(std::uint32_t);
+        descriptor.flags = static_cast<std::uint8_t>(*cursor++);
+    }
+    return true;
+}
+
+bool readXactionStringDescriptorTable(QFile& file,
+                                      const std::uint64_t descriptorTableOffset,
+                                      const std::uint64_t stringCount,
+                                      QByteArray& bytes)
+{
+    bytes.clear();
+    if (stringCount == 0) {
+        return true;
+    }
+    if (stringCount > (std::numeric_limits<std::uint64_t>::max)()
+            / kXactionStringDescriptorSerializedBytes
+        || !file.seek(static_cast<qint64>(descriptorTableOffset))) {
+        return false;
+    }
+    const std::uint64_t tableBytes = stringCount * kXactionStringDescriptorSerializedBytes;
+    if (tableBytes > static_cast<std::uint64_t>((std::numeric_limits<qsizetype>::max)())) {
+        return false;
+    }
+    bytes = file.read(static_cast<qint64>(tableBytes));
+    return bytes.size() == static_cast<qsizetype>(tableBytes);
+}
+
+std::vector<TraceSession::XactionRowsDescriptorByOrdinal>::const_iterator findXactionRowsDescriptorByOrdinal(
+    const std::vector<TraceSession::XactionRowsDescriptorByOrdinal>& descriptors,
+    const std::uint64_t ordinal)
+{
+    return std::lower_bound(descriptors.cbegin(),
+                            descriptors.cend(),
+                            ordinal,
+                            [](const TraceSession::XactionRowsDescriptorByOrdinal& entry,
+                               const std::uint64_t value) {
+                                return entry.ordinal < value;
+                            });
+}
+
+bool readAndValidateXactionGroupDescriptorTable(
+    QFile& file,
+    const std::uint64_t descriptorTableOffset,
+    const std::uint64_t groupCount,
+    const std::uint64_t fileSize,
+    std::vector<TraceSession::XactionRowsDescriptorByOrdinal>& descriptors,
+    std::stop_token stopToken = {},
+    const std::function<void(std::uint64_t completed)>& progressCallback = {})
+{
+    descriptors.clear();
+    descriptors.reserve(static_cast<std::size_t>(std::min<std::uint64_t>(
+        groupCount,
+        static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)()))));
+
+    QByteArray groupDescriptorTable;
+    if (!readXactionGroupDescriptorTable(file,
+                                         descriptorTableOffset,
+                                         groupCount,
+                                         groupDescriptorTable)) {
+        return false;
+    }
+
+    constexpr std::uint64_t kValidationProgressBatch = 512;
+    const char* groupDescriptorCursor = groupDescriptorTable.constData();
+    for (std::uint64_t index = 0; index < groupCount; ++index) {
+        if (stopToken.stop_requested()) {
+            return false;
+        }
+
+        TraceSession::XactionRowsDescriptorByOrdinal entry;
+        entry.ordinal = readLe64(groupDescriptorCursor);
+        groupDescriptorCursor += sizeof(std::uint64_t);
+        entry.descriptor.chunkTableOffset = readLe64(groupDescriptorCursor);
+        groupDescriptorCursor += sizeof(std::uint64_t);
+        entry.descriptor.chunkCount = readLe64(groupDescriptorCursor);
+        groupDescriptorCursor += sizeof(std::uint64_t);
+        entry.descriptor.rowCount = readLe64(groupDescriptorCursor);
+        groupDescriptorCursor += sizeof(std::uint64_t);
+
+        if (!validateXactionRowsDescriptor(entry, fileSize)
+            || (!descriptors.empty() && entry.ordinal <= descriptors.back().ordinal)) {
+            descriptors.clear();
+            return false;
+        }
+
+        entry.descriptor = withChunkTableBytes(entry.descriptor);
+        descriptors.push_back(entry);
+        if (progressCallback
+            && (((index + 1) % kValidationProgressBatch) == 0 || index + 1 == groupCount)) {
+            progressCallback(index + 1);
+        }
+    }
     return true;
 }
 
@@ -2072,7 +2329,7 @@ private:
                 + header_.rowMapChunkCount
                 + debugChunkDescriptors_.size(),
             1);
-        reportStage(CLogBTraceLoadStage::FinalizingIndexRowDirectory, directoryTotal);
+        reportStage(CLogBTraceLoadStage::FinalizingIndexRowDirectory, directoryTotal, 1);
         std::uint64_t completedDirectoryItems = 0;
         const auto reportDirectoryProgress = [&](const std::uint64_t itemCount) {
             if (stopToken.stop_requested()) {
@@ -2139,13 +2396,21 @@ bool TraceSession::open(const QString& filePath,
 
     const QString resolvedFilePath = metadata.filePath;
     session = std::shared_ptr<TraceSession>(
-        new TraceSession(resolvedFilePath, std::move(metadata), options));
+        new TraceSession(resolvedFilePath, std::move(metadata), options, callbacks, stopToken));
+    if (stopToken.stop_requested()) {
+        session.reset();
+        error.type = CLogBTraceLoadError::Type::Cancelled;
+        error.summary = QStringLiteral("Loading was cancelled.");
+        return false;
+    }
     return true;
 }
 
 TraceSession::TraceSession(QString filePath,
                            CLogBTraceMetadata metadata,
-                           const TraceSessionOptions options)
+                           const TraceSessionOptions options,
+                           const CLogBTraceLoadCallbacks& callbacks,
+                           std::stop_token stopToken)
     : filePath_(std::move(filePath))
     , metadata_(std::move(metadata))
     , pageSize_(std::max<std::size_t>(1, options.pageSize))
@@ -2154,7 +2419,8 @@ TraceSession::TraceSession(QString filePath,
     , fastIndexEnabled_(options.enableFastIndex && !options.parameterOverride.has_value())
 {
     initializeFastIndexState();
-    initializeXactionIndexState();
+    initializeXactionIndexState(callbacks, stopToken);
+    publishSnapshot();
 }
 
 const QString& TraceSession::filePath() const noexcept
@@ -2189,14 +2455,27 @@ std::size_t TraceSession::maxCachedBlocks() const noexcept
 
 std::size_t TraceSession::cachedPageCount() const noexcept
 {
+    const auto lockWaitStart = std::chrono::steady_clock::now();
     const std::lock_guard lock(rowBlockCacheMutex_);
+    LogTraceSessionLockWait("rowBlockCacheMutex_",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - lockWaitStart).count());
     return cachedPages_.size();
 }
 
 std::size_t TraceSession::cachedBlockCount() const noexcept
 {
+    const auto lockWaitStart = std::chrono::steady_clock::now();
     const std::lock_guard lock(rowBlockCacheMutex_);
+    LogTraceSessionLockWait("rowBlockCacheMutex_",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - lockWaitStart).count());
     return cachedBlocks_.size();
+}
+
+std::shared_ptr<const TraceSession::TraceSessionSnapshot> TraceSession::snapshot() const noexcept
+{
+    return std::atomic_load_explicit(&snapshot_, std::memory_order_acquire);
 }
 
 const QString& TraceSession::fastIndexPath() const noexcept
@@ -2217,12 +2496,7 @@ bool TraceSession::isFastIndexWritable() const noexcept
 bool TraceSession::readFastRecordsFromIndex(const std::size_t blockIndex,
                                             std::vector<CLogBTraceFastRecordInfo>& records) const
 {
-    if (!fastIndexReadable_ || blockIndex >= fastIndexDescriptors_.size()) {
-        records.clear();
-        return false;
-    }
-
-    return readFastRecordsFromIndexFile(fastIndexPath_, fastIndexDescriptors_[blockIndex], records);
+    return readFastRecordsFromSnapshot(snapshot(), blockIndex, records);
 }
 
 bool TraceSession::readFastRecordsFromIndex(const std::size_t blockIndex,
@@ -2230,13 +2504,61 @@ bool TraceSession::readFastRecordsFromIndex(const std::size_t blockIndex,
                                             const std::size_t rowCount,
                                             std::vector<CLogBTraceFastRecordInfo>& records) const
 {
-    if (!fastIndexReadable_ || blockIndex >= fastIndexDescriptors_.size()) {
+    return readFastRecordsFromSnapshot(snapshot(), blockIndex, localBegin, rowCount, records);
+}
+
+bool TraceSession::readFastRecordsFromSnapshot(
+    const std::shared_ptr<const TraceSessionSnapshot>& sessionSnapshot,
+    const std::size_t blockIndex,
+    std::vector<CLogBTraceFastRecordInfo>& records) const
+{
+    if (!sessionSnapshot
+        || !sessionSnapshot->fastIndexReadable
+        || blockIndex >= sessionSnapshot->fastIndexDescriptors.size()) {
         records.clear();
         return false;
     }
 
-    return readFastRecordsFromIndexFile(fastIndexPath_,
-                                        fastIndexDescriptors_[blockIndex],
+    if (const auto found = sessionSnapshot->cachedFastRecordsByBlock.find(blockIndex);
+        found != sessionSnapshot->cachedFastRecordsByBlock.end() && found->second) {
+        records = *found->second;
+        return true;
+    }
+
+    return readFastRecordsFromIndexFile(sessionSnapshot->fastIndexPath,
+                                        sessionSnapshot->fastIndexDescriptors[blockIndex],
+                                        records);
+}
+
+bool TraceSession::readFastRecordsFromSnapshot(
+    const std::shared_ptr<const TraceSessionSnapshot>& sessionSnapshot,
+    const std::size_t blockIndex,
+    const std::size_t localBegin,
+    const std::size_t rowCount,
+    std::vector<CLogBTraceFastRecordInfo>& records) const
+{
+    if (!sessionSnapshot
+        || !sessionSnapshot->fastIndexReadable
+        || blockIndex >= sessionSnapshot->fastIndexDescriptors.size()) {
+        records.clear();
+        return false;
+    }
+
+    if (const auto found = sessionSnapshot->cachedFastRecordsByBlock.find(blockIndex);
+        found != sessionSnapshot->cachedFastRecordsByBlock.end() && found->second) {
+        const auto& cached = *found->second;
+        if (localBegin > cached.size()) {
+            records.clear();
+            return false;
+        }
+        const std::size_t localEnd = std::min<std::size_t>(cached.size(), localBegin + rowCount);
+        records.assign(cached.begin() + static_cast<std::ptrdiff_t>(localBegin),
+                       cached.begin() + static_cast<std::ptrdiff_t>(localEnd));
+        return true;
+    }
+
+    return readFastRecordsFromIndexFile(sessionSnapshot->fastIndexPath,
+                                        sessionSnapshot->fastIndexDescriptors[blockIndex],
                                         localBegin,
                                         rowCount,
                                         records);
@@ -2313,17 +2635,28 @@ bool TraceSession::clearOptionalFieldFastIndex(const QString& fieldName,
 
 void TraceSession::clearCache()
 {
-    const std::lock_guard lock(rowBlockCacheMutex_);
-    cachedPages_.clear();
-    lruPageIndexes_.clear();
-    cachedBlocks_.clear();
-    lruBlockIndexes_.clear();
+    {
+        const auto lockWaitStart = std::chrono::steady_clock::now();
+        const std::lock_guard lock(rowBlockCacheMutex_);
+        LogTraceSessionLockWait("rowBlockCacheMutex_",
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - lockWaitStart).count());
+        cachedPages_.clear();
+        lruPageIndexes_.clear();
+        cachedBlocks_.clear();
+        lruBlockIndexes_.clear();
+    }
     clearOptionalFieldRecordCache();
+    publishSnapshotNoThrow();
 }
 
 void TraceSession::refreshCachedXactionIndexRows()
 {
+    const auto lockWaitStart = std::chrono::steady_clock::now();
     const std::lock_guard lock(rowBlockCacheMutex_);
+    LogTraceSessionLockWait("rowBlockCacheMutex_",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - lockWaitStart).count());
     if (!xactionIndexEnabled_ || cachedPages_.empty()) {
         return;
     }
@@ -2339,7 +2672,11 @@ bool TraceSession::ensureRows(const std::uint64_t beginRow,
                               const CLogBTraceLoadCallbacks& callbacks,
                               std::stop_token stopToken)
 {
+    const auto lockWaitStart = std::chrono::steady_clock::now();
     const std::lock_guard lock(rowBlockCacheMutex_);
+    LogTraceSessionLockWait("rowBlockCacheMutex_",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - lockWaitStart).count());
     error = {};
     if (beginRow > metadata_.totalRecords) {
         error.summary = QStringLiteral("Requested row range starts beyond the end of the trace.");
@@ -2378,7 +2715,11 @@ bool TraceSession::readRows(const std::uint64_t beginRow,
                             const CLogBTraceLoadCallbacks& callbacks,
                             std::stop_token stopToken)
 {
+    const auto lockWaitStart = std::chrono::steady_clock::now();
     const std::lock_guard lock(rowBlockCacheMutex_);
+    LogTraceSessionLockWait("rowBlockCacheMutex_",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - lockWaitStart).count());
     rows.clear();
     error = {};
 
@@ -2453,23 +2794,40 @@ bool TraceSession::readRowsDirect(const std::uint64_t beginRow,
                                   const CLogBTraceLoadCallbacks& callbacks,
                                   std::stop_token stopToken) const
 {
+    return readRowsDirect(snapshot(), beginRow, rowCount, rows, error, callbacks, stopToken);
+}
+
+bool TraceSession::readRowsDirect(
+    const std::shared_ptr<const TraceSessionSnapshot>& sessionSnapshot,
+    const std::uint64_t beginRow,
+    const std::uint64_t rowCount,
+    std::vector<FlitRecord>& rows,
+    CLogBTraceLoadError& error,
+    const CLogBTraceLoadCallbacks& callbacks,
+    std::stop_token stopToken) const
+{
     rows.clear();
     error = {};
 
-    if (beginRow > metadata_.totalRecords) {
+    if (!sessionSnapshot) {
+        error.summary = QStringLiteral("Trace session snapshot is not available.");
+        return false;
+    }
+
+    if (beginRow > sessionSnapshot->metadata.totalRecords) {
         error.summary = QStringLiteral("Requested row range starts beyond the end of the trace.");
         return false;
     }
 
     const std::uint64_t clampedRowCount = std::min<std::uint64_t>(
         rowCount,
-        metadata_.totalRecords - beginRow);
+        sessionSnapshot->metadata.totalRecords - beginRow);
     if (clampedRowCount == 0) {
         return true;
     }
 
-    if (!CLogBTraceLoader::loadRows(filePath_,
-                                    metadata_,
+    if (!CLogBTraceLoader::loadRows(sessionSnapshot->filePath,
+                                    sessionSnapshot->metadata,
                                     beginRow,
                                     clampedRowCount,
                                     rows,
@@ -2479,7 +2837,7 @@ bool TraceSession::readRowsDirect(const std::uint64_t beginRow,
         return false;
     }
 
-    applyXactionIndexToRows(beginRow, rows);
+    applyXactionIndexToRows(*sessionSnapshot, beginRow, rows);
     return true;
 }
 
@@ -2490,7 +2848,11 @@ bool TraceSession::collectRowsForTransportMask(const std::size_t blockIndex,
                                                const CLogBTraceLoadCallbacks& callbacks,
                                                std::stop_token stopToken)
 {
+    const auto lockWaitStart = std::chrono::steady_clock::now();
     const std::lock_guard lock(rowBlockCacheMutex_);
+    LogTraceSessionLockWait("rowBlockCacheMutex_",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - lockWaitStart).count());
     error = {};
 
     if (blockIndex >= metadata_.blocks.size()) {
@@ -3095,36 +3457,31 @@ bool TraceSession::isXactionIndexComplete() const noexcept
 std::vector<std::uint64_t> TraceSession::xactionOrdinals() const
 {
     std::vector<std::uint64_t> ordinals;
-    const std::lock_guard lock(xactionIndexMutex_);
-    if (!xactionIndexComplete_) {
+    std::vector<XactionRowsDescriptorByOrdinal> descriptors;
+    if (!xactionGroupDescriptors(descriptors)) {
         return ordinals;
     }
 
     ordinals.reserve(static_cast<std::size_t>(std::min<std::uint64_t>(
-        xactionGroupCount_,
+        descriptors.size(),
         static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)()))));
-    for (auto it = xactionRowsByOrdinalDescriptors_.cbegin();
-         it != xactionRowsByOrdinalDescriptors_.cend();
-         ++it) {
-        ordinals.push_back(static_cast<std::uint64_t>(it.key()));
+    for (const XactionRowsDescriptorByOrdinal& entry : descriptors) {
+        ordinals.push_back(entry.ordinal);
     }
-    std::sort(ordinals.begin(), ordinals.end());
     return ordinals;
 }
 
 bool TraceSession::xactionRowCountsByOrdinal(std::unordered_map<std::uint64_t, std::uint64_t>& rowCounts) const
 {
     rowCounts.clear();
-    const std::lock_guard lock(xactionIndexMutex_);
-    if (!xactionIndexComplete_) {
+    std::vector<XactionRowsDescriptorByOrdinal> descriptors;
+    if (!xactionGroupDescriptors(descriptors)) {
         return false;
     }
 
-    rowCounts.reserve(xactionRowsByOrdinalDescriptors_.size());
-    for (auto it = xactionRowsByOrdinalDescriptors_.cbegin();
-         it != xactionRowsByOrdinalDescriptors_.cend();
-         ++it) {
-        rowCounts.emplace(static_cast<std::uint64_t>(it.key()), it.value().rowCount);
+    rowCounts.reserve(descriptors.size());
+    for (const XactionRowsDescriptorByOrdinal& entry : descriptors) {
+        rowCounts.emplace(entry.ordinal, entry.descriptor.rowCount);
     }
     return true;
 }
@@ -3136,7 +3493,7 @@ bool TraceSession::xactionTypesByOrdinal(std::unordered_map<std::uint64_t, QStri
     QString indexPath;
     std::uint64_t stringTableOffset = 0;
     std::uint64_t stringCount = 0;
-    std::size_t indexedOrdinalCount = 0;
+    std::uint64_t indexedOrdinalCount = 0;
     std::vector<XactionRowMapChunkDescriptor> rowMapDescriptors;
     std::vector<XactionDebugChunkDescriptor> debugDescriptors;
     {
@@ -3151,7 +3508,7 @@ bool TraceSession::xactionTypesByOrdinal(std::unordered_map<std::uint64_t, QStri
         indexPath = xactionIndexPath_;
         stringTableOffset = xactionStringTableOffset_;
         stringCount = xactionStringCount_;
-        indexedOrdinalCount = xactionRowsByOrdinalDescriptors_.size();
+        indexedOrdinalCount = xactionGroupCount_;
         rowMapDescriptors = xactionRowMapChunkDescriptors_;
         debugDescriptors = xactionDebugChunkDescriptors_;
     }
@@ -3159,7 +3516,9 @@ bool TraceSession::xactionTypesByOrdinal(std::unordered_map<std::uint64_t, QStri
     if (rowMapDescriptors.size() != debugDescriptors.size()) {
         return false;
     }
-    types.reserve(indexedOrdinalCount);
+    types.reserve(static_cast<std::size_t>(std::min<std::uint64_t>(
+        indexedOrdinalCount,
+        static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)()))));
 
     QFile input(indexPath);
     if (!input.open(QIODevice::ReadOnly)) {
@@ -3345,7 +3704,7 @@ bool TraceSession::xactionCompletedOrdinals(std::unordered_set<std::uint64_t>& o
 
     QString indexPath;
     std::vector<XactionRowMapChunkDescriptor> rowMapDescriptors;
-    std::size_t indexedOrdinalCount = 0;
+    std::uint64_t indexedOrdinalCount = 0;
     {
         const std::lock_guard lock(xactionIndexMutex_);
         if (!xactionIndexComplete_ || xactionIndexPath_.isEmpty()) {
@@ -3357,10 +3716,12 @@ bool TraceSession::xactionCompletedOrdinals(std::unordered_set<std::uint64_t>& o
         }
         indexPath = xactionIndexPath_;
         rowMapDescriptors = xactionRowMapChunkDescriptors_;
-        indexedOrdinalCount = xactionRowsByOrdinalDescriptors_.size();
+        indexedOrdinalCount = xactionGroupCount_;
     }
 
-    ordinals.reserve(indexedOrdinalCount);
+    ordinals.reserve(static_cast<std::size_t>(std::min<std::uint64_t>(
+        indexedOrdinalCount,
+        static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)()))));
     QFile input(indexPath);
     if (!input.open(QIODevice::ReadOnly)) {
         return false;
@@ -3467,13 +3828,25 @@ bool TraceSession::xactionRowCompactInfoRange(const std::uint64_t beginRow,
                                               const std::uint64_t requestedRowCount,
                                               std::vector<XactionRowCompactInfo>& infos) const
 {
+    return xactionRowCompactInfoRange(snapshot(), beginRow, requestedRowCount, infos);
+}
+
+bool TraceSession::xactionRowCompactInfoRange(
+    const std::shared_ptr<const TraceSessionSnapshot>& sessionSnapshot,
+    const std::uint64_t beginRow,
+    const std::uint64_t requestedRowCount,
+    std::vector<XactionRowCompactInfo>& infos) const
+{
     infos.clear();
-    if (beginRow >= metadata_.totalRecords || requestedRowCount == 0) {
+    if (!sessionSnapshot) {
+        return false;
+    }
+    if (beginRow >= sessionSnapshot->metadata.totalRecords || requestedRowCount == 0) {
         return true;
     }
 
     const std::uint64_t rowCount =
-        std::min<std::uint64_t>(requestedRowCount, metadata_.totalRecords - beginRow);
+        std::min<std::uint64_t>(requestedRowCount, sessionSnapshot->metadata.totalRecords - beginRow);
     if (rowCount == 0) {
         return true;
     }
@@ -3486,25 +3859,20 @@ bool TraceSession::xactionRowCompactInfoRange(const std::uint64_t beginRow,
     const std::uint64_t firstChunkIndex = beginRow / kXactionRowMapChunkRows;
     const std::uint64_t lastChunkIndex = (endRow - 1) / kXactionRowMapChunkRows;
 
-    QString indexPath;
-    std::vector<XactionRowMapChunkDescriptor> descriptors;
-    {
-        const std::lock_guard lock(xactionIndexMutex_);
-        if (!xactionIndexComplete_
-            || xactionIndexPath_.isEmpty()
-            || lastChunkIndex >= xactionRowMapChunkDescriptors_.size()) {
-            infos.clear();
-            return false;
-        }
-        indexPath = xactionIndexPath_;
-        descriptors.insert(descriptors.end(),
-                           xactionRowMapChunkDescriptors_.begin()
-                               + static_cast<std::ptrdiff_t>(firstChunkIndex),
-                           xactionRowMapChunkDescriptors_.begin()
-                               + static_cast<std::ptrdiff_t>(lastChunkIndex + 1));
+    if (!sessionSnapshot->xactionIndexComplete
+        || sessionSnapshot->xactionIndexPath.isEmpty()
+        || lastChunkIndex >= sessionSnapshot->xactionRowMapChunkDescriptors.size()) {
+        infos.clear();
+        return false;
     }
+    std::vector<XactionRowMapChunkDescriptor> descriptors;
+    descriptors.insert(descriptors.end(),
+                       sessionSnapshot->xactionRowMapChunkDescriptors.begin()
+                           + static_cast<std::ptrdiff_t>(firstChunkIndex),
+                       sessionSnapshot->xactionRowMapChunkDescriptors.begin()
+                           + static_cast<std::ptrdiff_t>(lastChunkIndex + 1));
 
-    QFile input(indexPath);
+    QFile input(sessionSnapshot->xactionIndexPath);
     if (!input.open(QIODevice::ReadOnly)) {
         infos.clear();
         return false;
@@ -4049,12 +4417,19 @@ bool TraceSession::readXactionOrdinalChunk(const QString& indexPath,
 
 std::vector<std::uint64_t> TraceSession::xactionRowsForOrdinal(const std::uint64_t ordinal) const
 {
+    return xactionRowsForOrdinal(snapshot(), ordinal);
+}
+
+std::vector<std::uint64_t> TraceSession::xactionRowsForOrdinal(
+    const std::shared_ptr<const TraceSessionSnapshot>& sessionSnapshot,
+    const std::uint64_t ordinal) const
+{
     if (ordinal == 0) {
         return {};
     }
 
     std::vector<std::uint64_t> rows;
-    if (!readXactionRowsByOrdinal(ordinal, rows)) {
+    if (!sessionSnapshot || !readXactionRowsByOrdinal(*sessionSnapshot, ordinal, rows)) {
         return {};
     }
     return rows;
@@ -4160,22 +4535,29 @@ bool TraceSession::collectRowsMatchingXactionDeniedRange(const std::uint64_t beg
 
 void TraceSession::markXactionIndexStarted() noexcept
 {
-    const std::lock_guard lock(xactionIndexMutex_);
-    xactionIndexStarted_ = true;
-    xactionIndexComplete_ = false;
-    xactionRowTableOffset_ = 0;
-    xactionGroupTableOffset_ = 0;
-    xactionGroupCount_ = 0;
-    xactionStringTableOffset_ = 0;
-    xactionStringCount_ = 0;
-    xactionRowMapChunkDescriptors_.clear();
-    xactionDebugChunkDescriptors_.clear();
-    xactionRowsByOrdinalDescriptors_.clear();
-    cachedXactionTypesByOrdinal_.reset();
-    cachedXactionCompletedOrdinals_.reset();
-    cachedXactionOrdinalChunks_.clear();
-    lruXactionOrdinalChunkIndexes_.clear();
-    xactionIndexedOrdinals_.clear();
+    {
+        const auto lockWaitStart = std::chrono::steady_clock::now();
+        const std::lock_guard lock(xactionIndexMutex_);
+        LogTraceSessionLockWait("xactionIndexMutex_",
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - lockWaitStart).count());
+        xactionIndexStarted_ = true;
+        xactionIndexComplete_ = false;
+        xactionRowTableOffset_ = 0;
+        xactionGroupTableOffset_ = 0;
+        xactionGroupCount_ = 0;
+        xactionStringTableOffset_ = 0;
+        xactionStringCount_ = 0;
+        xactionRowMapChunkDescriptors_.clear();
+        xactionDebugChunkDescriptors_.clear();
+        xactionRowsByOrdinalDescriptors_.clear();
+        xactionRowsByOrdinalDescriptorsLoaded_ = false;
+        cachedXactionTypesByOrdinal_.reset();
+        cachedXactionCompletedOrdinals_.reset();
+        cachedXactionOrdinalChunks_.clear();
+        lruXactionOrdinalChunkIndexes_.clear();
+    }
+    publishSnapshotNoThrow();
 }
 
 void TraceSession::clearXactionIndex()
@@ -4273,7 +4655,12 @@ bool TraceSession::buildXactionIndex(CLogBTraceLoadError& error,
         return false;
     }
 
-    if (!tryLoadXactionIndexState()) {
+    if (!tryLoadXactionIndexState(callbacks, stopToken)) {
+        if (stopToken.stop_requested()) {
+            error.type = CLogBTraceLoadError::Type::Cancelled;
+            error.summary = QStringLiteral("Xaction indexing was cancelled.");
+            return false;
+        }
         resetXactionIndexFileState();
         error.type = CLogBTraceLoadError::Type::Generic;
         error.summary = QStringLiteral("Could not load finalized Xaction index file.");
@@ -4282,10 +4669,15 @@ bool TraceSession::buildXactionIndex(CLogBTraceLoadError& error,
     }
 
     {
+        const auto lockWaitStart = std::chrono::steady_clock::now();
         const std::lock_guard lock(xactionIndexMutex_);
+        LogTraceSessionLockWait("xactionIndexMutex_",
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - lockWaitStart).count());
         xactionIndexComplete_ = true;
         xactionIndexStarted_ = true;
     }
+    publishSnapshotNoThrow();
 
     if (callbacks.stageProgress) {
         callbacks.stageProgress(finalizingProgressTotal, finalizingProgressTotal);
@@ -4297,7 +4689,8 @@ bool TraceSession::buildXactionIndex(CLogBTraceLoadError& error,
     return true;
 }
 
-bool TraceSession::tryLoadXactionIndexState()
+bool TraceSession::tryLoadXactionIndexState(const CLogBTraceLoadCallbacks& callbacks,
+                                            std::stop_token stopToken)
 {
     if (!xactionIndexEnabled_ || xactionIndexPath_.isEmpty()) {
         return false;
@@ -4323,100 +4716,107 @@ bool TraceSession::tryLoadXactionIndexState()
         return false;
     }
 
-    QHash<std::uint64_t, XactionRowsDescriptor> rowsByOrdinal;
-    rowsByOrdinal.reserve(static_cast<int>(std::min<std::uint64_t>(
-        header.groupCount,
-        static_cast<std::uint64_t>((std::numeric_limits<int>::max)()))));
-    QSet<std::uint64_t> indexedOrdinals;
-    indexedOrdinals.reserve(rowsByOrdinal.capacity());
-
-    if (!input.seek(static_cast<qint64>(header.groupTableOffset))) {
-        resetXactionIndexFileState();
-        return false;
+    const auto toProgressCount = [](const std::uint64_t value) {
+        return static_cast<std::size_t>(std::min<std::uint64_t>(
+            value,
+            static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)())));
+    };
+    const std::uint64_t layoutProgressTotal =
+        std::max<std::uint64_t>(std::min<std::uint64_t>(header.groupCount, 2), 1);
+    if (callbacks.stage) {
+        callbacks.stage(CLogBTraceLoadStage::FinalizingIndexLayout,
+                        0,
+                        toProgressCount(layoutProgressTotal));
     }
+    if (callbacks.stageProgress) {
+        callbacks.stageProgress(0, toProgressCount(layoutProgressTotal));
+    }
+    const auto reportLayoutProgress = [&](const std::uint64_t completed) {
+        if (callbacks.stageProgress) {
+            callbacks.stageProgress(toProgressCount(std::min(completed, layoutProgressTotal)),
+                                    toProgressCount(layoutProgressTotal));
+        }
+    };
 
-    for (std::uint64_t index = 0; index < header.groupCount; ++index) {
-        quint64 ordinal = 0;
-        quint64 chunkTableOffset = 0;
-        quint64 chunkCount = 0;
-        quint64 rowCount = 0;
-        stream >> ordinal >> chunkTableOffset >> chunkCount >> rowCount;
-        if (stream.status() != QDataStream::Ok
-            || ordinal == 0
-            || chunkCount == 0
-            || rowCount == 0) {
+    constexpr std::uint64_t kValidationProgressBatch = 512;
+    if (header.groupCount > 0) {
+        if (stopToken.stop_requested()) {
             resetXactionIndexFileState();
             return false;
         }
-
-        std::uint64_t chunkTableBytes = 0;
-        if (!checkedMultiply(chunkCount,
-                             kXactionRowChunkDescriptorSerializedBytes,
-                             chunkTableBytes)
-            || chunkTableOffset > fileSize
-            || chunkTableBytes > fileSize
-            || chunkTableOffset + chunkTableBytes > fileSize) {
+        XactionRowsDescriptorByOrdinal firstGroup;
+        if (!readXactionGroupDescriptorAt(input,
+                                          header.groupTableOffset,
+                                          0,
+                                          firstGroup)
+            || !validateXactionRowsDescriptor(firstGroup, fileSize)) {
             resetXactionIndexFileState();
             return false;
         }
+        reportLayoutProgress(1);
 
-        rowsByOrdinal.insert(static_cast<std::uint64_t>(ordinal),
-                             XactionRowsDescriptor{
-                                 .chunkTableOffset = static_cast<std::uint64_t>(chunkTableOffset),
-                                 .chunkCount = static_cast<std::uint64_t>(chunkCount),
-                                 .rowCount = static_cast<std::uint64_t>(rowCount),
-                                 .chunkTableBytes = chunkTableBytes,
-                             });
-        indexedOrdinals.insert(static_cast<std::uint64_t>(ordinal));
-    }
-
-    for (auto it = rowsByOrdinal.cbegin(); it != rowsByOrdinal.cend(); ++it) {
-        const XactionRowsDescriptor group = it.value();
-        std::uint64_t validatedRows = 0;
-        for (std::uint64_t chunkIndex = 0; chunkIndex < group.chunkCount; ++chunkIndex) {
-            XactionRowChunkDescriptor chunk;
-            if (!readXactionRowChunkDescriptor(input,
-                                               group.chunkTableOffset,
-                                               chunkIndex,
-                                               chunk)) {
+        if (header.groupCount > 1) {
+            if (stopToken.stop_requested()) {
                 resetXactionIndexFileState();
                 return false;
             }
-
-            std::uint64_t dataBytes = 0;
-            if (chunk.rowCount == 0
-                || !checkedMultiply(chunk.rowCount, sizeof(std::uint64_t), dataBytes)
-                || chunk.dataOffset > fileSize
-                || chunk.storedBytes > fileSize
-                || chunk.dataOffset + chunk.storedBytes > fileSize
-                || chunk.uncompressedBytes != dataBytes
-                || validatedRows > (std::numeric_limits<std::uint64_t>::max)() - chunk.rowCount) {
+            XactionRowsDescriptorByOrdinal lastGroup;
+            if (!readXactionGroupDescriptorAt(input,
+                                              header.groupTableOffset,
+                                              header.groupCount - 1,
+                                              lastGroup)
+                || !validateXactionRowsDescriptor(lastGroup, fileSize)
+                || firstGroup.ordinal >= lastGroup.ordinal) {
                 resetXactionIndexFileState();
                 return false;
             }
-            validatedRows += chunk.rowCount;
-        }
-
-        if (validatedRows != group.rowCount) {
-            resetXactionIndexFileState();
-            return false;
+            reportLayoutProgress(layoutProgressTotal);
         }
     }
+    reportLayoutProgress(layoutProgressTotal);
+
+    // Keep open fast by validating fixed-size directory bounds plus the edge descriptors only.
+    // The sorted group table is searched and individual row-list chunks are bounds-checked lazily
+    // when a specific xaction is read; callers that need all groups materialize this table on demand.
 
     std::vector<XactionRowMapChunkDescriptor> rowMapChunkDescriptors;
     rowMapChunkDescriptors.resize(static_cast<std::size_t>(header.rowMapChunkCount));
     std::vector<XactionDebugChunkDescriptor> debugChunkDescriptors;
     debugChunkDescriptors.resize(static_cast<std::size_t>(header.debugChunkCount));
+    const std::uint64_t descriptorProgressTotal = std::max<std::uint64_t>(
+        header.rowMapChunkCount + header.debugChunkCount + header.stringCount,
+        1);
+    if (callbacks.stage) {
+        callbacks.stage(CLogBTraceLoadStage::FinalizingIndexRowDirectory,
+                        0,
+                        toProgressCount(descriptorProgressTotal));
+    }
+    if (callbacks.stageProgress) {
+        callbacks.stageProgress(0, toProgressCount(descriptorProgressTotal));
+    }
+    std::uint64_t completedDescriptors = 0;
+    const auto reportDescriptorProgress = [&](const std::uint64_t completed) {
+        if (callbacks.stageProgress) {
+            callbacks.stageProgress(toProgressCount(std::min(completed, descriptorProgressTotal)),
+                                    toProgressCount(descriptorProgressTotal));
+        }
+    };
+    if (!readXactionRowMapChunkDescriptorTable(input,
+                                               header.rowTableOffset,
+                                               header.rowMapChunkCount,
+                                               rowMapChunkDescriptors)) {
+        resetXactionIndexFileState();
+        return false;
+    }
+
     std::uint64_t validatedRowMapRows = 0;
     for (std::uint64_t chunkIndex = 0; chunkIndex < header.rowMapChunkCount; ++chunkIndex) {
-        XactionRowMapChunkDescriptor descriptor;
-        if (!readXactionRowMapChunkDescriptor(input,
-                                              header.rowTableOffset,
-                                              chunkIndex,
-                                              descriptor)) {
+        if (stopToken.stop_requested()) {
             resetXactionIndexFileState();
             return false;
         }
+        const XactionRowMapChunkDescriptor& descriptor =
+            rowMapChunkDescriptors[static_cast<std::size_t>(chunkIndex)];
         if (descriptor.rowCount == 0
             || descriptor.dataOffset > fileSize
             || descriptor.storedBytes > fileSize
@@ -4426,23 +4826,33 @@ bool TraceSession::tryLoadXactionIndexState()
             return false;
         }
         validatedRowMapRows += descriptor.rowCount;
-        rowMapChunkDescriptors[static_cast<std::size_t>(chunkIndex)] = descriptor;
+        ++completedDescriptors;
+        if ((completedDescriptors % kValidationProgressBatch) == 0
+            || completedDescriptors == descriptorProgressTotal) {
+            reportDescriptorProgress(completedDescriptors);
+        }
     }
     if (validatedRowMapRows != metadata_.totalRecords) {
         resetXactionIndexFileState();
         return false;
     }
 
+    if (!readXactionDebugChunkDescriptorTable(input,
+                                              header.debugChunkDescriptorTableOffset,
+                                              header.debugChunkCount,
+                                              debugChunkDescriptors)) {
+        resetXactionIndexFileState();
+        return false;
+    }
+
     std::uint64_t validatedDebugRows = 0;
     for (std::uint64_t chunkIndex = 0; chunkIndex < header.debugChunkCount; ++chunkIndex) {
-        XactionDebugChunkDescriptor descriptor;
-        if (!readXactionDebugChunkDescriptor(input,
-                                             header.debugChunkDescriptorTableOffset,
-                                             chunkIndex,
-                                             descriptor)) {
+        if (stopToken.stop_requested()) {
             resetXactionIndexFileState();
             return false;
         }
+        const XactionDebugChunkDescriptor& descriptor =
+            debugChunkDescriptors[static_cast<std::size_t>(chunkIndex)];
         if (descriptor.rowCount == 0
             || descriptor.storedBytes > fileSize
             || (descriptor.storedBytes != 0 && descriptor.dataOffset > fileSize)
@@ -4457,32 +4867,56 @@ bool TraceSession::tryLoadXactionIndexState()
             return false;
         }
         validatedDebugRows += descriptor.rowCount;
-        debugChunkDescriptors[static_cast<std::size_t>(chunkIndex)] = descriptor;
+        ++completedDescriptors;
+        if ((completedDescriptors % kValidationProgressBatch) == 0
+            || completedDescriptors == descriptorProgressTotal) {
+            reportDescriptorProgress(completedDescriptors);
+        }
     }
     if (validatedDebugRows != metadata_.totalRecords) {
         resetXactionIndexFileState();
         return false;
     }
 
+    QByteArray stringDescriptorTable;
+    if (!readXactionStringDescriptorTable(input,
+                                          header.stringTableOffset,
+                                          header.stringCount,
+                                          stringDescriptorTable)) {
+        resetXactionIndexFileState();
+        return false;
+    }
+    const char* stringDescriptorCursor = stringDescriptorTable.constData();
     for (std::uint64_t stringIndex = 0; stringIndex < header.stringCount; ++stringIndex) {
-        XactionStringDescriptor descriptor;
-        if (!readXactionStringDescriptor(input,
-                                         header.stringTableOffset,
-                                         stringIndex,
-                                         descriptor)) {
+        if (stopToken.stop_requested()) {
             resetXactionIndexFileState();
             return false;
         }
+        XactionStringDescriptor descriptor;
+        descriptor.dataOffset = readLe64(stringDescriptorCursor);
+        stringDescriptorCursor += sizeof(std::uint64_t);
+        descriptor.bytes = readLe32(stringDescriptorCursor);
+        stringDescriptorCursor += sizeof(std::uint32_t);
         if (descriptor.dataOffset > fileSize
             || descriptor.bytes > fileSize
             || descriptor.dataOffset + descriptor.bytes > fileSize) {
             resetXactionIndexFileState();
             return false;
         }
+        ++completedDescriptors;
+        if ((completedDescriptors % kValidationProgressBatch) == 0
+            || completedDescriptors == descriptorProgressTotal) {
+            reportDescriptorProgress(completedDescriptors);
+        }
     }
+    reportDescriptorProgress(descriptorProgressTotal);
 
     {
+        const auto lockWaitStart = std::chrono::steady_clock::now();
         const std::lock_guard lock(xactionIndexMutex_);
+        LogTraceSessionLockWait("xactionIndexMutex_",
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - lockWaitStart).count());
         xactionRowTableOffset_ = header.rowTableOffset;
         xactionGroupTableOffset_ = header.groupTableOffset;
         xactionGroupCount_ = header.groupCount;
@@ -4490,13 +4924,14 @@ bool TraceSession::tryLoadXactionIndexState()
         xactionStringCount_ = header.stringCount;
         xactionRowMapChunkDescriptors_ = std::move(rowMapChunkDescriptors);
         xactionDebugChunkDescriptors_ = std::move(debugChunkDescriptors);
-        xactionRowsByOrdinalDescriptors_ = std::move(rowsByOrdinal);
+        xactionRowsByOrdinalDescriptors_.clear();
+        xactionRowsByOrdinalDescriptorsLoaded_ = false;
         cachedXactionTypesByOrdinal_.reset();
         cachedXactionCompletedOrdinals_.reset();
         cachedXactionOrdinalChunks_.clear();
         lruXactionOrdinalChunkIndexes_.clear();
-        xactionIndexedOrdinals_ = std::move(indexedOrdinals);
     }
+    publishSnapshotNoThrow();
     return true;
 }
 
@@ -4509,22 +4944,29 @@ void TraceSession::resetXactionIndexFiles()
 
 void TraceSession::resetXactionIndexFileState()
 {
-    const std::lock_guard lock(xactionIndexMutex_);
-    xactionIndexStarted_ = false;
-    xactionIndexComplete_ = false;
-    xactionRowTableOffset_ = 0;
-    xactionGroupTableOffset_ = 0;
-    xactionGroupCount_ = 0;
-    xactionStringTableOffset_ = 0;
-    xactionStringCount_ = 0;
-    xactionRowMapChunkDescriptors_.clear();
-    xactionDebugChunkDescriptors_.clear();
-    xactionRowsByOrdinalDescriptors_.clear();
-    cachedXactionTypesByOrdinal_.reset();
-    cachedXactionCompletedOrdinals_.reset();
-    cachedXactionOrdinalChunks_.clear();
-    lruXactionOrdinalChunkIndexes_.clear();
-    xactionIndexedOrdinals_.clear();
+    {
+        const auto lockWaitStart = std::chrono::steady_clock::now();
+        const std::lock_guard lock(xactionIndexMutex_);
+        LogTraceSessionLockWait("xactionIndexMutex_",
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - lockWaitStart).count());
+        xactionIndexStarted_ = false;
+        xactionIndexComplete_ = false;
+        xactionRowTableOffset_ = 0;
+        xactionGroupTableOffset_ = 0;
+        xactionGroupCount_ = 0;
+        xactionStringTableOffset_ = 0;
+        xactionStringCount_ = 0;
+        xactionRowMapChunkDescriptors_.clear();
+        xactionDebugChunkDescriptors_.clear();
+        xactionRowsByOrdinalDescriptors_.clear();
+        xactionRowsByOrdinalDescriptorsLoaded_ = false;
+        cachedXactionTypesByOrdinal_.reset();
+        cachedXactionCompletedOrdinals_.reset();
+        cachedXactionOrdinalChunks_.clear();
+        lruXactionOrdinalChunkIndexes_.clear();
+    }
+    publishSnapshotNoThrow();
 }
 
 bool TraceSession::readXactionRowRecord(const std::uint64_t logicalRow,
@@ -4548,14 +4990,33 @@ bool TraceSession::readXactionRowRecords(
     std::vector<CLogBTraceXactionIndexRecord>& records,
     const bool includeDebugStrings) const
 {
+    const auto sessionSnapshot = snapshot();
+    if (!sessionSnapshot) {
+        records.clear();
+        return false;
+    }
+    return readXactionRowRecordsFromSnapshot(*sessionSnapshot,
+                                             beginRow,
+                                             requestedRowCount,
+                                             records,
+                                             includeDebugStrings);
+}
+
+bool TraceSession::readXactionRowRecordsFromSnapshot(
+    const TraceSessionSnapshot& sessionSnapshot,
+    const std::uint64_t beginRow,
+    const std::uint64_t requestedRowCount,
+    std::vector<CLogBTraceXactionIndexRecord>& records,
+    const bool includeDebugStrings) const
+{
     records.clear();
-    if (beginRow >= metadata_.totalRecords || requestedRowCount == 0) {
+    if (beginRow >= sessionSnapshot.metadata.totalRecords || requestedRowCount == 0) {
         return true;
     }
 
     const std::uint64_t rowCount = std::min<std::uint64_t>(
         requestedRowCount,
-        metadata_.totalRecords - beginRow);
+        sessionSnapshot.metadata.totalRecords - beginRow);
     if (rowCount == 0) {
         return true;
     }
@@ -4569,25 +5030,20 @@ bool TraceSession::readXactionRowRecords(
     const std::uint64_t firstChunkIndex = beginRow / kXactionRowMapChunkRows;
     const std::uint64_t lastChunkIndex = (endRow - 1) / kXactionRowMapChunkRows;
 
-    QString indexPath;
-    std::vector<XactionRowMapChunkDescriptor> descriptors;
-    {
-        const std::lock_guard lock(xactionIndexMutex_);
-        if (!xactionIndexComplete_
-            || xactionIndexPath_.isEmpty()
-            || lastChunkIndex >= xactionRowMapChunkDescriptors_.size()) {
-            records.clear();
-            return false;
-        }
-        indexPath = xactionIndexPath_;
-        descriptors.insert(descriptors.end(),
-                           xactionRowMapChunkDescriptors_.begin()
-                               + static_cast<std::ptrdiff_t>(firstChunkIndex),
-                           xactionRowMapChunkDescriptors_.begin()
-                               + static_cast<std::ptrdiff_t>(lastChunkIndex + 1));
+    if (!sessionSnapshot.xactionIndexComplete
+        || sessionSnapshot.xactionIndexPath.isEmpty()
+        || lastChunkIndex >= sessionSnapshot.xactionRowMapChunkDescriptors.size()) {
+        records.clear();
+        return false;
     }
+    std::vector<XactionRowMapChunkDescriptor> descriptors;
+    descriptors.insert(descriptors.end(),
+                       sessionSnapshot.xactionRowMapChunkDescriptors.begin()
+                           + static_cast<std::ptrdiff_t>(firstChunkIndex),
+                       sessionSnapshot.xactionRowMapChunkDescriptors.begin()
+                           + static_cast<std::ptrdiff_t>(lastChunkIndex + 1));
 
-    QFile input(indexPath);
+    QFile input(sessionSnapshot.xactionIndexPath);
     if (!input.open(QIODevice::ReadOnly)) {
         records.clear();
         return false;
@@ -4768,34 +5224,48 @@ bool TraceSession::readXactionDebugIds(const std::uint64_t logicalRow,
 bool TraceSession::readXactionRowsByOrdinal(const std::uint64_t ordinal,
                                             std::vector<std::uint64_t>& rows) const
 {
-    rows.clear();
-
-    QString indexPath;
-    XactionRowsDescriptor descriptor;
-    bool complete = false;
-    {
-        const std::lock_guard lock(xactionIndexMutex_);
-        complete = xactionIndexComplete_;
-        indexPath = xactionIndexPath_;
-        if (complete) {
-            const auto found = xactionRowsByOrdinalDescriptors_.constFind(ordinal);
-            if (found == xactionRowsByOrdinalDescriptors_.cend()) {
-                return false;
-            }
-            descriptor = found.value();
-        }
-    }
-
-    if (!complete || indexPath.isEmpty() || descriptor.rowCount == 0) {
+    const auto sessionSnapshot = snapshot();
+    if (!sessionSnapshot) {
+        rows.clear();
         return false;
     }
+    return readXactionRowsByOrdinal(*sessionSnapshot, ordinal, rows);
+}
 
-    QFile input(indexPath);
+bool TraceSession::readXactionRowsByOrdinal(const TraceSessionSnapshot& sessionSnapshot,
+                                            const std::uint64_t ordinal,
+                                            std::vector<std::uint64_t>& rows) const
+{
+    rows.clear();
+
+    if (!sessionSnapshot.xactionIndexComplete || sessionSnapshot.xactionIndexPath.isEmpty()) {
+        return false;
+    }
+    QFile input(sessionSnapshot.xactionIndexPath);
     if (!input.open(QIODevice::ReadOnly)) {
         return false;
     }
 
     const std::uint64_t fileSize = static_cast<std::uint64_t>(input.size());
+    XactionRowsDescriptor descriptor;
+    const auto found = findXactionRowsDescriptorByOrdinal(
+        sessionSnapshot.xactionRowsByOrdinalDescriptors,
+        ordinal);
+    if (found != sessionSnapshot.xactionRowsByOrdinalDescriptors.cend()
+        && found->ordinal == ordinal) {
+        descriptor = found->descriptor;
+    } else if (!findXactionRowsDescriptorByOrdinalOnDisk(input,
+                                                         sessionSnapshot.xactionGroupTableOffset,
+                                                         sessionSnapshot.xactionGroupCount,
+                                                         ordinal,
+                                                         fileSize,
+                                                         descriptor)) {
+        return false;
+    }
+
+    if (descriptor.rowCount == 0) {
+        return false;
+    }
     if (descriptor.rowCount > static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)())
         || descriptor.chunkTableOffset > fileSize
         || descriptor.chunkTableBytes > fileSize
@@ -4853,7 +5323,7 @@ bool TraceSession::readXactionRowsByOrdinal(const std::uint64_t ordinal,
             quint64 storedRow = 0;
             stream >> storedRow;
             if (stream.status() != QDataStream::Ok
-                || storedRow >= metadata_.totalRecords) {
+                || storedRow >= sessionSnapshot.metadata.totalRecords) {
                 rows.clear();
                 return false;
             }
@@ -4865,6 +5335,66 @@ bool TraceSession::readXactionRowsByOrdinal(const std::uint64_t ordinal,
         rows.clear();
         return false;
     }
+    return true;
+}
+
+bool TraceSession::xactionGroupDescriptors(
+    std::vector<XactionRowsDescriptorByOrdinal>& descriptors) const
+{
+    descriptors.clear();
+
+    QString indexPath;
+    std::uint64_t groupTableOffset = 0;
+    std::uint64_t groupCount = 0;
+    {
+        const auto lockWaitStart = std::chrono::steady_clock::now();
+        const std::lock_guard lock(xactionIndexMutex_);
+        LogTraceSessionLockWait("xactionIndexMutex_",
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - lockWaitStart).count());
+        if (!xactionIndexComplete_ || xactionIndexPath_.isEmpty()) {
+            return false;
+        }
+        if (xactionRowsByOrdinalDescriptorsLoaded_) {
+            descriptors = xactionRowsByOrdinalDescriptors_;
+            return true;
+        }
+        indexPath = xactionIndexPath_;
+        groupTableOffset = xactionGroupTableOffset_;
+        groupCount = xactionGroupCount_;
+    }
+
+    QFile input(indexPath);
+    if (!input.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    std::vector<XactionRowsDescriptorByOrdinal> loadedDescriptors;
+    if (!readAndValidateXactionGroupDescriptorTable(input,
+                                                    groupTableOffset,
+                                                    groupCount,
+                                                    static_cast<std::uint64_t>(input.size()),
+                                                    loadedDescriptors)) {
+        return false;
+    }
+
+    {
+        const auto lockWaitStart = std::chrono::steady_clock::now();
+        const std::lock_guard lock(xactionIndexMutex_);
+        LogTraceSessionLockWait("xactionIndexMutex_",
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - lockWaitStart).count());
+        if (!xactionIndexComplete_
+            || xactionIndexPath_ != indexPath
+            || xactionGroupTableOffset_ != groupTableOffset
+            || xactionGroupCount_ != groupCount) {
+            return false;
+        }
+        xactionRowsByOrdinalDescriptors_ = std::move(loadedDescriptors);
+        xactionRowsByOrdinalDescriptorsLoaded_ = true;
+        descriptors = xactionRowsByOrdinalDescriptors_;
+    }
+    publishSnapshotNoThrow();
     return true;
 }
 
@@ -4976,7 +5506,11 @@ bool TraceSession::readFastRecords(const std::size_t blockIndex,
                                    CLogBTraceLoadError& error,
                                    std::stop_token stopToken)
 {
+    const auto lockWaitStart = std::chrono::steady_clock::now();
     const std::lock_guard lock(rowBlockCacheMutex_);
+    LogTraceSessionLockWait("rowBlockCacheMutex_",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - lockWaitStart).count());
     records.clear();
     error = {};
 
@@ -5009,7 +5543,11 @@ bool TraceSession::readFastRecords(const std::size_t blockIndex,
 
 bool TraceSession::isRowCached(const std::uint64_t row) const noexcept
 {
+    const auto lockWaitStart = std::chrono::steady_clock::now();
     const std::lock_guard lock(rowBlockCacheMutex_);
+    LogTraceSessionLockWait("rowBlockCacheMutex_",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - lockWaitStart).count());
     if (row >= metadata_.totalRecords) {
         return false;
     }
@@ -5027,7 +5565,11 @@ bool TraceSession::isRowCached(const std::uint64_t row) const noexcept
 
 const FlitRecord* TraceSession::tryGetRow(const std::uint64_t row) const noexcept
 {
+    const auto lockWaitStart = std::chrono::steady_clock::now();
     const std::lock_guard lock(rowBlockCacheMutex_);
+    LogTraceSessionLockWait("rowBlockCacheMutex_",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - lockWaitStart).count());
     if (row >= metadata_.totalRecords) {
         return nullptr;
     }
@@ -5248,7 +5790,8 @@ void TraceSession::initializeFastIndexState() noexcept
     }
 }
 
-void TraceSession::initializeXactionIndexState()
+void TraceSession::initializeXactionIndexState(const CLogBTraceLoadCallbacks& callbacks,
+                                               std::stop_token stopToken)
 {
     if (metadata_.parameters.GetIssue() != CLog::Issue::Eb) {
         return;
@@ -5256,7 +5799,7 @@ void TraceSession::initializeXactionIndexState()
 
     xactionIndexEnabled_ = true;
     xactionIndexPath_ = xactionIndexPathForTrace(filePath_);
-    if (tryLoadXactionIndexState()) {
+    if (tryLoadXactionIndexState(callbacks, stopToken)) {
         const std::lock_guard lock(xactionIndexMutex_);
         xactionIndexStarted_ = true;
         xactionIndexComplete_ = true;
@@ -5266,17 +5809,23 @@ void TraceSession::initializeXactionIndexState()
 void TraceSession::applyXactionIndexToRows(const std::uint64_t beginRow,
                                            std::vector<FlitRecord>& rows) const
 {
-    if (!xactionIndexEnabled_ || rows.empty()) {
+    const auto sessionSnapshot = snapshot();
+    if (!sessionSnapshot) {
+        return;
+    }
+    applyXactionIndexToRows(*sessionSnapshot, beginRow, rows);
+}
+
+void TraceSession::applyXactionIndexToRows(const TraceSessionSnapshot& sessionSnapshot,
+                                           const std::uint64_t beginRow,
+                                           std::vector<FlitRecord>& rows) const
+{
+    if (!sessionSnapshot.xactionIndexEnabled || rows.empty()) {
         return;
     }
 
-    bool started = false;
-    bool complete = false;
-    {
-        const std::lock_guard lock(xactionIndexMutex_);
-        started = xactionIndexStarted_;
-        complete = xactionIndexComplete_;
-    }
+    const bool started = sessionSnapshot.xactionIndexStarted;
+    const bool complete = sessionSnapshot.xactionIndexComplete;
 
     if (!started) {
         for (FlitRecord& row : rows) {
@@ -5291,10 +5840,11 @@ void TraceSession::applyXactionIndexToRows(const std::uint64_t beginRow,
 
     std::vector<CLogBTraceXactionIndexRecord> completeRecords;
     const bool haveCompleteRecords = complete
-        && readXactionRowRecords(beginRow,
-                                 static_cast<std::uint64_t>(rows.size()),
-                                 completeRecords,
-                                 false);
+        && readXactionRowRecordsFromSnapshot(sessionSnapshot,
+                                             beginRow,
+                                             static_cast<std::uint64_t>(rows.size()),
+                                             completeRecords,
+                                             false);
 
     for (std::size_t index = 0; index < rows.size(); ++index) {
         FlitRecord& row = rows[index];
@@ -5329,6 +5879,71 @@ void TraceSession::applyXactionIndexToRows(const std::uint64_t beginRow,
         row.transactionGroupKey = indexRecord.indexed ? indexRecord.transactionGroupKey
                                                       : QString();
         row.xactionDebugLog.clear();
+    }
+}
+
+void TraceSession::publishSnapshot() const
+{
+    auto next = std::make_shared<TraceSessionSnapshot>();
+    next->filePath = filePath_;
+    next->metadata = metadata_;
+    next->pageSize = pageSize_;
+    next->maxCachedPages = maxCachedPages_;
+    next->maxCachedBlocks = maxCachedBlocks_;
+    next->fastIndexPath = fastIndexPath_;
+    next->fastIndexReadable = fastIndexReadable_;
+    next->fastIndexWritable = fastIndexWritable_;
+    next->fastIndexDescriptors = fastIndexDescriptors_;
+    {
+        const auto lockWaitStart = std::chrono::steady_clock::now();
+        const std::lock_guard lock(xactionIndexMutex_);
+        LogTraceSessionLockWait("xactionIndexMutex_",
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - lockWaitStart).count());
+        next->xactionIndexEnabled = xactionIndexEnabled_;
+        next->xactionIndexStarted = xactionIndexStarted_;
+        next->xactionIndexComplete = xactionIndexComplete_;
+        next->xactionIndexPath = xactionIndexPath_;
+        next->xactionRowTableOffset = xactionRowTableOffset_;
+        next->xactionGroupTableOffset = xactionGroupTableOffset_;
+        next->xactionGroupCount = xactionGroupCount_;
+        next->xactionStringTableOffset = xactionStringTableOffset_;
+        next->xactionStringCount = xactionStringCount_;
+        next->xactionRowMapChunkDescriptors = xactionRowMapChunkDescriptors_;
+        next->xactionDebugChunkDescriptors = xactionDebugChunkDescriptors_;
+        if (xactionRowsByOrdinalDescriptorsLoaded_) {
+            next->xactionRowsByOrdinalDescriptors = xactionRowsByOrdinalDescriptors_;
+        }
+    }
+    {
+        const auto lockWaitStart = std::chrono::steady_clock::now();
+        const std::lock_guard lock(rowBlockCacheMutex_);
+        LogTraceSessionLockWait("rowBlockCacheMutex_",
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - lockWaitStart).count());
+        next->cachedFastRecordsByBlock.reserve(cachedBlocks_.size());
+        for (const auto& [blockIndex, entry] : cachedBlocks_) {
+            if (entry.fastRecords) {
+                next->cachedFastRecordsByBlock.emplace(blockIndex, entry.fastRecords);
+            }
+        }
+    }
+    std::atomic_store_explicit(&snapshot_,
+                               std::shared_ptr<const TraceSessionSnapshot>(std::move(next)),
+                               std::memory_order_release);
+}
+
+void TraceSession::publishSnapshotNoThrow() const noexcept
+{
+    try {
+        publishSnapshot();
+    } catch (const std::exception& exception) {
+        qCWarning(traceSessionLog).noquote()
+            << QStringLiteral("Could not publish TraceSession snapshot: %1")
+                   .arg(QString::fromLocal8Bit(exception.what()));
+    } catch (...) {
+        qCWarning(traceSessionLog)
+            << "Could not publish TraceSession snapshot due to an unknown error.";
     }
 }
 
@@ -5425,6 +6040,7 @@ void TraceSession::tryPersistFastRecordsToIndex(const std::uint64_t blockIndex,
     if (!writeFastRecords(fastIndexPath_, static_cast<std::size_t>(blockIndex), fastIndexDescriptors_, records)) {
         fastIndexWritable_ = false;
         fastIndexReadable_ = false;
+        publishSnapshotNoThrow();
     }
 }
 

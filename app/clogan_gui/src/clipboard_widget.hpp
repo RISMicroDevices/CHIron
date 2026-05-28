@@ -51,7 +51,17 @@ public:
     std::vector<ClipboardEntry>* entries() noexcept;
     const std::vector<ClipboardEntry>* entries() const noexcept;
     void refreshFromEntries();
+    void beginIncrementalRefreshFromEntries(std::vector<ClipboardEntry>* entries,
+                                            const CLogBTraceMetadata* metadata,
+                                            bool entriesAlreadySynced = false);
+    void beginAppendRefreshFromEntries(std::vector<ClipboardEntry>* entries,
+                                       const CLogBTraceMetadata* metadata,
+                                       std::size_t appendBeginIndex);
+    bool appendEntryRowsIncrementally(std::size_t beginIndex, std::size_t count);
+    void abortIncrementalRefreshFromEntries();
+    void finishIncrementalRefreshFromEntries();
     void syncEntriesFromModel();
+    void syncDirtyEntriesFromModel();
     void applyTraceTableRowStyle(int referenceVisibleRowCount);
     void resizeColumnsToTraceDefaults();
     void setScope(ClipboardScope scope);
@@ -113,6 +123,8 @@ private:
     bool toolbarFolded_ = true;
     bool readOnly_ = true;
     bool syncingModel_ = false;
+    bool modifiedBadgeDirty_ = true;
+    bool hasModifiedRowsCache_ = false;
     TraceCacheLineMinimap* cacheMinimap_ = nullptr;
 
 private:
