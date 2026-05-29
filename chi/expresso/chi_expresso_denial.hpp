@@ -1222,6 +1222,841 @@ namespace CHI {
                 }
             );
 
+            /*
+            DENIED_REQ_NOT_TO_HN
+            - Title Message: "Denied REQ flit target node, expecting HN"
+            - Further Message: "Unexpected target node: {REQ.TgtID} ({TOPOLOGY[REQ.TgtID]}), expecting HN"
+            - Source: [Xaction]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. REQ.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_REQ_NOT_TO_HN = (
+                "DENIED_REQ_NOT_TO_HN",
+                Xact::XactDenial::DENIED_REQ_NOT_TO_HN,
+                [](auto, SourceEnum source) -> std::string { return "Denied REQ flit target node, expecting HN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsREQ()) {
+                            uint64_t tgtId = subject.obj.firedFlitRequest->flit.req.TgtID();
+                            return std::format("Unexpected target node: {:#x} ({}), expecting HN",
+                                tgtId,
+                                glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_REQ_NOT_FROM_RN_TO_HN
+            - Title Message: "Denied REQ flit source node or target node, expecting RN to HN"
+            - Further Message: "Unexpected source node: {REQ.SrcID} ({TOPOLOGY[REQ.SrcID]}), or target node: {REQ.TgtID} ({TOPOLOGY[REQ.TgtID]}), expecting from RN to HN"
+            - Source: [Xaction]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. REQ.SrcID
+                           2. REQ.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_REQ_NOT_FROM_RN_TO_HN = (
+                "DENIED_REQ_NOT_FROM_RN_TO_HN",
+                Xact::XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN,
+                [](auto, SourceEnum source) -> std::string { return "Denied REQ flit source node or target node, expecting RN to HN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsREQ()) {
+                            srcId = subject.obj.firedFlitRequest->flit.req.SrcID();
+                            tgtId = subject.obj.firedFlitRequest->flit.req.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from RN to HN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::SrcID, Flit::Keys::REQ::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_REQ_NOT_FROM_HN_TO_SN
+            - Title Message: "Denied REQ flit source node or target node, expecting HN to SN"
+            - Further Message: "Unexpected source node: {REQ.SrcID} ({TOPOLOGY[REQ.SrcID]}), or target node: {REQ.TgtID} ({TOPOLOGY[REQ.TgtID]}), expecting from HN to SN"
+            - Source: [Xaction]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. REQ.SrcID
+                           2. REQ.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_REQ_NOT_FROM_HN_TO_SN = (
+                "DENIED_REQ_NOT_FROM_HN_TO_SN",
+                Xact::XactDenial::DENIED_REQ_NOT_FROM_HN_TO_SN,
+                [](auto, SourceEnum source) -> std::string { return "Denied REQ flit source node or target node, expecting HN to SN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsREQ()) {
+                            srcId = subject.obj.firedFlitRequest->flit.req.SrcID();
+                            tgtId = subject.obj.firedFlitRequest->flit.req.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from HN to SN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::SrcID, Flit::Keys::REQ::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_RSP_NOT_TO_RN
+            - Title Message: "Denied RSP flit target node, expecting RN"
+            - Further Message: "Unexpected target node: {RSP.TgtID} ({TOPOLOGY[RSP.TgtID]}), expecting RN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_NOT_TO_RN = (
+                "DENIED_RSP_NOT_TO_RN",
+                Xact::XactDenial::DENIED_RSP_NOT_TO_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP flit target node, expecting RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            uint64_t tgtId = subject.obj.firedFlitResponse->flit.rsp.TgtID();
+                            return std::format("Unexpected target node: {:#x} ({}), expecting RN",
+                                tgtId,
+                                glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_RSP_NOT_FROM_HN_TO_RN
+            - Title Message: "Denied RSP flit source node or target node, expecting HN to RN"
+            - Further Message: "Unexpected source node: {RSP.SrcID} ({TOPOLOGY[RSP.SrcID]}), or target node: {RSP.TgtID} ({TOPOLOGY[RSP.TgtID]}), expecting from HN to RN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.SrcID
+                           2. RSP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_NOT_FROM_HN_TO_RN = (
+                "DENIED_RSP_NOT_FROM_HN_TO_RN",
+                Xact::XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP flit source node or target node, expecting HN to RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            srcId = subject.obj.firedFlitResponse->flit.rsp.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.rsp.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from HN to RN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::SrcID, Flit::Keys::RSP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_RSP_NOT_TO_HN
+            - Title Message: "Denied RSP flit target node, expecting HN"
+            - Further Message: "Unexpected target node: {RSP.TgtID} ({TOPOLOGY[RSP.TgtID]}), expecting HN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_NOT_TO_HN = (
+                "DENIED_RSP_NOT_TO_HN",
+                Xact::XactDenial::DENIED_RSP_NOT_TO_HN,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP flit target node, expecting HN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            uint64_t tgtId = subject.obj.firedFlitResponse->flit.rsp.TgtID();
+                            return std::format("Unexpected target node: {:#x} ({}), expecting HN",
+                                tgtId,
+                                glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_RSP_NOT_FROM_RN_TO_HN
+            - Title Message: "Denied RSP flit source node or target node, expecting RN to HN"
+            - Further Message: "Unexpected source node: {RSP.SrcID} ({TOPOLOGY[RSP.SrcID]}), or target node: {RSP.TgtID} ({TOPOLOGY[RSP.TgtID]}), expecting from RN to HN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.SrcID
+                           2. RSP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_NOT_FROM_RN_TO_HN = (
+                "DENIED_RSP_NOT_FROM_RN_TO_HN",
+                Xact::XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP flit source node or target node, expecting RN to HN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            srcId = subject.obj.firedFlitResponse->flit.rsp.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.rsp.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from RN to HN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::SrcID, Flit::Keys::RSP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_RSP_NOT_FROM_SN
+            - Title Message: "Denied RSP flit source node, expecting SN"
+            - Further Message: "Unexpected source node: {RSP.SrcID} ({TOPOLOGY[RSP.SrcID]}), expecting SN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.SrcID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_NOT_FROM_SN = (
+                "DENIED_RSP_NOT_FROM_SN",
+                Xact::XactDenial::DENIED_RSP_NOT_FROM_SN,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP flit source node, expecting SN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            uint64_t srcId = subject.obj.firedFlitResponse->flit.rsp.SrcID();
+                            return std::format("Unexpected source node: {:#x} ({}), expecting SN",
+                                srcId,
+                                glbl.TOPOLOGY.GetNode(srcId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::SrcID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+            
+            /*
+            DENIED_RSP_NOT_FROM_SN_TO_HN
+            - Title Message: "Denied RSP flit source node or target node, expecting SN to HN"
+            - Further Message: "Unexpected source node: {RSP.SrcID} ({TOPOLOGY[RSP.SrcID]}), or target node: {RSP.TgtID} ({TOPOLOGY[RSP.TgtID]}), expecting from SN to HN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.SrcID
+                           2. RSP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_NOT_FROM_SN_TO_HN = (
+                "DENIED_RSP_NOT_FROM_SN_TO_HN",
+                Xact::XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP flit source node or target node, expecting SN to HN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            srcId = subject.obj.firedFlitResponse->flit.rsp.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.rsp.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from SN to HN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::SrcID, Flit::Keys::RSP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_RSP_NOT_FROM_SN_TO_RN
+            - Title Message: "Denied RSP flit source node or target node, expecting SN to RN"
+            - Further Message: "Unexpected source node: {RSP.SrcID} ({TOPOLOGY[RSP.SrcID]}), or target node: {RSP.TgtID} ({TOPOLOGY[RSP.TgtID]}), expecting from SN to RN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.SrcID
+                           2. RSP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_NOT_FROM_SN_TO_RN = (
+                "DENIED_RSP_NOT_FROM_SN_TO_RN",
+                Xact::XactDenial::DENIED_RSP_NOT_FROM_SN_TO_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP flit source node or target node, expecting SN to RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            srcId = subject.obj.firedFlitResponse->flit.rsp.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.rsp.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from SN to RN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::SrcID, Flit::Keys::RSP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_RSP_NOT_FROM_SN_TO_HN_OR_RN
+            - Title Message: "Denied RSP flit source node or target node, expecting SN to HN or RN"
+            - Further Message: "Unexpected source node: {RSP.SrcID} ({TOPOLOGY[RSP.SrcID]}), or target node: {RSP.TgtID} ({TOPOLOGY[RSP.TgtID]}), expecting from SN to HN or RN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.SrcID
+                           2. RSP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_NOT_FROM_SN_TO_HN_OR_RN = (
+                "DENIED_RSP_NOT_FROM_SN_TO_HN_OR_RN",
+                Xact::XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN_OR_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP flit source node or target node, expecting SN to HN or RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            srcId = subject.obj.firedFlitResponse->flit.rsp.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.rsp.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from SN to HN or RN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::SrcID, Flit::Keys::RSP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_RSP_NOT_TO_SN
+            - Title Message: "Denied RSP flit target node, expecting SN"
+            - Further Message: "Unexpected target node: {RSP.TgtID} ({TOPOLOGY[RSP.TgtID]}), expecting SN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_NOT_TO_SN = (
+                "DENIED_RSP_NOT_TO_SN",
+                Xact::XactDenial::DENIED_RSP_NOT_TO_SN,
+                [](auto, SourceEnum source) -> std::string { return "Denied RSP flit target node, expecting SN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            uint64_t tgtId = subject.obj.firedFlitResponse->flit.rsp.TgtID();
+                            return std::format("Unexpected target node: {:#x} ({}), expecting SN",
+                                tgtId,
+                                glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_NOT_TO_RN
+            - Title Message: "Denied DAT flit target node, expecting RN"
+            - Further Message: "Unexpected target node: {DAT.TgtID} ({TOPOLOGY[DAT.TgtID]}), expecting RN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_TO_RN = (
+                "DENIED_DAT_NOT_TO_RN",
+                Xact::XactDenial::DENIED_DAT_NOT_TO_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit target node, expecting RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            uint64_t tgtId = subject.obj.firedFlitResponse->flit.dat.TgtID();
+                            return std::format("Unexpected target node: {:#x} ({}), expecting RN",
+                                tgtId,
+                                glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_NOT_FROM_HN_TO_RN
+            - Title Message: "Denied DAT flit source node or target node, expecting HN to RN"
+            - Further Message: "Unexpected source node: {DAT.SrcID} ({TOPOLOGY[DAT.SrcID]}), or target node: {DAT.TgtID} ({TOPOLOGY[DAT.TgtID]}), expecting from HN to RN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.SrcID
+                           2. DAT.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_FROM_HN_TO_RN = (
+                "DENIED_DAT_NOT_FROM_HN_TO_RN",
+                Xact::XactDenial::DENIED_DAT_NOT_FROM_HN_TO_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit source node or target node, expecting HN to RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            srcId = subject.obj.firedFlitResponse->flit.dat.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.dat.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from HN to RN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::SrcID, Flit::Keys::DAT::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_NOT_FROM_HN_TO_SN
+            - Title Message: "Denied DAT flit source node or target node, expecting HN to SN"
+            - Further Message: "Unexpected source node: {DAT.SrcID} ({TOPOLOGY[DAT.SrcID]}), or target node: {DAT.TgtID} ({TOPOLOGY[DAT.TgtID]}), expecting from HN to SN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.SrcID
+                           2. DAT.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_FROM_HN_TO_SN = (
+                "DENIED_DAT_NOT_FROM_HN_TO_SN",
+                Xact::XactDenial::DENIED_DAT_NOT_FROM_HN_TO_SN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit source node or target node, expecting HN to SN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            srcId = subject.obj.firedFlitResponse->flit.dat.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.dat.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from HN to SN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::SrcID, Flit::Keys::DAT::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_NOT_TO_HN
+            - Title Message: "Denied DAT flit target node, expecting HN"
+            - Further Message: "Unexpected target node: {DAT.TgtID} ({TOPOLOGY[DAT.TgtID]}), expecting HN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_TO_HN = (
+                "DENIED_DAT_NOT_TO_HN",
+                Xact::XactDenial::DENIED_DAT_NOT_TO_HN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit target node, expecting HN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            uint64_t tgtId = subject.obj.firedFlitResponse->flit.dat.TgtID();
+                            return std::format("Unexpected target node: {:#x} ({}), expecting HN",
+                                tgtId,
+                                glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_NOT_FROM_RN_TO_HN
+            - Title Message: "Denied DAT flit source node or target node, expecting RN to HN"
+            - Further Message: "Unexpected source node: {DAT.SrcID} ({TOPOLOGY[DAT.SrcID]}), or target node: {DAT.TgtID} ({TOPOLOGY[DAT.TgtID]}), expecting from RN to HN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.SrcID
+                           2. DAT.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_FROM_RN_TO_HN = (
+                "DENIED_DAT_NOT_FROM_RN_TO_HN",
+                Xact::XactDenial::DENIED_DAT_NOT_FROM_RN_TO_HN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit source node or target node, expecting RN to HN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            srcId = subject.obj.firedFlitResponse->flit.dat.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.dat.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from RN to HN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::SrcID, Flit::Keys::DAT::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_NOT_TO_SN
+            - Title Message: "Denied DAT flit target node, expecting SN"
+            - Further Message: "Unexpected target node: {DAT.TgtID} ({TOPOLOGY[DAT.TgtID]}), expecting SN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_TO_SN = (
+                "DENIED_DAT_NOT_TO_SN",
+                Xact::XactDenial::DENIED_DAT_NOT_TO_SN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit target node, expecting SN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            uint64_t tgtId = subject.obj.firedFlitResponse->flit.dat.TgtID();
+                            return std::format("Unexpected target node: {:#x} ({}), expecting SN",
+                                tgtId,
+                                glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+            
+            /*
+            DENIED_DAT_NOT_FROM_SN
+            - Title Message: "Denied DAT flit source node, expecting SN"
+            - Further Message: "Unexpected source node: {DAT.SrcID} ({TOPOLOGY[DAT.SrcID]}), expecting SN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.SrcID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_FROM_SN = (
+                "DENIED_DAT_NOT_FROM_SN",
+                Xact::XactDenial::DENIED_DAT_NOT_FROM_SN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit source node, expecting SN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            uint64_t srcId = subject.obj.firedFlitResponse->flit.dat.SrcID();
+                            return std::format("Unexpected source node: {:#x} ({}), expecting SN",
+                                srcId,
+                                glbl.TOPOLOGY.GetNode(srcId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::SrcID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_NOT_FROM_SN_TO_HN
+            - Title Message: "Denied DAT flit source node or target node, expecting SN to HN"
+            - Further Message: "Unexpected source node: {DAT.SrcID} ({TOPOLOGY[DAT.SrcID]}), or target node: {DAT.TgtID} ({TOPOLOGY[DAT.TgtID]}), expecting from SN to HN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.SrcID
+                           2. DAT.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_FROM_SN_TO_HN = (
+                "DENIED_DAT_NOT_FROM_SN_TO_HN",
+                Xact::XactDenial::DENIED_DAT_NOT_FROM_SN_TO_HN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit source node or target node, expecting SN to HN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            srcId = subject.obj.firedFlitResponse->flit.dat.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.dat.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from SN to HN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::SrcID, Flit::Keys::DAT::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_NOT_TO_HN_OR_RN
+            - Title Message: "Denied DAT flit target node, expecting HN or RN"
+            - Further Message: "Unexpected target node: {DAT.TgtID} ({TOPOLOGY[DAT.TgtID]}), expecting HN or RN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_TO_HN_OR_RN = (
+                "DENIED_DAT_NOT_TO_HN_OR_RN",
+                Xact::XactDenial::DENIED_DAT_NOT_TO_HN_OR_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit target node, expecting HN or RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            uint64_t tgtId = subject.obj.firedFlitResponse->flit.dat.TgtID();
+                            return std::format("Unexpected target node: {:#x} ({}), expecting HN or RN",
+                                tgtId,
+                                glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_DAT_NOT_FROM_RN_TO_RN
+            - Title Message: "Denied DAT flit source node or target node, expecting RN to RN"
+            - Further Message: "Unexpected source node: {DAT.SrcID} ({TOPOLOGY[DAT.SrcID]}), or target node: {DAT.TgtID} ({TOPOLOGY[DAT.TgtID]}), expecting from RN to RN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.SrcID
+                           2. DAT.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_NOT_FROM_RN_TO_RN = (
+                "DENIED_DAT_NOT_FROM_RN_TO_RN",
+                Xact::XactDenial::DENIED_DAT_NOT_FROM_RN_TO_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied DAT flit source node or target node, expecting RN to RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            srcId = subject.obj.firedFlitResponse->flit.dat.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.dat.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from RN to RN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::SrcID, Flit::Keys::DAT::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_SNP_NOT_TO_RN (Not utilized, snoop flits do not contain TgtID, reserved for future use)
+            - Title Message: "Denied SNP flit target node, expecting RN"
+            - Further Message: "Unexpected target node: {SNP.TgtID} ({TOPOLOGY[SNP.TgtID]}), expecting RN"
+            - Source: [Xaction]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. SNP.TgtID
+            *//*
+            inline static constexpr ExplanationBack<config> DENIED_SNP_NOT_TO_RN = (
+                "DENIED_SNP_NOT_TO_RN",
+                Xact::XactDenial::DENIED_SNP_NOT_TO_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied SNP flit target node, expecting RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsSNP()) {
+                            uint64_t tgtId = subject.obj.firedFlitRequest->flit.snp.TgtID();
+                            return std::format("Unexpected target node: {:#x} ({}), expecting RN",
+                                tgtId,
+                                glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                        }
+                    }
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+            */
+
+            /*
+            DENIED_SNP_NOT_FROM_HN_TO_RN
+            - Title Message: "Denied SNP flit source node or target node, expecting HN to RN"
+            - Further Message: "Unexpected source node: {SNP.SrcID} ({TOPOLOGY[SNP.SrcID]}), or target node: {SNP.TgtID} ({TOPOLOGY[SNP.TgtID]}), expecting from HN to RN"
+            - Source: [Joint, Xaction]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. SNP.SrcID
+                           2. SNP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_SNP_NOT_FROM_HN_TO_RN = (
+                "DENIED_SNP_NOT_FROM_HN_TO_RN",
+                Xact::XactDenial::DENIED_SNP_NOT_FROM_HN_TO_RN,
+                [](auto, SourceEnum source) -> std::string { return "Denied SNP flit source node or target node, expecting HN to RN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsSNP()) {
+                            srcId = subject.obj.firedFlitRequest->flit.snp.SrcID();
+                            tgtId = subject.obj.firedFlitRequest->nodeId;
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source node: {:#x} ({}), or target node: {:#x} ({}), expecting from HN to RN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::SrcID, Flit::Keys::SNP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
+            /*
+            DENIED_RSP_RETRYACK_ROUTE
+            - Title Message: "Denied RetryAck flit route, expecting HN to RN or SN to HN"
+            - Further Message: "Unexpected source: {RSP.SrcID} ({TOPOLOGY[RSP.SrcID]}), or target: {RSP.TgtID} ({TOPOLOGY[RSP.TgtID]}), expecting from HN to RN or SN to HN"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.SrcID
+                           2. RSP.TgtID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_RETRYACK_ROUTE = (
+                "DENIED_RSP_RETRYACK_ROUTE",
+                Xact::XactDenial::DENIED_RSP_RETRYACK_ROUTE,
+                [](auto, SourceEnum source) -> std::string { return "Denied RetryAck flit route, expecting HN to RN or SN to HN"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, tgtId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP() && subject.obj.firedFlitResponse->flit.rsp.IsRetryAck()) {
+                            srcId = subject.obj.firedFlitResponse->flit.rsp.SrcID();
+                            tgtId = subject.obj.firedFlitResponse->flit.rsp.TgtID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected source: {:#x} ({}), or target: {:#x} ({}), expecting from HN to RN or SN to HN",
+                        srcId,
+                        glbl.TOPOLOGY.GetNode(srcId).type.name,
+                        tgtId,
+                        glbl.TOPOLOGY.GetNode(tgtId).type.name);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::SrcID, Flit::Keys::RSP::TgtID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return {};
+                }
+            );
+
             // TODO
         };
     }
