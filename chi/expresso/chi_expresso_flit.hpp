@@ -410,6 +410,7 @@ namespace CHI {
 
         public:
             virtual std::string FormatSNPQoS(const KeyValueMap&, const format_func&) const = 0;
+            virtual std::string FormatSNPTgtID(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatSNPSrcID(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatSNPTxnID(const KeyValueMap&, const format_func&) const = 0;
             virtual std::string FormatSNPFwdTxnID(const KeyValueMap&, const format_func&) const = 0;
@@ -539,6 +540,7 @@ namespace CHI {
 
         public:
             inline virtual std::string FormatSNPQoS(const KeyValueMap&, const format_func&) const override;
+            inline virtual std::string FormatSNPTgtID(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatSNPSrcID(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatSNPTxnID(const KeyValueMap&, const format_func&) const override;
             inline virtual std::string FormatSNPFwdTxnID(const KeyValueMap&, const format_func&) const override;
@@ -769,6 +771,10 @@ namespace CHI {
                 inline constexpr KeyBack TxnID              (KeyCategory::SNP,  "SNP.TxnID",           "TxnID"             , FwdNID         , _FMTCALL(FormatSNPTxnID));
                 inline constexpr KeyBack SrcID              (KeyCategory::SNP,  "SNP.SrcID",           "SrcID"             , TxnID          , _FMTCALL(FormatSNPSrcID));
                 inline constexpr KeyBack QoS                (KeyCategory::SNP,  "SNP.QoS",             "QoS"               , SrcID          , _FMTCALL(FormatSNPQoS));
+
+                // *NOTICE: TgtID is not actually applicable for SNP flits, this is introduced for UI compatibility and flit capturing extension.
+                //          And the TgtID key is not included into the default key iteration list.
+                inline constexpr KeyBack TgtID              (KeyCategory::SNP,  "SNP.TgtID", "TgtID", _FMTCALL(FormatSNPTgtID));
 
                 inline constexpr KeyIterator begin() { return KeyIterator(QoS); }
                 inline constexpr KeyIterator end() { return KeyIterator(nullptr); }
@@ -2227,6 +2233,11 @@ namespace /*CHI::*/Expresso::Flit {
     inline std::string DefaultFormatter::FormatSNPQoS(const KeyValueMap& kv, const format_func& fmt) const
     {
         return _FormatNonDecodingIntegral(kv, Keys::SNP::QoS, fmt);
+    }
+
+    inline std::string DefaultFormatter::FormatSNPTgtID(const KeyValueMap& kv, const format_func& fmt) const
+    {
+        return _FormatNonDecodingIntegral(kv, Keys::SNP::TgtID, fmt);
     }
 
     inline std::string DefaultFormatter::FormatSNPSrcID(const KeyValueMap& kv, const format_func& fmt) const
