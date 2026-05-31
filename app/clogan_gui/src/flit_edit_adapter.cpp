@@ -877,13 +877,6 @@ bool isFixedConvention(const CHI::Eb::Xact::FieldConvention convention)
         || convention == FC::I0;
 }
 
-bool isChannelColumnField(const QString& fieldName)
-{
-    return fieldName == QLatin1String("Time")
-        || fieldName == QLatin1String("Channel")
-        || fieldName == QLatin1String("Direction");
-}
-
 const QStringList& templateFieldNamesStorage()
 {
     static const QStringList kFieldNames{
