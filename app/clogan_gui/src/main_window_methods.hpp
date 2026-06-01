@@ -42,6 +42,38 @@
     void setDerivedViewsOutdated(TraceViewSession& session, bool outdated);
     void rebuildDerivedViewsForActiveSession();
     void showFlitRowContextMenu(const QPoint& position);
+    TraceMarker* markerById(TraceViewSession& session, const QString& markerId);
+    const TraceMarker* markerById(const TraceViewSession& session, const QString& markerId) const;
+    TraceMarker* markerForLogicalRow(TraceViewSession& session, int logicalRow);
+    const TraceMarker* markerForLogicalRow(const TraceViewSession& session, int logicalRow) const;
+    void recordUnifiedRoute(TraceViewSession& session, UnifiedUndoRouteKind kind, const QString& text);
+    void pushMarkerUndoCommand(TraceViewSession& session, MarkerUndoCommand command);
+    void applyMarkerSnapshot(TraceViewSession& session,
+                             std::vector<TraceMarker> markers,
+                             const QString& selectedMarkerId);
+    void clearMarkerUndoHistory(TraceViewSession& session);
+    bool dispatchNativeUndoRedoForFocus(bool redo) const;
+    void undoUnifiedEdit();
+    void redoUnifiedEdit();
+    bool canUndoUnified() const;
+    bool canRedoUnified() const;
+    QString unifiedUndoText() const;
+    QString unifiedRedoText() const;
+    void addMarkerAtLogicalRow(int logicalRow);
+    void editMarker(const QString& markerId);
+    void removeMarker(const QString& markerId);
+    bool moveMarker(const QString& markerId, int targetLogicalRow);
+    void updateMarker(TraceMarker marker);
+    void selectMarker(const QString& markerId, bool jumpToRow);
+    void toggleMarkerSelection(const QString& markerId, bool jumpToRow);
+    void navigateMarker(bool forward);
+    std::vector<TraceMarkerDisplaySummary> markerDisplaySummaries(const std::vector<TraceMarker>& markers) const;
+    void refreshMarkerViews();
+    void showMarkerDock();
+    void saveMarkers();
+    bool saveMarkersToPath(const QString& path);
+    void loadMarkers();
+    bool loadMarkersFromPath(const QString& path);
     void bindClipboardWidgetToActiveScope();
     std::vector<ClipboardEntry>* clipboardEntriesForScope(ClipboardScope scope);
     const std::vector<ClipboardEntry>* clipboardEntriesForScope(ClipboardScope scope) const;

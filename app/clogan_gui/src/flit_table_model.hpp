@@ -182,6 +182,7 @@ Q_SIGNALS:
     void dirtyChanged(bool dirty);
     void rowsEdited();
     void undoRedoAvailabilityChanged(bool canUndo, bool canRedo);
+    void editCommandPushed(const QString& text);
 
 private:
     struct FilterCriteria {

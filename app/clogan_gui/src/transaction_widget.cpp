@@ -1421,6 +1421,21 @@ void TransactionWidget::setSelectedLogicalRow(const int logicalRow)
     update();
 }
 
+void TransactionWidget::setMarkers(std::vector<TraceMarker> markers, const QString& selectedMarkerId)
+{
+    sharedMarkers_ = std::move(markers);
+    selectedMarkerId_ = selectedMarkerId;
+    if (!selectedMarkerId_.isEmpty()) {
+        const auto found = std::find_if(sharedMarkers_.cbegin(), sharedMarkers_.cend(), [&](const TraceMarker& marker) {
+            return marker.id == selectedMarkerId_;
+        });
+        if (found == sharedMarkers_.cend()) {
+            selectedMarkerId_.clear();
+        }
+    }
+    update();
+}
+
 QVariantMap TransactionWidget::viewState() const
 {
     QVariantMap state;
@@ -5945,6 +5960,29 @@ void TransactionWidget::setMarkerFromSelectedSpan()
     update();
 }
 
+std::optional<QString> TransactionWidget::sharedMarkerAtPosition(const QPoint& position) const
+{
+    const QRect plot = plotRect();
+    const QRect ruler = rulerRect();
+    if (!plot.isValid() || !ruler.isValid()) {
+        return std::nullopt;
+    }
+    const QRect activeArea(plot.left(), plot.top(), plot.width(), ruler.bottom() - plot.top() + 1);
+    if (!activeArea.adjusted(-6, 0, 6, 0).contains(position)) {
+        return std::nullopt;
+    }
+    for (const TraceMarker& marker : sharedMarkers_) {
+        const int x = qBound(plot.left(),
+                             static_cast<int>(std::llround(timestampToPlotX(marker.timestamp, plot))),
+                             plot.right());
+        const QRect hit(x - 6, plot.top(), 12, ruler.bottom() - plot.top() + 1);
+        if (hit.contains(position)) {
+            return marker.id;
+        }
+    }
+    return std::nullopt;
+}
+
 bool TransactionWidget::activateSpanRequestRow(const int spanIndex)
 {
     if (spanIndex < 0 || spanIndex >= static_cast<int>(spans_.size())) {
@@ -6836,6 +6874,83 @@ void TransactionWidget::paintCursorRulerTag(QPainter& painter, const QRect& plot
     painter.restore();
 }
 
+void TransactionWidget::paintSharedMarkers(QPainter& painter,
+                                           const QRect& plot,
+                                           const QRect& ruler,
+                                           const QRect& infoBar) const
+{
+    if (sharedMarkers_.empty() || !plot.isValid() || !ruler.isValid()) {
+        return;
+    }
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    for (const TraceMarker& marker : sharedMarkers_) {
+        const int x = qBound(plot.left(),
+                             static_cast<int>(std::llround(timestampToPlotX(marker.timestamp, plot))),
+                             plot.right());
+        const QColor color = marker.color.isValid() ? marker.color : DefaultTraceMarkerColor(marker.logicalRow);
+        const bool active = marker.id == selectedMarkerId_ || marker.id == hoveredMarkerId_;
+        QColor lineColor = color;
+        lineColor.setAlpha(active ? 225 : 86);
+        QColor fillColor = color;
+        fillColor.setAlpha(active ? 235 : 118);
+
+        painter.setPen(QPen(lineColor, active ? 2 : 1));
+        painter.drawLine(QPoint(x, headerRect().bottom() + 1), QPoint(x, ruler.bottom()));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(fillColor);
+        painter.drawRoundedRect(QRect(x - 3, ruler.top() + 2, 7, qMax(6, ruler.height() - 4)), 2, 2);
+        if (active && infoBar.isValid()) {
+            painter.setPen(color.darker(130));
+            painter.setFont(infoBarFont());
+            painter.drawText(infoBar.adjusted(8, 0, -8, 0),
+                             Qt::AlignVCenter | Qt::AlignLeft,
+                             QStringLiteral("%1  row %2")
+                                 .arg(marker.label)
+                                 .arg(marker.logicalRow + 1));
+        }
+    }
+    painter.restore();
+}
+
+void TransactionWidget::paintBottomSpanSnap(QPainter& painter, const QRect& plot, const QRect& ruler) const
+{
+    if (spans_.empty() || !plot.isValid() || !ruler.isValid()) {
+        return;
+    }
+    const QRect snap(plot.left(), ruler.bottom() - 5, plot.width(), 5);
+    if (!snap.isValid()) {
+        return;
+    }
+
+    const qint64 visibleStart = visibleStartTimestamp();
+    const qint64 visibleEnd = visibleEndTimestamp();
+    const long double visibleRange =
+        std::max<long double>(1.0L, static_cast<long double>(visibleEnd) - static_cast<long double>(visibleStart));
+    const std::vector<int> visibleSpans = visibleSpanIndices(visibleStart, visibleEnd);
+
+    painter.save();
+    painter.setClipRect(snap);
+    for (const int spanIndex : visibleSpans) {
+        if (spanIndex < 0 || spanIndex >= static_cast<int>(spans_.size())) {
+            continue;
+        }
+        const TransactionSpan& span = spans_[static_cast<std::size_t>(spanIndex)];
+        const long double startFraction =
+            (static_cast<long double>(std::max(span.startTimestamp, visibleStart)) - visibleStart) / visibleRange;
+        const long double endFraction =
+            (static_cast<long double>(std::min(span.endTimestamp, visibleEnd)) - visibleStart) / visibleRange;
+        const int left = plot.left() + static_cast<int>(std::floor(startFraction * plot.width()));
+        const int right = plot.left() + static_cast<int>(std::ceil(endFraction * plot.width()));
+        QColor color = spanEdgeColor(span);
+        const bool active = spanIndex == selectedSpanIndex_ || spanIndex == hoveredSpanIndex_;
+        color.setAlpha(active ? 210 : 76);
+        painter.fillRect(QRect(left, snap.top(), qMax(1, right - left + 1), snap.height()), color);
+    }
+    painter.restore();
+}
+
 void TransactionWidget::paintRangeZoom(QPainter& painter) const
 {
     if (dragMode_ != DragMode::RangeZoom) {
@@ -7313,6 +7428,7 @@ void TransactionWidget::paintEvent(QPaintEvent* event)
         }
         painter.setClipping(false);
         paintCursorRulerTag(painter, plot, ruler);
+        paintBottomSpanSnap(painter, plot, ruler);
 
         painter.setFont(infoBarFont());
         QString detailText = statusText_;
@@ -7351,6 +7467,8 @@ void TransactionWidget::paintEvent(QPaintEvent* event)
                          Qt::AlignVCenter | Qt::AlignLeft,
                          QStringLiteral("Marker %1").arg(FormatTimestampForDisplay(markerTimestamp_)));
     }
+
+    paintSharedMarkers(painter, plotRect(), rulerRect(), infoBarRect());
 
     if (hasSelectedLogicalRow()) {
         const QRect selectionTextRect = headerSelectionTextRect();
@@ -7397,6 +7515,13 @@ void TransactionWidget::mousePressEvent(QMouseEvent* event)
 
     if (event->button() == Qt::LeftButton) {
         const QPoint position = event->position().toPoint();
+        if (const std::optional<QString> markerId = sharedMarkerAtPosition(position)) {
+            selectedMarkerId_ = *markerId;
+            Q_EMIT markerSelected(*markerId);
+            update();
+            event->accept();
+            return;
+        }
         if (arrangeModeSwitchRect().contains(position)) {
             const QRect switchRect = arrangeModeSwitchRect();
             setArrangeMode(position.x() < switchRect.center().x()
@@ -7492,6 +7617,12 @@ void TransactionWidget::mouseMoveEvent(QMouseEvent* event)
     }
     if (!event->buttons()) {
         hoveredSpanIndex_ = spanIndexAtPosition(position);
+        const std::optional<QString> markerId = sharedMarkerAtPosition(position);
+        const QString nextHoveredMarkerId = markerId ? *markerId : QString();
+        if (nextHoveredMarkerId != hoveredMarkerId_) {
+            hoveredMarkerId_ = nextHoveredMarkerId;
+            update();
+        }
         armHoverCard(hoveredSpanIndex_, position);
     }
     updateMouseCursor();
@@ -7638,6 +7769,7 @@ void TransactionWidget::contextMenuEvent(QContextMenuEvent* event)
 void TransactionWidget::leaveEvent(QEvent* event)
 {
     hoveredSpanIndex_ = -1;
+    hoveredMarkerId_.clear();
     hideHoverCard();
     update();
     unsetCursor();

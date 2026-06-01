@@ -10,6 +10,7 @@
 #include "latency_diff_widget.hpp"
 #include "latency_widget.hpp"
 #include "main_window.hpp"
+#include "marker_widget.hpp"
 #include "timeline_widget.hpp"
 #include "transaction_widget.hpp"
 #include "trace_statistics.hpp"
@@ -35,6 +36,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QThread>
@@ -4013,6 +4015,1048 @@ void testClipboardScopesAreSessionLocalAndGlobal()
     expectEqual(window.testClipboardRowCount(),
                 2,
                 QStringLiteral("Global Clipboard should allow same logical row numbers from different sessions."));
+}
+
+void testMainWindowMarkersArePerSessionAndPersist()
+{
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testApplyTraceRows(buildTimelineTestRows(), QStringLiteral("marker_a.clogb")),
+           QStringLiteral("First marker session should open."));
+    expectEqual(window.testMarkerCount(),
+                0,
+                QStringLiteral("New session should start without markers."));
+    expect(window.testAddMarkerAtLogicalRow(7),
+           QStringLiteral("Adding a marker from the main trace row should succeed."));
+    expectEqual(window.testMarkerCount(),
+                1,
+                QStringLiteral("Marker should be stored on the active session."));
+    expect(window.testTraceMarkerOverlayVisible(),
+           QStringLiteral("Main trace marker overlay should be visible when trace rows exist."));
+    const QRect markerOverlayGeometry = window.testTraceMarkerOverlayGeometry();
+    expect(markerOverlayGeometry.isValid(),
+           QStringLiteral("Main trace marker overlay geometry should be valid."));
+    expect(markerOverlayGeometry.width() > 18,
+           QStringLiteral("Selected marker summary tag should expand the floating marker overlay."));
+    const QRect cacheMinimapGeometry = window.testTraceCacheMinimapGeometry();
+    expect(cacheMinimapGeometry.isValid(),
+           QStringLiteral("Cache minimap overlay should reserve the marker/global minimap strip."));
+    expect(markerOverlayGeometry.intersects(cacheMinimapGeometry),
+           QStringLiteral("Expanded marker summary tag should float over the cache minimap overlay."));
+    expect(markerOverlayGeometry.left() < cacheMinimapGeometry.right() - 18,
+           QStringLiteral("Expanded marker summary tag should be allowed to float over the cache minimap."));
+    const QRect traceScrollBarGeometry = window.testTraceTableScrollBarGeometry();
+    const QRect markerMinimapGeometry = window.testTraceMarkerMinimapGeometry();
+    expect(markerMinimapGeometry.isValid(),
+           QStringLiteral("Marker/global minimap strip should have valid geometry."));
+    expectEqual(markerMinimapGeometry.right(),
+                traceScrollBarGeometry.left() - 1,
+                QStringLiteral("Marker/global minimap strip should stick to the left edge of the table scrollbar."));
+    const QRect collapsedMarkerTag = window.testTraceMarkerCollapsedTagGeometry(0);
+    expect(collapsedMarkerTag.isValid(),
+           QStringLiteral("Collapsed marker summary tag should have valid geometry."));
+    expect(collapsedMarkerTag.left() < markerMinimapGeometry.left()
+               && collapsedMarkerTag.right() >= markerMinimapGeometry.left(),
+           QStringLiteral("Collapsed marker summary tag should point at and stick to the minimap strip."));
+    const QRect expandedMarkerTag = window.testTraceMarkerExpandedTagGeometry(0);
+    expect(expandedMarkerTag.isValid(),
+           QStringLiteral("Expanded marker summary tag should have valid geometry."));
+    expect(expandedMarkerTag.width() > collapsedMarkerTag.width(),
+           QStringLiteral("Selected or hovered marker summary tag should expand to fit the marker label area."));
+    expectEqual(expandedMarkerTag.right(),
+                markerMinimapGeometry.right(),
+                QStringLiteral("Expanded marker summary tag should keep pointing at the minimap strip."));
+    const QRect traceViewportGeometry = window.testTraceTableViewportGeometry();
+    const QRect leftMarkerOverlayGeometry = window.testTraceMarkerLeftOverlayGeometry();
+    expect(leftMarkerOverlayGeometry.isValid(),
+           QStringLiteral("Left-edge row-coupled marker overlay should have valid geometry."));
+    expectEqual(leftMarkerOverlayGeometry.left(),
+                traceViewportGeometry.left(),
+                QStringLiteral("Left-edge marker overlay should be flush with the trace table viewport left edge."));
+    const QRect firstLeftPolygon = window.testTraceMarkerLeftPolygonGeometry(0);
+    expect(firstLeftPolygon.isValid(),
+           QStringLiteral("Visible marker row should draw a left-edge marker polygon."));
+    expectEqual(firstLeftPolygon.left(),
+                traceViewportGeometry.left(),
+                QStringLiteral("Left-edge marker polygon tip should touch the trace table viewport left edge."));
+    const QRect firstMarkerRowGeometry = window.testTraceTableLogicalRowViewportGeometry(7);
+    expect(firstMarkerRowGeometry.isValid(),
+           QStringLiteral("Marked trace table row should have valid viewport geometry."));
+    expectEqual(firstLeftPolygon.center().y(),
+                firstMarkerRowGeometry.center().y(),
+                QStringLiteral("Left-edge marker polygon should be vertically centered on its table row."));
+    expect(!window.testTraceMarkerLeftNameGeometry(0).isValid(),
+           QStringLiteral("Left-edge marker name should be hidden before double-click toggle."));
+    expect(window.testDoubleClickTraceMarkerLeftPolygon(0),
+           QStringLiteral("Double-clicking the left-edge marker polygon should toggle the marker name display."));
+    const QRect firstLeftName = window.testTraceMarkerLeftNameGeometry(0);
+    expect(firstLeftName.isValid(),
+           QStringLiteral("Left-edge marker name should be visible after double-click toggle."));
+    expect(firstLeftName.left() <= firstLeftPolygon.right(),
+           QStringLiteral("Left-edge marker name should attach to the marker polygon as one monolithic tag."));
+    expectEqual(firstLeftName.center().y(),
+                firstLeftPolygon.center().y(),
+                QStringLiteral("Left-edge marker name should stay vertically aligned with the marker polygon."));
+    expect(window.testDoubleClickTraceMarkerLeftPolygon(0),
+           QStringLiteral("Double-clicking the left-edge marker polygon again should hide the marker name."));
+    expect(!window.testTraceMarkerLeftNameGeometry(0).isValid(),
+           QStringLiteral("Left-edge marker name should be hidden after the second double-click toggle."));
+    expect(window.testAddMarkerAtLogicalRow(12),
+           QStringLiteral("Adding a second marker should succeed for marker tag click testing."));
+    const QRect secondCollapsedMarkerTag = window.testTraceMarkerCollapsedTagGeometry(1);
+    const QRect secondExpandedMarkerTag = window.testTraceMarkerExpandedTagGeometry(1);
+    expect(secondCollapsedMarkerTag.isValid() && secondExpandedMarkerTag.isValid(),
+           QStringLiteral("Inactive marker summary tag geometry should be available."));
+    expect(secondCollapsedMarkerTag.width() < secondExpandedMarkerTag.width(),
+           QStringLiteral("Inactive markers should remain as mini tags until selected or hovered."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                12,
+                QStringLiteral("Adding the second marker should select it."));
+    const QRect secondLeftPolygon = window.testTraceMarkerLeftPolygonGeometry(1);
+    expect(secondLeftPolygon.isValid(),
+           QStringLiteral("Second visible marker row should draw a left-edge marker polygon."));
+    expect(secondLeftPolygon.center().y() > firstLeftPolygon.center().y(),
+           QStringLiteral("Left-edge marker polygons should be coupled to their own table rows."));
+    const QRect secondMarkerRowGeometry = window.testTraceTableLogicalRowViewportGeometry(12);
+    expect(secondMarkerRowGeometry.isValid(),
+           QStringLiteral("Second marked trace table row should have valid viewport geometry."));
+    expectEqual(secondLeftPolygon.center().y(),
+                secondMarkerRowGeometry.center().y(),
+                QStringLiteral("Second left-edge marker polygon should be vertically centered on its table row."));
+    window.testSetTableScrollValue(8);
+    QApplication::processEvents();
+    const QRect firstScrolledLeftPolygon = window.testTraceMarkerLeftPolygonGeometry(0);
+    expect(!firstScrolledLeftPolygon.isValid(),
+           QStringLiteral("Left-edge marker polygon should hide when its table row leaves the viewport."));
+    const QRect secondScrolledLeftPolygon = window.testTraceMarkerLeftPolygonGeometry(1);
+    expect(secondScrolledLeftPolygon.isValid(),
+           QStringLiteral("Left-edge marker polygon should stay visible while its table row remains in the viewport."));
+    window.testSetTableScrollValue(0);
+    QApplication::processEvents();
+    window.testSetOpcodeFilter(QStringLiteral("NoSuchMarkerOpcode"));
+    QApplication::processEvents();
+    expect(!window.testTraceMarkerLeftPolygonGeometry(0).isValid(),
+           QStringLiteral("Filtered-out marker rows should not draw left-edge marker polygons."));
+    window.testSetOpcodeFilter(QString());
+    QApplication::processEvents();
+    window.testNavigateMarker(false);
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Alt-Up marker navigation should select the previous marker by row."));
+    window.testNavigateMarker(false);
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                12,
+                QStringLiteral("Alt-Up marker navigation should wrap to the last marker."));
+    window.testNavigateMarker(true);
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Alt-Down marker navigation should wrap to the first marker."));
+    window.testNavigateMarker(true);
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                12,
+                QStringLiteral("Alt-Down marker navigation should move to the second marker."));
+    const int scrollBeforeLeftMarkerClick = window.testTableScrollValue();
+    expect(window.testClickTraceMarkerLeftPolygon(0),
+           QStringLiteral("Clicking a left-edge marker polygon should be handled by the row overlay."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Clicking a left-edge marker polygon should select that marker."));
+    expectEqual(window.testTableScrollValue(),
+                scrollBeforeLeftMarkerClick,
+                QStringLiteral("Clicking a left-edge marker polygon should not jump or scroll the trace table."));
+    expect(window.testClickTraceMarkerLeftPolygon(0),
+           QStringLiteral("Clicking a selected left-edge marker polygon should be handled by the row overlay."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                -1,
+                QStringLiteral("Clicking a selected left-edge marker polygon should unselect that marker."));
+    expect(window.testClickTraceMarkerTag(0),
+           QStringLiteral("Clicking a marker summary tag should be handled by the marker overlay."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Clicking a marker summary tag should select and jump to that marker row."));
+    expect(window.testClickTraceMarkerTag(0),
+           QStringLiteral("Clicking a selected marker summary tag should be handled by the marker overlay."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                -1,
+                QStringLiteral("Clicking a selected marker summary tag should unselect that marker."));
+    expect(window.testStartTraceMarkerMoveFromTag(0),
+           QStringLiteral("Starting marker move from the right summary tag should enter move mode."));
+    expect(window.testTraceMarkerMoveActive(),
+           QStringLiteral("Marker move mode should be active after choosing Move from the right-side tag."));
+    expect(window.testDropTraceMarkerMoveOnLogicalRow(20),
+           QStringLiteral("Dropping a right-tag marker move on a visible row should be accepted."));
+    expect(!window.testTraceMarkerMoveActive(),
+           QStringLiteral("Successful marker move should leave move mode."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                20,
+                QStringLiteral("Right-tag marker move should select the moved marker at its new row."));
+    expectEqual(window.testMarkerTimestampAt(0),
+                1200,
+                QStringLiteral("Moved marker timestamp should update from the destination row."));
+    expectEqual(window.testMarkerLabelAt(0),
+                QStringLiteral("Marker 8"),
+                QStringLiteral("Moved marker should keep its existing label."));
+    expect(window.testEditMarkerDetails(0,
+                                        QStringLiteral("Moved Anchor"),
+                                        QStringLiteral("#3366cc"),
+                                        QStringLiteral("moved memo")),
+           QStringLiteral("Editing a marker immediately after moving it should not crash."));
+    expectEqual(window.testMarkerLabelAt(0),
+                QStringLiteral("Moved Anchor"),
+                QStringLiteral("Moved marker label should update after edit."));
+    expectEqual(window.testMarkerColorAt(0),
+                QStringLiteral("#3366cc"),
+                QStringLiteral("Moved marker color should update after edit."));
+    expectEqual(window.testMarkerMemoAt(0),
+                QStringLiteral("moved memo"),
+                QStringLiteral("Moved marker memo should update after edit."));
+    expect(window.testStartTraceMarkerMoveFromLeftPolygon(0),
+           QStringLiteral("Starting marker move from the left row polygon should enter move mode."));
+    expect(window.testDropTraceMarkerMoveOnLogicalRow(7),
+           QStringLiteral("Dropping a left-polygon marker move on a visible row should be accepted."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Left-polygon marker move should select the moved marker at its new row."));
+    expectEqual(window.testMarkerTimestampAt(0),
+                1070,
+                QStringLiteral("Left-polygon move should refresh timestamp from the destination row."));
+    expect(window.testStartTraceMarkerMoveFromTag(0),
+           QStringLiteral("Starting marker move for occupied-row rejection should enter move mode."));
+    expect(window.testDropTraceMarkerMoveOnLogicalRow(12),
+           QStringLiteral("Dropping onto an occupied row should still emit the move request."));
+    expect(window.testTraceMarkerMoveActive(),
+           QStringLiteral("Rejected marker move should keep move mode active for another target."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Rejected marker move should leave the marker on its original row."));
+    window.testCancelTraceMarkerMove();
+    expect(!window.testTraceMarkerMoveActive(),
+           QStringLiteral("Explicit marker move cancellation should leave move mode."));
+    expect(window.testStartTraceMarkerMoveFromTag(0),
+           QStringLiteral("Starting marker move for same-row drop should enter move mode."));
+    expect(window.testDropTraceMarkerMoveOnLogicalRow(7),
+           QStringLiteral("Dropping a marker onto its existing row should be accepted as a no-op."));
+    expect(!window.testTraceMarkerMoveActive(),
+           QStringLiteral("Same-row marker move should leave move mode."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Same-row marker move should keep the marker selected."));
+    expect(window.testStartTraceMarkerMoveFromTag(0),
+           QStringLiteral("Starting marker move for cancel testing should enter move mode."));
+    window.testCancelTraceMarkerMove();
+    expect(!window.testTraceMarkerMoveActive(),
+           QStringLiteral("Cancelled marker move should leave move mode."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Cancelled marker move should not move the marker."));
+    expect(window.testRemoveMarkerAt(1),
+           QStringLiteral("Removing the extra marker should restore the single-marker persistence setup."));
+    expectEqual(window.testMarkerCount(),
+                1,
+                QStringLiteral("Only the original marker should be persisted after marker tag click testing."));
+    expect(window.testEditMarkerDetails(0,
+                                        QStringLiteral("Anchor A"),
+                                        QStringLiteral("#00aa88"),
+                                        QStringLiteral("memo text")),
+           QStringLiteral("Editing marker label/color/memo should succeed."));
+
+    QTemporaryDir tempDir;
+    expect(tempDir.isValid(), QStringLiteral("Marker test temporary directory should be valid."));
+    const QString markerPath = tempDir.filePath(QStringLiteral("markers.markers.json"));
+    expect(window.testSaveMarkersJson(markerPath),
+           QStringLiteral("Marker sidecar JSON should save."));
+
+    expect(window.testApplyTraceRows(buildSecondSessionSwitchRows(), QStringLiteral("marker_b.clogb")),
+           QStringLiteral("Second marker session should open."));
+    expectEqual(window.testMarkerCount(),
+                0,
+                QStringLiteral("Markers should be per-session and not leak to a new trace session."));
+    expect(window.testTraceMarkerOverlayVisible(),
+           QStringLiteral("Marker overlay should stay visible as a global viewport minimap without markers."));
+
+    expect(window.testLoadMarkersJson(markerPath),
+           QStringLiteral("Marker sidecar JSON should load into the active session."));
+    expectEqual(window.testMarkerCount(),
+                1,
+                QStringLiteral("Loaded marker count should match the saved sidecar."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Loading markers should select the first valid marker."));
+    expectEqual(window.testMarkerLabelAt(0),
+                QStringLiteral("Anchor A"),
+                QStringLiteral("Marker label should round-trip through JSON."));
+    expectEqual(window.testMarkerColorAt(0),
+                QStringLiteral("#00aa88"),
+                QStringLiteral("Marker color should round-trip through JSON."));
+    expectEqual(window.testMarkerMemoAt(0),
+                QStringLiteral("memo text"),
+                QStringLiteral("Marker memo should round-trip through JSON."));
+    expect(window.testTraceMarkerOverlayVisible(),
+           QStringLiteral("Main trace marker overlay should show after loading markers."));
+
+    expect(window.testSwitchToSession(0),
+           QStringLiteral("Switching back to first marker session should succeed."));
+    QApplication::processEvents();
+    expectEqual(window.testMarkerCount(),
+                1,
+                QStringLiteral("First session should keep its original marker."));
+    expectEqual(window.testMarkerLabelAt(0),
+                QStringLiteral("Anchor A"),
+                QStringLiteral("First session marker edit should be retained."));
+    expect(window.testRemoveMarkerAt(0),
+           QStringLiteral("Removing a marker should succeed."));
+    expectEqual(window.testMarkerCount(),
+                0,
+                QStringLiteral("Removed marker should leave the session marker list empty."));
+    expect(window.testTraceMarkerOverlayVisible(),
+           QStringLiteral("Marker overlay should remain visible after removing the last marker."));
+}
+
+void testMainWindowMarkerUndoRedoAndUnifiedOrdering()
+{
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testApplyTraceRows(buildTimelineTestRows(), QStringLiteral("marker_undo.clogb")),
+           QStringLiteral("Marker undo test session should open."));
+    expect(window.testAddMarkerAtLogicalRow(7),
+           QStringLiteral("Adding a marker should create an undoable marker command."));
+    expect(window.testCanUndoUnified(),
+           QStringLiteral("Unified undo should be available after adding a marker."));
+    expect(window.testUnifiedUndoText().startsWith(QStringLiteral("Add marker")),
+           QStringLiteral("Unified undo text should describe the marker add."));
+    window.testUndoUnified();
+    expectEqual(window.testMarkerCount(),
+                0,
+                QStringLiteral("Undoing marker add should remove the marker."));
+    expect(window.testCanRedoUnified(),
+           QStringLiteral("Unified redo should be available after undoing marker add."));
+    window.testRedoUnified();
+    expectEqual(window.testMarkerCount(),
+                1,
+                QStringLiteral("Redoing marker add should restore the marker."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Redoing marker add should restore marker selection."));
+
+    expect(window.testMoveMarkerAt(0, 20),
+           QStringLiteral("Moving a marker should create an undoable marker command."));
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                20,
+                QStringLiteral("Moved marker should land on the requested row."));
+    expectEqual(window.testMarkerTimestampAt(0),
+                1200,
+                QStringLiteral("Moved marker timestamp should come from the target row."));
+    window.testUndoUnified();
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                7,
+                QStringLiteral("Undoing marker move should restore the original row."));
+    expectEqual(window.testMarkerTimestampAt(0),
+                1070,
+                QStringLiteral("Undoing marker move should restore the original timestamp."));
+    window.testRedoUnified();
+    expectEqual(window.testSelectedMarkerLogicalRow(),
+                20,
+                QStringLiteral("Redoing marker move should reapply the target row."));
+    expectEqual(window.testMarkerTimestampAt(0),
+                1200,
+                QStringLiteral("Redoing marker move should restore the target timestamp."));
+
+    expect(window.testEditMarkerDetails(0,
+                                        QStringLiteral("Undo Anchor"),
+                                        QStringLiteral("#8855aa"),
+                                        QStringLiteral("undo memo")),
+           QStringLiteral("Editing marker details should create one undoable command."));
+    window.testUndoUnified();
+    expectEqual(window.testMarkerLabelAt(0),
+                QStringLiteral("Marker 8"),
+                QStringLiteral("Undoing marker edit should restore the old label."));
+    window.testRedoUnified();
+    expectEqual(window.testMarkerLabelAt(0),
+                QStringLiteral("Undo Anchor"),
+                QStringLiteral("Redoing marker edit should restore the new label."));
+    expectEqual(window.testMarkerMemoAt(0),
+                QStringLiteral("undo memo"),
+                QStringLiteral("Redoing marker edit should restore the new memo."));
+
+    expect(window.testAddMarkerAtLogicalRow(12),
+           QStringLiteral("Adding a second marker should succeed."));
+    const QString undoTextBeforeRejectedMove = window.testUnifiedUndoText();
+    expect(!window.testMoveMarkerAt(0, 12),
+           QStringLiteral("Moving onto an occupied marker row should be rejected."));
+    expectEqual(window.testUnifiedUndoText(),
+                undoTextBeforeRejectedMove,
+                QStringLiteral("Rejected occupied-row moves should not add an undo step."));
+    expect(window.testRemoveMarkerAt(1),
+           QStringLiteral("Deleting a marker should create an undoable marker command."));
+    expectEqual(window.testMarkerCount(),
+                1,
+                QStringLiteral("Deleting the second marker should reduce marker count."));
+    window.testUndoUnified();
+    expectEqual(window.testMarkerCount(),
+                2,
+                QStringLiteral("Undoing marker delete should restore the deleted marker."));
+    window.testRedoUnified();
+    expectEqual(window.testMarkerCount(),
+                1,
+                QStringLiteral("Redoing marker delete should delete the marker again."));
+
+    expect(window.testSetTraceEditable(true),
+           QStringLiteral("Test should enable trace editing without modal UI."));
+    const int originalTimestamp = static_cast<int>(window.testTraceTimestampAtLogicalRow(0));
+    expect(window.testEditTraceTimestampAtLogicalRow(0, 7777),
+           QStringLiteral("Trace timestamp edit should create a flit undo route."));
+    expect(window.testMoveMarkerAt(0, 7),
+           QStringLiteral("Marker move after a flit edit should become the most recent undo route."));
+    expect(window.testUnifiedUndoText().startsWith(QStringLiteral("Move marker")),
+           QStringLiteral("Unified undo should prefer the most recent marker move over the older flit edit."));
+    window.testUndoUnified();
+    expectEqual(window.testMarkerLogicalRowAt(0),
+                20,
+                QStringLiteral("First unified undo should undo the marker move."));
+    expectEqual(static_cast<int>(window.testTraceTimestampAtLogicalRow(0)),
+                7777,
+                QStringLiteral("First unified undo should leave the flit edit intact."));
+    window.testUndoUnified();
+    expectEqual(static_cast<int>(window.testTraceTimestampAtLogicalRow(0)),
+                originalTimestamp,
+                QStringLiteral("Second unified undo should undo the older flit edit."));
+    window.testRedoUnified();
+    expectEqual(static_cast<int>(window.testTraceTimestampAtLogicalRow(0)),
+                7777,
+                QStringLiteral("First unified redo should redo the flit edit."));
+    window.testRedoUnified();
+    expectEqual(window.testMarkerLogicalRowAt(0),
+                7,
+                QStringLiteral("Second unified redo should redo the marker move."));
+
+    window.testUndoUnified();
+    expect(window.testCanRedoUnified(),
+           QStringLiteral("Redo should be available after undoing the marker move."));
+    expect(window.testEditMarkerLabel(0, QStringLiteral("Redo Breaker")),
+           QStringLiteral("A new marker edit after undo should clear unified redo."));
+    expect(!window.testCanRedoUnified(),
+           QStringLiteral("New marker command after undo should clear unified redo history."));
+}
+
+void testMarkerWidgetSearchFiltersNameAndMemo()
+{
+    using CHIron::Gui::MarkerWidget;
+    using CHIron::Gui::TraceMarker;
+    using CHIron::Gui::TraceMarkerDisplaySummary;
+
+    MarkerWidget widget;
+    widget.resize(520, 420);
+    widget.show();
+    QApplication::processEvents();
+
+    std::vector<TraceMarker> markers;
+    TraceMarker alpha;
+    alpha.id = QStringLiteral("alpha");
+    alpha.logicalRow = 3;
+    alpha.timestamp = 1030;
+    alpha.label = QStringLiteral("Alpha anchor");
+    alpha.color = QColor(QStringLiteral("#3366cc"));
+    alpha.memo = QStringLiteral("first marker memo");
+    markers.push_back(alpha);
+
+    TraceMarker beta;
+    beta.id = QStringLiteral("beta");
+    beta.logicalRow = 7;
+    beta.timestamp = 1070;
+    beta.label = QStringLiteral("Beta checkpoint");
+    beta.color = QColor(QStringLiteral("#00aa88"));
+    beta.memo = QStringLiteral("contains bus retry details");
+    markers.push_back(beta);
+
+    TraceMarker gamma;
+    gamma.id = QStringLiteral("gamma");
+    gamma.logicalRow = 11;
+    gamma.timestamp = 1110;
+    gamma.label = QStringLiteral("Gamma watch");
+    gamma.color = QColor(QStringLiteral("#8855aa"));
+    gamma.memo = QStringLiteral("ordinary note");
+    markers.push_back(gamma);
+
+    std::vector<TraceMarkerDisplaySummary> summaries;
+    summaries.push_back(TraceMarkerDisplaySummary{QStringLiteral("alpha"),
+                                                  QStringLiteral("REQ"),
+                                                  QStringLiteral("ReadShared"),
+                                                  QStringLiteral("0x1000")});
+    summaries.push_back(TraceMarkerDisplaySummary{QStringLiteral("beta"),
+                                                  QStringLiteral("RSP"),
+                                                  QStringLiteral("CompAck"),
+                                                  QString()});
+    summaries.push_back(TraceMarkerDisplaySummary{QStringLiteral("gamma"),
+                                                  QStringLiteral("SNP"),
+                                                  QStringLiteral("SnpCleanWithLongIntegratedSummary"),
+                                                  QStringLiteral("0x200000000000000000000000")});
+
+    widget.setMarkers(markers, QStringLiteral("beta"), CHIron::Gui::MarkerStickyState{}, summaries);
+    QApplication::processEvents();
+
+    auto* table = widget.findChild<QTableWidget*>(QStringLiteral("markerTable"));
+    auto* searchEdit = widget.findChild<QLineEdit*>(QStringLiteral("markerSearchEdit"));
+    expect(table != nullptr, QStringLiteral("Marker widget should expose its marker table."));
+    expect(searchEdit != nullptr, QStringLiteral("Marker widget should expose its search field."));
+    expectEqual(table->columnCount(),
+                7,
+                QStringLiteral("Marker list should expose summary columns."));
+    expectEqual(table->horizontalHeaderItem(1)->text(),
+                QStringLiteral("Channel"),
+                QStringLiteral("Marker list should show a Channel column."));
+    expectEqual(table->horizontalHeaderItem(2)->text(),
+                QStringLiteral("Opcode"),
+                QStringLiteral("Marker list should show an Opcode column."));
+    expectEqual(table->horizontalHeaderItem(3)->text(),
+                QStringLiteral("Address"),
+                QStringLiteral("Marker list should show an Address column."));
+    expect(table->verticalHeader()->defaultSectionSize() <= 22,
+           QStringLiteral("Marker list rows should use a compact default height."));
+    expect(!table->wordWrap(),
+           QStringLiteral("Marker list should not wrap compact summary rows."));
+    expectEqual(table->rowCount(),
+                3,
+                QStringLiteral("Empty marker search should show all markers."));
+    expectEqual(table->item(0, 1)->text(),
+                QStringLiteral("REQ"),
+                QStringLiteral("Marker channel summaries should omit direction prefixes such as TX/RX."));
+    expectEqual(table->item(0, 2)->text(),
+                QStringLiteral("ReadShared"),
+                QStringLiteral("Marker list should show opcode summaries."));
+    expectEqual(table->item(0, 3)->text(),
+                QStringLiteral("0x1000"),
+                QStringLiteral("Marker list should show REQ/SNP address summaries."));
+    expectEqual(table->item(1, 3)->text(),
+                QString(),
+                QStringLiteral("Marker list should leave non-REQ/SNP address summaries blank."));
+    expect(table->selectedItems().isEmpty()
+               || table->selectedItems().front()->data(Qt::UserRole + 1).toString() == QStringLiteral("beta"),
+           QStringLiteral("Initially selected marker should stay selected in the unfiltered table."));
+
+    searchEdit->setText(QStringLiteral("alpha"));
+    QApplication::processEvents();
+    expectEqual(table->rowCount(),
+                1,
+                QStringLiteral("Marker search should filter by label."));
+    expectEqual(table->item(0, 0)->text(),
+                QStringLiteral("Alpha anchor"),
+                QStringLiteral("Label search should show the matching marker."));
+    expect(table->selectedItems().isEmpty(),
+           QStringLiteral("A selected marker hidden by search should clear only the visible table selection."));
+
+    searchEdit->setText(QStringLiteral("BUS RETRY"));
+    QApplication::processEvents();
+    expectEqual(table->rowCount(),
+                1,
+                QStringLiteral("Marker search should filter by memo case-insensitively."));
+    expectEqual(table->item(0, 0)->text(),
+                QStringLiteral("Beta checkpoint"),
+                QStringLiteral("Memo search should show the marker whose memo matches."));
+    expect(!table->selectedItems().isEmpty(),
+           QStringLiteral("A selected marker visible after filtering should remain selected."));
+
+    int selectedSignals = 0;
+    QString selectedMarkerId;
+    QObject::connect(&widget, &MarkerWidget::markerSelected, &widget, [&](const QString& markerId) {
+        ++selectedSignals;
+        selectedMarkerId = markerId;
+    });
+    searchEdit->setText(QStringLiteral("gamma"));
+    QApplication::processEvents();
+    expectEqual(table->rowCount(),
+                1,
+                QStringLiteral("Search should switch filtered rows immediately."));
+    table->selectRow(0);
+    QApplication::processEvents();
+    expectEqual(selectedSignals,
+                1,
+                QStringLiteral("Selecting a filtered marker row should emit markerSelected."));
+    expectEqual(selectedMarkerId,
+                QStringLiteral("gamma"),
+                QStringLiteral("Selecting a filtered marker row should report the row marker id."));
+
+    QString editedLabel;
+    QObject::connect(&widget, &MarkerWidget::markerEdited, &widget, [&](const TraceMarker& marker) {
+        editedLabel = marker.label;
+    });
+    table->item(0, 0)->setText(QStringLiteral("Gamma renamed"));
+    QApplication::processEvents();
+    expectEqual(editedLabel,
+                QStringLiteral("Gamma renamed"),
+                QStringLiteral("Editing a filtered label row should emit the edited marker."));
+
+    searchEdit->clear();
+    QApplication::processEvents();
+    expectEqual(table->rowCount(),
+                3,
+                QStringLiteral("Clearing marker search should restore all markers."));
+
+    widget.testSetStickyMode(true);
+    QApplication::processEvents();
+    expectEqual(widget.testStickyNoteCount(),
+                3,
+                QStringLiteral("Sticky mode should show all markers on the All canvas."));
+    expectEqual(widget.testStickySummaryText(QStringLiteral("alpha")),
+                QStringLiteral("REQ  ReadShared  0x1000"),
+                QStringLiteral("Sticky notes should show channel/opcode/address summaries below the name."));
+    expect(widget.testStickySummaryFontIsSmaller(QStringLiteral("alpha")),
+           QStringLiteral("Sticky note summary font should be smaller than the marker name font."));
+    expect(widget.testStickyMemoStartsBelowSummary(QStringLiteral("gamma")),
+           QStringLiteral("Sticky memo editor should be laid out below wrapped integrated summary contents."));
+
+    searchEdit->setText(QStringLiteral("retry"));
+    QApplication::processEvents();
+    expectEqual(widget.testStickyNoteCount(),
+                1,
+                QStringLiteral("Sticky mode should use the same label/memo search filter."));
+    searchEdit->clear();
+    QApplication::processEvents();
+
+    int stickyActivations = 0;
+    QString stickyActivatedMarkerId;
+    QObject::connect(&widget, &MarkerWidget::markerActivated, &widget, [&](const QString& markerId) {
+        ++stickyActivations;
+        stickyActivatedMarkerId = markerId;
+        widget.setMarkers(markers, markerId, widget.stickyState(), summaries);
+    });
+    expect(widget.testDoubleClickStickyNote(QStringLiteral("alpha")),
+           QStringLiteral("Double-clicking a sticky note should be handled by the sticky scene item."));
+    QApplication::processEvents();
+    expectEqual(stickyActivations,
+                1,
+                QStringLiteral("Double-clicking a sticky note should emit one activation."));
+    expectEqual(stickyActivatedMarkerId,
+                QStringLiteral("alpha"),
+                QStringLiteral("Sticky note double-click should activate the clicked marker."));
+    expectEqual(widget.testStickyNoteCount(),
+                3,
+                QStringLiteral("Sticky note double-click should survive a synchronous marker-widget refresh."));
+    QString deferredMemo;
+    QObject::connect(&widget, &MarkerWidget::markerEdited, &widget, [&](const TraceMarker& marker) {
+        if (marker.id == QStringLiteral("gamma")) {
+            deferredMemo = marker.memo;
+            markers[2] = marker;
+            widget.setMarkers(markers, marker.id, widget.stickyState(), summaries);
+        }
+    });
+    expect(widget.testCommitStickyMemoText(QStringLiteral("gamma"), QStringLiteral("deferred sticky memo")),
+           QStringLiteral("Sticky memo test commit should target an existing sticky note."));
+    expect(deferredMemo.isEmpty(),
+           QStringLiteral("Sticky memo commits should be deferred until after the graphics-scene event returns."));
+    QApplication::processEvents();
+    expectEqual(deferredMemo,
+                QStringLiteral("deferred sticky memo"),
+                QStringLiteral("Deferred sticky memo commit should emit markerEdited on the next event turn."));
+    expectEqual(widget.testStickyNoteCount(),
+                3,
+                QStringLiteral("Deferred sticky memo commit should survive synchronous marker view refresh."));
+
+    expect(widget.testMoveStickyNote(QStringLiteral("beta"), QPointF(88.0, 72.0), QSizeF(222.0, 144.0)),
+           QStringLiteral("Sticky note test move should update the layout."));
+    CHIron::Gui::MarkerStickyState stickyState = widget.stickyState();
+    const auto allGroup = std::find_if(stickyState.groups.cbegin(), stickyState.groups.cend(), [](const CHIron::Gui::MarkerStickyGroup& group) {
+        return group.id == QStringLiteral("__all__");
+    });
+    expect(allGroup != stickyState.groups.cend(),
+           QStringLiteral("Sticky state should contain the All group."));
+    const auto movedLayout = std::find_if(allGroup->noteLayouts.cbegin(), allGroup->noteLayouts.cend(), [](const CHIron::Gui::MarkerStickyNoteLayout& layout) {
+        return layout.markerId == QStringLiteral("beta");
+    });
+    expect(movedLayout != allGroup->noteLayouts.cend(),
+           QStringLiteral("Moved sticky note should have a saved layout."));
+    expectNear(static_cast<int>(movedLayout->x),
+               88,
+               1,
+               QStringLiteral("Sticky note x position should be stored."));
+    expectNear(static_cast<int>(movedLayout->width),
+               222,
+               1,
+               QStringLiteral("Sticky note width should be stored."));
+    expect(widget.testMoveStickyNote(QStringLiteral("alpha"), QPointF(40.0, 40.0), QSizeF(160.0, 120.0)),
+           QStringLiteral("Sticky note snap setup should position alpha."));
+    expect(widget.testMoveStickyNote(QStringLiteral("beta"), QPointF(260.0, 50.0), QSizeF(160.0, 120.0)),
+           QStringLiteral("Sticky note snap setup should position beta."));
+    expect(widget.testMoveStickyNote(QStringLiteral("gamma"), QPointF(500.0, 50.0), QSizeF(150.0, 110.0)),
+           QStringLiteral("Sticky note snap setup should position gamma."));
+    expect(widget.testDragStickyNote(QStringLiteral("gamma"), QPointF(209.0, 53.0)),
+           QStringLiteral("Sticky note magnetic drag should target an existing sticky note."));
+    stickyState = widget.stickyState();
+    const auto snappedEdgeGroup = std::find_if(stickyState.groups.cbegin(), stickyState.groups.cend(), [](const CHIron::Gui::MarkerStickyGroup& group) {
+        return group.id == QStringLiteral("__all__");
+    });
+    const auto snappedEdge = std::find_if(snappedEdgeGroup->noteLayouts.cbegin(), snappedEdgeGroup->noteLayouts.cend(), [](const CHIron::Gui::MarkerStickyNoteLayout& layout) {
+        return layout.markerId == QStringLiteral("gamma");
+    });
+    expect(snappedEdge != snappedEdgeGroup->noteLayouts.cend(),
+           QStringLiteral("Magnetically moved sticky note should keep a saved layout."));
+    expectNear(static_cast<int>(snappedEdge->x),
+               200,
+               1,
+               QStringLiteral("Sticky note should magnetically dock its left edge to a nearby note right edge."));
+    expectNear(static_cast<int>(snappedEdge->y),
+               55,
+               1,
+               QStringLiteral("Sticky note should magnetically align to the nearest vertical edge or center guide while docking."));
+    expect(widget.testMoveStickyNote(QStringLiteral("gamma"), QPointF(500.0, 300.0), QSizeF(130.0, 110.0)),
+           QStringLiteral("Sticky note center snap setup should use a note width distinct from the target."));
+    expect(widget.testDragStickyNote(QStringLiteral("gamma"), QPointF(62.0, 300.0)),
+           QStringLiteral("Sticky note center snap drag should target an existing sticky note."));
+    stickyState = widget.stickyState();
+    const auto centerGroup = std::find_if(stickyState.groups.cbegin(), stickyState.groups.cend(), [](const CHIron::Gui::MarkerStickyGroup& group) {
+        return group.id == QStringLiteral("__all__");
+    });
+    const auto centerSnap = std::find_if(centerGroup->noteLayouts.cbegin(), centerGroup->noteLayouts.cend(), [](const CHIron::Gui::MarkerStickyNoteLayout& layout) {
+        return layout.markerId == QStringLiteral("gamma");
+    });
+    expectNear(static_cast<int>(centerSnap->x),
+               55,
+               1,
+               QStringLiteral("Sticky note should magnetically align centers with nearby notes."));
+    expect(widget.testDragStickyNote(QStringLiteral("gamma"), QPointF(226.0, 75.0)),
+           QStringLiteral("Sticky note outside magnetic threshold should remain free-form."));
+    stickyState = widget.stickyState();
+    const auto freeGroup = std::find_if(stickyState.groups.cbegin(), stickyState.groups.cend(), [](const CHIron::Gui::MarkerStickyGroup& group) {
+        return group.id == QStringLiteral("__all__");
+    });
+    const auto freeMove = std::find_if(freeGroup->noteLayouts.cbegin(), freeGroup->noteLayouts.cend(), [](const CHIron::Gui::MarkerStickyNoteLayout& layout) {
+        return layout.markerId == QStringLiteral("gamma");
+    });
+    expectNear(static_cast<int>(freeMove->x),
+               226,
+               1,
+               QStringLiteral("Sticky note should not dock when outside the magnetic threshold."));
+    expect(widget.testMoveStickyNote(QStringLiteral("gamma"), QPointF(40.0, 220.0), QSizeF(150.0, 110.0)),
+           QStringLiteral("Sticky note resize snap setup should position gamma."));
+    expect(widget.testMoveStickyNote(QStringLiteral("beta"), QPointF(260.0, 220.0), QSizeF(160.0, 120.0)),
+           QStringLiteral("Sticky note resize snap setup should provide a vertical target."));
+    expect(widget.testResizeStickyNote(QStringLiteral("gamma"), QSizeF(164.0, 119.0)),
+           QStringLiteral("Sticky note magnetic resize should target an existing sticky note."));
+    stickyState = widget.stickyState();
+    const auto resizedGroup = std::find_if(stickyState.groups.cbegin(), stickyState.groups.cend(), [](const CHIron::Gui::MarkerStickyGroup& group) {
+        return group.id == QStringLiteral("__all__");
+    });
+    const auto resized = std::find_if(resizedGroup->noteLayouts.cbegin(), resizedGroup->noteLayouts.cend(), [](const CHIron::Gui::MarkerStickyNoteLayout& layout) {
+        return layout.markerId == QStringLiteral("gamma");
+    });
+    expectNear(static_cast<int>(resized->width),
+               160,
+               1,
+               QStringLiteral("Sticky note resize should magnetically dock the right edge to a nearby note edge."));
+    expectNear(static_cast<int>(resized->height),
+               120,
+               1,
+               QStringLiteral("Sticky note resize should magnetically dock the bottom edge to a nearby note edge."));
+    expect(widget.testDragStickyNote(QStringLiteral("gamma"), QPointF(207.0, 53.0), Qt::AltModifier),
+           QStringLiteral("Alt sticky drag should use grid snapping."));
+    stickyState = widget.stickyState();
+    const auto altDragGroup = std::find_if(stickyState.groups.cbegin(), stickyState.groups.cend(), [](const CHIron::Gui::MarkerStickyGroup& group) {
+        return group.id == QStringLiteral("__all__");
+    });
+    const auto altDrag = std::find_if(altDragGroup->noteLayouts.cbegin(), altDragGroup->noteLayouts.cend(), [](const CHIron::Gui::MarkerStickyNoteLayout& layout) {
+        return layout.markerId == QStringLiteral("gamma");
+    });
+    expectNear(static_cast<int>(altDrag->x),
+               208,
+               1,
+               QStringLiteral("Alt sticky drag should snap x to the 16 px grid instead of magnetic docking."));
+    expectNear(static_cast<int>(altDrag->y),
+               48,
+               1,
+               QStringLiteral("Alt sticky drag should snap y to the 16 px grid."));
+    expect(widget.testResizeStickyNote(QStringLiteral("gamma"), QSizeF(123.0, 91.0), Qt::AltModifier),
+           QStringLiteral("Alt sticky resize should use grid snapping."));
+    stickyState = widget.stickyState();
+    const auto altResizeGroup = std::find_if(stickyState.groups.cbegin(), stickyState.groups.cend(), [](const CHIron::Gui::MarkerStickyGroup& group) {
+        return group.id == QStringLiteral("__all__");
+    });
+    const auto altResize = std::find_if(altResizeGroup->noteLayouts.cbegin(), altResizeGroup->noteLayouts.cend(), [](const CHIron::Gui::MarkerStickyNoteLayout& layout) {
+        return layout.markerId == QStringLiteral("gamma");
+    });
+    expectNear(static_cast<int>(altResize->width),
+               128,
+               1,
+               QStringLiteral("Alt sticky resize should snap width to the 16 px grid."));
+    expectNear(static_cast<int>(altResize->height),
+               96,
+               1,
+               QStringLiteral("Alt sticky resize should snap height to the 16 px grid."));
+    expect(widget.testPreviewStickyNoteDrag(QStringLiteral("gamma"), QPointF(211.0, 62.0), Qt::AltModifier),
+           QStringLiteral("Previewing an Alt sticky drag should show the alignment grid."));
+    expect(widget.testStickyGridVisible(),
+           QStringLiteral("Alt sticky drag preview should make the alignment grid visible."));
+    widget.testFinishStickyInteraction();
+    expect(!widget.testStickyGridVisible(),
+           QStringLiteral("Finishing sticky drag/resize should hide the alignment grid."));
+
+    QString stickyEditedLabel;
+    QString stickyEditedMemo;
+    QObject::connect(&widget, &MarkerWidget::markerEdited, &widget, [&](const TraceMarker& marker) {
+        stickyEditedLabel = marker.label;
+        stickyEditedMemo = marker.memo;
+    });
+    expect(widget.testEditStickyNote(QStringLiteral("beta"),
+                                     QStringLiteral("Beta inline"),
+                                     QStringLiteral("inline sticky memo")),
+           QStringLiteral("Sticky inline edit should target an existing marker."));
+    expectEqual(stickyEditedLabel,
+                QStringLiteral("Beta inline"),
+                QStringLiteral("Sticky inline label edit should emit markerEdited."));
+    expectEqual(stickyEditedMemo,
+                QStringLiteral("inline sticky memo"),
+                QStringLiteral("Sticky inline memo edit should emit markerEdited."));
+
+    expect(widget.testSelectStickyGroup(QStringLiteral("__all__")),
+           QStringLiteral("Sticky tests should be able to return to the All group."));
+    widget.setMarkers(markers, QStringLiteral("beta"), widget.stickyState(), summaries);
+    QApplication::processEvents();
+    const int selectedSignalsBeforeDrag = selectedSignals;
+    expect(widget.testDragStickyNote(QStringLiteral("gamma"), QPointF(320.0, 180.0)),
+           QStringLiteral("Sticky drag selection test should target an existing note."));
+    expectEqual(widget.testSelectedMarkerId(),
+                QStringLiteral("beta"),
+                QStringLiteral("Dragging a sticky note should not change the selected marker."));
+    expectEqual(selectedSignals,
+                selectedSignalsBeforeDrag,
+                QStringLiteral("Dragging a sticky note should not emit markerSelected."));
+    expect(widget.testResizeStickyNote(QStringLiteral("gamma"), QSizeF(176.0, 128.0)),
+           QStringLiteral("Sticky resize selection test should target an existing note."));
+    expectEqual(widget.testSelectedMarkerId(),
+                QStringLiteral("beta"),
+                QStringLiteral("Resizing a sticky note should not change the selected marker."));
+    expectEqual(selectedSignals,
+                selectedSignalsBeforeDrag,
+                QStringLiteral("Resizing a sticky note should not emit markerSelected."));
+
+    expect(widget.testAddStickyGroup(QStringLiteral("Investigation")),
+           QStringLiteral("Sticky test group creation should succeed."));
+    const QString investigationGroupId = widget.testActiveStickyGroupId();
+    expect(!investigationGroupId.isEmpty() && investigationGroupId != QStringLiteral("__all__"),
+           QStringLiteral("Custom sticky group should become active."));
+    expectEqual(widget.testStickyNoteCount(),
+                0,
+                QStringLiteral("New custom sticky group should start empty."));
+    expect(widget.testAddMarkerToActiveStickyGroup(QStringLiteral("gamma")),
+           QStringLiteral("Adding marker to custom sticky group should succeed."));
+    QApplication::processEvents();
+    expectEqual(widget.testStickyNoteCount(),
+                1,
+                QStringLiteral("Custom sticky group should show its member marker."));
+    expect(widget.testStickyCanDeleteFromGroup(QStringLiteral("gamma")),
+           QStringLiteral("Delete from group should be enabled in any custom group."));
+    expect(widget.testRemoveMarkerFromActiveStickyGroup(QStringLiteral("gamma")),
+           QStringLiteral("Toolbar group removal should allow deleting from a custom group."));
+    expectEqual(widget.testStickyNoteCount(),
+                0,
+                QStringLiteral("A marker should disappear after deletion from the active custom group."));
+    expect(widget.testAddMarkerToActiveStickyGroup(QStringLiteral("gamma")),
+           QStringLiteral("Adding marker back to custom sticky group should succeed for copy/move tests."));
+    QApplication::processEvents();
+
+    expect(widget.testAddStickyGroup(QStringLiteral("Archive")),
+           QStringLiteral("Second sticky test group creation should succeed."));
+    const QString archiveGroupId = widget.testActiveStickyGroupId();
+    expect(!archiveGroupId.isEmpty() && archiveGroupId != investigationGroupId,
+           QStringLiteral("Second custom group should have a distinct id."));
+    expect(widget.testStickyCopyToGroup(QStringLiteral("gamma"), archiveGroupId),
+           QStringLiteral("Copy into group should add marker membership to the target group."));
+    expect(widget.testStickyMarkerInGroup(investigationGroupId, QStringLiteral("gamma")),
+           QStringLiteral("Copy into group should preserve source group membership."));
+    expect(widget.testStickyMarkerInGroup(archiveGroupId, QStringLiteral("gamma")),
+           QStringLiteral("Copy into group should create target group membership."));
+    expect(widget.testSelectStickyGroup(investigationGroupId),
+           QStringLiteral("Sticky tests should be able to select the source group."));
+    expect(widget.testStickyCanDeleteFromGroup(QStringLiteral("gamma")),
+           QStringLiteral("Delete from group should be enabled when another custom group still contains the marker."));
+    expect(widget.testStickyDeleteFromGroup(QStringLiteral("gamma")),
+           QStringLiteral("Delete from group should remove only the active custom-group membership."));
+    expect(!widget.testStickyMarkerInGroup(investigationGroupId, QStringLiteral("gamma")),
+           QStringLiteral("Delete from group should remove the marker from the active custom group."));
+    expect(widget.testStickyMarkerInGroup(archiveGroupId, QStringLiteral("gamma")),
+           QStringLiteral("Delete from group should preserve other custom group memberships."));
+    expect(widget.testSelectStickyGroup(archiveGroupId),
+           QStringLiteral("Sticky tests should be able to select the remaining gamma group."));
+    expect(widget.testStickyCanDeleteFromGroup(QStringLiteral("gamma")),
+           QStringLiteral("Delete from group should stay enabled with one custom membership left."));
+    expect(widget.testSelectStickyGroup(QStringLiteral("__all__")),
+           QStringLiteral("Sticky tests should be able to select All again."));
+    expect(!widget.testStickyCanDeleteFromGroup(QStringLiteral("gamma")),
+           QStringLiteral("Delete from group should be disabled on All."));
+
+    expect(widget.testStickyCopyToGroup(QStringLiteral("beta"), archiveGroupId),
+           QStringLiteral("Copy into an existing group should support selected and non-selected markers."));
+    expect(widget.testStickyMoveToGroup(QStringLiteral("beta"), investigationGroupId),
+           QStringLiteral("Move from All should behave like copy into the target group."));
+    expect(widget.testStickyMarkerInGroup(archiveGroupId, QStringLiteral("beta")),
+           QStringLiteral("Move from All should not remove existing custom group membership."));
+    expect(widget.testStickyMarkerInGroup(investigationGroupId, QStringLiteral("beta")),
+           QStringLiteral("Move from All should add the target custom group membership."));
+    expect(widget.testSelectStickyGroup(archiveGroupId),
+           QStringLiteral("Sticky tests should be able to select the archive group."));
+    expect(widget.testStickyMoveToGroup(QStringLiteral("beta"), investigationGroupId),
+           QStringLiteral("Move from a custom group should move membership to the target group."));
+    expect(!widget.testStickyMarkerInGroup(archiveGroupId, QStringLiteral("beta")),
+           QStringLiteral("Move from a custom group should remove source membership."));
+    expect(widget.testStickyMarkerInGroup(investigationGroupId, QStringLiteral("beta")),
+           QStringLiteral("Move from a custom group should preserve target membership."));
+
+    expect(widget.testStickyCopyToNewGroup(QStringLiteral("alpha"), QStringLiteral("Copied Notes")),
+           QStringLiteral("Copy into new group should create and activate a custom group."));
+    const QString copiedGroupId = widget.testActiveStickyGroupId();
+    expect(widget.testStickyMarkerInGroup(copiedGroupId, QStringLiteral("alpha")),
+           QStringLiteral("Copy into new group should add marker membership to the new group."));
+    expect(widget.testStickyMoveToNewGroup(QStringLiteral("alpha"), QStringLiteral("Moved Notes")),
+           QStringLiteral("Move into new group should create and activate a custom group."));
+    const QString movedGroupId = widget.testActiveStickyGroupId();
+    expect(widget.testStickyMarkerInGroup(movedGroupId, QStringLiteral("alpha")),
+           QStringLiteral("Move into new group should add marker membership to the new group."));
+    expect(!widget.testStickyMarkerInGroup(copiedGroupId, QStringLiteral("alpha")),
+           QStringLiteral("Move into new group should remove source custom group membership."));
+
+    int stickyRemovedSignals = 0;
+    QString stickyRemovedMarkerId;
+    QObject::connect(&widget, &MarkerWidget::markerRemoved, &widget, [&](const QString& markerId) {
+        ++stickyRemovedSignals;
+        stickyRemovedMarkerId = markerId;
+    });
+    expect(widget.testStickyJumpToRow(QStringLiteral("gamma")),
+           QStringLiteral("Sticky context jump should target an existing marker."));
+    QApplication::processEvents();
+    expectEqual(stickyActivatedMarkerId,
+                QStringLiteral("gamma"),
+                QStringLiteral("Sticky context Jump to row should emit markerActivated."));
+    expect(widget.testStickyDeleteMarker(QStringLiteral("gamma")),
+           QStringLiteral("Sticky context Delete marker should target an existing marker."));
+    expectEqual(stickyRemovedSignals,
+                1,
+                QStringLiteral("Sticky context Delete marker should emit markerRemoved."));
+    expectEqual(stickyRemovedMarkerId,
+                QStringLiteral("gamma"),
+                QStringLiteral("Sticky context Delete marker should report the marker id."));
+
+    expect(widget.testSelectStickyGroup(QStringLiteral("__all__")),
+           QStringLiteral("Sticky Delete shortcut test should run with the selected note visible."));
+    widget.setMarkers(markers, QStringLiteral("beta"), widget.stickyState(), summaries);
+    widget.testSetStickyMode(true);
+    QApplication::processEvents();
+    widget.testSetStickyTextEditing(true);
+    expect(!widget.testTriggerStickyDeleteShortcut(),
+           QStringLiteral("Delete shortcut should not remove a sticky note while inline text editing has focus."));
+    expectEqual(stickyRemovedSignals,
+                1,
+                QStringLiteral("Blocked Delete shortcut should not emit markerRemoved."));
+    widget.testSetStickyTextEditing(false);
+    expect(widget.testTriggerStickyDeleteShortcut(),
+           QStringLiteral("Delete shortcut should remove the selected sticky note outside inline editing."));
+    expectEqual(stickyRemovedSignals,
+                2,
+                QStringLiteral("Delete shortcut should emit markerRemoved once."));
+    expectEqual(stickyRemovedMarkerId,
+                QStringLiteral("beta"),
+                QStringLiteral("Delete shortcut should remove the selected marker."));
+}
+
+void testMarkerJsonPersistsStickyState()
+{
+    using CHIron::Gui::LoadTraceMarkersFromJson;
+    using CHIron::Gui::MarkerStickyGroup;
+    using CHIron::Gui::MarkerStickyNoteLayout;
+    using CHIron::Gui::MarkerStickyState;
+    using CHIron::Gui::SaveTraceMarkersToJson;
+    using CHIron::Gui::TraceMarker;
+    using CHIron::Gui::TraceMarkerLoadResult;
+
+    TraceMarker markerA;
+    markerA.id = QStringLiteral("marker-a");
+    markerA.logicalRow = 0;
+    markerA.timestamp = 100;
+    markerA.label = QStringLiteral("A");
+    markerA.color = QColor(QStringLiteral("#3366cc"));
+
+    TraceMarker markerB;
+    markerB.id = QStringLiteral("marker-b");
+    markerB.logicalRow = 1;
+    markerB.timestamp = 200;
+    markerB.label = QStringLiteral("B");
+    markerB.color = QColor(QStringLiteral("#00aa88"));
+
+    MarkerStickyGroup group;
+    group.id = QStringLiteral("group-1");
+    group.name = QStringLiteral("Investigate");
+    group.markerIds = {markerB.id, QStringLiteral("missing-marker")};
+    MarkerStickyNoteLayout layout;
+    layout.markerId = markerB.id;
+    layout.x = 42.0;
+    layout.y = 64.0;
+    layout.width = 210.0;
+    layout.height = 130.0;
+    group.noteLayouts.push_back(layout);
+    MarkerStickyNoteLayout invalidLayout;
+    invalidLayout.markerId = QStringLiteral("missing-marker");
+    group.noteLayouts.push_back(invalidLayout);
+
+    MarkerStickyState state;
+    state.activeGroupId = group.id;
+    state.groups.push_back(group);
+
+    QTemporaryDir tempDir;
+    expect(tempDir.isValid(), QStringLiteral("Sticky marker JSON test temporary directory should be valid."));
+    const QString path = tempDir.filePath(QStringLiteral("sticky.markers.json"));
+    QString error;
+    expect(SaveTraceMarkersToJson(path,
+                                  std::vector<TraceMarker>{markerA, markerB},
+                                  state,
+                                  QStringLiteral("trace.clogb"),
+                                  QStringLiteral("trace"),
+                                  error),
+           error.isEmpty() ? QStringLiteral("Sticky marker JSON should save.")
+                           : error);
+
+    TraceMarkerLoadResult result;
+    expect(LoadTraceMarkersFromJson(path, 2, result, error),
+           error.isEmpty() ? QStringLiteral("Sticky marker JSON should load.")
+                           : error);
+    expect(result.stickyState.has_value(),
+           QStringLiteral("Loading sticky marker JSON should return sticky state."));
+    expectEqual(result.stickyState->activeGroupId,
+                QStringLiteral("group-1"),
+                QStringLiteral("Sticky active group should round-trip."));
+    expectEqual(static_cast<int>(result.stickyState->groups.size()),
+                1,
+                QStringLiteral("Sticky custom groups should round-trip."));
+    expectEqual(static_cast<int>(result.stickyState->groups.front().markerIds.size()),
+                1,
+                QStringLiteral("Unknown marker ids should be skipped from sticky group membership."));
+    expectEqual(result.stickyState->groups.front().markerIds.front(),
+                markerB.id,
+                QStringLiteral("Valid sticky group marker membership should round-trip."));
+    expectEqual(static_cast<int>(result.stickyState->groups.front().noteLayouts.size()),
+                1,
+                QStringLiteral("Unknown marker ids should be skipped from sticky note layouts."));
+    expectNear(static_cast<int>(result.stickyState->groups.front().noteLayouts.front().width),
+               210,
+               1,
+               QStringLiteral("Sticky note width should round-trip."));
+
+    const QString oldPath = tempDir.filePath(QStringLiteral("old.markers.json"));
+    expect(SaveTraceMarkersToJson(oldPath,
+                                  std::vector<TraceMarker>{markerA},
+                                  QStringLiteral("trace.clogb"),
+                                  QStringLiteral("trace"),
+                                  error),
+           error.isEmpty() ? QStringLiteral("Legacy marker JSON overload should save.")
+                           : error);
+    TraceMarkerLoadResult oldResult;
+    expect(LoadTraceMarkersFromJson(oldPath, 1, oldResult, error),
+           error.isEmpty() ? QStringLiteral("Legacy marker JSON overload should load.")
+                           : error);
+    expect(oldResult.stickyState.has_value(),
+           QStringLiteral("Saved marker JSON should include an optional sticky block."));
 }
 
 void testMainWindowPreservesPerSessionTableDetails()
@@ -12680,6 +13724,10 @@ int main(int argc, char* argv[])
         {QStringLiteral("ClipboardCsvSaveIncludesFilteredRows"), testClipboardCsvSaveIncludesFilteredRows},
         {QStringLiteral("ClipboardCLogBSaveAvailabilityAndRoundTrip"), testClipboardCLogBSaveAvailabilityAndRoundTrip},
         {QStringLiteral("ClipboardScopesAreSessionLocalAndGlobal"), testClipboardScopesAreSessionLocalAndGlobal},
+        {QStringLiteral("MainWindowMarkersArePerSessionAndPersist"), testMainWindowMarkersArePerSessionAndPersist},
+        {QStringLiteral("MainWindowMarkerUndoRedoAndUnifiedOrdering"), testMainWindowMarkerUndoRedoAndUnifiedOrdering},
+        {QStringLiteral("MarkerWidgetSearchFiltersNameAndMemo"), testMarkerWidgetSearchFiltersNameAndMemo},
+        {QStringLiteral("MarkerJsonPersistsStickyState"), testMarkerJsonPersistsStickyState},
         {QStringLiteral("MainWindowPreservesPerSessionTableDetails"), testMainWindowPreservesPerSessionTableDetails},
         {QStringLiteral("MainWindowPreservesPerSessionWidgetState"), testMainWindowPreservesPerSessionWidgetState},
         {QStringLiteral("MainWindowSessionSwitchKeepsTimelineAndAddressStable"), testMainWindowSessionSwitchKeepsTimelineAndAddressStable},

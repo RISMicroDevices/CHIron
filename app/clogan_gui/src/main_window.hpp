@@ -4,6 +4,7 @@
 #include "clipboard_widget.hpp"
 #include "flit_details_model.hpp"
 #include "flit_table_model.hpp"
+#include "marker_store.hpp"
 #include "trace_statistics.hpp"
 
 #include <QByteArray>
@@ -56,6 +57,9 @@ class LatencyDiffWidget;
 class TransactionWidget;
 class ClipboardWidget;
 class TraceCacheLineMinimap;
+class TraceMarkerOverlay;
+class MarkerWidget;
+struct TraceMarkerDisplaySummary;
 class TraceSession;
 
 class MainWindow final : public QMainWindow {
@@ -142,6 +146,52 @@ public:
     int testTransactionLaneCount() const noexcept;
     quint64 testTransactionBuildGeneration() const noexcept;
     void testInjectTransactionSpans(int laneCount, int spanCount);
+    int testMarkerCount() const noexcept;
+    bool testAddMarkerAtLogicalRow(int logicalRow);
+    bool testEditMarkerLabel(int markerIndex, const QString& label);
+    bool testEditMarkerDetails(int markerIndex,
+                               const QString& label,
+                               const QString& colorName,
+                               const QString& memo);
+    QString testMarkerLabelAt(int markerIndex) const;
+    QString testMarkerColorAt(int markerIndex) const;
+    QString testMarkerMemoAt(int markerIndex) const;
+    qint64 testMarkerTimestampAt(int markerIndex) const noexcept;
+    int testMarkerLogicalRowAt(int markerIndex) const noexcept;
+    bool testRemoveMarkerAt(int markerIndex);
+    bool testMoveMarkerAt(int markerIndex, int targetLogicalRow);
+    int testSelectedMarkerLogicalRow() const noexcept;
+    bool testCanUndoUnified() const;
+    bool testCanRedoUnified() const;
+    QString testUnifiedUndoText() const;
+    QString testUnifiedRedoText() const;
+    void testUndoUnified();
+    void testRedoUnified();
+    bool testSetTraceEditable(bool editable);
+    bool testEditTraceTimestampAtLogicalRow(int logicalRow, qint64 timestamp);
+    qint64 testTraceTimestampAtLogicalRow(int logicalRow) const noexcept;
+    bool testSaveMarkersJson(const QString& path);
+    bool testLoadMarkersJson(const QString& path);
+    bool testTraceMarkerOverlayVisible() const noexcept;
+    QRect testTraceMarkerOverlayGeometry() const;
+    QRect testTraceMarkerMinimapGeometry() const;
+    QRect testTraceMarkerCollapsedTagGeometry(int markerIndex) const;
+    QRect testTraceMarkerExpandedTagGeometry(int markerIndex) const;
+    QRect testTraceMarkerLeftOverlayGeometry() const;
+    QRect testTraceMarkerLeftPolygonGeometry(int markerIndex) const;
+    QRect testTraceMarkerLeftNameGeometry(int markerIndex) const;
+    QRect testTraceTableLogicalRowViewportGeometry(int logicalRow) const;
+    bool testClickTraceMarkerTag(int markerIndex);
+    bool testClickTraceMarkerLeftPolygon(int markerIndex);
+    bool testDoubleClickTraceMarkerLeftPolygon(int markerIndex);
+    bool testStartTraceMarkerMoveFromTag(int markerIndex);
+    bool testStartTraceMarkerMoveFromLeftPolygon(int markerIndex);
+    bool testDropTraceMarkerMoveOnLogicalRow(int logicalRow);
+    void testCancelTraceMarkerMove();
+    bool testTraceMarkerMoveActive() const noexcept;
+    void testNavigateMarker(bool forward);
+    QRect testTraceTableScrollBarGeometry() const;
+    QRect testTraceTableViewportGeometry() const;
     void testStartXactionIndexing(bool rebuildExisting = false);
     bool testSessionXactionIndexActive(int index) const noexcept;
     void testSetClipboardScope(ClipboardScope scope);

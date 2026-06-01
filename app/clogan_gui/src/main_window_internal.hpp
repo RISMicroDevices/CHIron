@@ -13,8 +13,11 @@
 #include "gui_format.hpp"
 #include "latency_diff_widget.hpp"
 #include "latency_widget.hpp"
+#include "marker_store.hpp"
+#include "marker_widget.hpp"
 #include "timeline_widget.hpp"
 #include "trace_cache_line_minimap.hpp"
+#include "trace_marker_overlay.hpp"
 #include "transaction_widget.hpp"
 #include "trace_session.hpp"
 
@@ -89,6 +92,7 @@
 #include <QTableWidget>
 #include <QTimer>
 #include <QTextBrowser>
+#include <QTextEdit>
 #include <QTextStream>
 #include <QScreen>
 #include <QTabBar>

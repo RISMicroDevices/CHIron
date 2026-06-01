@@ -319,6 +319,23 @@ bool TraceCacheLineMinimap::mapVisible() const noexcept
     return mapVisible_;
 }
 
+int TraceCacheLineMinimap::rightReservedWidth() const noexcept
+{
+    return rightReservedWidth_;
+}
+
+void TraceCacheLineMinimap::setRightReservedWidth(const int width)
+{
+    const int clamped = qMax(0, width);
+    if (rightReservedWidth_ == clamped) {
+        return;
+    }
+    rightReservedWidth_ = clamped;
+    updateOverlayGeometry();
+    rebuildVisibleSegments();
+    update();
+}
+
 void TraceCacheLineMinimap::setMapVisible(const bool visible)
 {
     if (mapVisible_ == visible) {
@@ -1783,7 +1800,9 @@ QRect TraceCacheLineMinimap::overlayRectForCurrentTable() const
         kTagMaxWidth
         + 2 * kOuterMargin
         + qMax(0, static_cast<int>(lanes_.size()) - 1) * (kLaneWidth + kLaneGap);
-    const int width = qBound(kOverlayBaseWidth, qMax(laneAreaWidth + 22, tagAnchorWidth), kOverlayMaxWidth);
+    const int width = qBound(kOverlayBaseWidth,
+                             qMax(laneAreaWidth + 22, tagAnchorWidth) + rightReservedWidth_,
+                             kOverlayMaxWidth + rightReservedWidth_);
     const int overlayWidth = qMin(width, qMax(1, scroll.left()));
     const int x = tableOrigin.x() + scroll.left() - overlayWidth;
     const int y = tableOrigin.y() + scroll.top();
@@ -1796,7 +1815,8 @@ QRect TraceCacheLineMinimap::laneRectForIndex(const int laneIndex, const int tot
         return QRect();
     }
     const int totalLaneWidth = totalLanes * kLaneWidth + (totalLanes - 1) * kLaneGap;
-    const int left = width() - kOuterMargin - totalLaneWidth
+    const int contentRight = width() - rightReservedWidth_;
+    const int left = contentRight - kOuterMargin - totalLaneWidth
         + laneIndex * (kLaneWidth + kLaneGap);
     return QRect(left,
                  0,

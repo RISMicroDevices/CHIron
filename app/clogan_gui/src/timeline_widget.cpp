@@ -678,6 +678,21 @@ void TimelineWidget::setSelectedLogicalRow(const int logicalRow)
     updateLaneSelectionFromFilter();
 }
 
+void TimelineWidget::setMarkers(std::vector<TraceMarker> markers, const QString& selectedMarkerId)
+{
+    sharedMarkers_ = std::move(markers);
+    selectedMarkerId_ = selectedMarkerId;
+    if (!selectedMarkerId_.isEmpty()) {
+        const auto found = std::find_if(sharedMarkers_.cbegin(), sharedMarkers_.cend(), [&](const TraceMarker& marker) {
+            return marker.id == selectedMarkerId_;
+        });
+        if (found == sharedMarkers_.cend()) {
+            selectedMarkerId_.clear();
+        }
+    }
+    update();
+}
+
 QVariantMap TimelineWidget::viewState() const
 {
     QVariantMap state;
@@ -880,6 +895,13 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event)
 
     if (event->button() == Qt::LeftButton
         && (positionInTimeline(event->pos()) || positionInRuler(event->pos()))) {
+        if (const std::optional<QString> markerId = sharedMarkerAtPosition(event->pos())) {
+            selectedMarkerId_ = *markerId;
+            Q_EMIT markerSelected(*markerId);
+            event->accept();
+            update();
+            return;
+        }
         beginPendingGesture(event->pos());
         event->accept();
         return;
@@ -993,6 +1015,12 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event)
     }
 
     updateHoveredOpcodeTag(event->pos());
+    const std::optional<QString> markerId = sharedMarkerAtPosition(event->pos());
+    const QString nextHoveredMarkerId = markerId ? *markerId : QString();
+    if (nextHoveredMarkerId != hoveredMarkerId_) {
+        hoveredMarkerId_ = nextHoveredMarkerId;
+        update();
+    }
     updateResizeCursor(event->pos());
     QWidget::mouseMoveEvent(event);
 }
@@ -1002,6 +1030,10 @@ void TimelineWidget::leaveEvent(QEvent* event)
     if (hoveredOpcodeTagEventIndex_) {
         hoveredOpcodeTagEventIndex_.reset();
         update(plotRect());
+    }
+    if (!hoveredMarkerId_.isEmpty()) {
+        hoveredMarkerId_.clear();
+        update();
     }
     QWidget::leaveEvent(event);
 }
@@ -2936,6 +2968,36 @@ void TimelineWidget::setMarkerLogicalRow(const int logicalRow)
     update();
 }
 
+std::optional<QString> TimelineWidget::sharedMarkerAtPosition(const QPoint& position) const
+{
+    if (!positionInRuler(position) && !positionInTimeline(position)) {
+        return std::nullopt;
+    }
+    const QRect plot = plotRect();
+    const QRect ruler = topRulerRect();
+    const QRect full = fullRulerRect();
+    for (const TraceMarker& marker : sharedMarkers_) {
+        if (marker.logicalRow < 0) {
+            continue;
+        }
+        const auto plotX = screenXForLogicalRow(static_cast<std::uint64_t>(marker.logicalRow), plot);
+        if (plotX) {
+            const QRect hit(*plotX - 6, ruler.top(), 12, plot.bottom() - ruler.top() + 1);
+            if (hit.contains(position)) {
+                return marker.id;
+            }
+        }
+        const auto fullX = screenXForLogicalRow(static_cast<std::uint64_t>(marker.logicalRow), full);
+        if (fullX) {
+            const QRect hit(*fullX - 6, full.top(), 12, full.height());
+            if (hit.contains(position)) {
+                return marker.id;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 void TimelineWidget::updateLaneSelectionFromFilter()
 {
     highlightedLane_ = selectedLaneFilter_ ? laneIndexFor(*selectedLaneFilter_) : -1;
@@ -4400,6 +4462,57 @@ void TimelineWidget::paintCursorAndMarker(QPainter& painter) const
     drawMarker(selectedLogicalRow_, QColor(QStringLiteral("#C48A00")),
                selectedLogicalRow_ >= 0 ? QStringLiteral("C %1").arg(selectedLogicalRow_ + 1) : QString(),
                Qt::SolidLine);
+    paintSharedMarkers(painter);
+}
+
+void TimelineWidget::paintSharedMarkers(QPainter& painter) const
+{
+    if (sharedMarkers_.empty()) {
+        return;
+    }
+
+    const QRect plot = plotRect();
+    const QRect ruler = topRulerRect();
+    const QRect full = fullRulerRect();
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    for (const TraceMarker& marker : sharedMarkers_) {
+        if (marker.logicalRow < 0) {
+            continue;
+        }
+        const QColor color = marker.color.isValid() ? marker.color : DefaultTraceMarkerColor(marker.logicalRow);
+        const bool active = marker.id == selectedMarkerId_ || marker.id == hoveredMarkerId_;
+        QColor lineColor = color;
+        lineColor.setAlpha(active ? 225 : 88);
+        QColor fillColor = color;
+        fillColor.setAlpha(active ? 235 : 118);
+
+        const auto plotX = screenXForLogicalRow(static_cast<std::uint64_t>(marker.logicalRow), plot);
+        if (plotX) {
+            painter.setPen(QPen(lineColor, active ? 2 : 1));
+            painter.drawLine(*plotX, ruler.top(), *plotX, plot.bottom());
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(fillColor);
+            const QPolygon triangle({QPoint(*plotX - 5, ruler.bottom() - 1),
+                                     QPoint(*plotX + 5, ruler.bottom() - 1),
+                                     QPoint(*plotX, ruler.bottom() - 10)});
+            painter.drawPolygon(triangle);
+            if (active) {
+                painter.setPen(color.darker(130));
+                painter.drawText(QRect(*plotX + 6, ruler.top() + 2, 180, 16),
+                                 Qt::AlignLeft | Qt::AlignVCenter,
+                                 marker.label);
+            }
+        }
+
+        const auto fullX = screenXForLogicalRow(static_cast<std::uint64_t>(marker.logicalRow), full);
+        if (fullX) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(fillColor);
+            painter.drawRoundedRect(QRect(*fullX - 2, full.top() + 3, 5, qMax(4, full.height() - 6)), 2, 2);
+        }
+    }
+    painter.restore();
 }
 
 void TimelineWidget::paintRangeZoom(QPainter& painter) const

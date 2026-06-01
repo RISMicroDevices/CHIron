@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QMouseEvent>
 
 #include <cstdint>
 
@@ -718,6 +719,379 @@ void MainWindow::testInjectTransactionSpans(const int laneCount, const int spanC
             }
         }
     }
+}
+
+int MainWindow::testMarkerCount() const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    return session ? static_cast<int>(session->markers.size()) : 0;
+}
+
+bool MainWindow::testAddMarkerAtLogicalRow(const int logicalRow)
+{
+    const int before = testMarkerCount();
+    addMarkerAtLogicalRow(logicalRow);
+    return testMarkerCount() > before;
+}
+
+bool MainWindow::testEditMarkerLabel(const int markerIndex, const QString& label)
+{
+    TraceViewSession* session = activeTraceViewSession();
+    if (!session || markerIndex < 0 || markerIndex >= static_cast<int>(session->markers.size())) {
+        return false;
+    }
+    TraceMarker marker = session->markers[static_cast<std::size_t>(markerIndex)];
+    marker.label = label;
+    marker.updatedAt = QDateTime::currentDateTimeUtc();
+    updateMarker(std::move(marker));
+    return true;
+}
+
+bool MainWindow::testEditMarkerDetails(const int markerIndex,
+                                       const QString& label,
+                                       const QString& colorName,
+                                       const QString& memo)
+{
+    TraceViewSession* session = activeTraceViewSession();
+    if (!session || markerIndex < 0 || markerIndex >= static_cast<int>(session->markers.size())) {
+        return false;
+    }
+    TraceMarker marker = session->markers[static_cast<std::size_t>(markerIndex)];
+    marker.label = label;
+    marker.color = QColor(colorName);
+    marker.memo = memo;
+    marker.updatedAt = QDateTime::currentDateTimeUtc();
+    updateMarker(std::move(marker));
+    return true;
+}
+
+QString MainWindow::testMarkerLabelAt(const int markerIndex) const
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    if (!session || markerIndex < 0 || markerIndex >= static_cast<int>(session->markers.size())) {
+        return {};
+    }
+    return session->markers[static_cast<std::size_t>(markerIndex)].label;
+}
+
+QString MainWindow::testMarkerColorAt(const int markerIndex) const
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    if (!session || markerIndex < 0 || markerIndex >= static_cast<int>(session->markers.size())) {
+        return {};
+    }
+    return TraceMarkerColorName(session->markers[static_cast<std::size_t>(markerIndex)].color);
+}
+
+QString MainWindow::testMarkerMemoAt(const int markerIndex) const
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    if (!session || markerIndex < 0 || markerIndex >= static_cast<int>(session->markers.size())) {
+        return {};
+    }
+    return session->markers[static_cast<std::size_t>(markerIndex)].memo;
+}
+
+qint64 MainWindow::testMarkerTimestampAt(const int markerIndex) const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    if (!session || markerIndex < 0 || markerIndex >= static_cast<int>(session->markers.size())) {
+        return -1;
+    }
+    return session->markers[static_cast<std::size_t>(markerIndex)].timestamp;
+}
+
+int MainWindow::testMarkerLogicalRowAt(const int markerIndex) const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    if (!session || markerIndex < 0 || markerIndex >= static_cast<int>(session->markers.size())) {
+        return -1;
+    }
+    return session->markers[static_cast<std::size_t>(markerIndex)].logicalRow;
+}
+
+bool MainWindow::testRemoveMarkerAt(const int markerIndex)
+{
+    TraceViewSession* session = activeTraceViewSession();
+    if (!session || markerIndex < 0 || markerIndex >= static_cast<int>(session->markers.size())) {
+        return false;
+    }
+    const QString markerId = session->markers[static_cast<std::size_t>(markerIndex)].id;
+    removeMarker(markerId);
+    return true;
+}
+
+bool MainWindow::testMoveMarkerAt(const int markerIndex, const int targetLogicalRow)
+{
+    TraceViewSession* session = activeTraceViewSession();
+    if (!session || markerIndex < 0 || markerIndex >= static_cast<int>(session->markers.size())) {
+        return false;
+    }
+    const QString markerId = session->markers[static_cast<std::size_t>(markerIndex)].id;
+    return moveMarker(markerId, targetLogicalRow);
+}
+
+int MainWindow::testSelectedMarkerLogicalRow() const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    if (!session) {
+        return -1;
+    }
+    const TraceMarker* marker = markerById(*session, session->selectedMarkerId);
+    return marker ? marker->logicalRow : -1;
+}
+
+bool MainWindow::testCanUndoUnified() const
+{
+    return canUndoUnified();
+}
+
+bool MainWindow::testCanRedoUnified() const
+{
+    return canRedoUnified();
+}
+
+QString MainWindow::testUnifiedUndoText() const
+{
+    return unifiedUndoText();
+}
+
+QString MainWindow::testUnifiedRedoText() const
+{
+    return unifiedRedoText();
+}
+
+void MainWindow::testUndoUnified()
+{
+    undoUnifiedEdit();
+}
+
+void MainWindow::testRedoUnified()
+{
+    redoUnifiedEdit();
+}
+
+bool MainWindow::testSetTraceEditable(const bool editable)
+{
+    TraceViewSession* session = activeTraceViewSession();
+    if (!session || !session->flitModel) {
+        return false;
+    }
+    if (!editable) {
+        session->editModeEnabled = false;
+        session->flitModel->setEditable(false);
+        return true;
+    }
+    session->editModeEnabled = true;
+    session->flitModel->setEditable(true);
+    if (!session->editableMetadata) {
+        session->editableMetadata = CLogBTraceMetadata{};
+        session->flitModel->setTraceMetadataOverride(session->editableMetadata);
+    }
+    return true;
+}
+
+bool MainWindow::testEditTraceTimestampAtLogicalRow(const int logicalRow, const qint64 timestamp)
+{
+    TraceViewSession* session = activeTraceViewSession();
+    if (!session || !session->flitModel || logicalRow < 0) {
+        return false;
+    }
+    const int visibleRow = session->flitModel->visibleRowForLogicalRow(logicalRow);
+    if (visibleRow < 0) {
+        return false;
+    }
+    return session->flitModel->setData(session->flitModel->index(visibleRow, FlitTableModel::TimeColumn),
+                                       QString::number(timestamp),
+                                       Qt::EditRole);
+}
+
+qint64 MainWindow::testTraceTimestampAtLogicalRow(const int logicalRow) const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    const FlitRecord* record = session && session->flitModel
+        ? session->flitModel->recordForLogicalRow(logicalRow)
+        : nullptr;
+    return record ? record->timestamp : -1;
+}
+
+bool MainWindow::testSaveMarkersJson(const QString& path)
+{
+    return saveMarkersToPath(path);
+}
+
+bool MainWindow::testLoadMarkersJson(const QString& path)
+{
+    return loadMarkersFromPath(path);
+}
+
+bool MainWindow::testTraceMarkerOverlayVisible() const noexcept
+{
+    return traceMarkerOverlay_ && traceMarkerOverlay_->testOverlayVisible();
+}
+
+QRect MainWindow::testTraceMarkerOverlayGeometry() const
+{
+    return traceMarkerOverlay_ ? traceMarkerOverlay_->testOverlayGeometry() : QRect();
+}
+
+QRect MainWindow::testTraceMarkerMinimapGeometry() const
+{
+    return traceMarkerOverlay_ ? traceMarkerOverlay_->testMinimapGeometry() : QRect();
+}
+
+QRect MainWindow::testTraceMarkerCollapsedTagGeometry(const int markerIndex) const
+{
+    return traceMarkerOverlay_ ? traceMarkerOverlay_->testCollapsedMarkerTagGeometry(markerIndex) : QRect();
+}
+
+QRect MainWindow::testTraceMarkerExpandedTagGeometry(const int markerIndex) const
+{
+    return traceMarkerOverlay_ ? traceMarkerOverlay_->testExpandedMarkerTagGeometry(markerIndex) : QRect();
+}
+
+QRect MainWindow::testTraceMarkerLeftOverlayGeometry() const
+{
+    return traceMarkerOverlay_ ? traceMarkerOverlay_->testLeftMarkerOverlayGeometry() : QRect();
+}
+
+QRect MainWindow::testTraceMarkerLeftPolygonGeometry(const int markerIndex) const
+{
+    return traceMarkerOverlay_ ? traceMarkerOverlay_->testLeftMarkerPolygonGeometry(markerIndex) : QRect();
+}
+
+QRect MainWindow::testTraceMarkerLeftNameGeometry(const int markerIndex) const
+{
+    return traceMarkerOverlay_ ? traceMarkerOverlay_->testLeftMarkerNameGeometry(markerIndex) : QRect();
+}
+
+QRect MainWindow::testTraceTableLogicalRowViewportGeometry(const int logicalRow) const
+{
+    if (!flitView_ || !flitModel_ || !flitView_->viewport() || !flitView_->parentWidget()) {
+        return {};
+    }
+    const int visibleRow = flitModel_->visibleRowForLogicalRow(logicalRow);
+    if (visibleRow < 0) {
+        return {};
+    }
+    const int rowY = flitView_->rowViewportPosition(visibleRow);
+    const int rowHeight = flitView_->rowHeight(visibleRow);
+    if (rowHeight <= 0 || rowY + rowHeight <= 0 || rowY >= flitView_->viewport()->height()) {
+        return {};
+    }
+    const QRect viewport = flitView_->viewport()->geometry();
+    const QPoint tableOrigin = flitView_->mapTo(flitView_->parentWidget(), QPoint(0, 0));
+    return QRect(tableOrigin.x() + viewport.left(),
+                 tableOrigin.y() + viewport.top() + rowY,
+                 viewport.width(),
+                 rowHeight);
+}
+
+bool MainWindow::testClickTraceMarkerTag(const int markerIndex)
+{
+    if (!traceMarkerOverlay_) {
+        return false;
+    }
+    const QRect tag = traceMarkerOverlay_->testCollapsedMarkerTagGeometry(markerIndex);
+    if (!tag.isValid()) {
+        return false;
+    }
+    const QPoint parentCenter = tag.center();
+    const QPoint localCenter = traceMarkerOverlay_->mapFromParent(parentCenter);
+    QMouseEvent press(QEvent::MouseButtonPress,
+                      QPointF(localCenter),
+                      QPointF(traceMarkerOverlay_->mapToGlobal(localCenter)),
+                      Qt::LeftButton,
+                      Qt::LeftButton,
+                      Qt::NoModifier);
+    QApplication::sendEvent(traceMarkerOverlay_, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease,
+                        QPointF(localCenter),
+                        QPointF(traceMarkerOverlay_->mapToGlobal(localCenter)),
+                        Qt::LeftButton,
+                        Qt::NoButton,
+                        Qt::NoModifier);
+    QApplication::sendEvent(traceMarkerOverlay_, &release);
+    QApplication::processEvents();
+    return press.isAccepted();
+}
+
+bool MainWindow::testClickTraceMarkerLeftPolygon(const int markerIndex)
+{
+    return traceMarkerOverlay_ && traceMarkerOverlay_->testClickLeftMarkerPolygon(markerIndex);
+}
+
+bool MainWindow::testDoubleClickTraceMarkerLeftPolygon(const int markerIndex)
+{
+    return traceMarkerOverlay_ && traceMarkerOverlay_->testDoubleClickLeftMarkerPolygon(markerIndex);
+}
+
+bool MainWindow::testStartTraceMarkerMoveFromTag(const int markerIndex)
+{
+    return traceMarkerOverlay_ && traceMarkerOverlay_->testStartMarkerMoveFromTag(markerIndex);
+}
+
+bool MainWindow::testStartTraceMarkerMoveFromLeftPolygon(const int markerIndex)
+{
+    return traceMarkerOverlay_ && traceMarkerOverlay_->testStartMarkerMoveFromLeftPolygon(markerIndex);
+}
+
+bool MainWindow::testDropTraceMarkerMoveOnLogicalRow(const int logicalRow)
+{
+    return traceMarkerOverlay_ && traceMarkerOverlay_->testDropMarkerMoveOnLogicalRow(logicalRow);
+}
+
+void MainWindow::testCancelTraceMarkerMove()
+{
+    if (traceMarkerOverlay_) {
+        traceMarkerOverlay_->testCancelMarkerMove();
+    }
+}
+
+bool MainWindow::testTraceMarkerMoveActive() const noexcept
+{
+    return traceMarkerOverlay_ && traceMarkerOverlay_->testMarkerMoveActive();
+}
+
+void MainWindow::testNavigateMarker(const bool forward)
+{
+    navigateMarker(forward);
+}
+
+QRect MainWindow::testTraceTableScrollBarGeometry() const
+{
+    if (!flitView_ || !flitView_->parentWidget()) {
+        return {};
+    }
+    QRect scroll = flitView_->verticalScrollBar() ? flitView_->verticalScrollBar()->geometry() : QRect();
+    if ((scroll.left() <= 0 || scroll.height() <= 0) && flitView_->viewport()) {
+        const QRect viewport = flitView_->viewport()->geometry();
+        scroll = QRect(viewport.right() + 1,
+                       viewport.top(),
+                       qMax(1, flitView_->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, flitView_)),
+                       viewport.height());
+    }
+    if (!scroll.isValid()) {
+        return {};
+    }
+    const QPoint tableOrigin = flitView_->mapTo(flitView_->parentWidget(), QPoint(0, 0));
+    return QRect(tableOrigin.x() + scroll.left(),
+                 tableOrigin.y() + scroll.top(),
+                 scroll.width(),
+                 scroll.height());
+}
+
+QRect MainWindow::testTraceTableViewportGeometry() const
+{
+    if (!flitView_ || !flitView_->viewport() || !flitView_->parentWidget()) {
+        return {};
+    }
+    const QRect viewport = flitView_->viewport()->geometry();
+    const QPoint tableOrigin = flitView_->mapTo(flitView_->parentWidget(), QPoint(0, 0));
+    return QRect(tableOrigin.x() + viewport.left(),
+                 tableOrigin.y() + viewport.top(),
+                 viewport.width(),
+                 viewport.height());
 }
 
 void MainWindow::testStartXactionIndexing(const bool rebuildExisting)

@@ -76,6 +76,9 @@ public:
 
     bool mapVisible() const noexcept;
     void setMapVisible(bool visible);
+    int rightReservedWidth() const noexcept;
+    void setRightReservedWidth(int width);
+    QRect overlayGeometry() const noexcept { return geometry(); }
     bool fadeWhenInactive() const noexcept;
     void setFadeWhenInactive(bool enabled);
 
@@ -266,6 +269,7 @@ private:
     bool pendingModelRefresh_ = false;
     bool mapVisible_ = false;
     bool fadeWhenInactive_ = true;
+    int rightReservedWidth_ = 0;
     bool hovered_ = false;
     bool focused_ = false;
     QString statusText_;

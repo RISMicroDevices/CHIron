@@ -2,6 +2,7 @@
 
 #include "clog_b_trace_loader.hpp"
 #include "flit_record.hpp"
+#include "marker_store.hpp"
 #include "trace_session.hpp"
 
 #include <QColor>
@@ -65,11 +66,13 @@ public:
                         FlitChannel channel,
                         std::optional<std::uint32_t> nodeId);
     void clearSelectedRow();
+    void setMarkers(std::vector<TraceMarker> markers, const QString& selectedMarkerId);
     QVariantMap viewState() const;
     void restoreViewState(const QVariantMap& state);
 
 Q_SIGNALS:
     void logicalRowActivated(int logicalRow);
+    void markerSelected(QString markerId);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -268,6 +271,7 @@ private:
     void moveCursorToAdjacentEvent(int direction);
     void setCursorLogicalRow(int logicalRow, bool emitActivation);
     void setMarkerLogicalRow(int logicalRow);
+    std::optional<QString> sharedMarkerAtPosition(const QPoint& position) const;
     void updateLaneSelectionFromFilter();
     void resetCustomLaneSortOrder();
     void setLaneSortOrder(TimelineLaneSortOrder order);
@@ -335,6 +339,7 @@ private:
                                     std::uint64_t ownerRow,
                                     const QRect& plot) const;
     void paintCursorAndMarker(QPainter& painter) const;
+    void paintSharedMarkers(QPainter& painter) const;
     void paintRangeZoom(QPainter& painter) const;
     void paintGestureOverlay(QPainter& painter) const;
     void paintStatus(QPainter& painter) const;
@@ -416,6 +421,9 @@ private:
     TimelineLaneSortOrder laneSortOrder_ = TimelineLaneSortOrder::NodeThenChannel;
     std::optional<std::size_t> hoveredOpcodeTagEventIndex_;
     std::optional<LaneSelector> selectedLaneFilter_;
+    std::vector<TraceMarker> sharedMarkers_;
+    QString selectedMarkerId_;
+    QString hoveredMarkerId_;
 
     DragMode dragMode_ = DragMode::None;
     ResizeColumn resizeColumn_ = ResizeColumn::None;

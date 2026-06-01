@@ -1069,6 +1069,7 @@ bool FlitTableModel::setData(const QModelIndex& index, const QVariant& value, co
     }
 
     undoStack_->push(new FlitTableModelSetRowCommand(this, logicalRow, *sourceRecord, std::move(editedRecord)));
+    Q_EMIT editCommandPushed(undoText());
     return true;
 }
 
@@ -1326,6 +1327,7 @@ bool FlitTableModel::insertRowsAtLogicalRow(const int logicalRow, std::vector<Fl
     undoStack_->push(new FlitTableModelInsertRowsCommand(this,
                                                          qBound(0, logicalRow, sourceRowCount()),
                                                          std::move(rows)));
+    Q_EMIT editCommandPushed(undoText());
     return true;
 }
 
@@ -1336,6 +1338,7 @@ bool FlitTableModel::insertRowsByTimestamp(std::vector<FlitRecord> rows)
     }
 
     undoStack_->push(new FlitTableModelInsertRowsCommand(this, std::move(rows)));
+    Q_EMIT editCommandPushed(undoText());
     return true;
 }
 
@@ -1381,6 +1384,7 @@ bool FlitTableModel::deleteRowAt(const int visibleRow)
     }
 
     undoStack_->push(new FlitTableModelDeleteRowCommand(this, logicalRow));
+    Q_EMIT editCommandPushed(undoText());
     return true;
 }
 

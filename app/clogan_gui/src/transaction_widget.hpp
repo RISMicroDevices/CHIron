@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flit_record.hpp"
+#include "marker_store.hpp"
 #include "trace_session.hpp"
 
 #include <QImage>
@@ -55,12 +56,14 @@ public:
     void buildView();
     void clear();
     void setSelectedLogicalRow(int logicalRow);
+    void setMarkers(std::vector<TraceMarker> markers, const QString& selectedMarkerId);
     QVariantMap viewState() const;
     void restoreViewState(const QVariantMap& state);
     QVariantMap diagnosticsState() const;
 
 Q_SIGNALS:
     void logicalRowActivated(int logicalRow);
+    void markerSelected(QString markerId);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -631,6 +634,7 @@ private:
     void ensureSpanVisible(int spanIndex);
     bool setCursorFromPlotPosition(const QPoint& position, bool snapToTransaction);
     void setMarkerFromSelectedSpan();
+    std::optional<QString> sharedMarkerAtPosition(const QPoint& position) const;
     bool activateSpanRequestRow(int spanIndex);
     bool activateSpanCompletionRow(int spanIndex);
     bool showSpanRelatedRows(int spanIndex);
@@ -670,6 +674,8 @@ private:
                              const QRect& ruler,
                              const QFontMetrics& metrics) const;
     void paintCursorRulerTag(QPainter& painter, const QRect& plot, const QRect& ruler) const;
+    void paintSharedMarkers(QPainter& painter, const QRect& plot, const QRect& ruler, const QRect& infoBar) const;
+    void paintBottomSpanSnap(QPainter& painter, const QRect& plot, const QRect& ruler) const;
     void paintRangeZoom(QPainter& painter) const;
     void paintGestureOverlay(QPainter& painter) const;
     static QString dragModeName(DragMode mode);
@@ -739,6 +745,9 @@ private:
     int verticalScrollOffset_ = 0;
     int rowHeight_ = 32;
     int hoveredSpanIndex_ = -1;
+    std::vector<TraceMarker> sharedMarkers_;
+    QString selectedMarkerId_;
+    QString hoveredMarkerId_;
     DragMode dragMode_ = DragMode::None;
     bool leftDragGestureActive_ = false;
     bool opcodeTagPressPending_ = false;

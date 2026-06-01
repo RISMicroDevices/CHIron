@@ -13,6 +13,7 @@ option(CHIRON_GUI_ENABLE_WINDEPLOYQT "Deploy the Qt runtime into the GUI build d
 option(CHIRON_GUI_ENABLE_QT_RUNTIME_DEPLOYMENT "Generate a Qt runtime deployment script for wrapper-driven deployment" OFF)
 option(CHIRON_GUI_BUILD_BENCHMARKS "Build CloganGUI performance benchmarks" ON)
 option(CHIRON_GUI_BUILD_TESTS "Build CloganGUI unit tests" ON)
+option(CHIRON_GUI_ENABLE_UNIT_TEST_PCH "Use precompiled CHIron core headers for CloganGUI unit tests" ON)
 set(CHIRON_GUI_OUTPUT_DIRECTORY "" CACHE PATH "Optional staging directory for built executables and libraries")
 set(CHIRON_GUI_DEPLOY_SCRIPT "" CACHE INTERNAL "Generated deployment script for wrapper-driven Qt runtime deployment")
 set(CHIRON_GUI_THIRD_PARTY_LICENSE_FILE
@@ -66,6 +67,7 @@ add_executable(CloganGUI
     src/main_window_internal.hpp
     src/main_window_members.hpp
     src/main_window_methods.hpp
+    src/main_window_markers.cpp
     src/main_window_optional_fields.cpp
     src/main_window_statistics.cpp
     src/main_window_topology.cpp
@@ -79,6 +81,12 @@ add_executable(CloganGUI
     src/channel_badge_painter.hpp
     src/gui_format.hpp
     src/gui_colors.hpp
+    src/marker_store.cpp
+    src/marker_store.hpp
+    src/marker_widget.cpp
+    src/marker_widget.hpp
+    src/trace_marker_overlay.cpp
+    src/trace_marker_overlay.hpp
     src/flit_transaction_keys.hpp
     src/flit_edit_adapter.cpp
     src/flit_edit_adapter.hpp
@@ -150,6 +158,8 @@ if(CHIRON_GUI_BUILD_BENCHMARKS)
         src/gui_format.hpp
         src/channel_badge_painter.hpp
         src/gui_colors.hpp
+        src/marker_store.cpp
+        src/marker_store.hpp
         src/cache_widget.cpp
         src/cache_widget.hpp
         src/flit_table_model.cpp
@@ -185,6 +195,7 @@ if(CHIRON_GUI_BUILD_TESTS)
         src/main_window_internal.hpp
         src/main_window_members.hpp
         src/main_window_methods.hpp
+        src/main_window_markers.cpp
         src/main_window_optional_fields.cpp
         src/main_window_statistics.cpp
         src/main_window_topology.cpp
@@ -198,6 +209,12 @@ if(CHIRON_GUI_BUILD_TESTS)
         src/channel_badge_painter.hpp
         src/gui_format.hpp
         src/gui_colors.hpp
+        src/marker_store.cpp
+        src/marker_store.hpp
+        src/marker_widget.cpp
+        src/marker_widget.hpp
+        src/trace_marker_overlay.cpp
+        src/trace_marker_overlay.hpp
         src/flit_transaction_keys.hpp
         src/flit_edit_adapter.cpp
         src/flit_edit_adapter.hpp
@@ -289,6 +306,16 @@ if(CHIRON_GUI_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/src
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
     )
+    if(CHIRON_GUI_ENABLE_UNIT_TEST_PCH)
+        target_precompile_headers(CloganGUIUnitTests
+            PRIVATE
+                src/config.hpp
+                src/chiron_b_adapter.hpp
+                src/chiron_eb_expresso.hpp
+                src/chiron_eb_adapter.hpp
+                src/clog_b_trace_loader.hpp
+        )
+    endif()
 endif()
 
 target_link_libraries(CloganGUI

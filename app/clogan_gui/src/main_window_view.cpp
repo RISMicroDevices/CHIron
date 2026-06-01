@@ -349,6 +349,7 @@ void MainWindow::jumpToLogicalTraceRow(const int logicalRow)
     updateAddressSelection();
     updateCacheSelection();
     updateTransactionSelection();
+    refreshMarkerViews();
     statusBar()->showMessage(QStringLiteral("Selected trace row %1.").arg(logicalRow + 1),
                              1500);
 }

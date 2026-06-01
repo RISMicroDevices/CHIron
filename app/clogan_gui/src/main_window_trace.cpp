@@ -2552,6 +2552,10 @@ void MainWindow::createSessionVisualizationWidgets(TraceViewSession& session)
                 [this](const int logicalRow) {
                     jumpToLogicalTraceRow(logicalRow);
                 });
+        connect(session.timelineWidget, &TimelineWidget::markerSelected, this,
+                [this](const QString& markerId) {
+                    toggleMarkerSelection(markerId, true);
+                });
     }
     if (!session.addressWidget && addressStack_) {
         session.addressWidget = new AddressWidget(addressStack_->parentWidget());
@@ -2583,6 +2587,10 @@ void MainWindow::createSessionVisualizationWidgets(TraceViewSession& session)
         connect(session.transactionWidget, &TransactionWidget::logicalRowActivated, this,
                 [this](const int logicalRow) {
                     jumpToLogicalTraceRow(logicalRow);
+                });
+        connect(session.transactionWidget, &TransactionWidget::markerSelected, this,
+                [this](const QString& markerId) {
+                    toggleMarkerSelection(markerId, true);
                 });
     }
 }
@@ -2651,6 +2659,7 @@ void MainWindow::populateSessionVisualizationWidgets(TraceViewSession& session)
     if (session.traceSession) {
         if (session.timelineWidget) {
             session.timelineWidget->setTraceSession(session.traceSession);
+            session.timelineWidget->setMarkers(session.markers, session.selectedMarkerId);
         }
         if (session.addressWidget) {
             session.addressWidget->setTraceSession(session.traceSession);
@@ -2663,6 +2672,7 @@ void MainWindow::populateSessionVisualizationWidgets(TraceViewSession& session)
         }
         if (session.transactionWidget) {
             session.transactionWidget->setTraceSession(session.traceSession);
+            session.transactionWidget->setMarkers(session.markers, session.selectedMarkerId);
         }
         return;
     }
@@ -2671,12 +2681,14 @@ void MainWindow::populateSessionVisualizationWidgets(TraceViewSession& session)
         std::vector<FlitRecord> sourceRows = session.flitModel->sourceRowsSnapshot();
         if (session.timelineWidget) {
             session.timelineWidget->setRows(sourceRows);
+            session.timelineWidget->setMarkers(session.markers, session.selectedMarkerId);
         }
         if (session.latencyWidget) {
             session.latencyWidget->setRows(sourceRows);
         }
         if (session.transactionWidget) {
             session.transactionWidget->setRows(sourceRows);
+            session.transactionWidget->setMarkers(session.markers, session.selectedMarkerId);
         }
         if (session.cacheWidget) {
             session.cacheWidget->setRows({});
@@ -2852,6 +2864,9 @@ void MainWindow::bindActiveSessionUi()
             traceCacheMinimap_->setFlitModel(flitModel_);
             traceCacheMinimap_->setTraceSession(currentTraceSession_);
         }
+        if (traceMarkerOverlay_) {
+            traceMarkerOverlay_->setFlitModel(flitModel_);
+        }
         wireTraceSelectionModel();
     }
     bindClipboardWidgetToActiveScope();
@@ -2966,6 +2981,7 @@ void MainWindow::bindActiveSessionUi()
     updateMetrics();
     applyTraceTableRowHeight();
     bindClipboardWidgetToActiveScope();
+    refreshMarkerViews();
     updateSearchNavigationButtons();
     refreshTopologyView();
     refreshSessionTabs();
@@ -3018,6 +3034,7 @@ void MainWindow::bindActiveSessionUi()
     if (session && transactionWidget_ && !session->transactionViewState.isEmpty()) {
         transactionWidget_->restoreViewState(session->transactionViewState);
     }
+    refreshMarkerViews();
 
     switchingTraceSession_ = false;
     scheduleDiagnosticsSnapshotRefresh();
@@ -3227,7 +3244,17 @@ void MainWindow::wireTraceModelSignals(FlitTableModel* model, FlitDetailsModel* 
     });
     connect(model, &FlitTableModel::undoRedoAvailabilityChanged, this, [this, model](bool, bool) {
         if (model == flitModel_) {
+            updateEditActions();
             scheduleDiagnosticsSnapshotRefresh();
+        }
+    });
+    connect(model, &FlitTableModel::editCommandPushed, this, [this, model](const QString& text) {
+        for (std::unique_ptr<TraceViewSession>& session : traceSessions_) {
+            if (!session || session->flitModel != model) {
+                continue;
+            }
+            recordUnifiedRoute(*session, UnifiedUndoRouteKind::Flit, text);
+            break;
         }
     });
 }
@@ -3647,16 +3674,35 @@ void MainWindow::showFlitRowContextMenu(const QPoint& position)
     deleteRowAction->setShortcut(QKeySequence::Delete);
     deleteRowAction->setEnabled(editable && index.isValid());
     menu.addSeparator();
-    QAction* undoAction = menu.addAction(flitModel_->undoText().isEmpty()
+    QAction* undoAction = menu.addAction(unifiedUndoText().isEmpty()
                                              ? QStringLiteral("Undo")
-                                             : QStringLiteral("Undo %1").arg(flitModel_->undoText()));
+                                             : QStringLiteral("Undo %1").arg(unifiedUndoText()));
     undoAction->setShortcut(QKeySequence::Undo);
-    undoAction->setEnabled(editable && flitModel_->canUndo());
-    QAction* redoAction = menu.addAction(flitModel_->redoText().isEmpty()
+    undoAction->setEnabled(canUndoUnified());
+    QAction* redoAction = menu.addAction(unifiedRedoText().isEmpty()
                                              ? QStringLiteral("Redo")
-                                             : QStringLiteral("Redo %1").arg(flitModel_->redoText()));
+                                             : QStringLiteral("Redo %1").arg(unifiedRedoText()));
     redoAction->setShortcut(QKeySequence::Redo);
-    redoAction->setEnabled(editable && flitModel_->canRedo());
+    redoAction->setEnabled(canRedoUnified());
+    menu.addSeparator();
+    QMenu* markerMenu = menu.addMenu(QStringLiteral("Marker"));
+    QAction* markerAddAction = markerMenu->addAction(QStringLiteral("Add Marker"));
+    QAction* markerEditAction = markerMenu->addAction(QStringLiteral("Edit Marker"));
+    QAction* markerRemoveAction = markerMenu->addAction(QStringLiteral("Remove Marker"));
+    markerMenu->addSeparator();
+    QAction* markerShowDockAction = markerMenu->addAction(QStringLiteral("Show Marker Dock"));
+    markerMenu->addSeparator();
+    QAction* markerLoadAction = markerMenu->addAction(QStringLiteral("Load Markers..."));
+    QAction* markerSaveAction = markerMenu->addAction(QStringLiteral("Save Markers..."));
+    const int selectedLogicalRow = index.isValid() ? flitModel_->logicalRowAt(index.row()) : -1;
+    TraceMarker* selectedMarker = session && selectedLogicalRow >= 0
+        ? markerForLogicalRow(*session, selectedLogicalRow)
+        : nullptr;
+    markerAddAction->setEnabled(session && selectedLogicalRow >= 0 && !selectedMarker);
+    markerEditAction->setEnabled(session && selectedMarker);
+    markerRemoveAction->setEnabled(session && selectedMarker);
+    markerSaveAction->setEnabled(session && !session->markers.empty());
+    markerLoadAction->setEnabled(session != nullptr);
 
     QAction* selected = menu.exec(flitView_->viewport()->mapToGlobal(position));
     if (selected == clipboardSingleSessionAction) {
@@ -3690,9 +3736,21 @@ void MainWindow::showFlitRowContextMenu(const QPoint& position)
     } else if (selected == deleteRowAction) {
         deleteSelectedFlitRow();
     } else if (selected == undoAction) {
-        undoFlitTableEdit();
+        undoUnifiedEdit();
     } else if (selected == redoAction) {
-        redoFlitTableEdit();
+        redoUnifiedEdit();
+    } else if (selected == markerAddAction) {
+        addMarkerAtLogicalRow(selectedLogicalRow);
+    } else if (selected == markerEditAction && selectedMarker) {
+        editMarker(selectedMarker->id);
+    } else if (selected == markerRemoveAction && selectedMarker) {
+        removeMarker(selectedMarker->id);
+    } else if (selected == markerShowDockAction) {
+        showMarkerDock();
+    } else if (selected == markerLoadAction) {
+        loadMarkers();
+    } else if (selected == markerSaveAction) {
+        saveMarkers();
     }
 }
 
@@ -5260,24 +5318,12 @@ void MainWindow::deleteSelectedFlitRow()
 
 void MainWindow::undoFlitTableEdit()
 {
-    const QWidget* focusWidget = QApplication::focusWidget();
-    const TraceViewSession* session = activeTraceViewSession();
-    if (!session || !session->editModeEnabled || !flitModel_ || !flitView_
-        || (focusWidget != flitView_ && focusWidget != flitView_->viewport())) {
-        return;
-    }
-    flitModel_->undoEdit();
+    undoUnifiedEdit();
 }
 
 void MainWindow::redoFlitTableEdit()
 {
-    const QWidget* focusWidget = QApplication::focusWidget();
-    const TraceViewSession* session = activeTraceViewSession();
-    if (!session || !session->editModeEnabled || !flitModel_ || !flitView_
-        || (focusWidget != flitView_ && focusWidget != flitView_->viewport())) {
-        return;
-    }
-    flitModel_->redoEdit();
+    redoUnifiedEdit();
 }
 
 void MainWindow::resetNoSessionState()
@@ -5302,6 +5348,12 @@ void MainWindow::resetNoSessionState()
     }
     if (transactionEmptyWidget_) {
         transactionEmptyWidget_->clear();
+    }
+    if (markerWidget_) {
+        markerWidget_->clear();
+    }
+    if (traceMarkerOverlay_) {
+        traceMarkerOverlay_->clear();
     }
     refreshLatencyDiffSessions();
     currentTracePath_.clear();

@@ -9,6 +9,24 @@
         PreserveInputOrder
     };
 
+    enum class UnifiedUndoRouteKind {
+        Flit = 0,
+        Marker
+    };
+
+    struct UnifiedUndoRoute {
+        UnifiedUndoRouteKind kind = UnifiedUndoRouteKind::Flit;
+        QString text;
+    };
+
+    struct MarkerUndoCommand {
+        QString text;
+        std::vector<TraceMarker> beforeMarkers;
+        QString beforeSelectedMarkerId;
+        std::vector<TraceMarker> afterMarkers;
+        QString afterSelectedMarkerId;
+    };
+
     ads::CDockManager* dockManager_ = nullptr;
     ads::CDockWidget* topologyDock_ = nullptr;
     ads::CDockWidget* timelineDock_ = nullptr;
@@ -18,12 +36,14 @@
     ads::CDockWidget* latencyDiffDock_ = nullptr;
     ads::CDockWidget* transactionDock_ = nullptr;
     ads::CDockWidget* clipboardDock_ = nullptr;
+    ads::CDockWidget* markerDock_ = nullptr;
     ads::CDockWidget* statisticsDock_ = nullptr;
     FlitTableModel* flitModel_ = nullptr;
     FlitDetailsModel* detailModel_ = nullptr;
     QTableView* flitView_ = nullptr;
     QTableView* detailView_ = nullptr;
     TraceCacheLineMinimap* traceCacheMinimap_ = nullptr;
+    TraceMarkerOverlay* traceMarkerOverlay_ = nullptr;
     TraceCacheLineMinimap* clipboardCacheMinimap_ = nullptr;
     QWidget* traceToolbar_ = nullptr;
     QWidget* traceToolbarContent_ = nullptr;
@@ -61,6 +81,7 @@
     LatencyWidget* latencyEmptyWidget_ = nullptr;
     TransactionWidget* transactionEmptyWidget_ = nullptr;
     ClipboardWidget* clipboardWidget_ = nullptr;
+    MarkerWidget* markerWidget_ = nullptr;
     LatencyDiffWidget* latencyDiffWidget_ = nullptr;
     TimelineWidget* timelineWidget_ = nullptr;
     AddressWidget* addressWidget_ = nullptr;
@@ -149,6 +170,14 @@
         LatencyWidget* latencyWidget = nullptr;
         TransactionWidget* transactionWidget = nullptr;
         std::vector<ClipboardEntry> clipboardEntries;
+        std::vector<TraceMarker> markers;
+        MarkerStickyState markerStickyState;
+        QString selectedMarkerId;
+        std::vector<MarkerUndoCommand> markerUndoCommands;
+        std::size_t markerUndoIndex = 0;
+        std::vector<UnifiedUndoRoute> unifiedUndoRoutes;
+        std::vector<UnifiedUndoRoute> unifiedRedoRoutes;
+        bool applyingUnifiedUndoRedo = false;
         bool rowBacked = false;
         int selectedLogicalRow = -1;
         int tableVerticalScrollValue = 0;

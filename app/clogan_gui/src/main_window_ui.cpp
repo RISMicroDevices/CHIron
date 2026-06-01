@@ -559,6 +559,10 @@ void MainWindow::buildUi()
                                                    TraceCacheLineMinimap::HostMode::MainTrace,
                                                    flitView_->parentWidget());
     traceCacheMinimap_->setFlitModel(flitModel_);
+    traceMarkerOverlay_ = new TraceMarkerOverlay(flitView_, flitView_->parentWidget());
+    traceMarkerOverlay_->setFlitModel(flitModel_);
+    traceMarkerOverlay_->setCacheMinimap(traceCacheMinimap_);
+    traceCacheMinimap_->setRightReservedWidth(18);
     tracePanelLayout->addWidget(traceContentHost, 1);
 
     detailView_ = new QTableView(dockManager_);
@@ -839,6 +843,7 @@ void MainWindow::buildUi()
     transactionStack_->addWidget(transactionEmptyWidget_);
 
     clipboardWidget_ = new ClipboardWidget(dockManager_);
+    markerWidget_ = new MarkerWidget(dockManager_);
     clipboardCacheMinimap_ = new TraceCacheLineMinimap(clipboardWidget_->tableView(),
                                                        TraceCacheLineMinimap::HostMode::Clipboard,
                                                        clipboardWidget_->tableView()->parentWidget());
@@ -848,6 +853,21 @@ void MainWindow::buildUi()
     });
     connect(clipboardWidget_, &ClipboardWidget::rowActivated, this, &MainWindow::handleClipboardRowActivated);
     connect(clipboardWidget_, &ClipboardWidget::saveRequested, this, &MainWindow::saveClipboard);
+    connect(markerWidget_, &MarkerWidget::markerActivated, this, [this](const QString& markerId) {
+        selectMarker(markerId, true);
+    });
+    connect(markerWidget_, &MarkerWidget::markerSelected, this, [this](const QString& markerId) {
+        toggleMarkerSelection(markerId, false);
+    });
+    connect(markerWidget_, &MarkerWidget::markerEdited, this, &MainWindow::updateMarker);
+    connect(markerWidget_, &MarkerWidget::markerRemoved, this, &MainWindow::removeMarker);
+    connect(markerWidget_, &MarkerWidget::stickyStateChanged, this, [this](MarkerStickyState state) {
+        if (TraceViewSession* session = activeTraceViewSession()) {
+            session->markerStickyState = std::move(state);
+        }
+    });
+    connect(markerWidget_, &MarkerWidget::saveRequested, this, &MainWindow::saveMarkers);
+    connect(markerWidget_, &MarkerWidget::loadRequested, this, &MainWindow::loadMarkers);
 
     auto* traceDock = makeDockWidget(QStringLiteral("Flits"), tracePanel, true);
     timelineDock_ = makeDockWidget(QStringLiteral("Timeline"), timelineHost, true);
@@ -858,6 +878,7 @@ void MainWindow::buildUi()
     latencyDiffDock_ = makeDockWidget(QStringLiteral("Latency Diff"), latencyDiffWidget_, true);
     transactionDock_ = makeDockWidget(QStringLiteral("Transaction"), transactionHost, true);
     clipboardDock_ = makeDockWidget(QStringLiteral("Clipboard"), clipboardWidget_, true);
+    markerDock_ = makeDockWidget(QStringLiteral("Marker"), markerWidget_, true);
     auto* detailsDock = makeDockWidget(QStringLiteral("Fields"), detailView_);
     auto* inspectorDock = makeDockWidget(QStringLiteral("Inspection"), inspectorPanel);
     statisticsDock_ = makeDockWidget(QStringLiteral("Statistics"), statisticsPanel, true);
@@ -874,6 +895,7 @@ void MainWindow::buildUi()
     dockManager_->addDockWidget(BottomDockWidgetArea, latencyDiffDock_, traceArea);
     dockManager_->addDockWidget(BottomDockWidgetArea, transactionDock_, traceArea);
     dockManager_->addDockWidget(BottomDockWidgetArea, clipboardDock_, traceArea);
+    dockManager_->addDockWidget(BottomDockWidgetArea, markerDock_, traceArea);
     dockManager_->addDockWidget(BottomDockWidgetArea, statisticsDock_, traceArea);
     dockManager_->addDockWidget(BottomDockWidgetArea, topologyDock_, traceArea);
     latencyDock_->closeDockWidget();
@@ -881,6 +903,7 @@ void MainWindow::buildUi()
     latencyDiffDock_->closeDockWidget();
     transactionDock_->closeDockWidget();
     clipboardDock_->closeDockWidget();
+    markerDock_->closeDockWidget();
     statisticsDock_->closeDockWidget();
     topologyDock_->closeDockWidget();
 
@@ -921,6 +944,7 @@ void MainWindow::buildUi()
     windowsMenu->addAction(latencyDiffDock_->toggleViewAction());
     windowsMenu->addAction(transactionDock_->toggleViewAction());
     windowsMenu->addAction(clipboardDock_->toggleViewAction());
+    windowsMenu->addAction(markerDock_->toggleViewAction());
     windowsMenu->addAction(detailsDock->toggleViewAction());
     windowsMenu->addAction(inspectorDock->toggleViewAction());
     windowsMenu->addAction(statisticsDock_->toggleViewAction());
@@ -1192,6 +1216,22 @@ void MainWindow::wireSignals()
     connect(nextHighlightShortcut, &QShortcut::activated, this, [this]() {
         navigateSearchHighlight(true);
     });
+    auto* previousMarkerShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Up), this);
+    previousMarkerShortcut->setContext(Qt::WindowShortcut);
+    connect(previousMarkerShortcut, &QShortcut::activated, this, [this]() {
+        navigateMarker(false);
+    });
+    auto* nextMarkerShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Down), this);
+    nextMarkerShortcut->setContext(Qt::WindowShortcut);
+    connect(nextMarkerShortcut, &QShortcut::activated, this, [this]() {
+        navigateMarker(true);
+    });
+    auto* undoShortcut = new QShortcut(QKeySequence::Undo, this);
+    undoShortcut->setContext(Qt::WindowShortcut);
+    connect(undoShortcut, &QShortcut::activated, this, &MainWindow::undoUnifiedEdit);
+    auto* redoShortcut = new QShortcut(QKeySequence::Redo, this);
+    redoShortcut->setContext(Qt::WindowShortcut);
+    connect(redoShortcut, &QShortcut::activated, this, &MainWindow::redoUnifiedEdit);
 
     connect(reqButton_, &QToolButton::toggled, this, [this](const bool checked) {
         flitModel_->setChannelVisible(FlitChannel::Req, checked);
@@ -1236,6 +1276,7 @@ void MainWindow::wireSignals()
             ? flitView_->selectionModel()->currentIndex()
             : QModelIndex();
         updateXactionRowsTable(current.isValid() ? flitModel_->recordAt(current.row()) : nullptr);
+        refreshMarkerViews();
         statusBar()->showMessage(checked
                                      ? QStringLiteral("Node labels enabled.")
                                      : QStringLiteral("Node labels disabled."),
@@ -1330,7 +1371,48 @@ void MainWindow::wireSignals()
                     traceCacheMapButton_->setChecked(visible);
                     traceCacheMapButton_->setText(visible ? QStringLiteral("Hide")
                                                           : QStringLiteral("Show"));
+                    if (traceMarkerOverlay_) {
+                        QTimer::singleShot(0, traceMarkerOverlay_, [this]() {
+                            if (traceMarkerOverlay_) {
+                                traceMarkerOverlay_->ensureOnTop();
+                            }
+                        });
+                    }
                     scheduleDiagnosticsSnapshotRefresh();
+                });
+    }
+    if (traceMarkerOverlay_) {
+        connect(traceMarkerOverlay_, &TraceMarkerOverlay::logicalRowActivated,
+                this, &MainWindow::jumpToLogicalTraceRow);
+        connect(traceMarkerOverlay_, &TraceMarkerOverlay::markerSelected,
+                this, [this](const QString& markerId) {
+                    selectMarker(markerId, false);
+                });
+        connect(traceMarkerOverlay_, &TraceMarkerOverlay::markerSelectRequested,
+                this, [this](const QString& markerId) {
+                    toggleMarkerSelection(markerId, false);
+                });
+        connect(traceMarkerOverlay_, &TraceMarkerOverlay::markerEditRequested,
+                this, &MainWindow::editMarker);
+        connect(traceMarkerOverlay_, &TraceMarkerOverlay::markerRemoveRequested,
+                this, &MainWindow::removeMarker);
+        connect(traceMarkerOverlay_, &TraceMarkerOverlay::markerMoveStarted,
+                this, [this](const QString&) {
+                    statusBar()->showMessage(QStringLiteral("Click a trace row to move marker; Esc cancels."));
+                });
+        connect(traceMarkerOverlay_, &TraceMarkerOverlay::markerMoveDropped,
+                this, [this](const QString& markerId, const int logicalRow) {
+                    if (moveMarker(markerId, logicalRow)) {
+                        if (traceMarkerOverlay_) {
+                            traceMarkerOverlay_->finishMarkerMove();
+                        }
+                    } else if (traceMarkerOverlay_) {
+                        statusBar()->showMessage(QStringLiteral("Target row already has a marker."), 2200);
+                    }
+                });
+        connect(traceMarkerOverlay_, &TraceMarkerOverlay::markerMoveCancelled,
+                this, [this](const QString&) {
+                    statusBar()->showMessage(QStringLiteral("Marker move cancelled."), 1200);
                 });
     }
     if (clipboardCacheMinimap_) {
@@ -1367,6 +1449,7 @@ void MainWindow::wireSignals()
             updateTimelineSelection();
             updateAddressSelection();
             updateTransactionSelection();
+            refreshMarkerViews();
         }
     });
 
@@ -1378,6 +1461,7 @@ void MainWindow::wireSignals()
         const bool highlighted = flitModel_->toggleTransactionHighlightFromVisibleRow(index.row());
         if (!highlighted) {
             statusBar()->showMessage(QStringLiteral("Cleared transactional highlight."), 2500);
+            refreshMarkerViews();
             if (xactionDebugMode_) {
                 showXactionDebugDialog(index.row(), false);
             }
@@ -1393,23 +1477,10 @@ void MainWindow::wireSignals()
         if (xactionDebugMode_) {
             showXactionDebugDialog(index.row(), true);
         }
+        refreshMarkerViews();
     });
 
     connect(flitView_, &QWidget::customContextMenuRequested, this, &MainWindow::showFlitRowContextMenu);
-
-    auto* undoFlitShortcut = new QShortcut(QKeySequence::Undo, flitView_);
-    undoFlitShortcut->setContext(Qt::WidgetShortcut);
-    connect(undoFlitShortcut, &QShortcut::activated, this, &MainWindow::undoFlitTableEdit);
-    auto* undoFlitViewportShortcut = new QShortcut(QKeySequence::Undo, flitView_->viewport());
-    undoFlitViewportShortcut->setContext(Qt::WidgetShortcut);
-    connect(undoFlitViewportShortcut, &QShortcut::activated, this, &MainWindow::undoFlitTableEdit);
-
-    auto* redoFlitShortcut = new QShortcut(QKeySequence::Redo, flitView_);
-    redoFlitShortcut->setContext(Qt::WidgetShortcut);
-    connect(redoFlitShortcut, &QShortcut::activated, this, &MainWindow::redoFlitTableEdit);
-    auto* redoFlitViewportShortcut = new QShortcut(QKeySequence::Redo, flitView_->viewport());
-    redoFlitViewportShortcut->setContext(Qt::WidgetShortcut);
-    connect(redoFlitViewportShortcut, &QShortcut::activated, this, &MainWindow::redoFlitTableEdit);
 
     auto* deleteFlitShortcut = new QShortcut(QKeySequence::Delete, flitView_);
     deleteFlitShortcut->setContext(Qt::WidgetShortcut);
