@@ -45,16 +45,16 @@ namespace CHI {
         class RNCacheStateMapEventBase {
         protected:
             RNCacheStateMap<config>&    host;
-            const Xaction<config>&      xaction;
+            const Xaction<config>*      xaction;
 
         public:
-            RNCacheStateMapEventBase(RNCacheStateMap<config>& host, const Xaction<config>& xaction) noexcept;
+            RNCacheStateMapEventBase(RNCacheStateMap<config>& host, const Xaction<config>* xaction) noexcept;
 
         public:
             RNCacheStateMap<config>&        GetRNCacheStateMap() noexcept;
             const RNCacheStateMap<config>&  GetRNCacheStateMap() const noexcept;
 
-            const Xaction<config>&          GetXaction() const noexcept;
+            const Xaction<config>*          GetXaction() const noexcept;
         };
 
         template<FlitConfigurationConcept config>
@@ -65,7 +65,7 @@ namespace CHI {
 
         public:
             RNCacheStateMapDeniedEventBase(RNCacheStateMap<config>&    host,
-                                           const Xaction<config>&      xaction,
+                                           const Xaction<config>*      xaction,
                                            XactDenialEnum              denial,
                                            const std::string&          message = "") noexcept;
 
@@ -77,71 +77,100 @@ namespace CHI {
         };
 
         template<FlitConfigurationConcept config>
-        class RNCacheStateMapDeniedTXRSPEvent : public RNCacheStateMapDeniedEventBase<config>,
-                                                public Gravity::Event<RNCacheStateMapDeniedTXRSPEvent<config>> {
+        class RNCacheStateMapDeniedRequestEventBase : public RNCacheStateMapDeniedEventBase<config> {
+        protected:
+            const FiredRequestFlit<config>& flit;
+
+        public:
+            RNCacheStateMapDeniedRequestEventBase(RNCacheStateMap<config>&        host,
+                                                 const Xaction<config>*           xaction,
+                                                 XactDenialEnum                   denial,
+                                                 const FiredRequestFlit<config>&  flit,
+                                                 const std::string&               message = "") noexcept;
+
+        public:
+            const FiredRequestFlit<config>& GetFlit() const noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapDeniedResponseEventBase : public RNCacheStateMapDeniedEventBase<config> {
         protected:
             const FiredResponseFlit<config>& flit;
 
+        public:
+            RNCacheStateMapDeniedResponseEventBase(RNCacheStateMap<config>&         host,
+                                                   const Xaction<config>*           xaction,
+                                                   XactDenialEnum                   denial,
+                                                   const FiredResponseFlit<config>& flit,
+                                                   const std::string&               message = "") noexcept;
+        public:
+            const FiredResponseFlit<config>& GetFlit() const noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapDeniedTXREQEvent : public RNCacheStateMapDeniedRequestEventBase<config>,
+                                                public Gravity::Event<RNCacheStateMapDeniedTXREQEvent<config>> {
+        public:
+            RNCacheStateMapDeniedTXREQEvent(RNCacheStateMap<config>&            host,
+                                            const Xaction<config>*              xaction,
+                                            XactDenialEnum                      denial,
+                                            const FiredRequestFlit<config>&     flit,
+                                            const std::string&                  message = "") noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapDeniedRXSNPEvent : public RNCacheStateMapDeniedRequestEventBase<config>,
+                                                public Gravity::Event<RNCacheStateMapDeniedRXSNPEvent<config>> {
+        public:
+            RNCacheStateMapDeniedRXSNPEvent(RNCacheStateMap<config>&            host,
+                                            const Xaction<config>*              xaction,
+                                            XactDenialEnum                      denial,
+                                            const FiredRequestFlit<config>&     flit,
+                                            const std::string&                  message = "") noexcept;
+        };
+
+        template<FlitConfigurationConcept config>
+        class RNCacheStateMapDeniedTXRSPEvent : public RNCacheStateMapDeniedResponseEventBase<config>,
+                                                public Gravity::Event<RNCacheStateMapDeniedTXRSPEvent<config>> {
         public:
             RNCacheStateMapDeniedTXRSPEvent(RNCacheStateMap<config>&            host,
-                                            const Xaction<config>&              xaction,
+                                            const Xaction<config>*              xaction,
                                             XactDenialEnum                      denial,
                                             const FiredResponseFlit<config>&    flit,
                                             const std::string&                  message = "") noexcept;
-
-        public:
-            const FiredResponseFlit<config>& GetFlit() const noexcept;
         };
 
         template<FlitConfigurationConcept config>
-        class RNCacheStateMapDeniedTXDATEvent : public RNCacheStateMapDeniedEventBase<config>,
+        class RNCacheStateMapDeniedTXDATEvent : public RNCacheStateMapDeniedResponseEventBase<config>,
                                                 public Gravity::Event<RNCacheStateMapDeniedTXDATEvent<config>> {
-        protected:
-            const FiredResponseFlit<config>& flit;
-
         public:
             RNCacheStateMapDeniedTXDATEvent(RNCacheStateMap<config>&            host,
-                                            const Xaction<config>&              xaction,
+                                            const Xaction<config>*              xaction,
                                             XactDenialEnum                      denial,
                                             const FiredResponseFlit<config>&    flit,
                                             const std::string&                  message = "") noexcept;
-
-        public:
-            const FiredResponseFlit<config>& GetFlit() const noexcept;
         };
 
         template<FlitConfigurationConcept config>
-        class RNCacheStateMapDeniedRXRSPEvent : public RNCacheStateMapDeniedEventBase<config>,
+        class RNCacheStateMapDeniedRXRSPEvent : public RNCacheStateMapDeniedResponseEventBase<config>,
                                                 public Gravity::Event<RNCacheStateMapDeniedRXRSPEvent<config>> {
-        protected:
-            const FiredResponseFlit<config>& flit;
-
         public:
             RNCacheStateMapDeniedRXRSPEvent(RNCacheStateMap<config>&            host,
-                                            const Xaction<config>&              xaction,
+                                            const Xaction<config>*              xaction,
                                             XactDenialEnum                      denial,
                                             const FiredResponseFlit<config>&    flit,
                                             const std::string&                  message = "") noexcept;
-
-        public:
-            const FiredResponseFlit<config>& GetFlit() const noexcept;
         };
 
         template<FlitConfigurationConcept config>
-        class RNCacheStateMapDeniedRXDATEvent : public RNCacheStateMapDeniedEventBase<config>,
+        class RNCacheStateMapDeniedRXDATEvent : public RNCacheStateMapDeniedResponseEventBase<config>,
                                                 public Gravity::Event<RNCacheStateMapDeniedRXDATEvent<config>> {
-        protected:
-            const FiredResponseFlit<config>& flit;
-
         public:
             RNCacheStateMapDeniedRXDATEvent(RNCacheStateMap<config>&            host,
-                                            const Xaction<config>&              xaction,
+                                            const Xaction<config>*              xaction,
                                             XactDenialEnum                      denial,
                                             const FiredResponseFlit<config>&    flit,
                                             const std::string&                  message = "") noexcept;
-
-        public:
-            const FiredResponseFlit<config>& GetFlit() const noexcept;
         };
 
 
@@ -150,6 +179,8 @@ namespace CHI {
         public:
             class EventHub {
             public:
+                Gravity::EventBus<RNCacheStateMapDeniedTXREQEvent<config>>   OnDeniedTXREQ;
+                Gravity::EventBus<RNCacheStateMapDeniedRXSNPEvent<config>>   OnDeniedRXSNP;
                 Gravity::EventBus<RNCacheStateMapDeniedTXRSPEvent<config>>   OnDeniedTXRSP;
                 Gravity::EventBus<RNCacheStateMapDeniedTXDATEvent<config>>   OnDeniedTXDAT;
                 Gravity::EventBus<RNCacheStateMapDeniedRXRSPEvent<config>>   OnDeniedRXRSP;
@@ -214,23 +245,33 @@ namespace CHI {
             std::pair<CacheState, bool> ExcavateWithSeer(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
             std::pair<CacheState, bool> EvaluateWithSeer(Flits::REQ<config>::addr_t::value_type addr) const noexcept;
 
+            XactDenialEnum  DeniedTXREQ(XactDenialEnum              denial,
+                                        const Xaction<config>*      xaction,
+                                        uint64_t                    time,
+                                        const Flits::REQ<config>&   flit,
+                                        const std::string&          message = "") noexcept;
+            XactDenialEnum  DeniedRXSNP(XactDenialEnum              denial,
+                                        const Xaction<config>*      xaction,
+                                        uint64_t                    time,
+                                        const Flits::SNP<config>&   flit,
+                                        const std::string&          message = "") noexcept;
             XactDenialEnum  DeniedTXRSP(XactDenialEnum              denial,
-                                        const Xaction<config>&      xaction,
+                                        const Xaction<config>*      xaction,
                                         uint64_t                    time,
                                         const Flits::RSP<config>&   flit,
                                         const std::string&          message = "") noexcept;
             XactDenialEnum  DeniedTXDAT(XactDenialEnum              denial,
-                                        const Xaction<config>&      xaction,
+                                        const Xaction<config>*      xaction,
                                         uint64_t                    time,
                                         const Flits::DAT<config>&   flit,
                                         const std::string&          message = "") noexcept;
             XactDenialEnum  DeniedRXRSP(XactDenialEnum              denial,
-                                        const Xaction<config>&      xaction,
+                                        const Xaction<config>*      xaction,
                                         uint64_t                    time,
                                         const Flits::RSP<config>&   flit,
                                         const std::string&          message = "") noexcept;
             XactDenialEnum  DeniedRXDAT(XactDenialEnum              denial,
-                                        const Xaction<config>&      xaction,
+                                        const Xaction<config>*      xaction,
                                         uint64_t                    time,
                                         const Flits::DAT<config>&   flit,
                                         const std::string&          message = "") noexcept;
@@ -288,7 +329,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline RNCacheStateMapEventBase<config>::RNCacheStateMapEventBase(
         RNCacheStateMap<config>&    host,
-        const Xaction<config>&      xaction) noexcept
+        const Xaction<config>*      xaction) noexcept
         : host      (host)
         , xaction   (xaction)
     { }
@@ -306,7 +347,7 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
-    inline const Xaction<config>& RNCacheStateMapEventBase<config>::GetXaction() const noexcept
+    inline const Xaction<config>* RNCacheStateMapEventBase<config>::GetXaction() const noexcept
     {
         return xaction;
     }
@@ -314,7 +355,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline RNCacheStateMapDeniedEventBase<config>::RNCacheStateMapDeniedEventBase(
         RNCacheStateMap<config>&    host,
-        const Xaction<config>&      xaction,
+        const Xaction<config>*      xaction,
         XactDenialEnum              denial,
         const std::string&          message) noexcept
         : RNCacheStateMapEventBase<config> (host, xaction)
@@ -341,76 +382,104 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
-    inline RNCacheStateMapDeniedTXRSPEvent<config>::RNCacheStateMapDeniedTXRSPEvent(
-        RNCacheStateMap<config>&    host,
-        const Xaction<config>&      xaction,
-        XactDenialEnum              denial,
-        const FiredResponseFlit<config>& flit,
-        const std::string&          message) noexcept
-        : RNCacheStateMapDeniedEventBase<config>   (host, xaction, denial, message)
-        , flit                                     (flit)
+    inline RNCacheStateMapDeniedRequestEventBase<config>::RNCacheStateMapDeniedRequestEventBase(
+        RNCacheStateMap<config>&            host,
+        const Xaction<config>*              xaction,
+        XactDenialEnum                      denial,
+        const FiredRequestFlit<config>&     flit,
+        const std::string&                  message) noexcept
+        : RNCacheStateMapDeniedEventBase<config>    (host, xaction, denial, message)
+        , flit                                      (flit)
     { }
 
     template<FlitConfigurationConcept config>
-    inline const FiredResponseFlit<config>& RNCacheStateMapDeniedTXRSPEvent<config>::GetFlit() const noexcept
+    inline const FiredRequestFlit<config>& RNCacheStateMapDeniedRequestEventBase<config>::GetFlit() const noexcept
     {
         return flit;
     }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMapDeniedResponseEventBase<config>::RNCacheStateMapDeniedResponseEventBase(
+        RNCacheStateMap<config>&         host,
+        const Xaction<config>*           xaction,
+        XactDenialEnum                   denial,
+        const FiredResponseFlit<config>& flit,
+        const std::string&               message) noexcept
+        : RNCacheStateMapDeniedEventBase<config>    (host, xaction, denial, message)
+        , flit                                      (flit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>& RNCacheStateMapDeniedResponseEventBase<config>::GetFlit() const noexcept
+    {
+        return flit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMapDeniedTXREQEvent<config>::RNCacheStateMapDeniedTXREQEvent(
+        RNCacheStateMap<config>&            host,
+        const Xaction<config>*              xaction,
+        XactDenialEnum                      denial,
+        const FiredRequestFlit<config>&     flit,
+        const std::string&                  message) noexcept
+        : RNCacheStateMapDeniedRequestEventBase<config>(host, xaction, denial, flit, message)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMapDeniedRXSNPEvent<config>::RNCacheStateMapDeniedRXSNPEvent(
+        RNCacheStateMap<config>&            host,
+        const Xaction<config>*              xaction,
+        XactDenialEnum                      denial,
+        const FiredRequestFlit<config>&     flit,
+        const std::string&                  message) noexcept
+        : RNCacheStateMapDeniedRequestEventBase<config>(host, xaction, denial, flit, message)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline RNCacheStateMapDeniedTXRSPEvent<config>::RNCacheStateMapDeniedTXRSPEvent(
+        RNCacheStateMap<config>&    host,
+        const Xaction<config>*      xaction,
+        XactDenialEnum              denial,
+        const FiredResponseFlit<config>& flit,
+        const std::string&          message) noexcept
+        : RNCacheStateMapDeniedResponseEventBase<config>(host, xaction, denial, flit, message)
+    { }
 
     template<FlitConfigurationConcept config>
     inline RNCacheStateMapDeniedTXDATEvent<config>::RNCacheStateMapDeniedTXDATEvent(
         RNCacheStateMap<config>&    host,
-        const Xaction<config>&      xaction,
+        const Xaction<config>*      xaction,
         XactDenialEnum              denial,
         const FiredResponseFlit<config>& flit,
         const std::string&          message) noexcept
-        : RNCacheStateMapDeniedEventBase<config>   (host, xaction, denial, message)
-        , flit                                     (flit)
+        : RNCacheStateMapDeniedResponseEventBase<config>(host, xaction, denial, flit, message)
     { }
-
-    template<FlitConfigurationConcept config>
-    inline const FiredResponseFlit<config>& RNCacheStateMapDeniedTXDATEvent<config>::GetFlit() const noexcept
-    {
-        return flit;
-    }
 
     template<FlitConfigurationConcept config>
     inline RNCacheStateMapDeniedRXRSPEvent<config>::RNCacheStateMapDeniedRXRSPEvent(
         RNCacheStateMap<config>&    host,
-        const Xaction<config>&      xaction,
+        const Xaction<config>*      xaction,
         XactDenialEnum              denial,
         const FiredResponseFlit<config>& flit,
         const std::string&          message) noexcept
-        : RNCacheStateMapDeniedEventBase<config>   (host, xaction, denial, message)
-        , flit                                     (flit)
+        : RNCacheStateMapDeniedResponseEventBase<config>(host, xaction, denial, flit, message)
     { }
-
-    template<FlitConfigurationConcept config>
-    inline const FiredResponseFlit<config>& RNCacheStateMapDeniedRXRSPEvent<config>::GetFlit() const noexcept
-    {
-        return flit;
-    }
 
     template<FlitConfigurationConcept config>
     inline RNCacheStateMapDeniedRXDATEvent<config>::RNCacheStateMapDeniedRXDATEvent(
         RNCacheStateMap<config>&    host,
-        const Xaction<config>&      xaction,
+        const Xaction<config>*      xaction,
         XactDenialEnum              denial,
         const FiredResponseFlit<config>& flit,
         const std::string&          message) noexcept
-        : RNCacheStateMapDeniedEventBase<config>   (host, xaction, denial, message)
-        , flit                                     (flit)
+        : RNCacheStateMapDeniedResponseEventBase<config>(host, xaction, denial, flit, message)
     { }
 
     template<FlitConfigurationConcept config>
-    inline const FiredResponseFlit<config>& RNCacheStateMapDeniedRXDATEvent<config>::GetFlit() const noexcept
-    {
-        return flit;
-    }
-
-    template<FlitConfigurationConcept config>
     inline RNCacheStateMap<config>::EventHub::EventHub() noexcept
-        : OnDeniedTXRSP    (0)
+        : OnDeniedTXREQ    (0)
+        , OnDeniedRXSNP    (0)
+        , OnDeniedTXRSP    (0)
         , OnDeniedTXDAT    (0)
         , OnDeniedRXRSP    (0)
         , OnDeniedRXDAT    (0)
@@ -419,6 +488,8 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline void RNCacheStateMap<config>::EventHub::Clear() noexcept
     {
+        OnDeniedTXREQ.Clear();
+        OnDeniedRXSNP.Clear();
         OnDeniedTXRSP.Clear();
         OnDeniedTXDAT.Clear();
         OnDeniedRXRSP.Clear();
@@ -426,9 +497,43 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::DeniedTXREQ(
+        XactDenialEnum                      denial,
+        const Xaction<config>*              xaction,
+        uint64_t                            time,
+        const Flits::REQ<config>&           flit,
+        const std::string&                  message) noexcept
+    {
+        FiredRequestFlit<config> firedFlit(XactScope::Requester, true, time, flit);
+
+        if (this->events)
+            this->events->OnDeniedTXREQ(RNCacheStateMapDeniedTXREQEvent<config>(
+                *this, xaction, denial, firedFlit, message));
+
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNCacheStateMap<config>::DeniedRXSNP(
+        XactDenialEnum                      denial,
+        const Xaction<config>*              xaction,
+        uint64_t                            time,
+        const Flits::SNP<config>&           flit,
+        const std::string&                  message) noexcept
+    {
+        FiredRequestFlit<config> firedFlit(XactScope::Requester, false, time, flit);
+
+        if (this->events)
+            this->events->OnDeniedRXSNP(RNCacheStateMapDeniedRXSNPEvent<config>(
+                *this, xaction, denial, firedFlit, message));
+
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::DeniedTXRSP(
         XactDenialEnum                      denial,
-        const Xaction<config>&              xaction,
+        const Xaction<config>*              xaction,
         uint64_t                            time,
         const Flits::RSP<config>&           flit,
         const std::string&                  message) noexcept
@@ -445,7 +550,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::DeniedTXDAT(
         XactDenialEnum                      denial,
-        const Xaction<config>&              xaction,
+        const Xaction<config>*              xaction,
         uint64_t                            time,
         const Flits::DAT<config>&           flit,
         const std::string&                  message) noexcept
@@ -462,7 +567,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::DeniedRXRSP(
         XactDenialEnum                      denial,
-        const Xaction<config>&              xaction,
+        const Xaction<config>*              xaction,
         uint64_t                            time,
         const Flits::RSP<config>&           flit,
         const std::string&                  message) noexcept
@@ -479,7 +584,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum RNCacheStateMap<config>::DeniedRXDAT(
         XactDenialEnum                      denial,
-        const Xaction<config>&              xaction,
+        const Xaction<config>*              xaction,
         uint64_t                            time,
         const Flits::DAT<config>&           flit,
         const std::string&                  message) noexcept
@@ -942,13 +1047,15 @@ namespace /*CHI::*/Xact {
             reqDecoder.Decode(flit.Opcode());
 
         if (!opcodeInfo.IsValid()) // unknown opcode
-            return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
+            return this->DeniedTXREQ(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, nullptr, time, flit,
+                "This Opcode cannot be decoded by RN TXREQ");
 
         //
         const details::RNCohTrans* trans = opcodeInfo.GetCompanion();
 
         if (!trans)
-            return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
+            return this->DeniedTXREQ(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, nullptr, time, flit,
+                "This Opcode is not supported by coherency transition for RN TXREQ");
 
         //
         const std::pair<CacheState, bool> initialState = EvaluateWithSeer(addr);
@@ -998,12 +1105,14 @@ namespace /*CHI::*/Xact {
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
+                return this->DeniedTXRSP(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, &xaction, time, flit,
+                    "This Opcode cannot be decoded by RN TXRSP");
 
             trans = &opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
+                return this->DeniedTXRSP(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode is not supported by coherency transition for RN TXRSP");
             */
         }
         else
@@ -1013,14 +1122,16 @@ namespace /*CHI::*/Xact {
                 = snpDecoder.Decode(xaction.GetFirst().flit.snp.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_SNP_OPCODE_NOT_DECODED;
+                return this->DeniedTXRSP(XactDenial::DENIED_SNP_OPCODE_NOT_DECODED, &xaction, time, flit,
+                    "This Opcode cannot be decoded by RN TXRSP");
 
             bool retToSrc = xaction.GetFirst().flit.snp.RetToSrc();
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
+                return this->DeniedTXRSP(XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode is not supported by coherency transition for RN TXRSP");
 
             const CacheStateTransitions::Intermediates::details::TableG0* g0 = nullptr;
             const CacheStateTransitions::Intermediates::details::TableG1* g1 = nullptr;
@@ -1040,7 +1151,7 @@ namespace /*CHI::*/Xact {
                         g0 = &tables->GSnpResp_RetToSrc_1();
                 }
                 else
-                    return this->DeniedTXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                    return this->DeniedTXRSP(XactDenial::DENIED_RSP_OPCODE, &xaction, time, flit,
                         "This Opcode is unexpected for SnpX transactions on RN TXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::SnpXFwd)
@@ -1060,14 +1171,16 @@ namespace /*CHI::*/Xact {
                     fwded = true;
                 }
                 else
-                    return this->DeniedTXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                    return this->DeniedTXRSP(XactDenial::DENIED_RSP_OPCODE, &xaction, time, flit,
                         "This Opcode is unexpected for SnpXFwd transactions on RN TXRSP");
             }
             else
-                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
+                return this->DeniedTXRSP(XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode's coherency transition table type not recognized for RN TXRSP");
 
             if (!g0 && !g1)
-                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
+                return this->DeniedTXRSP(XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode's coherency transition table is missing for RN TXRSP");
 
             //
             CacheResp resp = fwded ? CacheResp::FromSnpRespFwded(flit.Resp()) 
@@ -1168,12 +1281,14 @@ namespace /*CHI::*/Xact {
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
+                return this->DeniedTXDAT(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, &xaction, time, flit,
+                    "This Opcode cannot be decoded by RN TXDAT");
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
+                return this->DeniedTXDAT(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode is not supported by coherency transition for RN TXDAT");
 
             //
             CacheState nextState;
@@ -1260,7 +1375,8 @@ namespace /*CHI::*/Xact {
                 return XactDenial::DENIED_DAT_OPCODE;
             }
             else
-                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
+                return this->DeniedTXDAT(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode's coherency transition table type not recognized for RN TXDAT");
 
             // Speculative path tracking
             if (prevState.second)
@@ -1283,14 +1399,16 @@ namespace /*CHI::*/Xact {
                 = snpDecoder.Decode(xaction.GetFirst().flit.snp.Opcode());
 
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_SNP_OPCODE_NOT_DECODED;
+                return this->DeniedTXDAT(XactDenial::DENIED_SNP_OPCODE_NOT_DECODED, &xaction, time, flit,
+                    "This Opcode cannot be decoded by RN TXDAT");
 
             bool retToSrc = xaction.GetFirst().flit.snp.RetToSrc();
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
+                return this->DeniedTXDAT(XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode is not supported by coherency transition for RN TXDAT");
 
             // check for multi-data-beat repeat
             const FiredResponseFlit<config>* firstDAT = xaction.GetFirstDAT({ flit.Opcode() });
@@ -1362,10 +1480,12 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_DAT_OPCODE;
             }
             else
-                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
+                return this->DeniedTXDAT(XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode's coherency transition table type not recognized for RN TXDAT");
 
             if (!g0 && !g1)
-                return XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED;
+                return this->DeniedTXDAT(XactDenial::DENIED_SNP_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode's coherency transition table is missing for RN TXDAT");
 
             //
             CacheResp resp = dct ? CacheResp::FromCompData(flit.Resp()) : (
@@ -1504,12 +1624,14 @@ namespace /*CHI::*/Xact {
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
             
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
+                return this->DeniedRXRSP(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, &xaction, time, flit,
+                    "This Opcode cannot be decoded by RN RXRSP");
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
+                return this->DeniedRXRSP(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode is not supported by coherency transition for RN RXRSP");
 
             //
             CacheState nextState;
@@ -1530,7 +1652,7 @@ namespace /*CHI::*/Xact {
                     return XactDenial::ACCEPTED;
                 }
                 else
-                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, &xaction, time, flit,
                         "This Opcode is unexpected for Read transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::MakeReadUnique)
@@ -1562,7 +1684,7 @@ namespace /*CHI::*/Xact {
                     return XactDenial::ACCEPTED;
                 }
                 else
-                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, &xaction, time, flit,
                         "This Opcode is unexpected for MakeReadUnique transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::Dataless)
@@ -1609,7 +1731,7 @@ namespace /*CHI::*/Xact {
                     return XactDenial::ACCEPTED;
                 }
                 else
-                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, &xaction, time, flit,
                         "This Opcode is unexpected for Dataless transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::WriteNonCopyBack)
@@ -1631,7 +1753,7 @@ namespace /*CHI::*/Xact {
                     nextState = CacheStates::I;
                 }
                 else
-                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, &xaction, time, flit,
                         "This Opcode is unexpected for WriteNonCopyBack transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::Write)
@@ -1645,7 +1767,7 @@ namespace /*CHI::*/Xact {
                 {
                     // NOTICE: Prior to Issue G, Comp response was only possible for WriteEvictOrEvict
                     if (opcodeInfo.GetOpcode() != Opcodes::REQ::WriteEvictOrEvict)
-                        return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                        return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, &xaction, time, flit,
                             "Comp is only expected on WriteEvictOrEvict transactions on RN RXRSP");
 
                     nextState = CacheStates::I;
@@ -1655,7 +1777,7 @@ namespace /*CHI::*/Xact {
                     return XactDenial::ACCEPTED;
                 }
                 else
-                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, &xaction, time, flit,
                         "This Opcode is unexpected for Write transactions on RN RXRSP");
             }
             else if (trans->tables->type == CacheStateTransitions::Intermediates::Tables::Type::Atomic)
@@ -1682,11 +1804,12 @@ namespace /*CHI::*/Xact {
                     nextState = xs;
                 }
                 else
-                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, xaction, time, flit,
+                    return this->DeniedRXRSP(XactDenial::DENIED_RSP_OPCODE, &xaction, time, flit,
                         "This Opcode is unexpected for Atomic transactions on RN RXRSP");                
             }
             else
-                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
+                return this->DeniedRXRSP(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode's coherency transition table type not recognized for RN RXRSP");
 
             // Speculative path tracking
             if (prevState.second)
@@ -1707,7 +1830,7 @@ namespace /*CHI::*/Xact {
             /*
             * *NOTICE: No RN RXRSP possible on SNP transactions.
             */
-            return this->DeniedRXRSP(XactDenial::DENIED_CHANNEL_RXRSP, xaction, time, flit,
+            return this->DeniedRXRSP(XactDenial::DENIED_CHANNEL_RXRSP, &xaction, time, flit,
                 "No RN RXRSP possible on SNP transactions");
         }
     }
@@ -1729,12 +1852,14 @@ namespace /*CHI::*/Xact {
                 = reqDecoder.Decode(xaction.GetFirst().flit.req.Opcode());
             
             if (!opcodeInfo.IsValid()) // unknown opcode
-                return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
+                return this->DeniedRXDAT(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, &xaction, time, flit,
+                    "This Opcode cannot be decoded by RN RXDAT");
 
             trans = opcodeInfo.GetCompanion();
 
             if (!trans)
-                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
+                return this->DeniedRXDAT(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode is not supported by coherency transition for RN RXDAT");
 
             //
             CacheState nextState;
@@ -1867,7 +1992,8 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_DAT_OPCODE;
             }
             else
-                return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
+                return this->DeniedRXDAT(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, &xaction, time, flit,
+                    "This Opcode's coherency transition table type not recognized for RN RXDAT");
             
             // Speculative path tracking
             if (prevState.second)
@@ -1924,12 +2050,14 @@ namespace /*CHI::*/Xact {
                     = reqDecoder.Decode(nestingXaction->GetFirst().flit.req.Opcode());
 
                 if (!opcodeInfo.IsValid()) // unknown opcode
-                    return XactDenial::DENIED_REQ_OPCODE_NOT_DECODED;
+                    return this->DeniedTXREQ(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, nestingXaction, time, nestingXaction->GetFirst().flit.req,
+                        "This Opcode cannot be decoded by RN TXREQ");
 
                 trans = opcodeInfo.GetCompanion();
 
                 if (!trans)
-                    return XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED;
+                    return this->DeniedTXREQ(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, nestingXaction, time, nestingXaction->GetFirst().flit.req,
+                        "This Opcode is not supported by coherency transition for RN Transfer");
                 
                 //
                 std::pair<CacheState, bool> prevState = EvaluateWithSeer(addr);
