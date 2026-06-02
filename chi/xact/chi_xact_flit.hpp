@@ -302,6 +302,8 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline bool FiredRequestFlit<config>::IsToRequester(const Global<config>& glbl) const noexcept
     {
+        // *NOTICE: This function only checks the direction of the flit by scope, since TgtID not included in SNP flits.
+        //          The actual TgtID and node type should be checked out of this function when necessary. 
         switch (this->scope->value)
         {
             case XactScope::Requester:
@@ -467,10 +469,10 @@ namespace /*CHI::*/Xact {
         switch (this->scope->value)
         {
             case XactScope::Requester:
-                return this->IsTXREQ();
+                return this->IsTXREQ() && glbl.TOPOLOGY.IsRequester(flit.req.SrcID());
 
             case XactScope::Home:
-                return this->IsRXREQ();
+                return this->IsRXREQ() && glbl.TOPOLOGY.IsRequester(flit.req.SrcID());
 
             case XactScope::Subordinate:
                 return false;
@@ -486,13 +488,14 @@ namespace /*CHI::*/Xact {
         switch (this->scope->value)
         {
             case XactScope::Requester:
-                return this->IsRXSNP();
+                return this->IsRXSNP() && glbl.TOPOLOGY.IsHome(flit.snp.SrcID());
 
             case XactScope::Home:
-                return this->IsTXSNP();
+                return (this->IsTXREQ() && glbl.TOPOLOGY.IsHome(flit.req.SrcID()))
+                    || (this->IsTXSNP() && glbl.TOPOLOGY.IsHome(flit.snp.SrcID()));
 
             case XactScope::Subordinate:
-                return this->IsRXREQ();
+                return this->IsRXREQ() && glbl.TOPOLOGY.IsHome(flit.req.SrcID());
 
             [[unlikely]] default:
                 return false;
