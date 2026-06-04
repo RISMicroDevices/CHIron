@@ -1042,6 +1042,10 @@ namespace /*CHI::*/Xact {
         uint64_t                                time,
         const Flits::REQ<config>&               flit) noexcept
     {
+        // Ignore *LCrdReturn
+        if (flit.Opcode() == Opcodes::REQ::ReqLCrdReturn)
+            return XactDenial::ACCEPTED;
+
         // Decode REQ opcode
         const Opcodes::OpcodeInfo<typename Flits::REQ<config>::opcode_t, const details::RNCohTrans*>& opcodeInfo = 
             reqDecoder.Decode(flit.Opcode());
@@ -1090,6 +1094,10 @@ namespace /*CHI::*/Xact {
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
+
+        // Ignore *LCrdReturn
+        if (flit.Opcode() == Opcodes::RSP::RespLCrdReturn)
+            return XactDenial::ACCEPTED;
 
         if (xaction.GetFirst().IsREQ())
         {
@@ -1273,6 +1281,10 @@ namespace /*CHI::*/Xact {
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
+
+        // Ignore *LCrdReturn
+        if (flit.Opcode() == Opcodes::DAT::DataLCrdReturn)
+            return XactDenial::ACCEPTED;
 
         if (xaction.GetFirst().IsREQ())
         {
@@ -1617,6 +1629,14 @@ namespace /*CHI::*/Xact {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
 
+        // Ignore *LCrdReturn
+        if (flit.Opcode() == Opcodes::RSP::RespLCrdReturn)
+            return XactDenial::ACCEPTED;
+
+        // Ignore RetryAck
+        if (flit.Opcode() == Opcodes::RSP::RetryAck)
+            return XactDenial::ACCEPTED;
+
         if (xaction.GetFirst().IsREQ())
         {
             // Decode REQ opcode
@@ -1844,6 +1864,10 @@ namespace /*CHI::*/Xact {
     {
         // Decode transition set from TXREQ/RXSNP opcode
         const details::RNCohTrans* trans;
+
+        // Ignore *LCrdReturn
+        if (flit.Opcode() == Opcodes::DAT::DataLCrdReturn)
+            return XactDenial::ACCEPTED;
 
         if (xaction.GetFirst().IsREQ())
         {
