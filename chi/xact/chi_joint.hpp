@@ -1644,7 +1644,8 @@ namespace /*CHI::*/Xact {
     inline bool RNFJoint<config>::HasInflight() const noexcept
     {
         return !rxTransactions.empty() || !txTransactions.empty()
-            || !txDBIDTransactions.empty() || !txDBIDOverlappableTransactions.empty();
+            || !txDBIDTransactions.empty() || !txDBIDOverlappableTransactions.empty()
+            || !txRetriedTransactions.empty();
     }
 
     template<FlitConfigurationConcept config>
@@ -1700,6 +1701,8 @@ namespace /*CHI::*/Xact {
             std::shared_ptr<Xaction<config>> firstXaction = *xactionIter;
 
             xactionList->second.erase(xactionIter);
+            if (xactionList->second.empty())
+                txRetriedTransactions.erase(xactionList);
 
             std::shared_ptr<Xaction<config>> retryXaction =
                 opcodeInfo.GetCompanion()(glbl, firedReqFlit, firstXaction);
@@ -1732,7 +1735,10 @@ namespace /*CHI::*/Xact {
             std::list<FiredResponseFlit<config>>& pCreditList = iterPCreditList->second;
 
             if (pCreditList.empty())
+            {
+                grantedPCredits.erase(iterPCreditList);
                 return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
+            }
 
             XactDenialEnum denial =
                 firstXaction->Resend(glbl, pCreditList.front(), retryXaction);
@@ -1756,6 +1762,8 @@ namespace /*CHI::*/Xact {
 
             // consume P-Credit
             pCreditList.pop_front();
+            if (pCreditList.empty())
+                grantedPCredits.erase(iterPCreditList);
 
             // register retried xaction
             txTransactions[key] = retryXaction;
@@ -3064,7 +3072,9 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline bool SNFJoint<config>::HasInflight() const noexcept
     {
-        return !rxTransactions.empty() || !rxDBIDTransactions.empty() || !rxDBIDOverlappableTransactions.empty();
+        return !rxTransactions.empty() || !rxDBIDTransactions.empty()
+            || !rxDBIDOverlappableTransactions.empty() 
+            || !rxRetriedTransactions.empty();
     }
 
     template<FlitConfigurationConcept config>
@@ -3096,13 +3106,96 @@ namespace /*CHI::*/Xact {
         {
             if (rxTransactions.contains(key))
                 return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_TXNID_IN_USE, firedReqFlit, rxTransactions[key]);
-        
+
             // iterate and compare retry transactions
+            // TODO: simplified retry mapping by TxnID, temporary workaround for KunminghuV2
+            //       specification retry mapping implementation here
+            hnsrc_t hnKey;
+            hnKey.value     = 0;
+            hnKey.id.src    = reqFlit.SrcID();
 
-            // TODO: retry query
+            auto xactionList = rxRetriedTransactions.find(hnKey);
+            if (xactionList == rxRetriedTransactions.end())
+                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_RETRY, firedReqFlit);
 
-            return this->RequestDeniedByJoint(XactDenial::DENIED_UNSUPPORTED_FEATURE, firedReqFlit,
-                nullptr, std::string("Retry on ") + this->GetType()->name + " is not supported yet");
+            auto xactionIter = xactionList->second.begin();
+
+            for (; xactionIter != xactionList->second.end(); xactionIter++)
+                if (reqFlit.TxnID() == xactionIter->get()->GetFirst().flit.req.TxnID())
+                    break;
+
+            if (xactionIter == xactionList->second.end())
+                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_RETRY, firedReqFlit);
+
+            std::shared_ptr<Xaction<config>> firstXaction = *xactionIter;
+
+            xactionList->second.erase(xactionIter);
+            if (xactionList->second.empty())
+                rxRetriedTransactions.erase(xactionList);
+
+            std::shared_ptr<Xaction<config>> retryXaction =
+                opcodeInfo.GetCompanion()(glbl, firedReqFlit, firstXaction);
+
+            if (!retryXaction) // unsupported opcode transactions
+                return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, firedReqFlit,
+                    nullptr, std::string("No Xaction object mapped for ") + opcodeInfo.GetName() + " on " + this->GetType()->name);
+
+            if (theXaction)
+                *theXaction = retryXaction;
+
+            if (retryXaction->GetFirstDenial() != XactDenial::ACCEPTED)
+                return this->RequestDeniedByXaction(retryXaction->GetFirstDenial(), firedReqFlit, retryXaction);
+
+            assert(firstXaction->GetRetryAck() && "transaction not getting RetryAck but lies in retried list");
+
+            // check granted P-Credit
+            pcrd_t pCrdKey;
+            pCrdKey.value   = 0;
+            pCrdKey.id.src  = firstXaction->GetRetryAck()->flit.rsp.SrcID();
+            pCrdKey.id.tgt  = reqFlit.SrcID();
+
+            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>& grantedPCredits
+                = this->grantedPCredits[reqFlit.PCrdType()];
+
+            auto iterPCreditList = grantedPCredits.find(pCrdKey);
+            if (iterPCreditList == grantedPCredits.end())
+                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
+
+            std::list<FiredResponseFlit<config>>& pCreditList = iterPCreditList->second;
+
+            if (pCreditList.empty())
+            {
+                grantedPCredits.erase(iterPCreditList);
+                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
+            }
+
+            XactDenialEnum denial =
+                firstXaction->Resend(glbl, pCreditList.front(), retryXaction);
+            
+            if (denial != XactDenial::ACCEPTED)
+                return this->RequestDeniedByXaction(denial, firedReqFlit, firstXaction);
+
+            // original xaction complete
+            rxreqid_t firstKey;
+            firstKey.value  = 0;
+            firstKey.id.src = firstXaction->GetFirst().flit.req.SrcID();
+            firstKey.id.txn = firstXaction->GetFirst().flit.req.TxnID();
+
+            rxTransactions.erase(firstKey);
+
+            // event on retry xaction
+            this->FireXactionRetry(retryXaction);
+
+            // event on TxnID allocation
+            this->FireXactionTxnIDAllocation(retryXaction);
+
+            // consume P-Credit
+            pCreditList.pop_front();
+            if (pCreditList.empty())
+                grantedPCredits.erase(iterPCreditList);
+
+            // register retried xaction
+            rxTransactions[key] = retryXaction;
         }
         else
         {
