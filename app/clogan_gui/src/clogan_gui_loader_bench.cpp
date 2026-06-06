@@ -20,6 +20,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -57,6 +58,7 @@ struct BenchmarkOptions {
     bool transactionSpanScanOnly = false;
     bool clipboardBatchScanOnly = false;
     bool clipboardInsertBench = false;
+    bool dataSepRespDebug = false;
     QString clipboardStoreAlgorithm = QStringLiteral("double-buffer-swap");
     bool transactionRenderOnly = false;
     bool editableModeOnly = false;
@@ -130,6 +132,27 @@ struct ClipboardBenchSnapshot {
 
 constexpr std::uint64_t kClipboardBenchExistingRows = 100000;
 constexpr std::uint64_t kClipboardBenchInsertRows = 10000;
+constexpr std::uint32_t kEbDataSepRespOpcode = 0x0BU;
+constexpr std::uint8_t kXactionRowProcessedFlag = 1U << 0;
+constexpr std::uint8_t kXactionRowIndexedFlag = 1U << 1;
+constexpr std::uint8_t kXactionRowProcessedByJointFlag = 1U << 2;
+constexpr std::uint8_t kXactionRowCompleteFlag = 1U << 3;
+
+struct DataSepRespAnchor {
+    std::uint64_t ordinal = 0;
+    std::uint64_t requestLogicalRow = 0;
+    std::uint32_t requestNodeId = std::numeric_limits<std::uint32_t>::max();
+    CLog::Channel requestChannel = CLog::Channel::TXREQ;
+    std::uint32_t requestOpcode = 0;
+    std::uint64_t lineAddress = 0;
+};
+
+struct DataSepRespProbeRow {
+    std::uint64_t logicalRow = 0;
+    CHIron::Gui::CLogBTraceFastRecordInfo fast;
+    CHIron::Gui::TraceSession::XactionRowCompactInfo compact;
+    std::optional<DataSepRespAnchor> anchor;
+};
 
 std::vector<ClipboardBenchEntry> makeClipboardBenchEntries(const std::uint64_t beginRow,
                                                            const std::uint64_t count,
@@ -360,6 +383,97 @@ QString formatRecordsPerSecond(const qsizetype rowCount, const qint64 nanosecond
     return QString::number(static_cast<double>(rowCount) / seconds, 'f', rowCount >= 100000 ? 0 : 1);
 }
 
+QString channelName(const CLog::Channel channel)
+{
+    switch (channel) {
+    case CLog::Channel::TXREQ:
+        return QStringLiteral("TXREQ");
+    case CLog::Channel::TXREQ_BeforeSAM:
+        return QStringLiteral("TXREQ_BeforeSAM");
+    case CLog::Channel::TXRSP:
+        return QStringLiteral("TXRSP");
+    case CLog::Channel::TXDAT:
+        return QStringLiteral("TXDAT");
+    case CLog::Channel::TXSNP:
+        return QStringLiteral("TXSNP");
+    case CLog::Channel::RXREQ:
+        return QStringLiteral("RXREQ");
+    case CLog::Channel::RXREQ_BeforeSAM:
+        return QStringLiteral("RXREQ_BeforeSAM");
+    case CLog::Channel::RXRSP:
+        return QStringLiteral("RXRSP");
+    case CLog::Channel::RXDAT:
+        return QStringLiteral("RXDAT");
+    case CLog::Channel::RXSNP:
+        return QStringLiteral("RXSNP");
+    }
+
+    return QStringLiteral("Unknown(%1)").arg(static_cast<int>(channel));
+}
+
+QString nodeTypeName(const std::unordered_map<quint16, CLog::NodeType>& nodeTypes,
+                     const std::uint32_t nodeId)
+{
+    const auto found = nodeTypes.find(static_cast<quint16>(nodeId));
+    if (found == nodeTypes.end()) {
+        return QStringLiteral("?");
+    }
+    return QString::fromStdString(CLog::NodeTypeToString(found->second));
+}
+
+bool nodeTypeIsRequester(const std::unordered_map<quint16, CLog::NodeType>& nodeTypes,
+                         const std::uint32_t nodeId)
+{
+    const auto found = nodeTypes.find(static_cast<quint16>(nodeId));
+    if (found == nodeTypes.end()) {
+        return false;
+    }
+    switch (found->second) {
+    case CLog::NodeType::RN_F:
+    case CLog::NodeType::RN_D:
+    case CLog::NodeType::RN_I:
+        return true;
+    case CLog::NodeType::HN_F:
+    case CLog::NodeType::HN_I:
+    case CLog::NodeType::SN_F:
+    case CLog::NodeType::SN_I:
+    case CLog::NodeType::MN:
+    case CLog::NodeType::RN_F_BeforeSAM:
+    case CLog::NodeType::RN_D_BeforeSAM:
+    case CLog::NodeType::RN_I_BeforeSAM:
+    case CLog::NodeType::HN_F_BeforeSAM:
+    case CLog::NodeType::HN_I_BeforeSAM:
+    case CLog::NodeType::SN_F_BeforeSAM:
+    case CLog::NodeType::SN_I_BeforeSAM:
+    case CLog::NodeType::MN_BeforeSAM:
+        return false;
+    }
+    return false;
+}
+
+QString compactXactionFlagsText(const std::uint8_t flags)
+{
+    QStringList names;
+    if ((flags & kXactionRowProcessedFlag) != 0) {
+        names.append(QStringLiteral("processed"));
+    }
+    if ((flags & kXactionRowIndexedFlag) != 0) {
+        names.append(QStringLiteral("indexed"));
+    }
+    if ((flags & kXactionRowProcessedByJointFlag) != 0) {
+        names.append(QStringLiteral("joint"));
+    }
+    if ((flags & kXactionRowCompleteFlag) != 0) {
+        names.append(QStringLiteral("complete"));
+    }
+    return names.isEmpty() ? QStringLiteral("-") : names.join(QLatin1Char('|'));
+}
+
+QString addressText(const std::uint64_t address)
+{
+    return QStringLiteral("0x%1").arg(QString::number(address, 16).toUpper());
+}
+
 QString xactionStageKey(const CHIron::Gui::CLogBTraceLoadStage stage,
                         const std::size_t workerCount)
 {
@@ -417,6 +531,19 @@ bool fastRecordIsClipboardRequestOrigin(const CHIron::Gui::CLogBTraceFastRecordI
         return false;
     }
     return false;
+}
+
+bool fastRecordIsDataSepResp(const CHIron::Gui::CLogBTraceFastRecordInfo& record) noexcept
+{
+    const CLog::Channel channel = static_cast<CLog::Channel>(record.channel);
+    return (channel == CLog::Channel::TXDAT || channel == CLog::Channel::RXDAT)
+        && record.opcode == kEbDataSepRespOpcode;
+}
+
+bool fastRecordIsRequesterTxRequest(const CHIron::Gui::CLogBTraceFastRecordInfo& record) noexcept
+{
+    const CLog::Channel channel = static_cast<CLog::Channel>(record.channel);
+    return channel == CLog::Channel::TXREQ || channel == CLog::Channel::TXREQ_BeforeSAM;
 }
 
 bool runClipboardBatchScanMicrobench(const std::shared_ptr<CHIron::Gui::TraceSession>& session,
@@ -555,6 +682,489 @@ bool runClipboardBatchScanMicrobench(const std::shared_ptr<CHIron::Gui::TraceSes
     }
     sample.clipboardBatchDecodeNs = timer.nsecsElapsed();
     sample.clipboardBatchDecodedRows = decodedRows;
+    sample.rowCount = static_cast<qsizetype>(session->totalRows());
+    return true;
+}
+
+bool runDataSepRespDebugProbe(const std::shared_ptr<CHIron::Gui::TraceSession>& session,
+                              BenchmarkSample& sample,
+                              QTextStream& out,
+                              QTextStream& err)
+{
+    if (!session) {
+        err << "No session for DataSepResp debug probe.\n";
+        err.flush();
+        return false;
+    }
+    if (session->metadata().parameters.GetIssue() != CLog::Issue::Eb) {
+        err << "DataSepResp debug probe is only meaningful for CHI E.b traces.\n";
+        err.flush();
+        return false;
+    }
+    if (!session->isXactionIndexComplete()) {
+        CHIron::Gui::CLogBTraceLoadError indexError;
+        if (!session->buildXactionIndex(indexError)) {
+            err << "Xaction index build failed: " << indexError.summary << "\n";
+            if (!indexError.informativeText.isEmpty()) {
+                err << indexError.informativeText << "\n";
+            }
+            if (!indexError.detailedText.isEmpty()) {
+                err << indexError.detailedText << "\n";
+            }
+            err.flush();
+            return false;
+        }
+    }
+
+    struct Slice {
+        std::size_t blockIndex = 0;
+        std::uint64_t beginRow = 0;
+        std::uint64_t rowCount = 0;
+        std::size_t localBegin = 0;
+    };
+    struct QueryKey {
+        std::uint32_t rnNodeId = std::numeric_limits<std::uint32_t>::max();
+        std::uint64_t lineAddress = 0;
+
+        bool operator<(const QueryKey& other) const noexcept
+        {
+            if (rnNodeId != other.rnNodeId) {
+                return rnNodeId < other.rnNodeId;
+            }
+            return lineAddress < other.lineAddress;
+        }
+    };
+    struct QueryRows {
+        std::vector<DataSepRespProbeRow> rows;
+        DataSepRespAnchor anchor;
+    };
+
+    constexpr std::uint64_t kSliceRows = 262144;
+    std::vector<Slice> slices;
+    for (std::size_t blockIndex = 0; blockIndex < session->metadata().blocks.size(); ++blockIndex) {
+        const CHIron::Gui::CLogBTraceBlockSummary& block = session->metadata().blocks[blockIndex];
+        for (std::uint64_t localBegin = 0; localBegin < block.recordCount;) {
+            const std::uint64_t rowCount = std::min<std::uint64_t>(kSliceRows, block.recordCount - localBegin);
+            slices.push_back(Slice{blockIndex,
+                                   block.rowStart + localBegin,
+                                   rowCount,
+                                   static_cast<std::size_t>(localBegin)});
+            localBegin += rowCount;
+        }
+    }
+
+    std::unordered_map<std::uint64_t, DataSepRespAnchor> anchorByOrdinal;
+    std::vector<DataSepRespProbeRow> dataSepRespRows;
+    std::map<QString, std::uint64_t> countByChannel;
+    std::map<std::uint32_t, std::uint64_t> countByNode;
+    std::map<QString, std::uint64_t> rxCountByNodeType;
+    std::uint64_t txDataSepRespRows = 0;
+    std::uint64_t rxDataSepRespRows = 0;
+    std::uint64_t rxRequesterNodeRows = 0;
+    std::uint64_t rxWithOrdinalRows = 0;
+    std::uint64_t rxIndexedRows = 0;
+    std::uint64_t rxProcessedRows = 0;
+    std::uint64_t rxProcessedByJointRows = 0;
+    std::uint64_t rxCompleteRows = 0;
+
+    CHIron::Gui::CLogBTraceLoadError readError;
+    QElapsedTimer timer;
+    timer.start();
+    for (const Slice& slice : slices) {
+        std::vector<CHIron::Gui::CLogBTraceFastRecordInfo> fastRecords;
+        std::vector<CHIron::Gui::TraceSession::XactionRowCompactInfo> compactInfos;
+        if (!session->readFastRecords(slice.blockIndex,
+                                      slice.localBegin,
+                                      static_cast<std::size_t>(slice.rowCount),
+                                      fastRecords,
+                                      readError)
+            || fastRecords.size() < static_cast<std::size_t>(slice.rowCount)) {
+            err << "DataSepResp probe fast-record read failed: " << readError.summary << "\n";
+            err.flush();
+            return false;
+        }
+        if (!session->xactionRowCompactInfoRange(slice.beginRow, slice.rowCount, compactInfos)
+            || compactInfos.size() < static_cast<std::size_t>(slice.rowCount)) {
+            err << "DataSepResp probe compact xaction read failed.\n";
+            err.flush();
+            return false;
+        }
+
+        const std::size_t rowCount = static_cast<std::size_t>(slice.rowCount);
+        for (std::size_t rowIndex = 0; rowIndex < rowCount; ++rowIndex) {
+            const CHIron::Gui::CLogBTraceFastRecordInfo& fast = fastRecords[rowIndex];
+            const CHIron::Gui::TraceSession::XactionRowCompactInfo& compact = compactInfos[rowIndex];
+            const std::uint64_t logicalRow = slice.beginRow + static_cast<std::uint64_t>(rowIndex);
+
+            if (compact.xactionOrdinal != 0
+                && fastRecordIsRequesterTxRequest(fast)
+                && fastRecordHasClipboardAddress(fast)) {
+                DataSepRespAnchor anchor{
+                    .ordinal = compact.xactionOrdinal,
+                    .requestLogicalRow = logicalRow,
+                    .requestNodeId = fast.nodeId,
+                    .requestChannel = static_cast<CLog::Channel>(fast.channel),
+                    .requestOpcode = fast.opcode,
+                    .lineAddress = CHIron::Gui::CLogBTraceLoader::normalizeCacheLineAddress(fast.address),
+                };
+                const auto found = anchorByOrdinal.find(anchor.ordinal);
+                if (found == anchorByOrdinal.end()
+                    || anchor.requestLogicalRow < found->second.requestLogicalRow) {
+                    anchorByOrdinal[anchor.ordinal] = anchor;
+                }
+            }
+
+            if (!fastRecordIsDataSepResp(fast)) {
+                continue;
+            }
+
+            const CLog::Channel channel = static_cast<CLog::Channel>(fast.channel);
+            ++countByChannel[channelName(channel)];
+            ++countByNode[fast.nodeId];
+
+            DataSepRespProbeRow row;
+            row.logicalRow = logicalRow;
+            row.fast = fast;
+            row.compact = compact;
+            dataSepRespRows.push_back(std::move(row));
+
+            if (channel == CLog::Channel::TXDAT) {
+                ++txDataSepRespRows;
+                continue;
+            }
+            if (channel != CLog::Channel::RXDAT) {
+                continue;
+            }
+
+            ++rxDataSepRespRows;
+            if (nodeTypeIsRequester(session->metadata().nodeTypes, fast.nodeId)) {
+                ++rxRequesterNodeRows;
+            }
+            ++rxCountByNodeType[nodeTypeName(session->metadata().nodeTypes, fast.nodeId)];
+            if (compact.xactionOrdinal != 0) {
+                ++rxWithOrdinalRows;
+            }
+            if ((compact.flags & kXactionRowIndexedFlag) != 0) {
+                ++rxIndexedRows;
+            }
+            if ((compact.flags & kXactionRowProcessedFlag) != 0) {
+                ++rxProcessedRows;
+            }
+            if ((compact.flags & kXactionRowProcessedByJointFlag) != 0) {
+                ++rxProcessedByJointRows;
+            }
+            if ((compact.flags & kXactionRowCompleteFlag) != 0) {
+                ++rxCompleteRows;
+            }
+        }
+    }
+    const qint64 scanNs = timer.nsecsElapsed();
+
+    std::map<QueryKey, QueryRows> queryRows;
+    std::uint64_t rxAnchorFoundRows = 0;
+    std::uint64_t rxAnchorMissingRows = 0;
+    std::uint64_t rxAnchorNodeMismatchRows = 0;
+    std::uint64_t rxAnchorRnNodeMismatchRows = 0;
+    for (DataSepRespProbeRow& row : dataSepRespRows) {
+        if (static_cast<CLog::Channel>(row.fast.channel) != CLog::Channel::RXDAT) {
+            continue;
+        }
+        const auto found = anchorByOrdinal.find(row.compact.xactionOrdinal);
+        if (found == anchorByOrdinal.end()) {
+            ++rxAnchorMissingRows;
+            continue;
+        }
+        row.anchor = found->second;
+        ++rxAnchorFoundRows;
+        if (row.anchor->requestNodeId != row.fast.nodeId) {
+            ++rxAnchorNodeMismatchRows;
+        }
+        if (!nodeTypeIsRequester(session->metadata().nodeTypes, row.fast.nodeId)) {
+            ++rxAnchorRnNodeMismatchRows;
+        }
+
+        QueryKey key{
+            .rnNodeId = row.fast.nodeId,
+            .lineAddress = row.anchor->lineAddress,
+        };
+        QueryRows& rows = queryRows[key];
+        if (rows.rows.empty()) {
+            rows.anchor = *row.anchor;
+        }
+        rows.rows.push_back(row);
+    }
+
+    std::unordered_map<std::uint64_t, CHIron::Gui::TraceSession::XactionIndexRowInfo> debugInfos;
+    std::vector<std::uint64_t> rxRowsForDebug;
+    rxRowsForDebug.reserve(static_cast<std::size_t>(rxDataSepRespRows));
+    for (const DataSepRespProbeRow& row : dataSepRespRows) {
+        if (static_cast<CLog::Channel>(row.fast.channel) == CLog::Channel::RXDAT) {
+            rxRowsForDebug.push_back(row.logicalRow);
+        }
+    }
+    if (!rxRowsForDebug.empty()) {
+        (void)session->xactionRowInfosForRows(rxRowsForDebug, debugInfos, true);
+    }
+    std::map<QString, std::uint64_t> rxRespCounts;
+    std::unordered_map<std::uint64_t, QString> respByRxRow;
+    for (std::size_t index = 0; index < rxRowsForDebug.size();) {
+        const std::uint64_t beginRow = rxRowsForDebug[index];
+        std::uint64_t rowCount = 1;
+        while (index + static_cast<std::size_t>(rowCount) < rxRowsForDebug.size()
+               && rxRowsForDebug[index + static_cast<std::size_t>(rowCount)] == beginRow + rowCount) {
+            ++rowCount;
+        }
+
+        std::vector<CHIron::Gui::FlitRecord> decodedRows;
+        CHIron::Gui::CLogBTraceLoadError decodeError;
+        if (session->readRowsDirect(beginRow, rowCount, decodedRows, decodeError)
+            && decodedRows.size() == static_cast<std::size_t>(rowCount)) {
+            for (std::size_t offset = 0; offset < decodedRows.size(); ++offset) {
+                QString resp = decodedRows[offset].resp.trimmed();
+                if (resp.isEmpty()) {
+                    resp = QStringLiteral("<empty>");
+                }
+                const std::uint64_t logicalRow = beginRow + static_cast<std::uint64_t>(offset);
+                respByRxRow[logicalRow] = resp;
+                ++rxRespCounts[resp];
+            }
+        } else {
+            for (std::uint64_t offset = 0; offset < rowCount; ++offset) {
+                const std::uint64_t logicalRow = beginRow + offset;
+                respByRxRow[logicalRow] = QStringLiteral("<decode failed>");
+                ++rxRespCounts[QStringLiteral("<decode failed>")];
+            }
+        }
+
+        index += static_cast<std::size_t>(rowCount);
+    }
+    std::map<QString, std::uint64_t> denialCounts;
+    std::map<QString, std::uint64_t> jointPathCounts;
+    std::map<QString, std::uint64_t> xactionTypeCounts;
+    for (const std::uint64_t row : rxRowsForDebug) {
+        const auto found = debugInfos.find(row);
+        if (found == debugInfos.end()) {
+            ++denialCounts[QStringLiteral("<debug unavailable>")];
+            continue;
+        }
+        const CHIron::Gui::TraceSession::XactionIndexRowInfo& info = found->second;
+        QString denial = info.denialName.trimmed();
+        if (denial.isEmpty()) {
+            denial = info.indexed ? QStringLiteral("ACCEPTED") : QStringLiteral("<empty>");
+        }
+        ++denialCounts[denial];
+        if (!info.jointPath.isEmpty()) {
+            ++jointPathCounts[info.jointPath];
+        }
+        if (!info.xactionType.isEmpty()) {
+            ++xactionTypeCounts[info.xactionType];
+        }
+    }
+
+    constexpr std::size_t kReplayQueryLimit = 12;
+    std::map<QueryKey, std::vector<CHIron::Gui::CLogBTraceCacheLineStateSpan>> replaySpansByQuery;
+    std::map<QueryKey, qint64> replayNsByQuery;
+    std::map<QueryKey, QString> replayErrorByQuery;
+    std::map<QueryKey, std::uint64_t> rowsInsideSpanByQuery;
+    std::map<QueryKey, std::uint64_t> rowsAtSpanStartByQuery;
+    std::map<QString, std::uint64_t> sampledRespInsideSpanCounts;
+    std::map<QString, std::uint64_t> sampledRespOutsideSpanCounts;
+    std::size_t replayedQueriesForSummary = 0;
+    for (const auto& [key, rows] : queryRows) {
+        if (replayedQueriesForSummary >= kReplayQueryLimit) {
+            break;
+        }
+        std::vector<CHIron::Gui::CLogBTraceCacheLineStateSpan> spans;
+        CHIron::Gui::CLogBTraceLoadError replayError;
+        timer.restart();
+        const bool ok = CHIron::Gui::CLogBTraceLoader::buildCacheLineStateSpans(
+            session->filePath(),
+            session->metadata(),
+            CHIron::Gui::CLogBTraceCacheLineStateQuery{
+                .rnNodeId = key.rnNodeId,
+                .lineAddress = key.lineAddress,
+            },
+            spans,
+            replayError);
+        replayNsByQuery[key] = timer.nsecsElapsed();
+        if (!ok) {
+            replayErrorByQuery[key] = replayError.summary;
+            ++replayedQueriesForSummary;
+            continue;
+        }
+
+        std::uint64_t rowsInsideSpan = 0;
+        std::uint64_t rowsAtSpanStart = 0;
+        for (const DataSepRespProbeRow& row : rows.rows) {
+            bool insideSpan = false;
+            bool atSpanStart = false;
+            for (const CHIron::Gui::CLogBTraceCacheLineStateSpan& span : spans) {
+                if (row.logicalRow >= span.startLogicalRow && row.logicalRow <= span.endLogicalRow) {
+                    insideSpan = true;
+                    atSpanStart = row.logicalRow == span.startLogicalRow;
+                    break;
+                }
+            }
+            const QString resp = respByRxRow.count(row.logicalRow) != 0
+                ? respByRxRow[row.logicalRow]
+                : QStringLiteral("<unknown>");
+            if (insideSpan) {
+                ++rowsInsideSpan;
+                ++sampledRespInsideSpanCounts[resp];
+            } else {
+                ++sampledRespOutsideSpanCounts[resp];
+            }
+            if (atSpanStart) {
+                ++rowsAtSpanStart;
+            }
+        }
+
+        rowsInsideSpanByQuery[key] = rowsInsideSpan;
+        rowsAtSpanStartByQuery[key] = rowsAtSpanStart;
+        replaySpansByQuery[key] = std::move(spans);
+        ++replayedQueriesForSummary;
+    }
+
+    out << "DataSepResp debug probe\n";
+    out << "  Rows: total " << dataSepRespRows.size()
+        << ", RXDAT " << rxDataSepRespRows
+        << ", TXDAT " << txDataSepRespRows << "\n";
+    out << "  Scan: " << formatMilliseconds(scanNs)
+        << " ms, request anchors " << anchorByOrdinal.size()
+        << ", unique RN/line replay queries " << queryRows.size() << "\n";
+    out << "  By channel:";
+    for (const auto& [channel, count] : countByChannel) {
+        out << " " << channel << "=" << count;
+    }
+    out << "\n";
+    out << "  By node:";
+    for (const auto& [nodeId, count] : countByNode) {
+        out << " node" << nodeId
+            << "(" << nodeTypeName(session->metadata().nodeTypes, nodeId) << ")=" << count;
+    }
+    out << "\n";
+    out << "  RX node types:";
+    for (const auto& [nodeType, count] : rxCountByNodeType) {
+        out << " " << nodeType << "=" << count;
+    }
+    out << "\n";
+    out << "  RX xaction map: ordinal " << rxWithOrdinalRows
+        << ", processed " << rxProcessedRows
+        << ", indexed " << rxIndexedRows
+        << ", joint " << rxProcessedByJointRows
+        << ", complete " << rxCompleteRows << "\n";
+    out << "  RX anchor correlation: found " << rxAnchorFoundRows
+        << ", missing " << rxAnchorMissingRows
+        << ", request-node-mismatch " << rxAnchorNodeMismatchRows
+        << ", non-requester-rx-node " << rxAnchorRnNodeMismatchRows
+        << ", requester-rx-node rows " << rxRequesterNodeRows << "\n";
+    out << "  RX denials:";
+    for (const auto& [denial, count] : denialCounts) {
+        out << " " << denial << "=" << count;
+    }
+    out << "\n";
+    out << "  RX Resp values:";
+    for (const auto& [resp, count] : rxRespCounts) {
+        out << " " << resp << "=" << count;
+    }
+    out << "\n";
+    if (!sampledRespInsideSpanCounts.empty() || !sampledRespOutsideSpanCounts.empty()) {
+        out << "  Sampled replay Resp visibility:";
+        for (const auto& [resp, count] : sampledRespInsideSpanCounts) {
+            out << " inside[" << resp << "]=" << count;
+        }
+        for (const auto& [resp, count] : sampledRespOutsideSpanCounts) {
+            out << " outside[" << resp << "]=" << count;
+        }
+        out << "\n";
+    }
+    out << "  RX xaction types:";
+    for (const auto& [type, count] : xactionTypeCounts) {
+        out << " " << type << "=" << count;
+    }
+    out << "\n";
+
+    constexpr std::size_t kSampleRows = 12;
+    out << "  Sample RX DataSepResp rows:\n";
+    std::size_t printedRows = 0;
+    for (const DataSepRespProbeRow& row : dataSepRespRows) {
+        if (static_cast<CLog::Channel>(row.fast.channel) != CLog::Channel::RXDAT) {
+            continue;
+        }
+        const auto debugFound = debugInfos.find(row.logicalRow);
+        const QString denial = debugFound == debugInfos.end()
+            ? QStringLiteral("?")
+            : (debugFound->second.denialName.isEmpty()
+                   ? QStringLiteral("ACCEPTED")
+                   : debugFound->second.denialName);
+        out << "    row " << row.logicalRow
+            << " node " << row.fast.nodeId
+            << "(" << nodeTypeName(session->metadata().nodeTypes, row.fast.nodeId) << ")"
+            << " src->tgt " << row.fast.sourceId << "->" << row.fast.targetId
+            << " txn " << row.fast.txnId
+            << " dbid " << row.fast.dbid
+            << " resp " << (respByRxRow.count(row.logicalRow) != 0
+                                ? respByRxRow[row.logicalRow]
+                                : QStringLiteral("?"))
+            << " ordinal " << row.compact.xactionOrdinal
+            << " flags " << compactXactionFlagsText(row.compact.flags)
+            << " denial " << denial;
+        if (row.anchor) {
+            out << " anchorRow " << row.anchor->requestLogicalRow
+                << " anchorNode " << row.anchor->requestNodeId
+                << " " << channelName(row.anchor->requestChannel)
+                << " reqOpcode 0x" << QString::number(row.anchor->requestOpcode, 16).toUpper()
+                << " line " << addressText(row.anchor->lineAddress);
+        } else {
+            out << " anchor <missing>";
+        }
+        out << "\n";
+        ++printedRows;
+        if (printedRows >= kSampleRows) {
+            break;
+        }
+    }
+
+    out << "  Cache-state replay samples:\n";
+    std::size_t replayedQueries = 0;
+    for (const auto& [key, rows] : queryRows) {
+        if (replayedQueries >= kReplayQueryLimit) {
+            break;
+        }
+        const auto replayErrorIt = replayErrorByQuery.find(key);
+        if (replayErrorIt != replayErrorByQuery.end()) {
+            out << "    RN " << key.rnNodeId
+                << " line " << addressText(key.lineAddress)
+                << " replay failed: " << replayErrorIt->second << "\n";
+            ++replayedQueries;
+            continue;
+        }
+        const std::vector<CHIron::Gui::CLogBTraceCacheLineStateSpan>& spans =
+            replaySpansByQuery[key];
+
+        out << "    RN " << key.rnNodeId
+            << "(" << nodeTypeName(session->metadata().nodeTypes, key.rnNodeId) << ")"
+            << " line " << addressText(key.lineAddress)
+            << " rows " << rows.rows.size()
+            << " spans " << spans.size()
+            << " DataSepResp-inside-span " << rowsInsideSpanByQuery[key]
+            << " span-start " << rowsAtSpanStartByQuery[key]
+            << " replay " << formatMilliseconds(replayNsByQuery[key]) << " ms";
+        if (!spans.empty()) {
+            const CHIron::Gui::CLogBTraceCacheLineStateSpan& firstSpan = spans.front();
+            out << " firstSpan row " << firstSpan.startLogicalRow
+                << "-" << firstSpan.endLogicalRow
+                << " state " << firstSpan.stateText;
+        }
+        out << "\n";
+        ++replayedQueries;
+    }
+    if (queryRows.size() > kReplayQueryLimit) {
+        out << "    ... " << (queryRows.size() - kReplayQueryLimit)
+            << " additional RN/line replay queries omitted.\n";
+    }
+    out.flush();
+
     sample.rowCount = static_cast<qsizetype>(session->totalRows());
     return true;
 }
@@ -794,7 +1404,7 @@ void printUsage(QTextStream& stream, const QString& executableName)
               " [--txn-filter TEXT] [--dbid-filter TEXT] [--addr-filter TEXT]"
               " [--no-view] [--skip-model] [--scan-only] [--xaction-index-only]"
               " [--editable-mode-only] [--transaction-spans-only] [--transaction-span-scan-only] [--clipboard-batch-scan-only]"
-              " [--clipboard-insert-bench] [--clipboard-store-algorithm NAME] [--transaction-render-only]"
+              " [--clipboard-insert-bench] [--clipboard-store-algorithm NAME] [--datasepresp-debug] [--transaction-render-only]"
               " [--transaction-render-repeats N] [--transaction-render-vertical-steps N]\n";
     stream << "Measures metadata scan time, row decode time, model/filter population time, trace-table sizing time, optional Xaction indexing time, and Transaction span build time.\n";
 }
@@ -869,6 +1479,13 @@ std::optional<BenchmarkOptions> parseArguments(const QStringList& args, QTextStr
 
         if (argument == QLatin1String("--clipboard-insert-bench")) {
             options.clipboardInsertBench = true;
+            options.includeModel = false;
+            options.includeView = false;
+            continue;
+        }
+
+        if (argument == QLatin1String("--datasepresp-debug")) {
+            options.dataSepRespDebug = true;
             options.includeModel = false;
             options.includeView = false;
             continue;
@@ -1198,6 +1815,15 @@ BenchmarkSample runSample(const BenchmarkOptions& options)
         return sample;
     }
 
+    if (options.dataSepRespDebug) {
+        QTextStream out(stdout);
+        QTextStream err(stderr);
+        if (!runDataSepRespDebugProbe(session, sample, out, err)) {
+            std::exit(2);
+        }
+        return sample;
+    }
+
     if (options.transactionRenderOnly) {
         if (!session->isXactionIndexComplete()) {
             if (!session->buildXactionIndex(error)) {
@@ -1502,6 +2128,7 @@ int main(int argc, char* argv[])
         && !rawArguments.contains(QStringLiteral("--xaction-index-only"))
         && !editableMode
         && !rawArguments.contains(QStringLiteral("--transaction-span-scan-only"))
+        && !rawArguments.contains(QStringLiteral("--datasepresp-debug"))
         && !rawArguments.contains(QStringLiteral("--transaction-render-only"))
         && !rawArguments.contains(QStringLiteral("--no-view")));
 
@@ -1562,13 +2189,15 @@ int main(int argc, char* argv[])
                                                    ? QStringLiteral("Clipboard batch scan only")
                                                    : (options->clipboardInsertBench
                                                           ? QStringLiteral("Clipboard insert benchmark")
-                                                          : (options->transactionRenderOnly
-                                                                 ? QStringLiteral("Transaction render only")
-                                                                 : (options->includeModel
-                                                                        ? (options->includeView
-                                                                               ? QStringLiteral("loader + table attach")
-                                                                               : QStringLiteral("loader + model"))
-                                                                        : QStringLiteral("loader only")))))))));
+                                                          : (options->dataSepRespDebug
+                                                                 ? QStringLiteral("DataSepResp debug")
+                                                                 : (options->transactionRenderOnly
+                                                                        ? QStringLiteral("Transaction render only")
+                                                                        : (options->includeModel
+                                                                               ? (options->includeView
+                                                                                      ? QStringLiteral("loader + table attach")
+                                                                                      : QStringLiteral("loader + model"))
+                                                                               : QStringLiteral("loader only"))))))))));
     out << "Mode:  " << mode << "\n";
     if (options->reqOnly || options->txOnly) {
         QStringList filterModes;

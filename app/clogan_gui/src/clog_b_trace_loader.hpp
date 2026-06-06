@@ -72,6 +72,7 @@ enum class CLogBTraceLoadStage {
     Decoding,
     Formatting,
     Finalizing,
+    CollectingCacheStateErrors,
     FinalizingIndexDebug,
     FinalizingIndexLayout,
     FinalizingIndexRows,
@@ -183,6 +184,7 @@ struct CLogBTraceXactionIndexRecord {
     QString jointPath;
     QString denialName;
     QString denialCode;
+    std::uint32_t denialValue = 0;
     QString xactionType;
 };
 
@@ -227,6 +229,24 @@ struct CLogBTraceCacheLineStateSpan {
 
 using CLogBTraceCacheLineStateSpanCallback =
     std::function<bool(CLogBTraceCacheLineStateSpan span)>;
+
+struct CLogBTraceCacheReplayIssue {
+    std::uint64_t logicalRow = 0;
+    qint64 timestamp = 0;
+    std::uint32_t rnNodeId = (std::numeric_limits<std::uint32_t>::max)();
+    QString rnNodeType;
+    std::uint64_t lineAddress = 0;
+    QString denialName;
+    QString denialCode;
+    std::uint32_t denialValue = 0;
+    QString channel;
+    QString xactionType;
+    QString jointType;
+    QString jointPath;
+};
+
+using CLogBTraceCacheReplayIssueCallback =
+    std::function<bool(CLogBTraceCacheReplayIssue issue)>;
 
 class CLogBTraceLoader final {
 public:
@@ -353,6 +373,12 @@ public:
                                          CLogBTraceLoadError& error,
                                          const CLogBTraceLoadCallbacks& callbacks = {},
                                          std::stop_token stopToken = {});
+    static bool collectCacheStateReplayIssues(const QString& filePath,
+                                              const CLogBTraceMetadata& metadata,
+                                              const CLogBTraceCacheReplayIssueCallback& issueCallback,
+                                              CLogBTraceLoadError& error,
+                                              const CLogBTraceLoadCallbacks& callbacks = {},
+                                              std::stop_token stopToken = {});
 
     static bool collectFastRecordRowsMatchingFilter(const CLogBTraceMetadata& metadata,
                                                     const CLogBTraceFastFilter& filter,

@@ -9,6 +9,26 @@ using namespace MainWindowDetail;
 
 namespace {
 
+std::shared_ptr<const std::vector<TraceIssue>> EmptyTraceIssues()
+{
+    static const auto empty = std::make_shared<const std::vector<TraceIssue>>();
+    return empty;
+}
+
+template <typename Session>
+void clearTraceIssues(Session& session)
+{
+    session.rawTraceIssues = EmptyTraceIssues();
+    session.traceIssues = EmptyTraceIssues();
+    session.traceIssueCounts = {};
+    session.traceIssuePersistedTableLoaded = false;
+}
+
+bool isErrorsDockVisible(const ads::CDockWidget* dock, const ErrorsWidget* widget) noexcept
+{
+    return dock && widget && !dock->isClosed() && widget->isVisible();
+}
+
 void showXactionIndexErrorDialog(QWidget* parent,
                                  const QString& traceLabel,
                                  const CLogBTraceLoadError& error)
@@ -82,7 +102,11 @@ void MainWindow::startXactionIndexing(const bool rebuildExisting)
     auto stopSource = std::make_shared<std::stop_source>();
     targetSession->xactionIndexStopSource = stopSource;
     const quint64 generation = ++targetSession->xactionIndexGeneration;
+    cancelTraceIssueBuildForSession(*targetSession);
     targetSession->xactionIndexActive = true;
+    clearTraceIssues(*targetSession);
+    targetSession->traceIssueBuildComplete = false;
+    targetSession->traceIssueBuildRequested = isErrorsDockVisible(errorsDock_, errorsWidget_);
     xactionIndexStopSource_ = targetSession->xactionIndexStopSource;
     xactionIndexGeneration_ = targetSession->xactionIndexGeneration;
     xactionIndexActive_ = targetSession->xactionIndexActive;
@@ -222,6 +246,9 @@ void MainWindow::startXactionIndexing(const bool rebuildExisting)
                 case CLogBTraceLoadStage::Finalizing:
                     progressState->text = QStringLiteral("Xaction index: finalizing");
                     break;
+                case CLogBTraceLoadStage::CollectingCacheStateErrors:
+                    progressState->text = QStringLiteral("Xaction index: collecting cache-state errors");
+                    break;
                 case CLogBTraceLoadStage::FinalizingIndexDebug:
                     progressState->text = QStringLiteral("Xaction index: flushing debug data");
                     break;
@@ -339,6 +366,11 @@ void MainWindow::clearXactionIndex()
     }
 
     currentTraceSession_->clearXactionIndex();
+    if (TraceViewSession* session = activeTraceViewSession()) {
+        cancelTraceIssueBuildForSession(*session);
+        clearTraceIssues(*session);
+        session->traceIssueBuildComplete = false;
+    }
     if (flitModel_) {
         flitModel_->clearTransactionHighlightWithoutRefresh();
         scheduleVisibleXactionIndexRowsRefresh();
@@ -374,6 +406,9 @@ void MainWindow::cancelXactionIndexingForSession(TraceViewSession& session, cons
     if (wasActive && clearPartial && session.traceSession) {
         session.traceSession->clearXactionIndex();
     }
+    cancelTraceIssueBuildForSession(session);
+    clearTraceIssues(session);
+    session.traceIssueBuildComplete = false;
     if (wasActive && session.flitModel) {
         session.flitModel->clearTransactionHighlightWithoutRefresh();
         if (session.id == activeTraceSessionId_) {
@@ -461,6 +496,9 @@ void MainWindow::finishXactionIndexing(std::shared_ptr<TraceSession> session,
     }
     if (!succeeded || cancelled) {
         session->clearXactionIndex();
+        cancelTraceIssueBuildForSession(*targetSession);
+        clearTraceIssues(*targetSession);
+        targetSession->traceIssueBuildComplete = false;
         if (targetSession->flitModel) {
             targetSession->flitModel->clearTransactionHighlightWithoutRefresh();
             if (targetIsActive) {
@@ -501,6 +539,12 @@ void MainWindow::finishXactionIndexing(std::shared_ptr<TraceSession> session,
     }
 
     session->refreshCachedXactionIndexRows();
+    clearTraceIssues(*targetSession);
+    targetSession->traceIssueBuildActive = false;
+    targetSession->traceIssueBuildComplete = false;
+    targetSession->traceIssueBuildProgressText.clear();
+    targetSession->traceIssueBuildCompletedRows = 0;
+    targetSession->traceIssueBuildTotalRows = 0;
     if (targetSession->flitModel) {
         targetSession->flitModel->clearTransactionHighlightWithoutRefresh();
         if (targetIsActive) {
@@ -518,6 +562,11 @@ void MainWindow::finishXactionIndexing(std::shared_ptr<TraceSession> session,
         updateXactionIndexAction();
     }
     scheduleDiagnosticsSnapshotRefresh();
+    if (targetIsActive && isErrorsDockVisible(errorsDock_, errorsWidget_)) {
+        startTraceIssueBuild(*targetSession, true);
+    } else if (targetIsActive) {
+        refreshErrorsWidget();
+    }
 }
 
 }  // namespace CHIron::Gui

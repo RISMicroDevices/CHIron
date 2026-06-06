@@ -844,6 +844,7 @@ void MainWindow::buildUi()
 
     clipboardWidget_ = new ClipboardWidget(dockManager_);
     markerWidget_ = new MarkerWidget(dockManager_);
+    errorsWidget_ = new ErrorsWidget(dockManager_);
     clipboardCacheMinimap_ = new TraceCacheLineMinimap(clipboardWidget_->tableView(),
                                                        TraceCacheLineMinimap::HostMode::Clipboard,
                                                        clipboardWidget_->tableView()->parentWidget());
@@ -868,6 +869,19 @@ void MainWindow::buildUi()
     });
     connect(markerWidget_, &MarkerWidget::saveRequested, this, &MainWindow::saveMarkers);
     connect(markerWidget_, &MarkerWidget::loadRequested, this, &MainWindow::loadMarkers);
+    connect(errorsWidget_, &ErrorsWidget::logicalRowActivated, this, &MainWindow::jumpToLogicalTraceRow);
+    errorsWidget_->setIssueDisposition(TraceIssueSource::XactionIndex, xactionIssueDisposition_);
+    errorsWidget_->setIssueDisposition(TraceIssueSource::CacheStateReplay, cacheStateIssueDisposition_);
+    errorsWidget_->setSeverityVisible(TraceIssueSeverity::Error, errorIssuesVisible_);
+    errorsWidget_->setSeverityVisible(TraceIssueSeverity::Warning, warningIssuesVisible_);
+    connect(errorsWidget_, &ErrorsWidget::issueDispositionChanged, this, [this](const TraceIssueSource source,
+                                                                                const TraceIssueDisposition disposition) {
+        setTraceIssueDisposition(source, disposition);
+    });
+    connect(errorsWidget_, &ErrorsWidget::severityVisibilityChanged, this, [this](const TraceIssueSeverity severity,
+                                                                                  const bool visible) {
+        setTraceIssueSeverityVisible(severity, visible);
+    });
 
     auto* traceDock = makeDockWidget(QStringLiteral("Flits"), tracePanel, true);
     timelineDock_ = makeDockWidget(QStringLiteral("Timeline"), timelineHost, true);
@@ -879,6 +893,7 @@ void MainWindow::buildUi()
     transactionDock_ = makeDockWidget(QStringLiteral("Transaction"), transactionHost, true);
     clipboardDock_ = makeDockWidget(QStringLiteral("Clipboard"), clipboardWidget_, true);
     markerDock_ = makeDockWidget(QStringLiteral("Marker"), markerWidget_, true);
+    errorsDock_ = makeDockWidget(QStringLiteral("Errors"), errorsWidget_, true);
     auto* detailsDock = makeDockWidget(QStringLiteral("Fields"), detailView_);
     auto* inspectorDock = makeDockWidget(QStringLiteral("Inspection"), inspectorPanel);
     statisticsDock_ = makeDockWidget(QStringLiteral("Statistics"), statisticsPanel, true);
@@ -896,6 +911,7 @@ void MainWindow::buildUi()
     dockManager_->addDockWidget(BottomDockWidgetArea, transactionDock_, traceArea);
     dockManager_->addDockWidget(BottomDockWidgetArea, clipboardDock_, traceArea);
     dockManager_->addDockWidget(BottomDockWidgetArea, markerDock_, traceArea);
+    dockManager_->addDockWidget(BottomDockWidgetArea, errorsDock_, traceArea);
     dockManager_->addDockWidget(BottomDockWidgetArea, statisticsDock_, traceArea);
     dockManager_->addDockWidget(BottomDockWidgetArea, topologyDock_, traceArea);
     latencyDock_->closeDockWidget();
@@ -904,6 +920,7 @@ void MainWindow::buildUi()
     transactionDock_->closeDockWidget();
     clipboardDock_->closeDockWidget();
     markerDock_->closeDockWidget();
+    errorsDock_->closeDockWidget();
     statisticsDock_->closeDockWidget();
     topologyDock_->closeDockWidget();
 
@@ -945,6 +962,7 @@ void MainWindow::buildUi()
     windowsMenu->addAction(transactionDock_->toggleViewAction());
     windowsMenu->addAction(clipboardDock_->toggleViewAction());
     windowsMenu->addAction(markerDock_->toggleViewAction());
+    windowsMenu->addAction(errorsDock_->toggleViewAction());
     windowsMenu->addAction(detailsDock->toggleViewAction());
     windowsMenu->addAction(inspectorDock->toggleViewAction());
     windowsMenu->addAction(statisticsDock_->toggleViewAction());
@@ -958,6 +976,16 @@ void MainWindow::buildUi()
     QWidgetAction* windowsAction = new QWidgetAction(workspaceToolbar);
     windowsAction->setDefaultWidget(windowsButton);
     workspaceToolbar->addAction(windowsAction);
+
+    connect(errorsDock_, &ads::CDockWidget::visibilityChanged, this, [this](const bool visible) {
+        if (!visible) {
+            return;
+        }
+        if (TraceViewSession* session = activeTraceViewSession()) {
+            startTraceIssueBuild(*session);
+            refreshErrorsWidget();
+        }
+    });
 
     QMenu* sessionsMenu = new QMenu(QStringLiteral("&Sessions"), this);
     QAction* reloadActiveSessionAction =

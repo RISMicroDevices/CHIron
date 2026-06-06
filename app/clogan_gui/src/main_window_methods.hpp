@@ -70,6 +70,22 @@
     std::vector<TraceMarkerDisplaySummary> markerDisplaySummaries(const std::vector<TraceMarker>& markers) const;
     void refreshMarkerViews();
     void showMarkerDock();
+    void showErrorsDock();
+    void refreshErrorsWidget();
+    void loadTraceIssueDisplaySettings();
+    void saveTraceIssueDisplaySettings() const;
+    void setTraceIssueDisposition(TraceIssueSource source, TraceIssueDisposition disposition);
+    void setTraceIssueSeverityVisible(TraceIssueSeverity severity, bool visible);
+    void reapplyTraceIssueDisplayPolicy();
+    void startTraceIssueBuild(TraceViewSession& session, bool forceRebuild = false);
+    void cancelTraceIssueBuildForSession(TraceViewSession& session);
+    void finishTraceIssueBuild(std::shared_ptr<TraceSession> session,
+                               quint64 sessionId,
+                               quint64 generation,
+                               TraceIssueBuildResult result,
+                               bool succeeded,
+                               bool cancelled,
+                               QString errorText);
     void saveMarkers();
     bool saveMarkersToPath(const QString& path);
     void loadMarkers();

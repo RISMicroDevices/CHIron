@@ -5,6 +5,7 @@
 #include "flit_details_model.hpp"
 #include "flit_table_model.hpp"
 #include "marker_store.hpp"
+#include "trace_issue_store.hpp"
 #include "trace_statistics.hpp"
 
 #include <QByteArray>
@@ -59,8 +60,17 @@ class ClipboardWidget;
 class TraceCacheLineMinimap;
 class TraceMarkerOverlay;
 class MarkerWidget;
+class ErrorsWidget;
 struct TraceMarkerDisplaySummary;
 class TraceSession;
+
+struct TraceIssueBuildResult {
+    std::shared_ptr<const std::vector<TraceIssue>> rawIssues =
+        std::make_shared<const std::vector<TraceIssue>>();
+    std::shared_ptr<const std::vector<TraceIssue>> visibleIssues =
+        std::make_shared<const std::vector<TraceIssue>>();
+    TraceIssueCounts counts;
+};
 
 class MainWindow final : public QMainWindow {
 public:
@@ -192,6 +202,33 @@ public:
     void testNavigateMarker(bool forward);
     QRect testTraceTableScrollBarGeometry() const;
     QRect testTraceTableViewportGeometry() const;
+    void testShowErrorsDock();
+    int testActivePersistedTraceIssueCount() const;
+    int testErrorIssueCount() const noexcept;
+    int testErrorWarningCount() const noexcept;
+    int testErrorErrorCount() const noexcept;
+    int testErrorWidgetWarningCount() const noexcept;
+    int testErrorWidgetErrorCount() const noexcept;
+    bool testErrorsBuildActive() const noexcept;
+    bool testErrorsBuildComplete() const noexcept;
+    QString testErrorsBuildDebugState() const;
+    QString testErrorWidgetStatusText() const;
+    bool testErrorWidgetProgressVisible() const noexcept;
+    QString testErrorSeverityButtonText(TraceIssueSeverity severity) const;
+    QString testErrorIssueSummaryAt(int row) const;
+    QString testErrorIssueCodeAt(int row) const;
+    QString testErrorIssueDescriptionAt(int row) const;
+    QString testErrorIssueSourceAt(int row) const;
+    QString testErrorIssueRowTextAt(int row) const;
+    QString testErrorIssueDetailsAt(int row) const;
+    QString testExpandedErrorIssueDetailsAt(int row) const;
+    bool testErrorIssueExpanded(int row) const;
+    bool testSetErrorIssueExpanded(int row, bool expanded);
+    bool testActivateErrorIssueAt(int row);
+    QString testErrorIssueDisposition(TraceIssueSource source) const;
+    void testSetErrorIssueDisposition(TraceIssueSource source, TraceIssueDisposition disposition);
+    bool testErrorSeverityVisible(TraceIssueSeverity severity) const noexcept;
+    void testSetErrorSeverityVisible(TraceIssueSeverity severity, bool visible);
     void testStartXactionIndexing(bool rebuildExisting = false);
     bool testSessionXactionIndexActive(int index) const noexcept;
     void testSetClipboardScope(ClipboardScope scope);

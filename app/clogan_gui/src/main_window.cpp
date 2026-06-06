@@ -6,6 +6,7 @@
 #include <QMouseEvent>
 
 #include <cstdint>
+#include <limits>
 
 namespace CHIron::Gui {
 using namespace MainWindowDetail;
@@ -19,6 +20,7 @@ MainWindow::MainWindow(QWidget* parent)
     diagnosticsSnapshotTimer_->setSingleShot(true);
     diagnosticsSnapshotTimer_->setInterval(150);
 
+    loadTraceIssueDisplaySettings();
     buildUi();
     wireSignals();
     connect(diagnosticsSnapshotTimer_, &QTimer::timeout, this, &MainWindow::refreshDiagnosticsSnapshot);
@@ -39,6 +41,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
         cancelClipboardXactionAddressInsertForSession(session->id);
         cancelXactionIndexingForSession(*session, true);
         cancelStatisticsComputationForSession(*session);
+        cancelTraceIssueBuildForSession(*session);
     }
     if (dockManager_) {
         QSettings settings = MakeLayoutSettings();
@@ -1092,6 +1095,171 @@ QRect MainWindow::testTraceTableViewportGeometry() const
                  tableOrigin.y() + viewport.top(),
                  viewport.width(),
                  viewport.height());
+}
+
+void MainWindow::testShowErrorsDock()
+{
+    showErrorsDock();
+}
+
+int MainWindow::testActivePersistedTraceIssueCount() const
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    if (!session || !session->traceSession) {
+        return 0;
+    }
+    std::uint64_t issueCount = 0;
+    CLogBTraceLoadError error;
+    if (!session->traceSession->xactionIndexIssueCount(issueCount, error)) {
+        return -1;
+    }
+    return issueCount > static_cast<std::uint64_t>(std::numeric_limits<int>::max())
+        ? std::numeric_limits<int>::max()
+        : static_cast<int>(issueCount);
+}
+
+int MainWindow::testErrorIssueCount() const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    return session ? static_cast<int>(session->traceIssues->size()) : 0;
+}
+
+int MainWindow::testErrorWarningCount() const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    return session ? session->traceIssueCounts.warnings : 0;
+}
+
+int MainWindow::testErrorErrorCount() const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    return session ? session->traceIssueCounts.errors : 0;
+}
+
+int MainWindow::testErrorWidgetWarningCount() const noexcept
+{
+    return errorsWidget_ ? errorsWidget_->warningCount() : 0;
+}
+
+int MainWindow::testErrorWidgetErrorCount() const noexcept
+{
+    return errorsWidget_ ? errorsWidget_->errorCount() : 0;
+}
+
+bool MainWindow::testErrorsBuildActive() const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    return session && session->traceIssueBuildActive;
+}
+
+bool MainWindow::testErrorsBuildComplete() const noexcept
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    return session && session->traceIssueBuildComplete;
+}
+
+QString MainWindow::testErrorsBuildDebugState() const
+{
+    const TraceViewSession* session = activeTraceViewSession();
+    if (!session) {
+        return QStringLiteral("no-session");
+    }
+    return QStringLiteral("active=%1 complete=%2 loaded=%3 issues=%4 errors=%5 gen=%6 persisted=%7")
+        .arg(session->traceIssueBuildActive ? 1 : 0)
+        .arg(session->traceIssueBuildComplete ? 1 : 0)
+        .arg(session->traceIssuePersistedTableLoaded ? 1 : 0)
+        .arg(session->traceIssues ? static_cast<int>(session->traceIssues->size()) : -1)
+        .arg(session->traceIssueCounts.errors)
+        .arg(session->traceIssueBuildGeneration)
+        .arg(testActivePersistedTraceIssueCount());
+}
+
+QString MainWindow::testErrorWidgetStatusText() const
+{
+    return errorsWidget_ ? errorsWidget_->testStatusText() : QString();
+}
+
+bool MainWindow::testErrorWidgetProgressVisible() const noexcept
+{
+    return errorsWidget_ && errorsWidget_->testProgressVisible();
+}
+
+QString MainWindow::testErrorSeverityButtonText(const TraceIssueSeverity severity) const
+{
+    return errorsWidget_ ? errorsWidget_->testSeverityButtonText(severity) : QString();
+}
+
+QString MainWindow::testErrorIssueSummaryAt(const int row) const
+{
+    return errorsWidget_ ? errorsWidget_->testTopLevelSummary(row) : QString();
+}
+
+QString MainWindow::testErrorIssueCodeAt(const int row) const
+{
+    return errorsWidget_ ? errorsWidget_->testCodeText(row) : QString();
+}
+
+QString MainWindow::testErrorIssueDescriptionAt(const int row) const
+{
+    return errorsWidget_ ? errorsWidget_->testDescriptionText(row) : QString();
+}
+
+QString MainWindow::testErrorIssueSourceAt(const int row) const
+{
+    return errorsWidget_ ? errorsWidget_->testSourceText(row) : QString();
+}
+
+QString MainWindow::testErrorIssueRowTextAt(const int row) const
+{
+    return errorsWidget_ ? errorsWidget_->testRowText(row) : QString();
+}
+
+QString MainWindow::testErrorIssueDetailsAt(const int row) const
+{
+    return errorsWidget_ ? errorsWidget_->testDetailText(row) : QString();
+}
+
+QString MainWindow::testExpandedErrorIssueDetailsAt(const int row) const
+{
+    return errorsWidget_ ? errorsWidget_->testExpandedDetailText(row) : QString();
+}
+
+bool MainWindow::testErrorIssueExpanded(const int row) const
+{
+    return errorsWidget_ && errorsWidget_->testIssueExpanded(row);
+}
+
+bool MainWindow::testSetErrorIssueExpanded(const int row, const bool expanded)
+{
+    return errorsWidget_ && errorsWidget_->testSetIssueExpanded(row, expanded);
+}
+
+bool MainWindow::testActivateErrorIssueAt(const int row)
+{
+    return errorsWidget_ && errorsWidget_->testActivateIssue(row);
+}
+
+QString MainWindow::testErrorIssueDisposition(const TraceIssueSource source) const
+{
+    return TraceIssueDispositionText(source == TraceIssueSource::CacheStateReplay
+                                         ? cacheStateIssueDisposition_
+                                         : xactionIssueDisposition_);
+}
+
+void MainWindow::testSetErrorIssueDisposition(const TraceIssueSource source,
+                                              const TraceIssueDisposition disposition)
+{
+    const_cast<MainWindow*>(this)->setTraceIssueDisposition(source, disposition);
+}
+
+bool MainWindow::testErrorSeverityVisible(const TraceIssueSeverity severity) const noexcept
+{
+    return severity == TraceIssueSeverity::Warning ? warningIssuesVisible_ : errorIssuesVisible_;
+}
+
+void MainWindow::testSetErrorSeverityVisible(const TraceIssueSeverity severity, const bool visible)
+{
+    const_cast<MainWindow*>(this)->setTraceIssueSeverityVisible(severity, visible);
 }
 
 void MainWindow::testStartXactionIndexing(const bool rebuildExisting)

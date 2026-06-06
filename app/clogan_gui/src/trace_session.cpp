@@ -34,7 +34,7 @@ namespace {
 constexpr std::array<char, 8> kOptionalFieldIndexMagic = {'C', 'H', 'O', 'F', 'I', 'D', '1', '\0'};
 constexpr std::uint32_t kOptionalFieldIndexVersion = 1;
 constexpr std::array<char, 8> kXactionIndexMagic = {'C', 'H', 'X', 'A', 'C', 'T', '1', '\0'};
-constexpr std::uint32_t kXactionIndexVersion = 5;
+constexpr std::uint32_t kXactionIndexVersion = 8;
 constexpr std::uint64_t kXactionRowChunkRows = 1024;
 constexpr std::uint64_t kXactionRowMapChunksPerWriteSegment = 256;
 constexpr std::uint64_t kXactionRowMapChunksPerWriteFlush = 32;
@@ -47,9 +47,11 @@ constexpr qsizetype kXactionWriteFlushBytes = 32 * 1024 * 1024;
 constexpr std::uint64_t kXactionIndexHeaderSerializedBytes =
     sizeof(char) * kXactionIndexMagic.size()
     + sizeof(std::uint32_t)
-    + sizeof(std::uint64_t) * 12;
+    + sizeof(std::uint64_t) * 14;
 constexpr std::uint64_t kXactionGroupDescriptorSerializedBytes =
     sizeof(std::uint64_t) * 4;
+constexpr std::uint64_t kXactionIssueDescriptorSerializedBytes =
+    sizeof(std::uint64_t) * 3 + sizeof(std::uint32_t) * 8 + sizeof(std::uint8_t) * 2;
 constexpr std::uint64_t kXactionRowChunkDescriptorSerializedBytes =
     sizeof(std::uint64_t) * 2 + sizeof(std::uint32_t) * 2 + sizeof(std::uint8_t);
 constexpr std::uint64_t kXactionRowMapChunkRows = 262144;
@@ -93,6 +95,8 @@ struct XactionIndexHeader {
     std::uint64_t rowTableOffset = 0;
     std::uint64_t groupTableOffset = 0;
     std::uint64_t groupCount = 0;
+    std::uint64_t issueTableOffset = 0;
+    std::uint64_t issueCount = 0;
     std::uint64_t debugDescriptorTableOffset = 0;
     std::uint64_t debugChunkDescriptorTableOffset = 0;
     std::uint64_t debugChunkCount = 0;
@@ -135,6 +139,17 @@ using OptionalFieldIndexRecord = CLogBTraceOptionalFieldValue;
 
 std::uint8_t xactionRowFlagsForRecord(const CLogBTraceXactionIndexRecord& record);
 CLogBTraceXactionIndexRecord xactionRecordFromFlags(std::uint8_t flags, std::uint64_t ordinal);
+
+QString traceIssueSourceName(const TraceIssueSource source)
+{
+    switch (source) {
+    case TraceIssueSource::XactionIndex:
+        return QStringLiteral("Xaction");
+    case TraceIssueSource::CacheStateReplay:
+        return QStringLiteral("Cache State");
+    }
+    return QStringLiteral("Issue");
+}
 
 QString fastIndexPathForTrace(const QString& tracePath)
 {
@@ -850,6 +865,7 @@ CLogBTraceXactionIndexRecord xactionRecordFromFlags(const std::uint8_t flags,
     record.processedByJoint = (flags & XactionRowProcessedByJoint) != 0;
     record.xactionComplete = record.indexed && (flags & XactionRowComplete) != 0;
     record.xactionOrdinal = record.indexed ? ordinal : 0;
+    record.denialValue = 0;
     if (record.indexed) {
         record.transactionGroupKey =
             QStringLiteral("xaction|%1").arg(static_cast<qulonglong>(record.xactionOrdinal));
@@ -892,6 +908,8 @@ bool writeXactionHeader(QDataStream& stream, const XactionIndexHeader& header)
            << quint64(header.rowTableOffset)
            << quint64(header.groupTableOffset)
            << quint64(header.groupCount)
+           << quint64(header.issueTableOffset)
+           << quint64(header.issueCount)
            << quint64(header.debugDescriptorTableOffset)
            << quint64(header.debugChunkDescriptorTableOffset)
            << quint64(header.debugChunkCount)
@@ -916,6 +934,8 @@ bool readXactionHeader(QDataStream& stream, XactionIndexHeader& header)
     quint64 rowTableOffset = 0;
     quint64 groupTableOffset = 0;
     quint64 groupCount = 0;
+    quint64 issueTableOffset = 0;
+    quint64 issueCount = 0;
     quint64 debugDescriptorTableOffset = 0;
     quint64 debugChunkDescriptorTableOffset = 0;
     quint64 debugChunkCount = 0;
@@ -929,6 +949,8 @@ bool readXactionHeader(QDataStream& stream, XactionIndexHeader& header)
            >> rowTableOffset
            >> groupTableOffset
            >> groupCount
+           >> issueTableOffset
+           >> issueCount
            >> debugDescriptorTableOffset
            >> debugChunkDescriptorTableOffset
            >> debugChunkCount
@@ -946,6 +968,8 @@ bool readXactionHeader(QDataStream& stream, XactionIndexHeader& header)
     header.rowTableOffset = rowTableOffset;
     header.groupTableOffset = groupTableOffset;
     header.groupCount = groupCount;
+    header.issueTableOffset = issueTableOffset;
+    header.issueCount = issueCount;
     header.debugDescriptorTableOffset = debugDescriptorTableOffset;
     header.debugChunkDescriptorTableOffset = debugChunkDescriptorTableOffset;
     header.debugChunkCount = debugChunkCount;
@@ -1000,6 +1024,20 @@ bool validateXactionIndexHeader(const XactionIndexHeader& header,
     if (header.groupTableOffset > fileSize
         || groupTableBytes > fileSize
         || header.groupTableOffset + groupTableBytes > fileSize) {
+        return false;
+    }
+
+    if (header.issueCount != 0
+        && kXactionIssueDescriptorSerializedBytes
+            > (std::numeric_limits<std::uint64_t>::max)() / header.issueCount) {
+        return false;
+    }
+    const std::uint64_t issueTableBytes =
+        header.issueCount * kXactionIssueDescriptorSerializedBytes;
+    if ((header.issueCount != 0 && header.issueTableOffset == 0)
+        || header.issueTableOffset > fileSize
+        || issueTableBytes > fileSize
+        || header.issueTableOffset + issueTableBytes > fileSize) {
         return false;
     }
 
@@ -1124,6 +1162,63 @@ bool readXactionGroupDescriptorAt(QFile& file,
     cursor += sizeof(std::uint64_t);
     descriptor.descriptor.chunkTableBytes = 0;
     return true;
+}
+
+TraceSession::XactionIssueRecord readXactionIssueRecord(const char* cursor) noexcept
+{
+    TraceSession::XactionIssueRecord issue;
+    const std::uint8_t source = static_cast<std::uint8_t>(*cursor++);
+    const std::uint8_t severity = static_cast<std::uint8_t>(*cursor++);
+    issue.source = source == static_cast<std::uint8_t>(TraceIssueSource::CacheStateReplay)
+        ? TraceIssueSource::CacheStateReplay
+        : TraceIssueSource::XactionIndex;
+    issue.severity = severity == static_cast<std::uint8_t>(TraceIssueSeverity::Warning)
+        ? TraceIssueSeverity::Warning
+        : TraceIssueSeverity::Error;
+    issue.logicalRow = readLe64(cursor);
+    cursor += sizeof(std::uint64_t);
+    issue.timestamp = static_cast<qint64>(readLe64(cursor));
+    cursor += sizeof(std::uint64_t);
+    issue.denialName = readLe32(cursor);
+    cursor += sizeof(std::uint32_t);
+    issue.denialCode = readLe32(cursor);
+    cursor += sizeof(std::uint32_t);
+    issue.denialValue = readLe32(cursor);
+    cursor += sizeof(std::uint32_t);
+    issue.channel = readLe32(cursor);
+    cursor += sizeof(std::uint32_t);
+    issue.jointType = readLe32(cursor);
+    cursor += sizeof(std::uint32_t);
+    issue.jointPath = readLe32(cursor);
+    cursor += sizeof(std::uint32_t);
+    issue.xactionType = readLe32(cursor);
+    cursor += sizeof(std::uint32_t);
+    issue.node = readLe32(cursor);
+    cursor += sizeof(std::uint32_t);
+    issue.address = readLe64(cursor);
+    return issue;
+}
+
+bool readXactionIssueTable(QFile& file,
+                           const std::uint64_t issueTableOffset,
+                           const std::uint64_t issueCount,
+                           QByteArray& bytes)
+{
+    bytes.clear();
+    if (issueCount == 0) {
+        return true;
+    }
+    if (issueCount > (std::numeric_limits<std::uint64_t>::max)()
+            / kXactionIssueDescriptorSerializedBytes
+        || !file.seek(static_cast<qint64>(issueTableOffset))) {
+        return false;
+    }
+    const std::uint64_t tableBytes = issueCount * kXactionIssueDescriptorSerializedBytes;
+    if (tableBytes > static_cast<std::uint64_t>((std::numeric_limits<qsizetype>::max)())) {
+        return false;
+    }
+    bytes = file.read(static_cast<qint64>(tableBytes));
+    return bytes.size() == static_cast<qsizetype>(tableBytes);
 }
 
 bool validateXactionRowsDescriptor(const TraceSession::XactionRowsDescriptorByOrdinal& entry,
@@ -1496,6 +1591,7 @@ public:
         currentChunkIndex_ = 0;
         nextExpectedRow_ = 0;
         flushedRowMapChunkCount_ = 0;
+        xactionIssues_.clear();
         rowGroupsByOrdinal_.clear();
         strings_.clear();
         stringIds_.clear();
@@ -1523,6 +1619,9 @@ public:
         }
 
         currentChunkRecords_.push_back(std::move(record));
+        if (TraceIssueDenialIsReportable(currentChunkRecords_.back().denialName)) {
+            xactionIssues_.push_back(internXactionIssueRecord(logicalRow, currentChunkRecords_.back()));
+        }
         ++nextExpectedRow_;
         if (currentChunkRecords_.size() == kXactionRowMapChunkRows) {
             pendingChunkRecords_.push_back(std::move(currentChunkRecords_));
@@ -1567,6 +1666,11 @@ public:
             return false;
         }
         return true;
+    }
+
+    bool addCacheReplayIssueForIndex(CLogBTraceCacheReplayIssue issue)
+    {
+        return addCacheReplayIssue(std::move(issue));
     }
 
     void discard()
@@ -1655,6 +1759,54 @@ private:
         };
     }
 
+    TraceSession::XactionIssueRecord internXactionIssueRecord(
+        const std::uint64_t logicalRow,
+        const CLogBTraceXactionIndexRecord& record)
+    {
+        TraceSession::XactionIssueRecord issue;
+        issue.source = TraceIssueSource::XactionIndex;
+        issue.severity = TraceIssueSeverityForDenial(record.denialName);
+        issue.logicalRow = logicalRow;
+        issue.denialName = internString(record.denialName);
+        issue.denialCode = internString(record.denialCode);
+        issue.denialValue = record.denialValue;
+        issue.jointType = internString(record.jointType);
+        issue.jointPath = internString(record.jointPath);
+        issue.xactionType = internString(record.xactionType);
+        return issue;
+    }
+
+    TraceSession::XactionIssueRecord internCacheIssueRecord(
+        const CLogBTraceCacheReplayIssue& cacheIssue)
+    {
+        TraceSession::XactionIssueRecord issue;
+        issue.source = TraceIssueSource::CacheStateReplay;
+        issue.severity = TraceIssueSeverityForDenial(cacheIssue.denialName);
+        issue.logicalRow = cacheIssue.logicalRow;
+        issue.timestamp = cacheIssue.timestamp;
+        issue.denialName = internString(cacheIssue.denialName);
+        issue.denialCode = internString(cacheIssue.denialCode);
+        issue.denialValue = cacheIssue.denialValue;
+        issue.channel = internString(cacheIssue.channel);
+        issue.jointType = internString(cacheIssue.jointType);
+        issue.jointPath = internString(cacheIssue.jointPath);
+        issue.xactionType = internString(cacheIssue.xactionType);
+        issue.node = internString(QStringLiteral("%1 %2")
+                                      .arg(cacheIssue.rnNodeId)
+                                      .arg(cacheIssue.rnNodeType));
+        issue.address = cacheIssue.lineAddress;
+        return issue;
+    }
+
+    bool addCacheReplayIssue(CLogBTraceCacheReplayIssue issue)
+    {
+        if (!TraceIssueDenialIsReportable(issue.denialName)) {
+            return true;
+        }
+        xactionIssues_.push_back(internCacheIssueRecord(issue));
+        return true;
+    }
+
     static void writeLe32(char*& cursor, const std::uint32_t value) noexcept
     {
         *cursor++ = static_cast<char>(value & 0xffU);
@@ -1726,6 +1878,24 @@ private:
             writeLe32(cursor, entry.debugIds.xactionType);
         }
         return true;
+    }
+
+    static void serializeIssueEntry(QDataStream& stream,
+                                    const TraceSession::XactionIssueRecord& entry)
+    {
+        stream << quint8(static_cast<int>(entry.source))
+               << quint8(static_cast<int>(entry.severity))
+               << quint64(entry.logicalRow)
+               << quint64(static_cast<std::uint64_t>(entry.timestamp))
+               << quint32(entry.denialName)
+               << quint32(entry.denialCode)
+               << quint32(entry.denialValue)
+               << quint32(entry.channel)
+               << quint32(entry.jointType)
+               << quint32(entry.jointPath)
+               << quint32(entry.xactionType)
+               << quint32(entry.node)
+               << quint64(entry.address);
     }
 
     static bool serializeRows(const std::vector<std::uint64_t>& rows,
@@ -1921,7 +2091,6 @@ private:
             group.chunks.push_back(rowListChunk.descriptor);
             group.rowCount += rowListChunk.descriptor.rowCount;
         }
-
         flushedRowMapChunkCount_ = std::max(flushedRowMapChunkCount_,
                                             prepared.chunkIndex + 1);
         return true;
@@ -2146,6 +2315,33 @@ private:
         return true;
     }
 
+    bool writeIssueTable(const std::function<bool(std::uint64_t itemCount)>& progressCallback)
+    {
+        header_.issueCount = static_cast<std::uint64_t>(xactionIssues_.size());
+        header_.issueTableOffset = header_.issueCount == 0
+            ? 0
+            : static_cast<std::uint64_t>(file_.size());
+        if (xactionIssues_.empty()) {
+            return true;
+        }
+        if (!file_.seek(static_cast<qint64>(header_.issueTableOffset))) {
+            return false;
+        }
+        QDataStream stream(&file_);
+        stream.setByteOrder(QDataStream::LittleEndian);
+        for (const TraceSession::XactionIssueRecord& issue : xactionIssues_) {
+            serializeIssueEntry(stream, issue);
+            if (stream.status() != QDataStream::Ok) {
+                setError(QStringLiteral("Could not serialize an Xaction issue record."));
+                return false;
+            }
+            if (progressCallback && !progressCallback(1)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool preparePendingRowMapChunksParallel(std::stop_token stopToken,
                                             const std::uint64_t chunkCount,
                                             const std::size_t workerCount,
@@ -2326,6 +2522,7 @@ private:
             static_cast<std::uint64_t>(strings_.size())
                 + static_cast<std::uint64_t>(rowGroupsByOrdinal_.size())
                 + rowListChunkCount
+                + static_cast<std::uint64_t>(xactionIssues_.size())
                 + header_.rowMapChunkCount
                 + debugChunkDescriptors_.size(),
             1);
@@ -2343,6 +2540,7 @@ private:
         };
         if (!writeStringTable(reportDirectoryProgress)
             || !writeGroupDirectory(reportDirectoryProgress)
+            || !writeIssueTable(reportDirectoryProgress)
             || !writeDebugChunkDescriptorTable(debugChunkDescriptors_, reportDirectoryProgress)
             || !writeRowMapDescriptorTable(rowMapDescriptors_, reportDirectoryProgress)) {
             return false;
@@ -2359,6 +2557,7 @@ private:
     XactionIndexHeader header_;
     std::vector<CLogBTraceXactionIndexRecord> currentChunkRecords_;
     std::vector<std::vector<CLogBTraceXactionIndexRecord>> pendingChunkRecords_;
+    std::vector<TraceSession::XactionIssueRecord> xactionIssues_;
     std::vector<TraceSession::XactionRowMapChunkDescriptor> rowMapDescriptors_;
     std::vector<TraceSession::XactionDebugChunkDescriptor> debugChunkDescriptors_;
     std::uint64_t currentChunkIndex_ = 0;
@@ -3818,6 +4017,7 @@ bool TraceSession::xactionRowInfoRange(const std::uint64_t beginRow,
         info.jointPath = record.jointPath;
         info.denialName = record.denialName;
         info.denialCode = record.denialCode;
+        info.denialValue = record.denialValue;
         info.xactionType = record.xactionType;
         infos.push_back(std::move(info));
     }
@@ -4216,6 +4416,7 @@ bool TraceSession::xactionRowInfosForRows(
                     info.jointPath = std::move(debugRecord.jointPath);
                     info.denialName = std::move(debugRecord.denialName);
                     info.denialCode = std::move(debugRecord.denialCode);
+                    info.denialValue = debugRecord.denialValue;
                     info.xactionType = std::move(debugRecord.xactionType);
                 }
             }
@@ -4482,6 +4683,7 @@ bool TraceSession::xactionRowInfo(const std::uint64_t logicalRow,
     info.jointPath = record.jointPath;
     info.denialName = record.denialName;
     info.denialCode = record.denialCode;
+    info.denialValue = record.denialValue;
     info.xactionType = record.xactionType;
     return true;
 }
@@ -4546,6 +4748,8 @@ void TraceSession::markXactionIndexStarted() noexcept
         xactionRowTableOffset_ = 0;
         xactionGroupTableOffset_ = 0;
         xactionGroupCount_ = 0;
+        xactionIssueTableOffset_ = 0;
+        xactionIssueCount_ = 0;
         xactionStringTableOffset_ = 0;
         xactionStringCount_ = 0;
         xactionRowMapChunkDescriptors_.clear();
@@ -4616,6 +4820,41 @@ bool TraceSession::buildXactionIndex(CLogBTraceLoadError& error,
         error.type = CLogBTraceLoadError::Type::Cancelled;
         error.summary = QStringLiteral("Xaction indexing was cancelled.");
         return false;
+    }
+
+    if (metadata_.parameters.GetIssue() == CLog::Issue::Eb) {
+        const std::size_t cacheProgressTotal =
+            static_cast<std::size_t>(std::min<std::uint64_t>(
+                metadata_.totalRecords,
+                static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)())));
+        if (callbacks.stage) {
+            callbacks.stage(CLogBTraceLoadStage::CollectingCacheStateErrors, 1, cacheProgressTotal);
+        }
+        if (callbacks.stageProgress) {
+            callbacks.stageProgress(0, cacheProgressTotal);
+        }
+
+        CLogBTraceLoadCallbacks cacheCallbacks;
+        cacheCallbacks.stageProgress = callbacks.stageProgress;
+        CLogBTraceLoadError cacheError;
+        const bool cacheIssuesOk = CLogBTraceLoader::collectCacheStateReplayIssues(
+            filePath_,
+            metadata_,
+            [&writer](CLogBTraceCacheReplayIssue issue) {
+                return writer.addCacheReplayIssueForIndex(std::move(issue));
+            },
+            cacheError,
+            cacheCallbacks,
+            stopToken);
+        if (!cacheIssuesOk) {
+            writer.discard();
+            resetXactionIndexFileState();
+            error = std::move(cacheError);
+            if (error.summary.isEmpty()) {
+                error.summary = QStringLiteral("Failed to collect cache-state replay errors.");
+            }
+            return false;
+        }
     }
 
     const std::size_t finalizingProgressTotal =
@@ -4920,6 +5159,8 @@ bool TraceSession::tryLoadXactionIndexState(const CLogBTraceLoadCallbacks& callb
         xactionRowTableOffset_ = header.rowTableOffset;
         xactionGroupTableOffset_ = header.groupTableOffset;
         xactionGroupCount_ = header.groupCount;
+        xactionIssueTableOffset_ = header.issueTableOffset;
+        xactionIssueCount_ = header.issueCount;
         xactionStringTableOffset_ = header.stringTableOffset;
         xactionStringCount_ = header.stringCount;
         xactionRowMapChunkDescriptors_ = std::move(rowMapChunkDescriptors);
@@ -4955,6 +5196,8 @@ void TraceSession::resetXactionIndexFileState()
         xactionRowTableOffset_ = 0;
         xactionGroupTableOffset_ = 0;
         xactionGroupCount_ = 0;
+        xactionIssueTableOffset_ = 0;
+        xactionIssueCount_ = 0;
         xactionStringTableOffset_ = 0;
         xactionStringCount_ = 0;
         xactionRowMapChunkDescriptors_.clear();
@@ -5468,6 +5711,297 @@ bool TraceSession::readXactionDebugStrings(const XactionRowDebugIds& debugIds,
         && readString(debugIds.xactionType, record.xactionType);
 }
 
+bool TraceSession::xactionIndexIssues(std::vector<TraceIssue>& issues,
+                                      CLogBTraceLoadError& error,
+                                      std::stop_token stopToken,
+                                      const std::function<void(std::uint64_t completedIssues,
+                                                               std::uint64_t totalIssues)>& progressCallback) const
+{
+    issues.clear();
+    error = {};
+
+    QString indexPath;
+    std::uint64_t issueTableOffset = 0;
+    std::uint64_t issueCount = 0;
+    std::uint64_t stringTableOffset = 0;
+    std::uint64_t stringCount = 0;
+    {
+        const std::lock_guard lock(xactionIndexMutex_);
+        if (!xactionIndexComplete_ || xactionIndexPath_.isEmpty()) {
+            error.summary = QStringLiteral("Persisted Xaction issue table is not ready.");
+            return false;
+        }
+        indexPath = xactionIndexPath_;
+        issueTableOffset = xactionIssueTableOffset_;
+        issueCount = xactionIssueCount_;
+        stringTableOffset = xactionStringTableOffset_;
+        stringCount = xactionStringCount_;
+    }
+    QFile input(indexPath);
+    if (!input.open(QIODevice::ReadOnly)) {
+        error.summary = QStringLiteral("Could not open persisted Xaction issue table.");
+        error.informativeText = indexPath;
+        return false;
+    }
+    const std::uint64_t fileSize = static_cast<std::uint64_t>(input.size());
+    {
+        QDataStream stream(&input);
+        stream.setByteOrder(QDataStream::LittleEndian);
+        XactionIndexHeader header;
+        if (!readXactionHeader(stream, header)
+            || !validateXactionIndexHeader(header, filePath_, metadata_, fileSize)) {
+            error.summary = QStringLiteral("Persisted Xaction issue table is stale.");
+            error.informativeText = indexPath;
+            return false;
+        }
+        issueTableOffset = header.issueTableOffset;
+        issueCount = header.issueCount;
+        stringTableOffset = header.stringTableOffset;
+        stringCount = header.stringCount;
+    }
+    if (issueCount == 0) {
+        if (progressCallback) {
+            progressCallback(0, 0);
+        }
+        return true;
+    }
+
+    QByteArray issueTable;
+    if (!readXactionIssueTable(input, issueTableOffset, issueCount, issueTable)) {
+        error.summary = QStringLiteral("Could not read persisted Xaction issue table.");
+        error.informativeText = indexPath;
+        return false;
+    }
+
+    QByteArray stringDescriptorTable;
+    if (!readXactionStringDescriptorTable(input,
+                                          stringTableOffset,
+                                          stringCount,
+                                          stringDescriptorTable)) {
+        error.summary = QStringLiteral("Could not read persisted Xaction string table.");
+        error.informativeText = indexPath;
+        return false;
+    }
+
+    QHash<std::uint32_t, QString> stringCache;
+    const auto readString = [&](const std::uint32_t oneBasedIndex, QString& value) -> bool {
+        value.clear();
+        if (oneBasedIndex == 0) {
+            return true;
+        }
+        if (oneBasedIndex > stringCount) {
+            return false;
+        }
+        const auto cached = stringCache.constFind(oneBasedIndex);
+        if (cached != stringCache.cend()) {
+            value = cached.value();
+            return true;
+        }
+
+        const std::uint64_t descriptorOffset =
+            static_cast<std::uint64_t>(oneBasedIndex - 1) * kXactionStringDescriptorSerializedBytes;
+        if (descriptorOffset + kXactionStringDescriptorSerializedBytes
+            > static_cast<std::uint64_t>(stringDescriptorTable.size())) {
+            return false;
+        }
+        const char* descriptorCursor =
+            stringDescriptorTable.constData() + static_cast<qsizetype>(descriptorOffset);
+        XactionStringDescriptor descriptor;
+        descriptor.dataOffset = readLe64(descriptorCursor);
+        descriptorCursor += sizeof(std::uint64_t);
+        descriptor.bytes = readLe32(descriptorCursor);
+        if (descriptor.dataOffset > fileSize
+            || descriptor.bytes > fileSize
+            || descriptor.dataOffset + descriptor.bytes > fileSize
+            || !input.seek(static_cast<qint64>(descriptor.dataOffset))) {
+            return false;
+        }
+        const QByteArray bytes = input.read(static_cast<qint64>(descriptor.bytes));
+        if (bytes.size() != static_cast<int>(descriptor.bytes)) {
+            return false;
+        }
+        value = QString::fromUtf8(bytes);
+        stringCache.insert(oneBasedIndex, value);
+        return true;
+    };
+
+    issues.reserve(static_cast<std::size_t>(std::min<std::uint64_t>(
+        issueCount,
+        static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)()))));
+    const char* issueCursor = issueTable.constData();
+    if (progressCallback) {
+        progressCallback(0, issueCount);
+    }
+    for (std::uint64_t issueIndex = 0; issueIndex < issueCount; ++issueIndex) {
+        if (stopToken.stop_requested()) {
+            error.type = CLogBTraceLoadError::Type::Cancelled;
+            error.summary = QStringLiteral("Issue loading was cancelled.");
+            return false;
+        }
+
+        if (static_cast<std::uint64_t>(issueCursor - issueTable.constData())
+                + kXactionIssueDescriptorSerializedBytes
+            > static_cast<std::uint64_t>(issueTable.size())) {
+            error.summary = QStringLiteral("Could not parse persisted Xaction issue record.");
+            error.informativeText = indexPath;
+            return false;
+        }
+        const XactionIssueRecord record = readXactionIssueRecord(issueCursor);
+        issueCursor += kXactionIssueDescriptorSerializedBytes;
+
+        TraceIssue issue;
+        issue.source = record.source;
+        issue.logicalRow = record.logicalRow;
+        issue.timestamp = record.timestamp;
+        issue.denialValue = record.denialValue;
+        if (!readString(record.denialName, issue.denialName)
+            || !readString(record.denialCode, issue.denialCode)
+            || !readString(record.channel, issue.channel)
+            || !readString(record.node, issue.node)) {
+            error.summary = QStringLiteral("Could not resolve persisted Xaction issue strings.");
+            error.informativeText = indexPath;
+            return false;
+        }
+        issue.severity = TraceIssueSeverityForDenial(issue.denialName);
+
+        QString jointType;
+        QString jointPath;
+        QString xactionType;
+        if (!readString(record.jointType, jointType)
+            || !readString(record.jointPath, jointPath)
+            || !readString(record.xactionType, xactionType)) {
+            error.summary = QStringLiteral("Could not resolve persisted Xaction issue details.");
+            error.informativeText = indexPath;
+            return false;
+        }
+
+        if (record.address != (std::numeric_limits<std::uint64_t>::max)()) {
+            issue.address = TraceIssueAddressText(record.address);
+        }
+        issue.id = QStringLiteral("%1|%2|%3")
+                       .arg(static_cast<int>(issue.source))
+                       .arg(static_cast<qulonglong>(issue.logicalRow))
+                       .arg(issue.denialName);
+        issue.summary = issue.source == TraceIssueSource::CacheStateReplay
+            ? QStringLiteral("%1 during cache-state replay at row %2")
+                  .arg(issue.denialName)
+                  .arg(static_cast<qulonglong>(issue.logicalRow + 1))
+            : QStringLiteral("%1 denied at row %2")
+                  .arg(issue.denialName)
+                  .arg(static_cast<qulonglong>(issue.logicalRow + 1));
+
+        QStringList details;
+        details << (issue.source == TraceIssueSource::CacheStateReplay
+                        ? QStringLiteral("Cache-state replay denial")
+                        : QStringLiteral("Xaction index denial"));
+        details << QStringLiteral("  Denial: %1 (%2)")
+                       .arg(issue.denialName,
+                            issue.denialCode.isEmpty() ? QStringLiteral("-") : issue.denialCode);
+        details << QStringLiteral("  Denial value: 0x%1")
+                       .arg(QString::number(issue.denialValue, 16).toUpper(), 8, QLatin1Char('0'));
+        details << QStringLiteral("  Source: %1").arg(traceIssueSourceName(issue.source));
+        details << QStringLiteral("  Logical row: %1")
+                       .arg(static_cast<qulonglong>(issue.logicalRow + 1));
+        details << QStringLiteral("  Joint type: %1")
+                       .arg(jointType.isEmpty() ? QStringLiteral("none") : jointType);
+        details << QStringLiteral("  Joint path: %1")
+                       .arg(jointPath.isEmpty() ? QStringLiteral("none") : jointPath);
+        details << QStringLiteral("  Xaction type: %1")
+                       .arg(xactionType.isEmpty() ? QStringLiteral("none") : xactionType);
+        if (!issue.channel.isEmpty()) {
+            details << QStringLiteral("  Replay channel: %1").arg(issue.channel);
+        }
+        if (!issue.node.isEmpty()) {
+            details << QStringLiteral("  Node: %1").arg(issue.node);
+        }
+        if (!issue.address.isEmpty()) {
+            details << QStringLiteral("  Line address: %1").arg(issue.address);
+        }
+        issue.details = details.join(QLatin1Char('\n'));
+
+        if (TraceIssueDenialIsReportable(issue.denialName)) {
+            issues.push_back(std::move(issue));
+        }
+        if (progressCallback
+            && ((issueIndex + 1) == issueCount || ((issueIndex + 1) % 512ULL) == 0)) {
+            progressCallback(issueIndex + 1, issueCount);
+        }
+    }
+
+    std::sort(issues.begin(), issues.end(), [](const TraceIssue& lhs, const TraceIssue& rhs) {
+        if (lhs.logicalRow != rhs.logicalRow) {
+            return lhs.logicalRow < rhs.logicalRow;
+        }
+        if (lhs.source != rhs.source) {
+            return static_cast<int>(lhs.source) < static_cast<int>(rhs.source);
+        }
+        return lhs.denialName < rhs.denialName;
+    });
+    if (issues.empty()) {
+        return true;
+    }
+    return true;
+}
+
+bool TraceSession::xactionIndexIssueCount(std::uint64_t& issueCount,
+                                          CLogBTraceLoadError& error,
+                                          std::stop_token stopToken) const
+{
+    issueCount = 0;
+    error = {};
+
+    QString indexPath;
+    {
+        const std::lock_guard lock(xactionIndexMutex_);
+        if (!xactionIndexComplete_ || xactionIndexPath_.isEmpty()) {
+            error.summary = QStringLiteral("Persisted Xaction issue table is not ready.");
+            return false;
+        }
+        indexPath = xactionIndexPath_;
+    }
+
+    if (stopToken.stop_requested()) {
+        error.type = CLogBTraceLoadError::Type::Cancelled;
+        error.summary = QStringLiteral("Issue count loading was cancelled.");
+        return false;
+    }
+
+    QFile input(indexPath);
+    if (!input.open(QIODevice::ReadOnly)) {
+        error.summary = QStringLiteral("Could not open persisted Xaction issue table.");
+        error.informativeText = indexPath;
+        return false;
+    }
+
+    QDataStream stream(&input);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    XactionIndexHeader header;
+    const std::uint64_t fileSize = static_cast<std::uint64_t>(input.size());
+    if (!readXactionHeader(stream, header)
+        || !validateXactionIndexHeader(header, filePath_, metadata_, fileSize)) {
+        error.summary = QStringLiteral("Persisted Xaction issue table is stale.");
+        error.informativeText = indexPath;
+        return false;
+    }
+
+    issueCount = header.issueCount;
+    return true;
+}
+
+bool TraceSession::refreshXactionIndexStateFromDisk(std::stop_token stopToken)
+{
+    if (!xactionIndexEnabled_) {
+        return false;
+    }
+    const bool loaded = tryLoadXactionIndexState({}, stopToken);
+    if (loaded) {
+        const std::lock_guard lock(xactionIndexMutex_);
+        xactionIndexStarted_ = true;
+        xactionIndexComplete_ = true;
+    }
+    return loaded;
+}
+
 QString TraceSession::buildPersistedXactionDebugInfo(
     const std::uint64_t logicalRow,
     const CLogBTraceXactionIndexRecord& record) const
@@ -5907,6 +6441,8 @@ void TraceSession::publishSnapshot() const
         next->xactionRowTableOffset = xactionRowTableOffset_;
         next->xactionGroupTableOffset = xactionGroupTableOffset_;
         next->xactionGroupCount = xactionGroupCount_;
+        next->xactionIssueTableOffset = xactionIssueTableOffset_;
+        next->xactionIssueCount = xactionIssueCount_;
         next->xactionStringTableOffset = xactionStringTableOffset_;
         next->xactionStringCount = xactionStringCount_;
         next->xactionRowMapChunkDescriptors = xactionRowMapChunkDescriptors_;

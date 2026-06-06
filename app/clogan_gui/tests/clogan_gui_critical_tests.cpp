@@ -2,6 +2,7 @@
 #include "cache_widget.hpp"
 #include "clog_b_trace_loader.hpp"
 #include "config.hpp"
+#include "errors_widget.hpp"
 #include "filter_parallel_utils.hpp"
 #include "flit_transaction_keys.hpp"
 #include "flit_table_model.hpp"
@@ -13,6 +14,7 @@
 #include "marker_widget.hpp"
 #include "timeline_widget.hpp"
 #include "transaction_widget.hpp"
+#include "trace_issue_store.hpp"
 #include "trace_statistics.hpp"
 #include "trace_session_fast_index_utils.hpp"
 
@@ -36,6 +38,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSettings>
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -64,6 +67,14 @@
 namespace {
 
 using TestFunction = std::function<void()>;
+
+void resetErrorsDispositionSettings()
+{
+    QSettings settings(QCoreApplication::applicationDirPath() + QStringLiteral("/clogan_gui_layout.ini"),
+                       QSettings::IniFormat);
+    settings.remove(QStringLiteral("errors"));
+    settings.sync();
+}
 
 [[noreturn]] void fail(const QString& message)
 {
@@ -1239,6 +1250,61 @@ void waitForTransactionSpans(CHIron::Gui::TransactionWidget& widget,
     expectEqual(widget.testSpanCount(), expectedSpans, context);
 }
 
+template<typename GlobalT>
+void populateRetryTestTopology(GlobalT& global)
+{
+    global.TOPOLOGY.SetNode(1, CHI::Eb::Xact::NodeType::RN_F, "RN_F");
+    global.TOPOLOGY.SetNode(2, CHI::Eb::Xact::NodeType::HN_F, "HN_F");
+    global.TOPOLOGY.SetNode(3, CHI::Eb::Xact::NodeType::SN_F, "SN_F");
+}
+
+template<typename ReqFlit>
+ReqFlit makeRetryReadRequest()
+{
+    ReqFlit request{};
+    request.TgtID() = 2;
+    request.SrcID() = 1;
+    request.TxnID() = 7;
+    request.Opcode() = CHI::Eb::Opcodes::REQ::ReadNoSnp;
+    request.Size() = CHI::Eb::Sizes::B64;
+    request.Addr() = 0x1000;
+    request.AllowRetry() = 1;
+    request.PCrdType() = 3;
+    return request;
+}
+
+template<typename RspFlit>
+RspFlit makeRetryAckResponse()
+{
+    RspFlit response{};
+    response.TgtID() = 1;
+    response.SrcID() = 2;
+    response.TxnID() = 7;
+    response.Opcode() = CHI::Eb::Opcodes::RSP::RetryAck;
+    response.PCrdType() = 3;
+    return response;
+}
+
+template<typename RspFlit>
+RspFlit makePCrdGrantResponse()
+{
+    RspFlit response{};
+    response.TgtID() = 1;
+    response.SrcID() = 2;
+    response.Opcode() = CHI::Eb::Opcodes::RSP::PCrdGrant;
+    response.PCrdType() = 3;
+    return response;
+}
+
+template<typename ReqFlit>
+ReqFlit makeRetryReissuedRequest()
+{
+    ReqFlit request = makeRetryReadRequest<ReqFlit>();
+    request.AllowRetry() = 0;
+    request.PCrdType() = 3;
+    return request;
+}
+
 struct TransactionTraceFixture {
     QTemporaryDir tempDir;
     QString tracePath;
@@ -1673,6 +1739,145 @@ TransactionTraceFixture makeCacheWriteEvictOrEvictCopyBackTrace(const QString& f
                            {
                                {CLog::NodeType::RN_F, 1},
                                {CLog::NodeType::HN_F, 16},
+                           },
+                           std::move(records));
+    return fixture;
+}
+
+TransactionTraceFixture makeCacheReplayInitialStateDeniedTrace(const QString& fileName)
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set cache denial NodeIDWidth."));
+    expect(params.SetReqAddrWidth(52), QStringLiteral("Failed to set cache denial ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(32), QStringLiteral("Failed to set cache denial ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(32), QStringLiteral("Failed to set cache denial DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set cache denial DataWidth."));
+    params.SetDataCheckPresent(true);
+    params.SetPoisonPresent(true);
+    params.SetMPAMPresent(true);
+
+    const auto serializeReq = [](const ReqFlit& flit, TestFlitBitWriter& writer) {
+        appendEbReqFlitForTest(flit, writer);
+    };
+
+    auto makeWriteEvict = [](const std::uint16_t txnId, const std::uint64_t address) {
+        ReqFlit request{};
+        request.TgtID() = 16;
+        request.SrcID() = 1;
+        request.TxnID() = txnId;
+        request.Opcode() = CHI::Eb::Opcodes::REQ::WriteEvictOrEvict;
+        request.Size() = CHI::Eb::Sizes::B64;
+        request.Addr() = address;
+        request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_Allocate;
+        request.SnpAttr() = CHI::Eb::SnpAttrs::Snoopable;
+        request.AllowRetry() = 1;
+        request.ExpCompAck() = 1;
+        return request;
+    };
+
+    std::vector<CLog::CLogB::TagCHIRecords::Record> records;
+    records.push_back(makeSerializedRecord(CLog::Channel::TXREQ,
+                                            1,
+                                            1,
+                                            makeWriteEvict(1, 0x1000),
+                                            serializeReq));
+    records.push_back(makeSerializedRecord(CLog::Channel::TXREQ,
+                                            1,
+                                            1,
+                                            makeWriteEvict(2, 0x2000),
+                                            serializeReq));
+
+    TransactionTraceFixture fixture;
+    expect(fixture.tempDir.isValid(), QStringLiteral("Temporary directory creation failed."));
+    fixture.tracePath = fixture.tempDir.filePath(fileName);
+    fixture.transactionCount = 2;
+    writeTraceWithTopology(fixture.tracePath,
+                           params,
+                           {
+                               {CLog::NodeType::RN_F, 1},
+                               {CLog::NodeType::HN_F, 16},
+                           },
+                           std::move(records));
+    return fixture;
+}
+
+enum class RetryBoundarySplit {
+    AfterRetryAck,
+    AfterPCrdGrant,
+};
+
+TransactionTraceFixture makeRetryChunkBoundaryTrace(const QString& fileName,
+                                                   const RetryBoundarySplit split)
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+    using RspFlit = CHI::Eb::Flits::RSP<XactTestConfig>;
+    using DatFlit = CHI::Eb::Flits::DAT<XactTestConfig>;
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set retry boundary NodeIDWidth."));
+    expect(params.SetReqAddrWidth(52), QStringLiteral("Failed to set retry boundary ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(32), QStringLiteral("Failed to set retry boundary ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(32), QStringLiteral("Failed to set retry boundary DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set retry boundary DataWidth."));
+    params.SetDataCheckPresent(true);
+    params.SetPoisonPresent(true);
+    params.SetMPAMPresent(true);
+
+    const auto serializeReq = [](const ReqFlit& flit, TestFlitBitWriter& writer) {
+        appendEbReqFlitForTest(flit, writer);
+    };
+    const auto serializeRsp = [](const RspFlit& flit, TestFlitBitWriter& writer) {
+        appendEbRspFlitForTest(flit, writer);
+    };
+    const auto serializeDat = [](const DatFlit& flit, TestFlitBitWriter& writer) {
+        appendEbDatFlitForTest(flit, writer);
+    };
+
+    ReqFlit original = makeRetryReadRequest<ReqFlit>();
+    RspFlit retryAck = makeRetryAckResponse<RspFlit>();
+    RspFlit pcrdGrant = makePCrdGrantResponse<RspFlit>();
+    ReqFlit reissued = makeRetryReissuedRequest<ReqFlit>();
+
+    DatFlit data0{};
+    data0.TgtID() = reissued.SrcID();
+    data0.SrcID() = reissued.TgtID();
+    data0.TxnID() = reissued.TxnID();
+    data0.HomeNID() = reissued.TgtID();
+    data0.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+    data0.RespErr() = CHI::Eb::RespErrs::OK;
+    data0.Resp() = CHI::Eb::Resps::CompData_UC;
+    data0.DBID() = 9;
+    data0.DataID() = 0;
+    data0.BE() = 0xFFFFFFFFU;
+    DatFlit data2 = data0;
+    data2.DataID() = 2;
+
+    std::vector<CLog::CLogB::TagCHIRecords::Record> records;
+    records.reserve(split == RetryBoundarySplit::AfterRetryAck ? 4 : 6);
+    records.push_back(makeSerializedRecord(CLog::Channel::TXREQ, 1, 1, original, serializeReq));
+    records.push_back(makeSerializedRecord(CLog::Channel::RXRSP, 1, 1, retryAck, serializeRsp));
+    records.push_back(makeSerializedRecord(CLog::Channel::RXRSP, 1, 1, pcrdGrant, serializeRsp));
+    records.push_back(makeSerializedRecord(CLog::Channel::TXREQ, 1, 1, reissued, serializeReq));
+    if (split == RetryBoundarySplit::AfterPCrdGrant) {
+        records.push_back(makeSerializedRecord(CLog::Channel::RXDAT, 1, 1, data0, serializeDat));
+        records.push_back(makeSerializedRecord(CLog::Channel::RXDAT, 1, 1, data2, serializeDat));
+    }
+
+    TransactionTraceFixture fixture;
+    expect(fixture.tempDir.isValid(), QStringLiteral("Temporary directory creation failed."));
+    fixture.tracePath = fixture.tempDir.filePath(fileName);
+    fixture.transactionCount = 1;
+    writeTraceWithTopology(fixture.tracePath,
+                           params,
+                           {
+                               {CLog::NodeType::RN_F, 1},
+                               {CLog::NodeType::HN_F, 2},
                            },
                            std::move(records));
     return fixture;
@@ -2130,6 +2335,124 @@ void testCacheLineStateReplayToleratesNonStateDatFieldDenials()
     expectEqual(static_cast<std::uint64_t>(spans.back().endLogicalRow),
                 static_cast<std::uint64_t>(5),
                 QStringLiteral("Field-denied CopyBackWrData should close the state span on the first beat."));
+}
+
+void testXactionIndexPersistsCacheStateReplayIssues()
+{
+    TransactionTraceFixture fixture =
+        makeCacheReplayInitialStateDeniedTrace(QStringLiteral("cache_replay_denied_issue.clogb"));
+
+    CHIron::Gui::CLogBTraceLoadError error;
+    std::shared_ptr<CHIron::Gui::TraceSession> session;
+    expect(CHIron::Gui::TraceSession::open(fixture.tracePath, session, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Cache replay denied TraceSession should open.")
+               : error.summary);
+    expect(session != nullptr,
+           QStringLiteral("Cache replay denied TraceSession should be created."));
+    expect(session->buildXactionIndex(error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Cache replay denied Xaction index should build.")
+               : error.summary);
+
+    std::uint64_t persistedIssueCount = 0;
+    expect(session->xactionIndexIssueCount(persistedIssueCount, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Cache replay denied persisted issue count should be readable.")
+               : error.summary);
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> issueLoadProgress;
+    std::vector<CHIron::Gui::TraceIssue> issues;
+    expect(session->xactionIndexIssues(issues,
+                                       error,
+                                       {},
+                                       [&issueLoadProgress](const std::uint64_t completedIssues,
+                                                            const std::uint64_t totalIssues) {
+                                           issueLoadProgress.emplace_back(completedIssues, totalIssues);
+                                       }),
+           error.summary.isEmpty()
+               ? QStringLiteral("Persisted issue table should be readable.")
+               : error.summary);
+    expect(!issueLoadProgress.empty(),
+           QStringLiteral("Persisted issue loading should report progress."));
+    expectEqual(issueLoadProgress.front().first,
+                static_cast<std::uint64_t>(0),
+                QStringLiteral("Persisted issue loading should report an initial zero progress sample."));
+    expectEqual(issueLoadProgress.front().second,
+                persistedIssueCount,
+                QStringLiteral("Persisted issue loading should report the issue table count as total progress."));
+    std::uint64_t previousCompletedIssues = 0;
+    for (const auto& progress : issueLoadProgress) {
+        expectEqual(progress.second,
+                    persistedIssueCount,
+                    QStringLiteral("Persisted issue loading progress should keep a stable total."));
+        expect(progress.first >= previousCompletedIssues,
+               QStringLiteral("Persisted issue loading progress should be monotonic."));
+        expect(progress.first <= progress.second,
+               QStringLiteral("Persisted issue loading progress should not exceed total."));
+        previousCompletedIssues = progress.first;
+    }
+    expectEqual(issueLoadProgress.back().first,
+                persistedIssueCount,
+                QStringLiteral("Persisted issue loading should report final completion."));
+    const auto cacheIssue = std::find_if(issues.cbegin(), issues.cend(), [](const CHIron::Gui::TraceIssue& issue) {
+        return issue.source == CHIron::Gui::TraceIssueSource::CacheStateReplay;
+    });
+    expect(cacheIssue != issues.cend(),
+           QStringLiteral("Cache-state replay denial should be persisted into the Xaction index issue table."));
+    expectEqual(cacheIssue->denialName,
+                QStringLiteral("XACT_DENIED_STATE_INITIAL"),
+                QStringLiteral("Cache issue denial name should come from RNCacheStateMap XactDenialEnum."));
+    expect(cacheIssue->denialValue != 0,
+           QStringLiteral("Cache issue should persist the RNCacheStateMap XactDenialEnum value."));
+    expectEqual(static_cast<int>(cacheIssue->logicalRow),
+                0,
+                QStringLiteral("Cache replay initial-state denial should point at the denied TXREQ row."));
+    expect(cacheIssue->details.contains(QStringLiteral("Cache-state replay denial")),
+           QStringLiteral("Cache issue details should identify the cache replay source."));
+}
+
+void testXactionIndexAcceptsHomeToRequesterSnoop()
+{
+    TransactionTraceFixture fixture =
+        makeCacheStateRoundTripTrace(QStringLiteral("xaction_home_to_rn_snoop.clogb"));
+
+    CHIron::Gui::CLogBTraceLoadError error;
+    std::shared_ptr<CHIron::Gui::TraceSession> session;
+    expect(CHIron::Gui::TraceSession::open(fixture.tracePath, session, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("HN-to-RN snoop TraceSession should open.")
+               : error.summary);
+    expect(session != nullptr,
+           QStringLiteral("HN-to-RN snoop TraceSession should be created."));
+    expect(session->buildXactionIndex(error),
+           error.summary.isEmpty()
+               ? QStringLiteral("HN-to-RN snoop Xaction index should build.")
+               : error.summary);
+
+    std::vector<CHIron::Gui::TraceIssue> issues;
+    expect(session->xactionIndexIssues(issues, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("HN-to-RN snoop issue table should be readable.")
+               : error.summary);
+    const auto routeDenial = std::find_if(issues.cbegin(), issues.cend(), [](const CHIron::Gui::TraceIssue& issue) {
+        return issue.denialName == QStringLiteral("XACT_DENIED_SNP_NOT_FROM_HN_TO_RN");
+    });
+    expect(routeDenial == issues.cend(),
+           QStringLiteral("Valid RXSNP from an HN-F source to an RN-F record node should not be route-denied."));
+
+    const QString snpDebug = session->xactionDebugInfo(3);
+    expect(snpDebug.contains(QStringLiteral("Joint path: RNFJoint::NextRXSNP")),
+           QStringLiteral("Persisted snoop debug info should include its RNF joint path."));
+    expect(snpDebug.contains(QStringLiteral("Denial: XACT_ACCEPTED")),
+           QStringLiteral("Persisted snoop debug info should keep the accepted xaction result."));
+
+    std::vector<CHIron::Gui::FlitRecord> rows;
+    expect(session->readRows(3, 1, rows, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Accepted HN-to-RN snoop row should read back from the session.")
+               : error.summary);
+    expect(!rows.empty() && !CHIron::Gui::TransactionGroupKeys(rows.front()).empty(),
+           QStringLiteral("Accepted HN-to-RN snoop row should keep persisted transaction grouping."));
 }
 
 void waitForTraceCacheMinimapLane(CHIron::Gui::MainWindow& window,
@@ -4444,6 +4767,357 @@ void testMainWindowMarkerUndoRedoAndUnifiedOrdering()
            QStringLiteral("New marker command after undo should clear unified redo history."));
 }
 
+void testTraceIssueSeverityAndErrorsWidget()
+{
+    using CHIron::Gui::CountTraceIssues;
+    using CHIron::Gui::ErrorsWidget;
+    using CHIron::Gui::TraceIssueDisposition;
+    using CHIron::Gui::TraceIssue;
+    using CHIron::Gui::TraceIssueDenialIsReportable;
+    using CHIron::Gui::TraceIssueSeverity;
+    using CHIron::Gui::TraceIssueSeverityForDenial;
+    using CHIron::Gui::TraceIssueSource;
+
+    expect(!TraceIssueDenialIsReportable(QString()),
+           QStringLiteral("Empty denials should not be reported as Errors issues."));
+    expect(!TraceIssueDenialIsReportable(QStringLiteral("XACT_ACCEPTED")),
+           QStringLiteral("Accepted xaction rows should not be reported as Errors issues."));
+    expect(!TraceIssueDenialIsReportable(QStringLiteral("not processed")),
+           QStringLiteral("Not-processed xaction rows should not be reported as Errors issues."));
+    expect(TraceIssueDenialIsReportable(QStringLiteral("DENIED_FIELD_MAPPING")),
+           QStringLiteral("Denied xaction/cache rows should be reportable."));
+    expect(TraceIssueSeverityForDenial(QStringLiteral("DENIED_FIELD_MAPPING")) == TraceIssueSeverity::Error,
+           QStringLiteral("All current denied xaction/cache denials should be classified as errors."));
+
+    TraceIssue cacheIssue;
+    cacheIssue.id = QStringLiteral("issue-1");
+    cacheIssue.logicalRow = 41;
+    cacheIssue.timestamp = 1041;
+    cacheIssue.severity = TraceIssueSeverity::Error;
+    cacheIssue.source = TraceIssueSource::CacheStateReplay;
+    cacheIssue.denialName = QStringLiteral("DENIED_STATE_TRANSITION");
+    cacheIssue.denialCode = QStringLiteral("0x123");
+    cacheIssue.channel = QStringLiteral("DAT");
+    cacheIssue.opcode = QStringLiteral("DataSepResp");
+    cacheIssue.node = QStringLiteral("2 RN");
+    cacheIssue.address = QStringLiteral("0x1000");
+    cacheIssue.summary = QStringLiteral("Cache replay denied DataSepResp at row 42");
+    cacheIssue.details = QStringLiteral("Denial code: 0x123\nJoint type: RNCacheStateMap\nLine address: 0x1000");
+
+    TraceIssue xactionIssue = cacheIssue;
+    xactionIssue.id = QStringLiteral("issue-2");
+    xactionIssue.logicalRow = 43;
+    xactionIssue.source = TraceIssueSource::XactionIndex;
+    xactionIssue.denialName = QStringLiteral("XACT_DENIED_RSP_TXNID_NOT_EXIST");
+    xactionIssue.denialCode = QStringLiteral("0x456");
+    xactionIssue.summary = QStringLiteral("Xaction denied RSP at row 44");
+
+    const std::vector<TraceIssue> issues{cacheIssue};
+    const auto counts = CountTraceIssues(issues);
+    expectEqual(counts.errors,
+                1,
+                QStringLiteral("Denied diagnostics should contribute to the error count."));
+    expectEqual(counts.warnings,
+                0,
+                QStringLiteral("Warning count should remain reserved for future diagnostics."));
+
+    ErrorsWidget widget;
+    widget.resize(760, 320);
+    widget.show();
+    QApplication::processEvents();
+    expectEqual(widget.testIssueDispositionText(TraceIssueSource::XactionIndex),
+                QStringLiteral("Error"),
+                QStringLiteral("Errors widget should default Xaction denials to Error."));
+    expectEqual(widget.testIssueDispositionText(TraceIssueSource::CacheStateReplay),
+                QStringLiteral("Error"),
+                QStringLiteral("Errors widget should default Cache State denials to Error."));
+    expect(widget.testSeverityVisible(TraceIssueSeverity::Error),
+           QStringLiteral("Errors widget should show errors by default."));
+    expect(widget.testSeverityVisible(TraceIssueSeverity::Warning),
+           QStringLiteral("Errors widget should show warnings by default."));
+    expect(widget.testSeverityButtonHasIcon(TraceIssueSeverity::Error),
+           QStringLiteral("Errors widget Error count toggle should show its critical icon."));
+    expect(widget.testSeverityButtonHasIcon(TraceIssueSeverity::Warning),
+           QStringLiteral("Errors widget Warning count toggle should show its warning icon."));
+    expectEqual(widget.testDispositionButtonText(TraceIssueSource::XactionIndex),
+                QStringLiteral("Xaction: Error"),
+                QStringLiteral("Xaction disposition should be one current-state button."));
+    expectEqual(widget.testDispositionButtonText(TraceIssueSource::CacheStateReplay),
+                QStringLiteral("Cache: Error"),
+                QStringLiteral("Cache disposition should be one current-state button."));
+    expect(widget.testDispositionButtonHasIcon(TraceIssueSource::XactionIndex),
+           QStringLiteral("Xaction Error disposition button should show a critical icon."));
+    expect(widget.testDispositionButtonHasIcon(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Cache Error disposition button should show a critical icon."));
+    expect(!widget.testDispositionButtonCheckable(TraceIssueSource::XactionIndex),
+           QStringLiteral("Xaction disposition button should not use a checked selected fill."));
+    expect(!widget.testDispositionButtonChecked(TraceIssueSource::XactionIndex),
+           QStringLiteral("Xaction disposition button should remain visually unselected."));
+    expect(!widget.testDispositionButtonCheckable(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Cache disposition button should not use a checked selected fill."));
+    expect(!widget.testDispositionButtonChecked(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Cache disposition button should remain visually unselected."));
+    expect(widget.testClickDispositionButton(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Clicking the Cache disposition button should cycle its disposition."));
+    expectEqual(widget.testIssueDispositionText(TraceIssueSource::CacheStateReplay),
+                QStringLiteral("Warning"),
+                QStringLiteral("Cache disposition button should cycle Error to Warning."));
+    expectEqual(widget.testDispositionButtonText(TraceIssueSource::CacheStateReplay),
+                QStringLiteral("Cache: Warning"),
+                QStringLiteral("Cache disposition button should display Warning after one click."));
+    expect(widget.testDispositionButtonHasIcon(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Cache Warning disposition button should show a warning icon."));
+    expect(!widget.testDispositionButtonChecked(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Cache disposition button should stay visually unselected after cycling to Warning."));
+    expect(widget.testClickDispositionButton(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Clicking the Cache disposition button should cycle from Warning."));
+    expectEqual(widget.testIssueDispositionText(TraceIssueSource::CacheStateReplay),
+                QStringLiteral("Ignored"),
+                QStringLiteral("Cache disposition button should cycle Warning to Ignored."));
+    expectEqual(widget.testDispositionButtonText(TraceIssueSource::CacheStateReplay),
+                QStringLiteral("Cache: Ignored"),
+                QStringLiteral("Cache disposition button should display Ignored after two clicks."));
+    expect(!widget.testDispositionButtonHasIcon(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Ignored disposition button should be text-only."));
+    expect(!widget.testDispositionButtonChecked(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Cache disposition button should stay visually unselected after cycling to Ignored."));
+    expect(widget.testClickDispositionButton(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Clicking the Cache disposition button should cycle from Ignored."));
+    expectEqual(widget.testIssueDispositionText(TraceIssueSource::CacheStateReplay),
+                QStringLiteral("Error"),
+                QStringLiteral("Cache disposition button should cycle Ignored back to Error."));
+    widget.setBuildStatus(false, QStringLiteral("Build Xaction index to collect protocol errors."));
+    expect(widget.testStatusText().contains(QStringLiteral("Build Xaction index")),
+           QStringLiteral("Errors widget should show non-active build guidance text."));
+    expect(!widget.testProgressVisible(),
+           QStringLiteral("Errors widget progress bar should stay hidden for inactive guidance text."));
+    widget.setBuildStatus(true, QStringLiteral("Loading persisted errors"), 25, 100);
+    QApplication::processEvents();
+    expect(widget.testProgressVisible(),
+           QStringLiteral("Errors widget progress bar should show during active loading."));
+    expect(!widget.testProgressBusy(),
+           QStringLiteral("Errors widget progress bar should be determinate when a total is known."));
+    expectEqual(widget.testProgressMaximum(),
+                1000,
+                QStringLiteral("Errors widget progress bar should use a compact normalized determinate range."));
+    expectEqual(widget.testProgressValue(),
+                250,
+                QStringLiteral("Errors widget progress bar should scale completed issue loading progress."));
+    expect(widget.testStatusText().contains(QStringLiteral("25 / 100 issues")),
+           QStringLiteral("Errors widget status should report persisted issue loading progress."));
+    widget.setBuildStatus(true, QStringLiteral("Loading persisted errors"));
+    QApplication::processEvents();
+    expect(widget.testProgressVisible(),
+           QStringLiteral("Errors widget progress bar should still show when total progress is unknown."));
+    expect(widget.testProgressBusy(),
+           QStringLiteral("Errors widget progress bar should become indeterminate without a total."));
+    widget.setIssues(issues);
+    QApplication::processEvents();
+    expect(!widget.testProgressVisible(),
+           QStringLiteral("Errors widget progress bar should hide after issues are loaded."));
+
+    expectEqual(widget.issueCount(),
+                1,
+                QStringLiteral("Errors widget should list one issue."));
+    expectEqual(widget.errorCount(),
+                1,
+                QStringLiteral("Errors widget toolbar should count errors."));
+    expectEqual(widget.warningCount(),
+                0,
+                QStringLiteral("Errors widget toolbar should keep warnings at zero for current denials."));
+    expect(widget.testTopLevelHasSeverityIcon(0),
+           QStringLiteral("Errors widget rows should carry a severity icon."));
+    expect(widget.testIssueTreeRootDecorated(),
+           QStringLiteral("Errors widget should use the native tree expander control."));
+    expectGreater(widget.testIssueTreeIndentation(),
+                  0.0,
+                  QStringLiteral("Errors widget should reserve space for the expand/fold indicator."));
+    expectEqual(widget.testCodeText(0),
+                cacheIssue.denialCode,
+                QStringLiteral("Errors widget Code column should prefer denial code."));
+    expectEqual(widget.testDescriptionText(0),
+                cacheIssue.summary,
+                QStringLiteral("Errors widget Description column should display the issue summary."));
+    expectEqual(widget.testSourceText(0),
+                QStringLiteral("Cache State"),
+                QStringLiteral("Errors widget Source column should display the issue source."));
+    expectEqual(widget.testRowText(0),
+                QStringLiteral("42"),
+                QStringLiteral("Errors widget Row column should display one-based trace rows."));
+    expect(widget.testDetailText(0).contains(QStringLiteral("Joint type")),
+           QStringLiteral("Expanded Errors widget details should expose denial context."));
+    expect(!widget.testIssueExpanded(0),
+           QStringLiteral("Errors widget issue rows should start collapsed."));
+    expectEqual(widget.testIssueContextToggleText(0),
+                QStringLiteral("Expand"),
+                QStringLiteral("Collapsed Errors issue context action should offer Expand."));
+    expect(widget.testSetIssueExpanded(0, true),
+           QStringLiteral("Errors widget test API should expand an issue row."));
+    expect(widget.testIssueExpanded(0),
+           QStringLiteral("Errors widget issue row should report expanded after expansion."));
+    expect(widget.testExpandedDetailText(0).contains(QStringLiteral("Joint type")),
+           QStringLiteral("Expanded Errors issue detail child should show persisted denial details."));
+    expectEqual(widget.testIssueContextToggleText(0),
+                QStringLiteral("Fold"),
+                QStringLiteral("Expanded Errors issue context action should offer Fold."));
+    expect(widget.testSetIssueExpanded(0, false),
+           QStringLiteral("Errors widget test API should fold an issue row."));
+
+    int activatedRow = -1;
+    QObject::connect(&widget, &ErrorsWidget::logicalRowActivated, &widget, [&](const int logicalRow) {
+        activatedRow = logicalRow;
+    });
+    expect(widget.testActivateIssue(0),
+           QStringLiteral("Errors widget test activation should target the issue row."));
+    expectEqual(activatedRow,
+                41,
+                QStringLiteral("Double-clicking an Errors issue should activate its logical trace row."));
+    expect(widget.testIssueExpanded(0),
+           QStringLiteral("Double-clicking an Errors issue should also expand the row."));
+    expect(widget.testActivateIssue(0),
+           QStringLiteral("Second double-clicking an Errors issue should fold it again."));
+    expect(!widget.testIssueExpanded(0),
+           QStringLiteral("Second double-clicking an Errors issue should report folded state."));
+    expect(widget.testClickDispositionButton(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Errors widget Cache disposition button should cycle to Warning."));
+    expectEqual(widget.testIssueDispositionText(TraceIssueSource::CacheStateReplay),
+                QStringLiteral("Warning"),
+                QStringLiteral("Errors widget should expose changed Cache State disposition."));
+    expect(widget.testClickDispositionButton(TraceIssueSource::CacheStateReplay),
+           QStringLiteral("Errors widget Cache disposition button should cycle to Ignored."));
+    expectEqual(widget.testIssueDispositionText(TraceIssueSource::CacheStateReplay),
+                QStringLiteral("Ignored"),
+                QStringLiteral("Errors widget should expose ignored Cache State disposition."));
+    expect(widget.testSetSeverityVisible(TraceIssueSeverity::Error, false),
+           QStringLiteral("Errors widget test API should hide errors."));
+    expect(!widget.testSeverityVisible(TraceIssueSeverity::Error),
+           QStringLiteral("Errors widget should expose hidden error toggle state."));
+    expect(widget.testSeverityButtonHasIcon(TraceIssueSeverity::Error),
+           QStringLiteral("Errors widget Error count toggle should keep its icon while hidden."));
+    expect(widget.testSeverityButtonText(TraceIssueSeverity::Error).contains(QStringLiteral("1 error")),
+           QStringLiteral("Errors widget Error count toggle should keep its count while hidden."));
+    expect(widget.testSetSeverityVisible(TraceIssueSeverity::Warning, true),
+           QStringLiteral("Errors widget test API should keep warnings visible."));
+
+    std::vector<TraceIssue> manyIssues;
+    widget.testSetIssuePageSize(64);
+    manyIssues.reserve(200);
+    for (int index = 0; index < 200; ++index) {
+        TraceIssue issue = xactionIssue;
+        issue.id = QStringLiteral("paged-issue-%1").arg(index);
+        issue.logicalRow = static_cast<std::uint64_t>(index);
+        issue.summary = QStringLiteral("Paged issue at row %1").arg(index + 1);
+        manyIssues.push_back(std::move(issue));
+    }
+    widget.setIssues(manyIssues);
+    QApplication::processEvents();
+    expectEqual(widget.issueCount(),
+                200,
+                QStringLiteral("Errors widget should keep the full issue count for paged lists."));
+    expect(widget.testDisplayedIssueRowCount() < widget.issueCount(),
+           QStringLiteral("Errors widget should initially expose only the first issue page to the view."));
+    const int displayedBeforeFetch = widget.testDisplayedIssueRowCount();
+    expect(widget.testFetchMoreIssueRows(),
+           QStringLiteral("Errors widget should fetch additional issue pages on demand."));
+    expect(widget.testDisplayedIssueRowCount() > displayedBeforeFetch,
+           QStringLiteral("Errors widget fetchMore should increase the displayed issue page."));
+    while (widget.testDisplayedIssueRowCount() < widget.issueCount()) {
+        expect(widget.testFetchMoreIssueRows(),
+               QStringLiteral("Errors widget should keep fetching additional issue pages until complete."));
+    }
+    expectEqual(widget.testDisplayedIssueRowCount(),
+                widget.issueCount(),
+                QStringLiteral("Errors widget should expose the remaining small page after fetchMore."));
+    widget.close();
+    QApplication::processEvents();
+}
+
+void testErrorsDockSourceDispositionAndSeverityFilters()
+{
+    resetErrorsDispositionSettings();
+
+    CHIron::Gui::TraceIssue xactionIssue;
+    xactionIssue.id = QStringLiteral("xaction-issue");
+    xactionIssue.logicalRow = 4;
+    xactionIssue.severity = CHIron::Gui::TraceIssueSeverity::Error;
+    xactionIssue.source = CHIron::Gui::TraceIssueSource::XactionIndex;
+    xactionIssue.denialName = QStringLiteral("XACT_DENIED_RSP_TXNID_NOT_EXIST");
+    xactionIssue.denialCode = QStringLiteral("0x101");
+    xactionIssue.summary = QStringLiteral("Xaction denial at row 5");
+    xactionIssue.details = QStringLiteral("Xaction index denial");
+
+    CHIron::Gui::TraceIssue cacheIssue;
+    cacheIssue.id = QStringLiteral("cache-issue");
+    cacheIssue.logicalRow = 8;
+    cacheIssue.severity = CHIron::Gui::TraceIssueSeverity::Error;
+    cacheIssue.source = CHIron::Gui::TraceIssueSource::CacheStateReplay;
+    cacheIssue.denialName = QStringLiteral("XACT_DENIED_STATE_INITIAL");
+    cacheIssue.denialCode = QStringLiteral("0x202");
+    cacheIssue.summary = QStringLiteral("Cache denial at row 9");
+    cacheIssue.details = QStringLiteral("Cache-state replay denial");
+
+    const std::vector<CHIron::Gui::TraceIssue> rawIssues{xactionIssue, cacheIssue};
+    std::vector<CHIron::Gui::TraceIssue> visibleIssues =
+        CHIron::Gui::ApplyTraceIssueDispositionPolicy(rawIssues,
+                                                      CHIron::Gui::TraceIssueDisposition::Error,
+                                                      CHIron::Gui::TraceIssueDisposition::Warning);
+    auto counts = CHIron::Gui::CountTraceIssues(visibleIssues);
+    expectEqual(counts.errors,
+                1,
+                QStringLiteral("Xaction Error + Cache Warning should count one error."));
+    expectEqual(counts.warnings,
+                1,
+                QStringLiteral("Xaction Error + Cache Warning should count one warning."));
+
+    visibleIssues = CHIron::Gui::ApplyTraceIssueDispositionPolicy(rawIssues,
+                                                                  CHIron::Gui::TraceIssueDisposition::Ignored,
+                                                                  CHIron::Gui::TraceIssueDisposition::Warning);
+    counts = CHIron::Gui::CountTraceIssues(visibleIssues);
+    expectEqual(static_cast<int>(visibleIssues.size()),
+                1,
+                QStringLiteral("Ignoring Xaction should hide only Xaction issues."));
+    expectEqual(counts.warnings,
+                1,
+                QStringLiteral("Cache Warning should remain visible when Xaction is ignored."));
+    expectEqual(visibleIssues.front().source == CHIron::Gui::TraceIssueSource::CacheStateReplay ? 1 : 0,
+                1,
+                QStringLiteral("Remaining issue should be Cache State."));
+
+    visibleIssues = CHIron::Gui::ApplyTraceIssueDispositionPolicy(rawIssues,
+                                                                  CHIron::Gui::TraceIssueDisposition::Error,
+                                                                  CHIron::Gui::TraceIssueDisposition::Ignored);
+    counts = CHIron::Gui::CountTraceIssues(visibleIssues);
+    expectEqual(static_cast<int>(visibleIssues.size()),
+                1,
+                QStringLiteral("Ignoring Cache State should hide only cache issues."));
+    expectEqual(counts.errors,
+                1,
+                QStringLiteral("Xaction Error should remain visible when Cache State is ignored."));
+    expectEqual(visibleIssues.front().source == CHIron::Gui::TraceIssueSource::XactionIndex ? 1 : 0,
+                1,
+                QStringLiteral("Remaining issue should be Xaction."));
+
+    CHIron::Gui::ErrorsWidget widget;
+    widget.resize(900, 320);
+    widget.show();
+    QApplication::processEvents();
+    widget.setIssues(rawIssues);
+    expectEqual(widget.errorCount(),
+                2,
+                QStringLiteral("Errors widget should start with both mixed issues as errors."));
+    expect(widget.testSeverityButtonHasIcon(CHIron::Gui::TraceIssueSeverity::Error),
+           QStringLiteral("Mixed-source Errors widget Error toggle should expose its icon."));
+    expect(widget.testSeverityButtonHasIcon(CHIron::Gui::TraceIssueSeverity::Warning),
+           QStringLiteral("Mixed-source Errors widget Warning toggle should expose its icon."));
+    expect(widget.testSetSeverityVisible(CHIron::Gui::TraceIssueSeverity::Error, false),
+           QStringLiteral("Errors widget should expose the Error visibility toggle."));
+    expect(!widget.testSeverityVisible(CHIron::Gui::TraceIssueSeverity::Error),
+           QStringLiteral("Errors widget should remember hidden Error toggle state."));
+    expect(widget.testSeverityButtonText(CHIron::Gui::TraceIssueSeverity::Error).contains(QStringLiteral("2 errors")),
+           QStringLiteral("Errors widget count text should not clear when errors are toggled off."));
+    widget.close();
+}
+
 void testMarkerWidgetSearchFiltersNameAndMemo()
 {
     using CHIron::Gui::MarkerWidget;
@@ -5713,6 +6387,126 @@ void testMainWindowDiagnosticsIncludeCacheWidgetState()
            QStringLiteral("Diagnostics snapshot should identify the active owning Cache widget."));
 }
 
+void testCoreRetryReissueAcceptedOnRNFAndSNF()
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+    using RspFlit = CHI::Eb::Flits::RSP<XactTestConfig>;
+
+    CHI::Eb::Xact::Global<XactTestConfig> global;
+    populateRetryTestTopology(global);
+
+    const ReqFlit original = makeRetryReadRequest<ReqFlit>();
+    const RspFlit retryAck = makeRetryAckResponse<RspFlit>();
+    const RspFlit pcrdGrant = makePCrdGrantResponse<RspFlit>();
+    const ReqFlit reissued = makeRetryReissuedRequest<ReqFlit>();
+    ReqFlit snOriginalReq = original;
+    snOriginalReq.SrcID() = 2;
+    snOriginalReq.TgtID() = 3;
+    ReqFlit snReissuedReq = snOriginalReq;
+    snReissuedReq.AllowRetry() = 0;
+    RspFlit snRetryAck = retryAck;
+    snRetryAck.TgtID() = snOriginalReq.SrcID();
+    snRetryAck.SrcID() = snOriginalReq.TgtID();
+    RspFlit snPCrdGrant = pcrdGrant;
+    snPCrdGrant.TgtID() = snOriginalReq.SrcID();
+    snPCrdGrant.SrcID() = snOriginalReq.TgtID();
+
+    CHI::Eb::Xact::RNFJoint<XactTestConfig> rnJoint;
+    std::shared_ptr<CHI::Eb::Xact::Xaction<XactTestConfig>> rnOriginal;
+    expect(rnJoint.NextTXREQ(global, 1, original, &rnOriginal)
+               == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("RN-F should accept the original retryable request."));
+    expect(rnJoint.NextRXRSP(global, 2, retryAck, &rnOriginal)
+               == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("RN-F should accept RetryAck."));
+    expect(rnJoint.NextRXRSP(global, 3, pcrdGrant)
+               == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("RN-F should accept PCrdGrant."));
+    std::shared_ptr<CHI::Eb::Xact::Xaction<XactTestConfig>> rnRetry;
+    expect(rnJoint.NextTXREQ(global, 4, reissued, &rnRetry)
+               == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("RN-F should accept the AllowRetry=0 reissued request."));
+    expect(rnRetry && rnRetry->IsSecondTry() && rnRetry->GetFirstTry() == rnOriginal,
+           QStringLiteral("RN-F reissued request should be linked to the original xaction."));
+
+    CHI::Eb::Xact::SNFJoint<XactTestConfig> snJoint;
+    std::shared_ptr<CHI::Eb::Xact::Xaction<XactTestConfig>> snOriginal;
+    expect(snJoint.NextRXREQ(global, 1, snOriginalReq, &snOriginal)
+               == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("SN-F should accept the original retryable request."));
+    expect(snJoint.NextTXRSP(global, 2, snRetryAck, &snOriginal)
+               == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("SN-F should accept RetryAck."));
+    expect(snJoint.NextTXRSP(global, 3, snPCrdGrant)
+               == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("SN-F should accept PCrdGrant."));
+    std::shared_ptr<CHI::Eb::Xact::Xaction<XactTestConfig>> snRetry;
+    expect(snJoint.NextRXREQ(global, 4, snReissuedReq, &snRetry)
+               == CHI::Eb::Xact::XactDenial::ACCEPTED,
+           QStringLiteral("SN-F should accept the AllowRetry=0 reissued request."));
+    expect(snRetry && snRetry->IsSecondTry() && snRetry->GetFirstTry() == snOriginal,
+           QStringLiteral("SN-F reissued request should be linked to the original xaction."));
+}
+
+void testXactionIndexRetryBoundaryReplaysPCrdGrant()
+{
+    const auto verifyBoundary = [](const RetryBoundarySplit split,
+                                   const QString& fileName,
+                                   const int expectedRows,
+                                   const QString& context) {
+        TransactionTraceFixture fixture = makeRetryChunkBoundaryTrace(fileName, split);
+
+        CHIron::Gui::CLogBTraceLoadError error;
+        std::shared_ptr<CHIron::Gui::TraceSession> session;
+        expect(CHIron::Gui::TraceSession::open(fixture.tracePath, session, error),
+               error.summary.isEmpty()
+                   ? context + QStringLiteral(": retry boundary trace should open.")
+                   : error.summary);
+        expect(session != nullptr, context + QStringLiteral(": retry boundary session should be created."));
+        expect(session->buildXactionIndex(error),
+               error.summary.isEmpty()
+                   ? context + QStringLiteral(": retry boundary trace should build an xaction index.")
+                   : error.summary);
+
+        std::vector<CHIron::Gui::TraceIssue> issues;
+        expect(session->xactionIndexIssues(issues, error),
+               error.summary.isEmpty()
+                   ? context + QStringLiteral(": retry boundary issues should load.")
+                   : error.summary);
+        const auto retryIssue = std::find_if(issues.cbegin(), issues.cend(), [](const auto& issue) {
+            return issue.denialName == QStringLiteral("XACT_DENIED_NO_MATCHING_RETRY")
+                || issue.denialName == QStringLiteral("XACT_DENIED_NO_MATCHING_PCREDIT")
+                || issue.denialName == QStringLiteral("XACT_DENIED_UNSUPPORTED_FEATURE");
+        });
+        expect(retryIssue == issues.cend(),
+               context + QStringLiteral(": retry boundary replay should not persist retry/P-credit denials."));
+
+        std::vector<CHIron::Gui::FlitRecord> rows;
+        expect(session->readRows(0, expectedRows, rows, error),
+               error.summary.isEmpty()
+                   ? context + QStringLiteral(": retry boundary rows should read back.")
+                   : error.summary);
+        expectEqual(static_cast<int>(rows.size()),
+                    expectedRows,
+                    context + QStringLiteral(": retry boundary trace should read all rows."));
+        expect(rows[0].xactionIndexed && rows[3].xactionIndexed,
+               context + QStringLiteral(": original and reissued retry requests should both be indexed."));
+        expect(!rows[0].transactionGroupKey.isEmpty()
+                   && rows[0].transactionGroupKey == rows[3].transactionGroupKey,
+               context + QStringLiteral(": original and reissued retry requests should share one persisted transaction key."));
+    };
+
+    verifyBoundary(RetryBoundarySplit::AfterRetryAck,
+                   QStringLiteral("xaction_retry_after_retry_ack_boundary.clogb"),
+                   4,
+                   QStringLiteral("RetryAck boundary"));
+    verifyBoundary(RetryBoundarySplit::AfterPCrdGrant,
+                   QStringLiteral("xaction_retry_after_pcrd_grant_boundary.clogb"),
+                   6,
+                   QStringLiteral("PCrdGrant boundary"));
+}
+
 void testMainWindowTransactionRefreshFollowsOwningXactionSession()
 {
     using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
@@ -6627,6 +7421,242 @@ void testDeniedFlitFilterMatchesRedXactionBulletsForTraceSession()
     expect(xactionIndex.data(CHIron::Gui::FlitTableModel::XactionIndexStateRole).toInt()
                == static_cast<int>(CHIron::Gui::XactionIndexState::Denied),
            QStringLiteral("The filtered row's Xaction role should render the red bullet."));
+}
+
+void testErrorsDockShowsDeniedXactionRows()
+{
+    resetErrorsDispositionSettings();
+
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+    using DatFlit = CHI::Eb::Flits::DAT<XactTestConfig>;
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set error-dock NodeIDWidth."));
+    expect(params.SetReqAddrWidth(52), QStringLiteral("Failed to set error-dock ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(32), QStringLiteral("Failed to set error-dock ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(32), QStringLiteral("Failed to set error-dock DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set error-dock DataWidth."));
+    params.SetDataCheckPresent(true);
+    params.SetPoisonPresent(true);
+    params.SetMPAMPresent(true);
+
+    const auto serializeReq = [](const ReqFlit& flit, TestFlitBitWriter& writer) {
+        appendEbReqFlitForTest(flit, writer);
+    };
+    const auto serializeDat = [](const DatFlit& flit, TestFlitBitWriter& writer) {
+        appendEbDatFlitForTest(flit, writer);
+    };
+
+    ReqFlit readReq{};
+    readReq.TgtID() = 2;
+    readReq.SrcID() = 1;
+    readReq.TxnID() = 7;
+    readReq.Opcode() = CHI::Eb::Opcodes::REQ::ReadNoSnp;
+    readReq.Size() = CHI::Eb::Sizes::B64;
+    readReq.Addr() = 0x1000;
+    readReq.AllowRetry() = 1;
+
+    DatFlit compData{};
+    compData.TgtID() = 1;
+    compData.SrcID() = 2;
+    compData.TxnID() = 7;
+    compData.HomeNID() = 2;
+    compData.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+    compData.RespErr() = CHI::Eb::RespErrs::OK;
+    compData.Resp() = CHI::Eb::Resps::CompData_UC;
+    compData.DBID() = 9;
+    compData.BE() = 0xFFFFFFFFU;
+
+    ReqFlit deniedReq = readReq;
+    deniedReq.TxnID() = 11;
+
+    QTemporaryDir tempDir;
+    expect(tempDir.isValid(), QStringLiteral("Temporary directory creation failed."));
+    const QString tracePath = tempDir.filePath(QStringLiteral("errors_dock_denied_xaction.clogb"));
+    writeTraceWithTopology(tracePath,
+                           params,
+                           {
+                               {CLog::NodeType::RN_F, 1},
+                               {CLog::NodeType::HN_F, 2},
+                           },
+                           {
+                               makeSerializedRecord(CLog::Channel::TXREQ, 1, 1, readReq, serializeReq),
+                               makeSerializedRecord(CLog::Channel::RXDAT, 2, 1, compData, serializeDat),
+                               makeSerializedRecord(CLog::Channel::TXREQ, 1, 1, deniedReq, serializeReq),
+                           });
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+    expect(window.testLoadTraceFile(tracePath),
+           QStringLiteral("Errors dock denied-row trace should load."));
+    window.testStartXactionIndexing(true);
+    expect(waitForCondition([&window]() {
+               return !window.testSessionXactionIndexActive(0);
+           }, 5000),
+           QStringLiteral("Errors dock denied-row trace should finish xaction indexing."));
+    expectEqual(window.testActivePersistedTraceIssueCount(),
+                1,
+                QStringLiteral("Active Errors dock session should read the persisted red-bullet issue table."));
+
+    CHIron::Gui::CLogBTraceLoadError sessionError;
+    std::shared_ptr<CHIron::Gui::TraceSession> session;
+    expect(CHIron::Gui::TraceSession::open(tracePath, session, sessionError),
+           sessionError.summary.isEmpty()
+               ? QStringLiteral("Errors dock denied-row comparison session should open.")
+               : sessionError.summary);
+    expect(session != nullptr,
+           QStringLiteral("Errors dock denied-row comparison session should be created."));
+    expect(session->buildXactionIndex(sessionError),
+           sessionError.summary.isEmpty()
+               ? QStringLiteral("Errors dock denied-row comparison index should build.")
+               : sessionError.summary);
+    std::vector<CHIron::Gui::TraceIssue> persistedIssues;
+    expect(session->xactionIndexIssues(persistedIssues, sessionError),
+           sessionError.summary.isEmpty()
+               ? QStringLiteral("Errors dock denied-row issue table should be readable.")
+               : sessionError.summary);
+    expectEqual(static_cast<int>(persistedIssues.size()),
+                1,
+                QStringLiteral("Errors dock denied-row issue table should persist the red-bullet row."));
+    CHIron::Gui::FlitTableModel model;
+    model.setTraceSession(session);
+    model.setXactionDeniedOnlyFilter(true);
+    expect(waitForCondition([&model]() {
+               return model.visibleCount() == 1;
+           }, 5000),
+           QStringLiteral("Errors dock comparison model should finish the denied-only filter build."));
+    expectEqual(model.visibleCount(),
+                1,
+                QStringLiteral("Errors dock comparison model should find one red-bullet denied row."));
+    const CHIron::Gui::FlitRecord* deniedRow = model.recordAt(0);
+    expect(deniedRow != nullptr,
+           QStringLiteral("Errors dock comparison model should expose the denied row."));
+    const int expectedDeniedRow = model.logicalRowAt(0) + 1;
+    expect(expectedDeniedRow > 0,
+           QStringLiteral("Errors dock comparison row should have a logical row."));
+
+    window.testSetErrorSeverityVisible(CHIron::Gui::TraceIssueSeverity::Error, false);
+    window.testSetErrorSeverityVisible(CHIron::Gui::TraceIssueSeverity::Warning, false);
+    window.testShowErrorsDock();
+    expect(waitForCondition([&window]() {
+               return window.testErrorsBuildComplete()
+                   && !window.testErrorsBuildActive()
+                   && window.testErrorWidgetErrorCount() == 1
+                   && !window.testErrorWidgetProgressVisible();
+           }, 10000),
+           QStringLiteral("Errors dock should finish loading and update toolbar counts when all severities are hidden: ")
+               + window.testErrorsBuildDebugState());
+    expectEqual(window.testErrorIssueCount(),
+                0,
+                QStringLiteral("Hidden severities should keep the Errors list empty after loading finishes."));
+    expectEqual(window.testErrorWidgetErrorCount(),
+                1,
+                QStringLiteral("Errors widget toolbar count should update even when the loaded error row is hidden."));
+    expect(window.testErrorSeverityButtonText(CHIron::Gui::TraceIssueSeverity::Error)
+               .contains(QStringLiteral("1 error")),
+           QStringLiteral("Errors widget Error button should retain the loaded count while errors are hidden."));
+    expect(!window.testErrorWidgetStatusText().contains(QStringLiteral("Loading persisted errors")),
+           QStringLiteral("Errors widget should clear loading text after hidden-row loading finishes."));
+    expect(window.testErrorWidgetStatusText().contains(QStringLiteral("No visible issues")),
+           QStringLiteral("Errors widget should summarize hidden loaded issues as filtered, not absent."));
+    expect(!window.testErrorWidgetProgressVisible(),
+           QStringLiteral("Errors widget progress bar should hide after hidden-row loading finishes."));
+
+    window.testSetErrorSeverityVisible(CHIron::Gui::TraceIssueSeverity::Error, true);
+    window.testSetErrorSeverityVisible(CHIron::Gui::TraceIssueSeverity::Warning, true);
+    QApplication::processEvents();
+    expect(waitForCondition([&window]() {
+               return window.testErrorsBuildComplete()
+                   && !window.testErrorsBuildActive()
+                   && window.testErrorErrorCount() == 1;
+           }, 10000),
+           QStringLiteral("Errors dock should finish collecting denied xaction rows: ")
+               + window.testErrorsBuildDebugState());
+    expectEqual(window.testErrorErrorCount(),
+                1,
+                QStringLiteral("Errors dock should show the row rendered as a red denied Xaction bullet."));
+    expectEqual(window.testErrorWarningCount(),
+                0,
+                QStringLiteral("Errors dock should reserve warning count for future diagnostics."));
+    expect(window.testErrorIssueCodeAt(0).startsWith(QStringLiteral("0x")),
+           QStringLiteral("Errors dock should expose the persisted numeric denial code."));
+    expectEqual(window.testErrorIssueSourceAt(0),
+                QStringLiteral("Xaction"),
+                QStringLiteral("Errors dock should expose the persisted issue source."));
+    expectEqual(window.testErrorIssueRowTextAt(0),
+                QString::number(expectedDeniedRow),
+                QStringLiteral("Errors dock should expose the one-based persisted trace row."));
+    expect(window.testErrorIssueSummaryAt(0).contains(QStringLiteral("row %1").arg(expectedDeniedRow)),
+           QStringLiteral("Errors dock description should point at the same denied trace row as the red bullet."));
+    expect(window.testErrorIssueDetailsAt(0).contains(QStringLiteral("Xaction index denial")),
+           QStringLiteral("Errors dock details should include Xaction denial context."));
+    window.testSetErrorIssueDisposition(CHIron::Gui::TraceIssueSource::XactionIndex,
+                                        CHIron::Gui::TraceIssueDisposition::Warning);
+    QApplication::processEvents();
+    expectEqual(window.testErrorErrorCount(),
+                0,
+                QStringLiteral("Changing Xaction disposition to Warning should clear error count."));
+    expectEqual(window.testErrorWarningCount(),
+                1,
+                QStringLiteral("Changing Xaction disposition to Warning should move the persisted issue to warnings."));
+    window.testSetErrorSeverityVisible(CHIron::Gui::TraceIssueSeverity::Warning, false);
+    QApplication::processEvents();
+    expectEqual(window.testErrorIssueCount(),
+                0,
+                QStringLiteral("Hiding warnings should hide warning-classified Xaction rows."));
+    expectEqual(window.testErrorWarningCount(),
+                1,
+                QStringLiteral("Hiding warnings should keep the warning count available in the toolbar."));
+    window.testSetErrorSeverityVisible(CHIron::Gui::TraceIssueSeverity::Warning, true);
+    QApplication::processEvents();
+    expectEqual(window.testErrorIssueCount(),
+                1,
+                QStringLiteral("Showing warnings should restore warning-classified Xaction rows."));
+
+    CHIron::Gui::MainWindow reopenedWindow;
+    reopenedWindow.resize(1200, 720);
+    reopenedWindow.show();
+    QApplication::processEvents();
+    expect(reopenedWindow.testLoadTraceFile(tracePath),
+           QStringLiteral("Errors dock denied-row trace should reopen with the persisted index."));
+    reopenedWindow.testShowErrorsDock();
+    expect(waitForCondition([&reopenedWindow]() {
+               return reopenedWindow.testErrorsBuildComplete()
+                   && !reopenedWindow.testErrorsBuildActive();
+           }, 5000),
+           QStringLiteral("Errors dock should load persisted issue records after reopening."));
+    expectEqual(reopenedWindow.testErrorErrorCount(),
+                0,
+                QStringLiteral("Reopened Errors dock should restore Xaction Warning disposition from settings."));
+    expectEqual(reopenedWindow.testErrorWarningCount(),
+                1,
+                QStringLiteral("Reopened Errors dock should keep the persisted issue as a warning."));
+    expectEqual(reopenedWindow.testErrorIssueDisposition(CHIron::Gui::TraceIssueSource::XactionIndex),
+                QStringLiteral("Warning"),
+                QStringLiteral("Reopened Errors dock should restore Xaction disposition control."));
+    expect(reopenedWindow.testErrorIssueCodeAt(0).startsWith(QStringLiteral("0x")),
+           QStringLiteral("Reopened Errors dock should keep the persisted numeric denial code."));
+    expectEqual(reopenedWindow.testErrorIssueSourceAt(0),
+                QStringLiteral("Xaction"),
+                QStringLiteral("Reopened Errors dock should keep the persisted issue source."));
+    expectEqual(reopenedWindow.testErrorIssueRowTextAt(0),
+                QString::number(expectedDeniedRow),
+                QStringLiteral("Reopened Errors dock should keep the persisted trace row."));
+    expect(reopenedWindow.testErrorIssueSummaryAt(0).contains(QStringLiteral("row %1").arg(expectedDeniedRow)),
+           QStringLiteral("Reopened Errors dock description should keep the persisted denied trace row."));
+    expect(!reopenedWindow.testErrorIssueSummaryAt(0).contains(QStringLiteral("DENIED_XACTION")),
+           QStringLiteral("Persisted issue rows should not use synthetic fallback denial names."));
+    expect(!reopenedWindow.testErrorIssueExpanded(0),
+           QStringLiteral("Reopened persisted Errors issue should start collapsed."));
+    expect(reopenedWindow.testSetErrorIssueExpanded(0, true),
+           QStringLiteral("Reopened persisted Errors issue should expand from persisted details."));
+    expect(reopenedWindow.testExpandedErrorIssueDetailsAt(0).contains(QStringLiteral("Xaction index denial")),
+           QStringLiteral("Reopened persisted Errors detail row should show persisted denial context."));
+    resetErrorsDispositionSettings();
 }
 
 void testDoubleClickTransactionHighlightMarksRelatedRows()
@@ -13726,6 +14756,8 @@ int main(int argc, char* argv[])
         {QStringLiteral("ClipboardScopesAreSessionLocalAndGlobal"), testClipboardScopesAreSessionLocalAndGlobal},
         {QStringLiteral("MainWindowMarkersArePerSessionAndPersist"), testMainWindowMarkersArePerSessionAndPersist},
         {QStringLiteral("MainWindowMarkerUndoRedoAndUnifiedOrdering"), testMainWindowMarkerUndoRedoAndUnifiedOrdering},
+        {QStringLiteral("TraceIssueSeverityAndErrorsWidget"), testTraceIssueSeverityAndErrorsWidget},
+        {QStringLiteral("ErrorsDockSourceDispositionAndSeverityFilters"), testErrorsDockSourceDispositionAndSeverityFilters},
         {QStringLiteral("MarkerWidgetSearchFiltersNameAndMemo"), testMarkerWidgetSearchFiltersNameAndMemo},
         {QStringLiteral("MarkerJsonPersistsStickyState"), testMarkerJsonPersistsStickyState},
         {QStringLiteral("MainWindowPreservesPerSessionTableDetails"), testMainWindowPreservesPerSessionTableDetails},
@@ -13738,6 +14770,8 @@ int main(int argc, char* argv[])
         {QStringLiteral("MainWindowCloseSessionWithActiveTransactionBuildIgnoresLateCompletion"), testMainWindowCloseSessionWithActiveTransactionBuildIgnoresLateCompletion},
         {QStringLiteral("MainWindowDiagnosticsIncludeTransactionWidgetState"), testMainWindowDiagnosticsIncludeTransactionWidgetState},
         {QStringLiteral("MainWindowDiagnosticsIncludeCacheWidgetState"), testMainWindowDiagnosticsIncludeCacheWidgetState},
+        {QStringLiteral("CoreRetryReissueAcceptedOnRNFAndSNF"), testCoreRetryReissueAcceptedOnRNFAndSNF},
+        {QStringLiteral("XactionIndexRetryBoundaryReplaysPCrdGrant"), testXactionIndexRetryBoundaryReplaysPCrdGrant},
         {QStringLiteral("MainWindowTransactionRefreshFollowsOwningXactionSession"), testMainWindowTransactionRefreshFollowsOwningXactionSession},
         {QStringLiteral("MainWindowTransactionSessionSwitchesDoNotRebuild"), testMainWindowTransactionSessionSwitchesDoNotRebuild},
         {QStringLiteral("MainWindowPreservesPerSessionTopologySelection"), testMainWindowPreservesPerSessionTopologySelection},
@@ -13751,6 +14785,7 @@ int main(int argc, char* argv[])
         {QStringLiteral("MainWindowCloseSessionWithActiveStatisticsIgnoresLateChunks"), testMainWindowCloseSessionWithActiveStatisticsIgnoresLateChunks},
         {QStringLiteral("DeniedFlitFilterShowsOnlyDeniedXactionRows"), testDeniedFlitFilterShowsOnlyDeniedXactionRows},
         {QStringLiteral("DeniedFlitFilterMatchesRedXactionBulletsForTraceSession"), testDeniedFlitFilterMatchesRedXactionBulletsForTraceSession},
+        {QStringLiteral("ErrorsDockShowsDeniedXactionRows"), testErrorsDockShowsDeniedXactionRows},
         {QStringLiteral("DoubleClickTransactionHighlightMarksRelatedRows"), testDoubleClickTransactionHighlightMarksRelatedRows},
         {QStringLiteral("ReadNoSnpTransactionHighlightIncludesAllCompDataBeats"), testReadNoSnpTransactionHighlightIncludesAllCompDataBeats},
         {QStringLiteral("XactionIndexPersistsRowsAfterChunkWriteFlush"), testXactionIndexPersistsRowsAfterChunkWriteFlush},
@@ -13758,6 +14793,8 @@ int main(int argc, char* argv[])
         {QStringLiteral("CacheLineStateReplayBuildsRequestedRnAddressSpans"), testCacheLineStateReplayBuildsRequestedRnAddressSpans},
         {QStringLiteral("CacheLineStateReplayAppliesReqTxdatCopyBack"), testCacheLineStateReplayAppliesReqTxdatCopyBack},
         {QStringLiteral("CacheLineStateReplayToleratesNonStateDatFieldDenials"), testCacheLineStateReplayToleratesNonStateDatFieldDenials},
+        {QStringLiteral("XactionIndexPersistsCacheStateReplayIssues"), testXactionIndexPersistsCacheStateReplayIssues},
+        {QStringLiteral("XactionIndexAcceptsHomeToRequesterSnoop"), testXactionIndexAcceptsHomeToRequesterSnoop},
         {QStringLiteral("TraceCacheMinimapMainTraceBuildsLaneOverlayAndSegments"), testTraceCacheMinimapMainTraceBuildsLaneOverlayAndSegments},
         {QStringLiteral("TraceCacheMinimapTagsStackAndAnchorToLaneRightEdge"), testTraceCacheMinimapTagsStackAndAnchorToLaneRightEdge},
         {QStringLiteral("TraceCacheMinimapAddingLaneDuringBuildFinishesBoth"), testTraceCacheMinimapAddingLaneDuringBuildFinishesBoth},

@@ -8,6 +8,7 @@
 #include "clipboard_widget.hpp"
 #include "clog_b_trace_loader.hpp"
 #include "config.hpp"
+#include "errors_widget.hpp"
 #include "flit_edit_adapter.hpp"
 #include "flit_transaction_keys.hpp"
 #include "gui_format.hpp"
@@ -108,6 +109,7 @@
 #include <array>
 #include <atomic>
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <iterator>
 #include <limits>
@@ -399,6 +401,8 @@ inline QString LoadStageText(const CLogBTraceLoadStage stage, const std::size_t 
             : QStringLiteral("Formatting decoded rows...");
     case CLogBTraceLoadStage::Finalizing:
         return QStringLiteral("Finalizing trace indexes...");
+    case CLogBTraceLoadStage::CollectingCacheStateErrors:
+        return QStringLiteral("Collecting cache-state errors...");
     case CLogBTraceLoadStage::FinalizingIndexDebug:
         return QStringLiteral("Validating xaction debug index...");
     case CLogBTraceLoadStage::FinalizingIndexLayout:
@@ -424,6 +428,7 @@ inline bool LoadStageUsesStageProgress(const CLogBTraceLoadStage stage)
     case CLogBTraceLoadStage::Decoding:
     case CLogBTraceLoadStage::Formatting:
     case CLogBTraceLoadStage::Finalizing:
+    case CLogBTraceLoadStage::CollectingCacheStateErrors:
     case CLogBTraceLoadStage::FinalizingIndexDebug:
     case CLogBTraceLoadStage::FinalizingIndexLayout:
     case CLogBTraceLoadStage::FinalizingIndexRows:
@@ -456,6 +461,7 @@ inline QString LoadStageProgressUnit(const CLogBTraceLoadStage stage, const std:
     case CLogBTraceLoadStage::Decoding:
     case CLogBTraceLoadStage::Formatting:
     case CLogBTraceLoadStage::Finalizing:
+    case CLogBTraceLoadStage::CollectingCacheStateErrors:
         return plural("record", "records");
     case CLogBTraceLoadStage::Opening:
     case CLogBTraceLoadStage::Parsing:

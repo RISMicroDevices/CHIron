@@ -37,6 +37,7 @@
     ads::CDockWidget* transactionDock_ = nullptr;
     ads::CDockWidget* clipboardDock_ = nullptr;
     ads::CDockWidget* markerDock_ = nullptr;
+    ads::CDockWidget* errorsDock_ = nullptr;
     ads::CDockWidget* statisticsDock_ = nullptr;
     FlitTableModel* flitModel_ = nullptr;
     FlitDetailsModel* detailModel_ = nullptr;
@@ -82,6 +83,7 @@
     TransactionWidget* transactionEmptyWidget_ = nullptr;
     ClipboardWidget* clipboardWidget_ = nullptr;
     MarkerWidget* markerWidget_ = nullptr;
+    ErrorsWidget* errorsWidget_ = nullptr;
     LatencyDiffWidget* latencyDiffWidget_ = nullptr;
     TimelineWidget* timelineWidget_ = nullptr;
     AddressWidget* addressWidget_ = nullptr;
@@ -172,6 +174,20 @@
         std::vector<ClipboardEntry> clipboardEntries;
         std::vector<TraceMarker> markers;
         MarkerStickyState markerStickyState;
+        std::shared_ptr<const std::vector<TraceIssue>> rawTraceIssues =
+            std::make_shared<const std::vector<TraceIssue>>();
+        std::shared_ptr<const std::vector<TraceIssue>> traceIssues =
+            std::make_shared<const std::vector<TraceIssue>>();
+        TraceIssueCounts traceIssueCounts;
+        bool traceIssueBuildRequested = false;
+        bool traceIssueBuildActive = false;
+        bool traceIssueBuildComplete = false;
+        bool traceIssuePersistedTableLoaded = false;
+        quint64 traceIssueBuildGeneration = 0;
+        std::shared_ptr<std::stop_source> traceIssueBuildStopSource;
+        QString traceIssueBuildProgressText;
+        std::uint64_t traceIssueBuildCompletedRows = 0;
+        std::uint64_t traceIssueBuildTotalRows = 0;
         QString selectedMarkerId;
         std::vector<MarkerUndoCommand> markerUndoCommands;
         std::size_t markerUndoIndex = 0;
@@ -219,6 +235,11 @@
     quint64 nextTraceSessionId_ = 1;
     quint64 activeTraceSessionId_ = 0;
     bool switchingTraceSession_ = false;
+    TraceIssueDisposition xactionIssueDisposition_ = TraceIssueDisposition::Error;
+    TraceIssueDisposition cacheStateIssueDisposition_ = TraceIssueDisposition::Error;
+    bool errorIssuesVisible_ = true;
+    bool warningIssuesVisible_ = true;
+    quint64 traceIssueDisplayGeneration_ = 0;
     QString currentTracePath_;
     QString currentTraceLabel_;
     QString pendingTraceLoadPath_;

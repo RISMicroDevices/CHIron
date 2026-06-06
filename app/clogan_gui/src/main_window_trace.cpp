@@ -2869,6 +2869,10 @@ void MainWindow::bindActiveSessionUi()
         }
         wireTraceSelectionModel();
     }
+    refreshErrorsWidget();
+    if (session && errorsDock_ && errorsWidget_ && !errorsDock_->isClosed() && errorsWidget_->isVisible()) {
+        startTraceIssueBuild(*session);
+    }
     bindClipboardWidgetToActiveScope();
     if (detailView_ && detailModel_) {
         detailView_->setModel(detailModel_);
@@ -5352,6 +5356,9 @@ void MainWindow::resetNoSessionState()
     if (markerWidget_) {
         markerWidget_->clear();
     }
+    if (errorsWidget_) {
+        errorsWidget_->clear();
+    }
     if (traceMarkerOverlay_) {
         traceMarkerOverlay_->clear();
     }
@@ -5410,6 +5417,7 @@ void MainWindow::closeTraceSession(const quint64 sessionId)
     cancelClipboardXactionAddressInsertForSession((*found)->id);
     cancelXactionIndexingForSession(**found, true);
     cancelStatisticsComputationForSession(**found);
+    cancelTraceIssueBuildForSession(**found);
     if ((*found)->flitModel) {
         (*found)->flitModel->cancelPendingFilterBuild();
     }
@@ -5458,6 +5466,7 @@ void MainWindow::closeOtherTraceSessions(const quint64 keepSessionId)
         cancelClipboardXactionAddressInsertForSession((*it)->id);
         cancelXactionIndexingForSession(**it, true);
         cancelStatisticsComputationForSession(**it);
+        cancelTraceIssueBuildForSession(**it);
         if ((*it)->flitModel) {
             (*it)->flitModel->cancelPendingFilterBuild();
         }
@@ -5482,6 +5491,7 @@ void MainWindow::closeAllTraceSessions()
         cancelClipboardXactionAddressInsertForSession(session->id);
         cancelXactionIndexingForSession(*session, true);
         cancelStatisticsComputationForSession(*session);
+        cancelTraceIssueBuildForSession(*session);
         if (session->flitModel) {
             session->flitModel->cancelPendingFilterBuild();
             session->flitModel->clear();

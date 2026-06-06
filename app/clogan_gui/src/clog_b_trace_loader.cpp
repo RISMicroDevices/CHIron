@@ -316,6 +316,11 @@ QString ebXactionDenialCode(const CHI::Eb::Xact::XactDenialEnum denial)
                                       QLatin1Char('0'));
 }
 
+std::uint32_t ebXactionDenialValue(const CHI::Eb::Xact::XactDenialEnum denial) noexcept
+{
+    return denial ? static_cast<std::uint32_t>(denial->value) : 0;
+}
+
 QString ebXactionDenialCategory(const CHI::Eb::Xact::XactDenialEnum denial)
 {
     if (!denial) {
@@ -5703,6 +5708,7 @@ void storeEbXactionIndexRecord(
     indexRecord.jointPath = result.path;
     indexRecord.denialName = ebXactionDenialName(result.denial);
     indexRecord.denialCode = ebXactionDenialCode(result.denial);
+    indexRecord.denialValue = ebXactionDenialValue(result.denial);
     indexRecord.xactionType = result.xaction
         ? ebXactionTypeName(result.xaction->GetType())
         : QStringLiteral("none");
@@ -5716,6 +5722,7 @@ void storeEbXactionNotIndexedRecord(CLogBTraceXactionIndexRecord& indexRecord)
     indexRecord.jointPath = QStringLiteral("not processed");
     indexRecord.denialName = QStringLiteral("not processed");
     indexRecord.denialCode = QStringLiteral("-");
+    indexRecord.denialValue = 0;
     indexRecord.xactionType = QStringLiteral("none");
 }
 
@@ -5750,11 +5757,17 @@ struct PendingEbXactionIndexRecord {
     std::uint64_t ownerOrdinal = 0;
 };
 
-struct DeniedEbXactionIndexFlit {
+struct BoundaryEbXactionIndexFlit {
     std::uint64_t logicalRow = 0;
     std::size_t sourceContext = kNoXactionContext;
     DecodedEbRecord decodedRecord;
 };
+
+bool isEbXactionBoundaryStateReplayFlit(const DecodedEbRecord& decodedRecord) noexcept
+{
+    const auto* flit = std::get_if<FlexibleRspFlit>(&decodedRecord.flit);
+    return flit && flit->Opcode() == CHI::Eb::Opcodes::RSP::PCrdGrant;
+}
 
 struct EbXactionIndexBlockCacheEntry {
     std::mutex mutex;
@@ -6234,6 +6247,120 @@ std::optional<CHI::Eb::Xact::CacheState> currentDatCacheState(
     }
     return std::nullopt;
 }
+
+template<typename Config>
+class EbCacheReplayIssueCollector final {
+public:
+    explicit EbCacheReplayIssueCollector(const CLogBTraceCacheReplayIssueCallback& callback)
+        : callback_(callback)
+    {
+    }
+
+    bool replay(const CLogBTraceMetadata& metadata,
+                const EbCacheReplayRecord<Config>& replayRecord,
+                const std::uint64_t logicalRow,
+                CLogBTraceLoadError& error)
+    {
+        const DecodedEbRecord& decodedRecord = replayRecord.decodedRecord;
+        const auto nodeType = ebXactionNodeTypeForRecord(metadata.nodeTypes, decodedRecord);
+        if (!nodeType || !ebXactionUseRnfJoint(*nodeType)) {
+            return true;
+        }
+        if (!cacheReplayCanSampleAcceptedFlit(replayRecord)
+            && !cacheReplayCanSampleResponseFlit(replayRecord)) {
+            return true;
+        }
+
+        CHI::Eb::Xact::RNCacheStateMap<Config>& stateMap =
+            rnStateMaps_[static_cast<std::uint32_t>(decodedRecord.nodeId)];
+        const std::uint64_t time = static_cast<std::uint64_t>(
+            std::max<qint64>(0, decodedRecord.timestamp));
+        std::uint64_t address = 0;
+        CHI::Eb::Xact::XactDenialEnum denial = nullptr;
+        bool sampled = false;
+
+        std::visit([&](const auto& flit) {
+            using T = std::decay_t<decltype(flit)>;
+            if constexpr (std::is_same_v<T, FlexibleReqFlit>) {
+                if (!cacheReplayCanSampleAcceptedFlit(replayRecord)
+                    || decodedRecord.direction != FlitDirection::Tx) {
+                    return;
+                }
+                const auto xactionFlit = makeEbXactionReqFlit<Config>(flit);
+                address = normalizedCacheLineAddress(static_cast<std::uint64_t>(xactionFlit.Addr()));
+                denial = stateMap.NextTXREQ(address, time, xactionFlit);
+                sampled = true;
+            } else if constexpr (std::is_same_v<T, FlexibleRspFlit>) {
+                if (!cacheReplayCanSampleResponseFlit(replayRecord)) {
+                    return;
+                }
+                address = normalizedCacheLineAddress(xactionFirstAddress(*replayRecord.result.xaction));
+                const auto xactionFlit = makeEbXactionRspFlit<Config>(flit);
+                if (decodedRecord.direction == FlitDirection::Rx
+                    && replayRecord.result.xaction->GetFirst().IsREQ()) {
+                    denial = stateMap.NextRXRSP(address, time, *replayRecord.result.xaction, xactionFlit);
+                    sampled = true;
+                } else if (decodedRecord.direction == FlitDirection::Tx
+                           && replayRecord.result.xaction->GetFirst().IsSNP()) {
+                    denial = stateMap.NextTXRSP(address, time, *replayRecord.result.xaction, xactionFlit);
+                    sampled = true;
+                }
+            } else if constexpr (std::is_same_v<T, FlexibleDatFlit>) {
+                if (!cacheReplayCanSampleResponseFlit(replayRecord)) {
+                    return;
+                }
+                address = normalizedCacheLineAddress(xactionFirstAddress(*replayRecord.result.xaction));
+                const auto xactionFlit = makeEbXactionDatFlit<Config>(flit);
+                (void)currentDatCacheState<Config>(stateMap,
+                                                   address,
+                                                   time,
+                                                   *replayRecord.result.xaction,
+                                                   xactionFlit,
+                                                   decodedRecord.direction,
+                                                   denial);
+                sampled = denial != nullptr;
+            } else if constexpr (std::is_same_v<T, FlexibleSnpFlit>) {
+                if (!cacheReplayCanSampleAcceptedFlit(replayRecord)
+                    || decodedRecord.direction != FlitDirection::Rx) {
+                    return;
+                }
+                const auto xactionFlit = makeEbXactionSnpFlit<Config>(flit);
+                address = normalizedCacheLineAddress(static_cast<std::uint64_t>(xactionFlit.Addr()) << 3U);
+                denial = stateMap.NextRXSNP(address, time, xactionFlit);
+                sampled = true;
+            }
+        }, decodedRecord.flit);
+
+        if (!sampled || !denial || denial == CHI::Eb::Xact::XactDenial::ACCEPTED) {
+            return true;
+        }
+
+        CLogBTraceCacheReplayIssue issue;
+        issue.logicalRow = logicalRow;
+        issue.timestamp = decodedRecord.timestamp;
+        issue.rnNodeId = static_cast<std::uint32_t>(decodedRecord.nodeId);
+        issue.rnNodeType = QString::fromStdString(CLog::NodeTypeToString(*nodeType));
+        issue.lineAddress = address;
+        issue.denialName = ebXactionDenialName(denial);
+        issue.denialCode = ebXactionDenialCode(denial);
+        issue.denialValue = ebXactionDenialValue(denial);
+        issue.channel = channelName(decodedRecord.sourceChannel);
+        issue.xactionType = replayRecord.result.xaction
+            ? ebXactionTypeName(replayRecord.result.xaction->GetType())
+            : QStringLiteral("none");
+        issue.jointType = replayRecord.result.jointType;
+        issue.jointPath = replayRecord.result.path;
+        if (!callback_ || callback_(std::move(issue))) {
+            return true;
+        }
+        setCancelledLoadError(error);
+        return false;
+    }
+
+private:
+    CLogBTraceCacheReplayIssueCallback callback_;
+    std::unordered_map<std::uint32_t, CHI::Eb::Xact::RNCacheStateMap<Config>> rnStateMaps_;
+};
 
 template<typename Config>
 class EbCacheLifetimeReplay final {
@@ -6916,15 +7043,133 @@ bool buildEbCacheLineStateSpans(const QString& resolvedFilePath,
 }
 
 template<typename Config>
+bool collectEbCacheStateReplayIssues(const QString& resolvedFilePath,
+                                     const CLogBTraceMetadata& metadata,
+                                     const EbMeasures& measures,
+                                     const CLogBTraceCacheReplayIssueCallback& issueCallback,
+                                     CLogBTraceLoadError& error,
+                                     const CLogBTraceLoadCallbacks& callbacks,
+                                     std::stop_token stopToken)
+{
+    const QString flitReport = buildFlitReport(metadata.parameters, measures);
+    EbXactionIndexThreadState<Config> state;
+    initializeEbXactionIndexState(state, metadata.nodeTypes);
+    EbCacheReplayIssueCollector<Config> collector(issueCallback);
+
+    const std::size_t totalRecords =
+        static_cast<std::size_t>(std::min<std::uint64_t>(
+            metadata.totalRecords,
+            static_cast<std::uint64_t>((std::numeric_limits<std::size_t>::max)())));
+    reportStage(callbacks.stage, CLogBTraceLoadStage::Decoding, 1, totalRecords);
+    if (callbacks.stageProgress) {
+        callbacks.stageProgress(0, totalRecords);
+    }
+    reportProgress(callbacks.progress, 0, 0);
+
+    std::uint64_t processedRows = 0;
+    std::uint64_t processedBytes = 0;
+    std::uint64_t totalBytes = 0;
+    for (const CLogBTraceBlockSummary& block : metadata.blocks) {
+        totalBytes += block.serializedSize;
+    }
+    reportProgress(callbacks.progress, 0, totalBytes);
+
+    for (std::size_t blockIndex = 0; blockIndex < metadata.blocks.size(); ++blockIndex) {
+        if (stopToken.stop_requested()) {
+            setCancelledLoadError(error);
+            return false;
+        }
+
+        std::shared_ptr<CLog::CLogB::TagCHIRecords> block;
+        if (!CLogBTraceLoader::loadBlockRecords(resolvedFilePath,
+                                                metadata,
+                                                blockIndex,
+                                                block,
+                                                error,
+                                                callbacks,
+                                                stopToken)) {
+            return false;
+        }
+        if (!block) {
+            continue;
+        }
+
+        std::vector<qulonglong> recordTimestamps;
+        std::size_t failedRecordIndex = 0;
+        if (!buildRecordTimestamps(*block, recordTimestamps, failedRecordIndex)) {
+            setLoadError(error,
+                         CLogBTraceLoadError::Type::Generic,
+                         QStringLiteral("Failed to reconstruct timestamps for Cache-state diagnostics."),
+                         QStringLiteral("Timestamp deltas overflowed or were malformed in block %1 near local record %2.")
+                             .arg(static_cast<qulonglong>(blockIndex))
+                             .arg(static_cast<qulonglong>(failedRecordIndex)));
+            return false;
+        }
+
+        const std::size_t recordCount = std::min(block->records.size(), recordTimestamps.size());
+        for (std::size_t localIndex = 0; localIndex < recordCount; ++localIndex) {
+            if (stopToken.stop_requested()) {
+                setCancelledLoadError(error);
+                return false;
+            }
+
+            EbCacheReplayRecord<Config> replayRecord;
+            if (!processEbCacheReplaySourceRecord(metadata,
+                                                  measures,
+                                                  flitReport,
+                                                  *block,
+                                                  block->records[localIndex],
+                                                  localIndex,
+                                                  recordTimestamps[localIndex],
+                                                  state,
+                                                  replayRecord,
+                                                  error)) {
+                return false;
+            }
+
+            const std::uint64_t logicalRow =
+                metadata.blocks[blockIndex].rowStart + static_cast<std::uint64_t>(localIndex);
+            if (!collector.replay(metadata, replayRecord, logicalRow, error)) {
+                return false;
+            }
+
+            ++processedRows;
+            if ((processedRows % kXactionMergeProgressBatchSize) == 0U && callbacks.stageProgress) {
+                callbacks.stageProgress(static_cast<std::size_t>(
+                                            std::min<std::uint64_t>(processedRows, totalRecords)),
+                                        totalRecords);
+            }
+        }
+
+        processedBytes += metadata.blocks[blockIndex].serializedSize;
+        reportProgress(callbacks.progress, processedBytes, totalBytes);
+    }
+
+    if (callbacks.stageProgress) {
+        callbacks.stageProgress(totalRecords, totalRecords);
+    }
+    reportProgress(callbacks.progress, totalBytes, totalBytes);
+    reportStage(callbacks.stage, CLogBTraceLoadStage::Completed, 1, totalRecords);
+    return true;
+}
+
+template<typename Config>
 bool replayDecodedEbXactionIndexRecord(
     const CLogBTraceMetadata& metadata,
     const DecodedEbRecord& decodedRecord,
     EbXactionIndexThreadState<Config>& state,
     CLogBTraceXactionIndexRecord& indexRecord,
-    bool& accepted)
+    bool& stateAccepted,
+    bool& indexed)
 {
-    accepted = false;
+    stateAccepted = false;
+    indexed = false;
     bool processed = false;
+    auto storeResult = [&](const EbXactionProcessResult<Config>& result) {
+        storeEbXactionIndexRecord(indexRecord, result);
+        stateAccepted = result.denial == CHI::Eb::Xact::XactDenial::ACCEPTED;
+        indexed = stateAccepted && result.ordinal.has_value();
+    };
 
     std::visit([&](const auto& flit) {
         using T = std::decay_t<decltype(flit)>;
@@ -6939,9 +7184,7 @@ bool replayDecodedEbXactionIndexRecord(
                                                 decodedRecord,
                                                 xactionFlit,
                                                 state.nextXactionOrdinal);
-            storeEbXactionIndexRecord(indexRecord, result);
-            accepted = result.denial == CHI::Eb::Xact::XactDenial::ACCEPTED
-                && result.ordinal.has_value();
+            storeResult(result);
             processed = true;
         } else if constexpr (std::is_same_v<T, FlexibleRspFlit>) {
             const auto xactionFlit = makeEbXactionRspFlit<Config>(flit);
@@ -6954,9 +7197,7 @@ bool replayDecodedEbXactionIndexRecord(
                                                 decodedRecord,
                                                 xactionFlit,
                                                 state.nextXactionOrdinal);
-            storeEbXactionIndexRecord(indexRecord, result);
-            accepted = result.denial == CHI::Eb::Xact::XactDenial::ACCEPTED
-                && result.ordinal.has_value();
+            storeResult(result);
             processed = true;
         } else if constexpr (std::is_same_v<T, FlexibleDatFlit>) {
             const auto xactionFlit = makeEbXactionDatFlit<Config>(flit);
@@ -6969,9 +7210,7 @@ bool replayDecodedEbXactionIndexRecord(
                                                 decodedRecord,
                                                 xactionFlit,
                                                 state.nextXactionOrdinal);
-            storeEbXactionIndexRecord(indexRecord, result);
-            accepted = result.denial == CHI::Eb::Xact::XactDenial::ACCEPTED
-                && result.ordinal.has_value();
+            storeResult(result);
             processed = true;
         } else if constexpr (std::is_same_v<T, FlexibleSnpFlit>) {
             const auto xactionFlit = makeEbXactionSnpFlit<Config>(flit);
@@ -6984,9 +7223,7 @@ bool replayDecodedEbXactionIndexRecord(
                                                 decodedRecord,
                                                 xactionFlit,
                                                 state.nextXactionOrdinal);
-            storeEbXactionIndexRecord(indexRecord, result);
-            accepted = result.denial == CHI::Eb::Xact::XactDenial::ACCEPTED
-                && result.ordinal.has_value();
+            storeResult(result);
             processed = true;
         }
     }, decodedRecord.flit);
@@ -7082,7 +7319,7 @@ bool buildEbXactionIndexRecords(const QString& resolvedFilePath,
     std::mutex errorMutex;
     std::mutex deniedMutex;
     std::mutex progressCallbackMutex;
-    std::vector<DeniedEbXactionIndexFlit> deniedFlits;
+    std::vector<BoundaryEbXactionIndexFlit> boundaryFlits;
 
     const auto publishStageProgress = [&](const std::size_t completed,
                                           const std::size_t total) {
@@ -7250,7 +7487,7 @@ bool buildEbXactionIndexRecords(const QString& resolvedFilePath,
                         return;
                     }
 
-                    std::vector<DeniedEbXactionIndexFlit> localDeniedFlits;
+                    std::vector<BoundaryEbXactionIndexFlit> localBoundaryFlits;
                     for (std::size_t localIndex = context.localBegin;
                          localIndex < context.localEnd;
                          ++localIndex) {
@@ -7296,8 +7533,8 @@ bool buildEbXactionIndexRecords(const QString& resolvedFilePath,
                             pendingRecords[static_cast<std::size_t>(logicalRow)];
                         pending.record = std::move(indexRecord);
                         setPendingEbXactionRecordOwner(pending, context.contextIndex);
-                        if (deniedByJoint) {
-                            localDeniedFlits.push_back(DeniedEbXactionIndexFlit{
+                        if (deniedByJoint || isEbXactionBoundaryStateReplayFlit(decodedRecord)) {
+                            localBoundaryFlits.push_back(BoundaryEbXactionIndexFlit{
                                 .logicalRow = logicalRow,
                                 .sourceContext = context.contextIndex,
                                 .decodedRecord = std::move(decodedRecord),
@@ -7313,11 +7550,11 @@ bool buildEbXactionIndexRecords(const QString& resolvedFilePath,
                         }
                     }
 
-                    if (!localDeniedFlits.empty()) {
+                    if (!localBoundaryFlits.empty()) {
                         const std::lock_guard lock(deniedMutex);
-                        deniedFlits.insert(deniedFlits.end(),
-                                           std::make_move_iterator(localDeniedFlits.begin()),
-                                           std::make_move_iterator(localDeniedFlits.end()));
+                        boundaryFlits.insert(boundaryFlits.end(),
+                                             std::make_move_iterator(localBoundaryFlits.begin()),
+                                             std::make_move_iterator(localBoundaryFlits.end()));
                     }
                     releaseCachedBlockContext(context.blockIndex);
                 }
@@ -7347,17 +7584,17 @@ bool buildEbXactionIndexRecords(const QString& resolvedFilePath,
     }
 
     publishIndexProgress();
-    std::sort(deniedFlits.begin(),
-              deniedFlits.end(),
-              [](const DeniedEbXactionIndexFlit& lhs,
-                 const DeniedEbXactionIndexFlit& rhs) {
+    std::sort(boundaryFlits.begin(),
+              boundaryFlits.end(),
+              [](const BoundaryEbXactionIndexFlit& lhs,
+                 const BoundaryEbXactionIndexFlit& rhs) {
                   return lhs.logicalRow < rhs.logicalRow;
               });
 
     reportStage(callbacks.stage,
                 CLogBTraceLoadStage::Formatting,
                 0,
-                deniedFlits.size());
+                boundaryFlits.size());
     std::size_t mergeWorkTotal = 0;
     for (const std::unique_ptr<EbXactionIndexSliceContext<Config>>& context : contexts) {
         if (!context->state.rnJoint.HasInflight()
@@ -7365,11 +7602,11 @@ bool buildEbXactionIndexRecords(const QString& resolvedFilePath,
             continue;
         }
         mergeWorkTotal += static_cast<std::size_t>(std::count_if(
-            deniedFlits.begin(),
-            deniedFlits.end(),
-            [&](const DeniedEbXactionIndexFlit& deniedFlit) {
-                return deniedFlit.sourceContext != context->contextIndex
-                    && deniedFlit.logicalRow >= context->logicalEnd;
+            boundaryFlits.begin(),
+            boundaryFlits.end(),
+            [&](const BoundaryEbXactionIndexFlit& boundaryFlit) {
+                return boundaryFlit.sourceContext != context->contextIndex
+                    && boundaryFlit.logicalRow >= context->logicalEnd;
             }));
     }
     std::size_t mergeWorkCompleted = 0;
@@ -7382,7 +7619,7 @@ bool buildEbXactionIndexRecords(const QString& resolvedFilePath,
             return false;
         }
 
-        for (const DeniedEbXactionIndexFlit& deniedFlit : deniedFlits) {
+        for (const BoundaryEbXactionIndexFlit& boundaryFlit : boundaryFlits) {
             if (stopToken.stop_requested()) {
                 setCancelledLoadError(error);
                 return false;
@@ -7391,20 +7628,22 @@ bool buildEbXactionIndexRecords(const QString& resolvedFilePath,
                 && !context->state.snJoint.HasInflight()) {
                 break;
             }
-            if (deniedFlit.sourceContext == context->contextIndex
-                || deniedFlit.logicalRow < context->logicalEnd) {
+            if (boundaryFlit.sourceContext == context->contextIndex
+                || boundaryFlit.logicalRow < context->logicalEnd) {
                 continue;
             }
 
             EbXactionIndexThreadState<Config> trialState = context->state;
             CLogBTraceXactionIndexRecord mergedRecord;
-            bool accepted = false;
+            bool stateAccepted = false;
+            bool indexed = false;
             replayDecodedEbXactionIndexRecord<Config>(metadata,
-                                                      deniedFlit.decodedRecord,
+                                                      boundaryFlit.decodedRecord,
                                                       trialState,
                                                       mergedRecord,
-                                                      accepted);
-            if (!accepted) {
+                                                      stateAccepted,
+                                                      indexed);
+            if (!stateAccepted) {
                 ++mergeWorkCompleted;
                 if (callbacks.stageProgress
                     && ((mergeWorkCompleted % kXactionMergeProgressBatchSize) == 0
@@ -7415,11 +7654,13 @@ bool buildEbXactionIndexRecords(const QString& resolvedFilePath,
             }
 
             context->state = std::move(trialState);
-            PendingEbXactionIndexRecord& pending =
-                pendingRecords[static_cast<std::size_t>(deniedFlit.logicalRow)];
-            if (!pending.record.indexed) {
-                pending.record = std::move(mergedRecord);
-                setPendingEbXactionRecordOwner(pending, context->contextIndex);
+            if (indexed) {
+                PendingEbXactionIndexRecord& pending =
+                    pendingRecords[static_cast<std::size_t>(boundaryFlit.logicalRow)];
+                if (!pending.record.indexed) {
+                    pending.record = std::move(mergedRecord);
+                    setPendingEbXactionRecordOwner(pending, context->contextIndex);
+                }
             }
             ++mergeWorkCompleted;
             if (callbacks.stageProgress
@@ -8638,6 +8879,67 @@ bool CLogBTraceLoader::buildCacheLineStateSpans(
                                                                 error,
                                                                 callbacks,
                                                                 stopToken);
+    }
+}
+
+bool CLogBTraceLoader::collectCacheStateReplayIssues(
+    const QString& filePath,
+    const CLogBTraceMetadata& metadata,
+    const CLogBTraceCacheReplayIssueCallback& issueCallback,
+    CLogBTraceLoadError& error,
+    const CLogBTraceLoadCallbacks& callbacks,
+    std::stop_token stopToken)
+{
+    error = {};
+
+    if (stopToken.stop_requested()) {
+        setCancelledLoadError(error);
+        return false;
+    }
+
+    if (metadata.parameters.GetIssue() != CLog::Issue::Eb) {
+        return true;
+    }
+
+    const QString resolvedFilePath = resolveTraceFilePath(filePath, metadata);
+    if (resolvedFilePath.isEmpty()) {
+        setLoadError(error,
+                     CLogBTraceLoadError::Type::Generic,
+                     QStringLiteral("No trace file path was provided for Cache-state diagnostics."));
+        return false;
+    }
+
+    EbMeasures measures;
+    if (!prepareEbTraceDecoding(metadata.parameters, measures, error)) {
+        return false;
+    }
+
+    switch (metadata.parameters.GetDataWidth()) {
+    case 128:
+        return collectEbCacheStateReplayIssues<EbXactionConfig<128>>(resolvedFilePath,
+                                                                     metadata,
+                                                                     measures,
+                                                                     issueCallback,
+                                                                     error,
+                                                                     callbacks,
+                                                                     stopToken);
+    case 256:
+        return collectEbCacheStateReplayIssues<EbXactionConfig<256>>(resolvedFilePath,
+                                                                     metadata,
+                                                                     measures,
+                                                                     issueCallback,
+                                                                     error,
+                                                                     callbacks,
+                                                                     stopToken);
+    case 512:
+    default:
+        return collectEbCacheStateReplayIssues<EbXactionConfig<512>>(resolvedFilePath,
+                                                                     metadata,
+                                                                     measures,
+                                                                     issueCallback,
+                                                                     error,
+                                                                     callbacks,
+                                                                     stopToken);
     }
 }
 

@@ -64,6 +64,7 @@ add_executable(CloganGUI
     src/main_window.cpp
     src/main_window.hpp
     src/main_window_diagnostics.cpp
+    src/main_window_errors.cpp
     src/main_window_internal.hpp
     src/main_window_members.hpp
     src/main_window_methods.hpp
@@ -81,6 +82,10 @@ add_executable(CloganGUI
     src/channel_badge_painter.hpp
     src/gui_format.hpp
     src/gui_colors.hpp
+    src/trace_issue_store.cpp
+    src/trace_issue_store.hpp
+    src/errors_widget.cpp
+    src/errors_widget.hpp
     src/marker_store.cpp
     src/marker_store.hpp
     src/marker_widget.cpp
@@ -158,6 +163,10 @@ if(CHIRON_GUI_BUILD_BENCHMARKS)
         src/gui_format.hpp
         src/channel_badge_painter.hpp
         src/gui_colors.hpp
+        src/trace_issue_store.cpp
+        src/trace_issue_store.hpp
+        src/errors_widget.cpp
+        src/errors_widget.hpp
         src/marker_store.cpp
         src/marker_store.hpp
         src/cache_widget.cpp
@@ -192,6 +201,7 @@ if(CHIRON_GUI_BUILD_TESTS)
         src/main_window.cpp
         src/main_window.hpp
         src/main_window_diagnostics.cpp
+        src/main_window_errors.cpp
         src/main_window_internal.hpp
         src/main_window_members.hpp
         src/main_window_methods.hpp
@@ -209,6 +219,10 @@ if(CHIRON_GUI_BUILD_TESTS)
         src/channel_badge_painter.hpp
         src/gui_format.hpp
         src/gui_colors.hpp
+        src/trace_issue_store.cpp
+        src/trace_issue_store.hpp
+        src/errors_widget.cpp
+        src/errors_widget.hpp
         src/marker_store.cpp
         src/marker_store.hpp
         src/marker_widget.cpp

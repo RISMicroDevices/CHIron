@@ -1,6 +1,7 @@
 #pragma once
 
 #include "clog_b_trace_loader.hpp"
+#include "trace_issue_store.hpp"
 #include "trace_statistics.hpp"
 
 #include <QHash>
@@ -71,6 +72,22 @@ public:
         std::uint32_t xactionType = 0;
     };
 
+    struct XactionIssueRecord {
+        TraceIssueSource source = TraceIssueSource::XactionIndex;
+        TraceIssueSeverity severity = TraceIssueSeverity::Error;
+        std::uint64_t logicalRow = 0;
+        qint64 timestamp = 0;
+        std::uint32_t denialName = 0;
+        std::uint32_t denialCode = 0;
+        std::uint32_t denialValue = 0;
+        std::uint32_t channel = 0;
+        std::uint32_t jointType = 0;
+        std::uint32_t jointPath = 0;
+        std::uint32_t xactionType = 0;
+        std::uint32_t node = 0;
+        std::uint64_t address = std::numeric_limits<std::uint64_t>::max();
+    };
+
     struct OptionalFieldIndexState {
         QString path;
         std::uint64_t descriptorTableOffset = 0;
@@ -90,6 +107,7 @@ public:
         QString jointPath;
         QString denialName;
         QString denialCode;
+        std::uint32_t denialValue = 0;
         QString xactionType;
     };
 
@@ -115,6 +133,8 @@ public:
         std::uint64_t xactionRowTableOffset = 0;
         std::uint64_t xactionGroupTableOffset = 0;
         std::uint64_t xactionGroupCount = 0;
+        std::uint64_t xactionIssueTableOffset = 0;
+        std::uint64_t xactionIssueCount = 0;
         std::uint64_t xactionStringTableOffset = 0;
         std::uint64_t xactionStringCount = 0;
         std::vector<XactionRowMapChunkDescriptor> xactionRowMapChunkDescriptors;
@@ -254,6 +274,15 @@ public:
     std::vector<std::uint64_t> xactionRowsForGroup(const QString& groupKey) const;
     bool xactionRowInfo(std::uint64_t logicalRow, XactionIndexRowInfo& info) const;
     QString xactionDebugInfo(std::uint64_t logicalRow) const;
+    bool xactionIndexIssues(std::vector<TraceIssue>& issues,
+                            CLogBTraceLoadError& error,
+                            std::stop_token stopToken = {},
+                            const std::function<void(std::uint64_t completedIssues,
+                                                     std::uint64_t totalIssues)>& progressCallback = {}) const;
+    bool xactionIndexIssueCount(std::uint64_t& issueCount,
+                                CLogBTraceLoadError& error,
+                                std::stop_token stopToken = {}) const;
+    bool refreshXactionIndexStateFromDisk(std::stop_token stopToken = {});
     bool collectRowsMatchingXactionDeniedRange(std::uint64_t beginRow,
                                                std::uint64_t rowCount,
                                                std::vector<int>& logicalRows) const;
@@ -424,6 +453,8 @@ private:
     std::uint64_t xactionRowTableOffset_ = 0;
     std::uint64_t xactionGroupTableOffset_ = 0;
     std::uint64_t xactionGroupCount_ = 0;
+    std::uint64_t xactionIssueTableOffset_ = 0;
+    std::uint64_t xactionIssueCount_ = 0;
     std::uint64_t xactionStringTableOffset_ = 0;
     std::uint64_t xactionStringCount_ = 0;
     std::vector<XactionRowMapChunkDescriptor> xactionRowMapChunkDescriptors_;
