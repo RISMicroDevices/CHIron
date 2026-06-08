@@ -118,14 +118,16 @@ namespace CHI {
         using NodeTypeEnum = const NodeTypeEnumBack*;
 
         namespace NodeType {
-            inline constexpr NodeTypeEnumBack   RN_F    ("RN-F", XactScope::Requester   , 0);
-            inline constexpr NodeTypeEnumBack   RN_D    ("RN-D", XactScope::Requester   , 1);
-            inline constexpr NodeTypeEnumBack   RN_I    ("RN-I", XactScope::Requester   , 2);
-            inline constexpr NodeTypeEnumBack   HN_F    ("HN-F", XactScope::Home        , 3);
-            inline constexpr NodeTypeEnumBack   HN_I    ("HN-I", XactScope::Home        , 4);
-            inline constexpr NodeTypeEnumBack   SN_F    ("SN-F", XactScope::Subordinate , 5);
-            inline constexpr NodeTypeEnumBack   SN_I    ("SN-I", XactScope::Subordinate , 6);
-            inline constexpr NodeTypeEnumBack   MN      ("MN",   XactScope::Home        , 7);
+            inline constexpr NodeTypeEnumBack   Unknown ("Unknown", XactScope::Requester, 0);
+            
+            inline constexpr NodeTypeEnumBack   RN_F    ("RN-F", XactScope::Requester   , 1);
+            inline constexpr NodeTypeEnumBack   RN_D    ("RN-D", XactScope::Requester   , 2);
+            inline constexpr NodeTypeEnumBack   RN_I    ("RN-I", XactScope::Requester   , 3);
+            inline constexpr NodeTypeEnumBack   HN_F    ("HN-F", XactScope::Home        , 4);
+            inline constexpr NodeTypeEnumBack   HN_I    ("HN-I", XactScope::Home        , 5);
+            inline constexpr NodeTypeEnumBack   SN_F    ("SN-F", XactScope::Subordinate , 6);
+            inline constexpr NodeTypeEnumBack   SN_I    ("SN-I", XactScope::Subordinate , 7);
+            inline constexpr NodeTypeEnumBack   MN      ("MN",   XactScope::Home        , 8);
         }
 
         class Topology {
@@ -174,8 +176,8 @@ namespace /*CHI::*/Xact {
     */
 
     inline Topology::Node::Node() noexcept
-        : type      (NodeType::RN_F)
-        , name      ("invalid")
+        : type      (NodeType::Unknown)
+        , name      ("<Invalid>")
         , valid     (false)
     { }
 
