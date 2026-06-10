@@ -111,7 +111,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromRequesterToHome(glbl))
         {
-            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN, this->first);
             return;
         }
 
@@ -324,7 +324,7 @@ namespace /*CHI::*/Xact {
         )
         {
             if (!rspFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
@@ -386,7 +386,7 @@ namespace /*CHI::*/Xact {
         else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompAck)
         {
             if (!rspFlit.IsFromRequesterToHome(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN, rspFlit);
 
             if (
                 !this->HasDAT({ Opcodes::DAT::CompData })
@@ -439,7 +439,7 @@ namespace /*CHI::*/Xact {
         )
         {
             if (!datFlit.IsToRequester(glbl))
-                return XactDenial::DENIED_DAT_NOT_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_DAT_NOT_TO_RN, datFlit);
 
             if (datFlit.flit.dat.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_DAT_TGTID_MISMATCHING_REQ;

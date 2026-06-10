@@ -115,7 +115,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromHomeToSubordinate(glbl))
         {
-            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_HN_TO_SN;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_NOT_FROM_HN_TO_SN, this->first);
             return;
         }
 
@@ -309,7 +309,7 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
             {
                 if (!rspFlit.IsFromSubordinateToHome(glbl))
-                    return XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN;
+                    return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN, rspFlit);
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -339,7 +339,7 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompPersist)
             {
                 if (!rspFlit.IsFromSubordinateToHome(glbl))
-                    return XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN;
+                    return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN, rspFlit);
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_COMPPERSIST_AFTER_COMP;
@@ -372,7 +372,7 @@ namespace /*CHI::*/Xact {
             else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
             {
                 if (!rspFlit.IsFromSubordinateToHome(glbl))
-                    return XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN;
+                    return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN, rspFlit);
 
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -399,7 +399,7 @@ namespace /*CHI::*/Xact {
             else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Persist)
             {
                 if (!rspFlit.IsFromSubordinateToHome(glbl))
-                    return XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN;
+                    return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN, rspFlit);
 
                 if (this->HasRSP({ Opcodes::RSP::Persist }))
                     return XactDenial::DENIED_PERSIST_AFTER_PERSIST;

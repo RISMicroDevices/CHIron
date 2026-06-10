@@ -85,12 +85,18 @@ namespace CHI {
                                               public Gravity::Event<XactionDeniedRequestFlitEvent<config>> {
         protected:
             const FiredRequestFlit<config>& flit;
+
+            const FiredRequestFlit<config>* complementRequest;
         
         public:
             XactionDeniedRequestFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredRequestFlit<config>& flit, const std::string& message = "") noexcept;
+            XactionDeniedRequestFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredRequestFlit<config>& flit, const FiredRequestFlit<config>& complementRequest, const std::string& message = "") noexcept;
 
         public:
             const FiredRequestFlit<config>& GetFlit() const noexcept;
+
+            bool                            HasComplementRequest() const noexcept;
+            const FiredRequestFlit<config>* GetComplementRequest() const noexcept;
         };
 
         template<FlitConfigurationConcept config>
@@ -99,11 +105,21 @@ namespace CHI {
         protected:
             const FiredResponseFlit<config>& flit;
 
+            const FiredRequestFlit<config>*  complementRequest;
+            const FiredResponseFlit<config>* complementResponse;
+
         public:
             XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const std::string& message = "") noexcept;
+            XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const FiredRequestFlit<config>& complementRequest, const std::string& message = "") noexcept;
+            XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const FiredResponseFlit<config>& complementResponse, const std::string& message = "") noexcept;
 
         public:
             const FiredResponseFlit<config>& GetFlit() const noexcept;
+
+            bool                             HasComplementRequest() const noexcept;
+            const FiredRequestFlit<config>*  GetComplementRequest() const noexcept;
+            bool                             HasComplementResponse() const noexcept;
+            const FiredResponseFlit<config>* GetComplementResponse() const noexcept;
         };
 
         
@@ -354,8 +370,23 @@ namespace CHI {
                                               const FiredRequestFlit<config>&   flit,
                                               const std::string&                message = "") noexcept;
 
+            XactDenialEnum  RequestFlitDenied(XactDenialEnum                    denial, 
+                                              const FiredRequestFlit<config>&   flit,
+                                              const FiredRequestFlit<config>&   complementRequest,
+                                              const std::string&                message = "") noexcept;
+
             XactDenialEnum  ResponseFlitDenied(XactDenialEnum                     denial, 
                                                const FiredResponseFlit<config>&   flit,
+                                               const std::string&                 message = "") noexcept;
+
+            XactDenialEnum  ResponseFlitDenied(XactDenialEnum                     denial, 
+                                               const FiredResponseFlit<config>&   flit,
+                                               const FiredRequestFlit<config>&    complementRequest,
+                                               const std::string&                 message = "") noexcept;
+                                               
+            XactDenialEnum  ResponseFlitDenied(XactDenialEnum                     denial, 
+                                               const FiredResponseFlit<config>&   flit,
+                                               const FiredResponseFlit<config>&   complementResponse,
                                                const std::string&                 message = "") noexcept;
         };
     }
@@ -1641,7 +1672,7 @@ namespace /*CHI::*/Xact {
                 "RetryAck expected");
 
         if (!rspFlit.IsFromHomeToRequester(glbl) && !rspFlit.IsFromSubordinateToHome(glbl))
-            return XactDenial::DENIED_RSP_RETRYACK_ROUTE;
+            return this->ResponseFlitDenied(XactDenial::DENIED_RSP_RETRYACK_ROUTE, rspFlit);
 
         if (!this->subsequence.empty())
             return XactDenial::DENIED_RETRY_ON_ACTIVE_PROGRESS;
@@ -1947,6 +1978,19 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::RequestFlitDenied(
+        XactDenialEnum                  denial,
+        const FiredRequestFlit<config>& flit,
+        const FiredRequestFlit<config>& complementRequest,
+        const std::string&              message) noexcept
+    {
+        if (this->events)
+            this->events->OnDeniedRequestFlit(XactionDeniedRequestFlitEvent<config>(
+                *this, denial, flit, complementRequest, message));
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
     inline XactDenialEnum Xaction<config>::ResponseFlitDenied(
         XactDenialEnum                      denial,
         const FiredResponseFlit<config>&    flit,
@@ -1955,6 +1999,32 @@ namespace /*CHI::*/Xact {
         if (this->events)
             this->events->OnDeniedResponseFlit(XactionDeniedResponseFlitEvent<config>(
                 *this, denial, flit, message));
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::ResponseFlitDenied(
+        XactDenialEnum                      denial,
+        const FiredResponseFlit<config>&    flit,
+        const FiredRequestFlit<config>&     complementRequest,
+        const std::string&                  message) noexcept
+    {
+        if (this->events)
+            this->events->OnDeniedResponseFlit(XactionDeniedResponseFlitEvent<config>(
+                *this, denial, flit, complementRequest, message));
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::ResponseFlitDenied(
+        XactDenialEnum                      denial,
+        const FiredResponseFlit<config>&    flit,
+        const FiredResponseFlit<config>&    complementResponse,
+        const std::string&                  message) noexcept
+    {
+        if (this->events)
+            this->events->OnDeniedResponseFlit(XactionDeniedResponseFlitEvent<config>(
+                *this, denial, flit, complementResponse, message));
         return denial;
     }
 }
@@ -2017,12 +2087,32 @@ namespace /*CHI::*/Xact {
     inline XactionDeniedRequestFlitEvent<config>::XactionDeniedRequestFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredRequestFlit<config>& flit, const std::string& message) noexcept
         : XactionDeniedEventBase<config>    (xaction, denial, message)
         , flit                              (flit)
+        , complementRequest                 (nullptr)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline XactionDeniedRequestFlitEvent<config>::XactionDeniedRequestFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredRequestFlit<config>& flit, const FiredRequestFlit<config>& complementRequest, const std::string& message) noexcept
+        : XactionDeniedEventBase<config>    (xaction, denial, message)
+        , flit                              (flit)
+        , complementRequest                 (&complementRequest)
     { }
 
     template<FlitConfigurationConcept config>
     inline const FiredRequestFlit<config>& XactionDeniedRequestFlitEvent<config>::GetFlit() const noexcept
     {
         return flit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool XactionDeniedRequestFlitEvent<config>::HasComplementRequest() const noexcept
+    {
+        return complementRequest != nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredRequestFlit<config>* XactionDeniedRequestFlitEvent<config>::GetComplementRequest() const noexcept
+    {
+        return complementRequest;
     }
 }
 
@@ -2033,12 +2123,54 @@ namespace /*CHI::*/Xact {
     inline XactionDeniedResponseFlitEvent<config>::XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const std::string& message) noexcept
         : XactionDeniedEventBase<config>    (xaction, denial, message)
         , flit                              (flit)
+        , complementRequest                 (nullptr)
+        , complementResponse                (nullptr)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline XactionDeniedResponseFlitEvent<config>::XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const FiredRequestFlit<config>& complementRequest, const std::string& message) noexcept
+        : XactionDeniedEventBase<config>    (xaction, denial, message)
+        , flit                              (flit)
+        , complementRequest                 (&complementRequest)
+        , complementResponse                (nullptr)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline XactionDeniedResponseFlitEvent<config>::XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const FiredResponseFlit<config>& complementResponse, const std::string& message) noexcept
+        : XactionDeniedEventBase<config>    (xaction, denial, message)
+        , flit                              (flit)
+        , complementRequest                 (nullptr)
+        , complementResponse                (&complementResponse)
     { }
 
     template<FlitConfigurationConcept config>
     inline const FiredResponseFlit<config>& XactionDeniedResponseFlitEvent<config>::GetFlit() const noexcept
     {
         return flit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool XactionDeniedResponseFlitEvent<config>::HasComplementRequest() const noexcept
+    {
+        return complementRequest != nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredRequestFlit<config>* XactionDeniedResponseFlitEvent<config>::GetComplementRequest() const noexcept
+    {
+        return complementRequest;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool XactionDeniedResponseFlitEvent<config>::HasComplementResponse() const noexcept
+    {
+        return complementResponse != nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* XactionDeniedResponseFlitEvent<config>::GetComplementResponse() const noexcept
+    {
+        return complementResponse;
     }
 }
 

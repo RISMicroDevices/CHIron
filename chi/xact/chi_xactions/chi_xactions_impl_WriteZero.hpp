@@ -108,7 +108,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromRequesterToHome(glbl))
         {
-            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN, this->first);
             return;
         }
 
@@ -284,7 +284,7 @@ namespace /*CHI::*/Xact {
         else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompDBIDResp)
         {
             if (!rspFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
@@ -311,7 +311,7 @@ namespace /*CHI::*/Xact {
         else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
         {
             if (!rspFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
@@ -339,7 +339,7 @@ namespace /*CHI::*/Xact {
               || rspFlit.flit.rsp.Opcode() == Opcodes::RSP::DBIDRespOrd)
         {
             if (!rspFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;

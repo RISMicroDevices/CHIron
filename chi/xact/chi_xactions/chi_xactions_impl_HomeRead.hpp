@@ -112,7 +112,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromHomeToSubordinate(glbl))
         {
-            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_HN_TO_SN;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_NOT_FROM_HN_TO_SN, this->first);
             return;
         }
 
@@ -295,7 +295,7 @@ namespace /*CHI::*/Xact {
         else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::ReadReceipt)
         {
             if (!rspFlit.IsFromSubordinateToHome(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
@@ -341,7 +341,7 @@ namespace /*CHI::*/Xact {
         )
         {
             if (!datFlit.IsFromSubordinate(glbl))
-                return XactDenial::DENIED_DAT_NOT_FROM_SN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_DAT_NOT_FROM_SN, datFlit);
 
             if (datFlit.flit.dat.TgtID() == this->first.flit.req.SrcID())
             {
@@ -354,7 +354,7 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_DAT_TXNID_MISMATCHING_DMT;
             }
             else
-                return XactDenial::DENIED_DAT_NOT_TO_HN_OR_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_DAT_NOT_TO_HN_OR_RN, datFlit);
 
             if (datFlit.flit.dat.Opcode() == Opcodes::DAT::CompData)
             {

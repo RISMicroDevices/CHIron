@@ -120,7 +120,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromRequesterToHome(glbl))
         {
-            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN, this->first);
             return;
         }
 
@@ -358,7 +358,7 @@ namespace /*CHI::*/Xact {
                 if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
                 {
                     if (!rspFlit.IsFromHomeToRequester(glbl))
-                        return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
                     
                     if (this->HasRSP({ Opcodes::RSP::Comp }))
                         return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -389,7 +389,7 @@ namespace /*CHI::*/Xact {
                 if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
                 {
                     if (!rspFlit.IsFromHomeToRequester(glbl))
-                        return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
                     
                     if (this->HasRSP({ Opcodes::RSP::Comp }))
                         return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -416,7 +416,7 @@ namespace /*CHI::*/Xact {
                 else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompAck)
                 {
                     if (!rspFlit.IsFromRequesterToHome(glbl))
-                        return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
+                        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN, rspFlit);
 
                     if (this->HasRSP({ Opcodes::RSP::CompAck }))
                         return XactDenial::DENIED_COMPACK_AFTER_COMPACK;
@@ -450,7 +450,7 @@ namespace /*CHI::*/Xact {
                 if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompPersist)
                 {
                     if (!rspFlit.IsFromHomeToRequester(glbl))
-                        return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
                     
                     if (this->HasRSP({ Opcodes::RSP::Comp }))
                         return XactDenial::DENIED_COMPPERSIST_AFTER_COMP;
@@ -483,7 +483,7 @@ namespace /*CHI::*/Xact {
                 else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Comp)
                 {
                     if (!rspFlit.IsFromHomeToRequester(glbl))
-                        return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
                     
                     if (this->HasRSP({ Opcodes::RSP::Comp }))
                         return XactDenial::DENIED_COMP_AFTER_COMP;
@@ -510,7 +510,7 @@ namespace /*CHI::*/Xact {
                 else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Persist)
                 {
                     if (!rspFlit.IsFromHomeToRequester(glbl) && !rspFlit.IsFromSubordinateToRequester(glbl))
-                        return XactDenial::DENIED_RSP_NOT_TO_RN;
+                        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_TO_RN, rspFlit);
                     
                     if (this->HasRSP({ Opcodes::RSP::Persist }))
                         return XactDenial::DENIED_PERSIST_AFTER_PERSIST;

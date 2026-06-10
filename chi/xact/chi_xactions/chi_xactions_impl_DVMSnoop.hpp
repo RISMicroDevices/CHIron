@@ -109,7 +109,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromHomeToRequester(glbl))
         {
-            this->firstDenial = XactDenial::DENIED_SNP_NOT_FROM_HN_TO_RN;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_SNP_NOT_FROM_HN_TO_RN, this->first);
             return;
         }
 
@@ -242,7 +242,7 @@ namespace /*CHI::*/Xact {
         if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::SnpResp)
         {
             if (!rspFlit.IsFromRequesterToHome(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.snp.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_SNP;
@@ -307,7 +307,7 @@ namespace /*CHI::*/Xact {
         if (snpFlit.flit.snp.Opcode() == Opcodes::SNP::SnpDVMOp)
         {
             if (!snpFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_SNP_NOT_FROM_HN_TO_RN;
+                return this->RequestFlitDenied(XactDenial::DENIED_SNP_NOT_FROM_HN_TO_RN, snpFlit);
 
             if (snpFlit.flit.snp.SrcID() != this->first.flit.snp.SrcID())
                 return XactDenial::DENIED_SRCID_MISMATCH;

@@ -115,7 +115,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromRequesterToHome(glbl))
         {
-            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN, this->first);
             return;
         }
 
@@ -347,7 +347,7 @@ namespace /*CHI::*/Xact {
         )
         {
             if (!rspFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
@@ -405,7 +405,7 @@ namespace /*CHI::*/Xact {
                     "CompAck is only expected for WriteEvictOrEvict");
 
             if (!rspFlit.IsFromRequesterToHome(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN, rspFlit);
 
             if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
                 return XactDenial::DENIED_COMPACK_AFTER_DBIDRESP;
@@ -446,7 +446,7 @@ namespace /*CHI::*/Xact {
         if (datFlit.flit.dat.Opcode() == Opcodes::DAT::CopyBackWrData)
         {
             if (!datFlit.IsFromRequesterToHome(glbl))
-                return XactDenial::DENIED_DAT_NOT_FROM_RN_TO_HN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_DAT_NOT_FROM_RN_TO_HN, datFlit);
 
 #ifdef CHI_ISSUE_EB_ENABLE
             // WriteEvictOrEvict only

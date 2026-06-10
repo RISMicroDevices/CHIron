@@ -112,7 +112,7 @@ namespace /*CHI::*/Xact {
 
         if (!this->first.IsFromRequesterToHome(glbl))
         {
-            this->firstDenial = XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN;
+            this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_NOT_FROM_RN_TO_HN, this->first);
             return;
         }
 
@@ -313,7 +313,7 @@ namespace /*CHI::*/Xact {
         )
         {
             if (!rspFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
@@ -370,7 +370,7 @@ namespace /*CHI::*/Xact {
                     "Comp is only expected for AtomicStore");
 
             if (!rspFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
@@ -416,7 +416,7 @@ namespace /*CHI::*/Xact {
                     "CompDBIDResp is only expected for AtomicStore");
 
             if (!rspFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_HN_TO_RN, rspFlit);
 
             if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
@@ -475,7 +475,7 @@ namespace /*CHI::*/Xact {
         if (datFlit.flit.dat.Opcode() == Opcodes::DAT::NonCopyBackWrData)
         {
             if (!datFlit.IsFromRequesterToHome(glbl))
-                return XactDenial::DENIED_DAT_NOT_FROM_RN_TO_HN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_DAT_NOT_FROM_RN_TO_HN, datFlit);
 
             const FiredResponseFlit<config>* optDBIDSource;
 
@@ -524,7 +524,7 @@ namespace /*CHI::*/Xact {
                     "CompData is not expected for AtomicStore");
 
             if (!datFlit.IsFromHomeToRequester(glbl))
-                return XactDenial::DENIED_DAT_NOT_FROM_HN_TO_RN;
+                return this->ResponseFlitDenied(XactDenial::DENIED_DAT_NOT_FROM_HN_TO_RN, datFlit);
 
             if (datFlit.flit.dat.TgtID() != this->first.flit.req.SrcID())
                 return XactDenial::DENIED_DAT_TGTID_MISMATCHING_REQ;
