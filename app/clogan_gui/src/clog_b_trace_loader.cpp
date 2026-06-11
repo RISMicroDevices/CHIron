@@ -1697,6 +1697,12 @@ void applyBeforeSamMarker(FlitRecord& row)
     row.dimTarget = true;
 }
 
+void applySnoopCaptureTarget(FlitRecord& row, const quint16 nodeId)
+{
+    row.target = InternDisplayString(QString::number(static_cast<qulonglong>(nodeId)));
+    row.dimTarget = true;
+}
+
 std::size_t flitChannelIndex(const CLog::Channel channel)
 {
     switch (channel) {
@@ -4377,6 +4383,7 @@ bool appendDecodedTag(const CLog::Parameters& params,
                     normalizeDynamicFields(row, &flit, params);
                 } else if constexpr (std::is_same_v<T, FlexibleSnpFlit>) {
                     row = adapter.fromSNP(decodedRecord.timestamp, decodedRecord.direction, flit);
+                    applySnoopCaptureTarget(row, decodedRecord.nodeId);
                     if (trackXactions) {
                         const auto xactionFlit = makeEbXactionSnpFlit<XactionConfig>(flit);
                         const EbXactionProcessResult<XactionConfig> result =
@@ -4691,6 +4698,7 @@ bool appendDecodedBTag(const CLog::Parameters& params,
                 normalizeDynamicFields(row, &flit, params);
             } else if constexpr (std::is_same_v<T, FlexibleBSnpFlit>) {
                 row = adapter.fromSNP(decodedRecord.timestamp, decodedRecord.direction, flit);
+                applySnoopCaptureTarget(row, decodedRecord.nodeId);
                 normalizeAddressDisplay(row,
                                         QStringLiteral("Addr"),
                                         formatFixedHex(static_cast<qulonglong>(flit.Addr() << 3),

@@ -214,7 +214,7 @@ inline bool XactionNodeLabelForRecord(const FlitRecord& record,
         return false;
     }
 
-    if (targetColumn && record.dimTarget) {
+    if (targetColumn && record.dimTarget && !record.channelTag.isEmpty()) {
         label = record.channelTag;
         color = NodeTypeLabelColor(label);
         return !label.isEmpty();

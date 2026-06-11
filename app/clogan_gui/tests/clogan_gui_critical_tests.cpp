@@ -5,6 +5,7 @@
 #include "errors_widget.hpp"
 #include "filter_parallel_utils.hpp"
 #include "flit_transaction_keys.hpp"
+#include "flit_edit_adapter.hpp"
 #include "flit_table_model.hpp"
 #include "latency_analysis.hpp"
 #include "latency_diff_export.hpp"
@@ -8179,6 +8180,112 @@ void testBeforeSamRequestChannelsDisplayAsReqWithMarker()
                 QStringLiteral("Hiding REQ should hide BeforeSAM request rows while leaving DAT rows."));
 }
 
+void testSnpTargetColumnDisplaysCaptureNodeAndStaysDimmed()
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using SnpFlit = CHI::Eb::Flits::SNP<XactTestConfig>;
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set test NodeIDWidth."));
+    expect(params.SetReqAddrWidth(52), QStringLiteral("Failed to set test ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(32), QStringLiteral("Failed to set test ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(32), QStringLiteral("Failed to set test DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set test DataWidth."));
+    params.SetDataCheckPresent(true);
+    params.SetPoisonPresent(true);
+    params.SetMPAMPresent(true);
+
+    SnpFlit snp{};
+    snp.SrcID() = 10;
+    snp.TxnID() = 21;
+    snp.FwdNID() = 31;
+    snp.FwdTxnID() = 44;
+    snp.Opcode() = CHI::Eb::Opcodes::SNP::SnpMakeInvalid;
+    snp.Addr() = 0x3000 >> 3U;
+
+    const auto serializeSnp = [](const SnpFlit& flit, TestFlitBitWriter& writer) {
+        appendEbSnpFlitForTest(flit, writer);
+    };
+
+    CLog::CLogB::TagCHIRecords block;
+    block.head.timeBase = 0;
+    block.records.push_back(makeSerializedRecord(CLog::Channel::RXSNP,
+                                                 7,
+                                                 1,
+                                                 snp,
+                                                 serializeSnp));
+
+    CHIron::Gui::CLogBTraceMetadata metadata;
+    metadata.parameters = params;
+    metadata.nodeTypes[7] = CLog::NodeType::RN_F;
+    metadata.nodeTypes[10] = CLog::NodeType::HN_F;
+    metadata.nodeTypes[31] = CLog::NodeType::RN_I;
+    metadata.blocks.push_back(CHIron::Gui::CLogBTraceBlockSummary{
+        .serializedSize = 1,
+        .recordCount = static_cast<std::uint32_t>(block.records.size()),
+    });
+    metadata.totalRecords = block.records.size();
+
+    std::vector<CHIron::Gui::FlitRecord> rows;
+    CHIron::Gui::CLogBTraceLoadError error;
+    expect(CHIron::Gui::CLogBTraceLoader::decodeBlockRows(metadata,
+                                                          0,
+                                                          block,
+                                                          0,
+                                                          block.records.size(),
+                                                          rows,
+                                                          error,
+                                                          {},
+                                                          {},
+                                                          false),
+           error.summary.isEmpty()
+               ? QStringLiteral("SNP target display block should decode successfully.")
+               : error.summary);
+    expectEqual(rows.size(),
+                static_cast<std::size_t>(1),
+                QStringLiteral("SNP target display test block should decode one row."));
+
+    const CHIron::Gui::FlitRecord& row = rows.front();
+    expect(row.channel == CHIron::Gui::FlitChannel::Snp,
+           QStringLiteral("Decoded SNP row should keep the logical SNP channel."));
+    expectEqual(row.target,
+                QStringLiteral("7"),
+                QStringLiteral("SNP TgtID display should use the capturing node id, not FwdNID."));
+    expect(row.dimTarget, QStringLiteral("SNP TgtID display should be dimmed."));
+    expect(row.channelNodeId && *row.channelNodeId == 7,
+           QStringLiteral("SNP row should keep its capture node id metadata."));
+    expectEqual(CHIron::Gui::FlitEditAdapter::fieldNameForColumn(
+                    CHIron::Gui::FlitTableModel::TargetColumn,
+                    QString(),
+                    row),
+                QStringLiteral("TgtID"),
+                QStringLiteral("SNP target table column should not alias to FwdNID."));
+
+    const CHIron::Gui::FlitEditCellState targetState =
+        CHIron::Gui::FlitEditAdapter::cellState(row, &metadata, QStringLiteral("TgtID"));
+    expect(!targetState.applicable,
+           QStringLiteral("SNP TgtID edit state should stay inapplicable so the cell is grayed out."));
+
+    CHIron::Gui::FlitTableModel model;
+    model.setRows(rows);
+    model.setTraceMetadataOverride(metadata);
+    model.setNodeLabelsVisible(true);
+
+    const QModelIndex targetIndex = model.index(0, CHIron::Gui::FlitTableModel::TargetColumn);
+    expectEqual(model.data(targetIndex, Qt::DisplayRole).toString(),
+                QStringLiteral("7"),
+                QStringLiteral("SNP table target cell should display the capture node id."));
+    expect(model.data(targetIndex, Qt::ForegroundRole).value<QColor>().isValid(),
+           QStringLiteral("SNP target column should provide a dim foreground color."));
+    expect(model.data(targetIndex, Qt::BackgroundRole).value<QColor>().isValid(),
+           QStringLiteral("SNP target column should provide a dim background color."));
+    expectEqual(model.data(targetIndex,
+                           CHIron::Gui::FlitTableModel::NodeLabelTextRole).toString(),
+                QStringLiteral("RN-F"),
+                QStringLiteral("SNP capture-node target should still resolve node labels from metadata."));
+}
+
 void testSuggestedFilterWorkerCountIsBounded()
 {
     const std::size_t tinyCount = CHIron::Gui::Detail::suggestedFilterWorkerCount(0);
@@ -14807,6 +14914,7 @@ int main(int argc, char* argv[])
         {QStringLiteral("TraceCacheMinimapClipboardMergesRowsInsideSameSourceState"), testTraceCacheMinimapClipboardMergesRowsInsideSameSourceState},
         {QStringLiteral("TraceCacheMinimapClipboardSlicesStateReturnTransitions"), testTraceCacheMinimapClipboardSlicesStateReturnTransitions},
         {QStringLiteral("BeforeSamRequestChannelsDisplayAsReqWithMarker"), testBeforeSamRequestChannelsDisplayAsReqWithMarker},
+        {QStringLiteral("SnpTargetColumnDisplaysCaptureNodeAndStaysDimmed"), testSnpTargetColumnDisplaysCaptureNodeAndStaysDimmed},
         {QStringLiteral("SuggestedFilterWorkerCountIsBounded"), testSuggestedFilterWorkerCountIsBounded},
         {QStringLiteral("FastIndexDescriptorValidationRejectsCorruption"), testFastIndexDescriptorValidationRejectsCorruption},
         {QStringLiteral("FastRecordRangeFilterPreservesMatchOrder"), testFastRecordRangeFilterPreservesMatchOrder},

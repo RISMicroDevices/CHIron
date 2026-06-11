@@ -964,7 +964,7 @@ QString FlitEditAdapter::fieldNameForColumn(const int column,
     case FlitTableModel::SourceColumn:
         return QStringLiteral("SrcID");
     case FlitTableModel::TargetColumn:
-        return row.channel == FlitChannel::Snp ? QStringLiteral("FwdNID") : QStringLiteral("TgtID");
+        return QStringLiteral("TgtID");
     case FlitTableModel::TxnColumn:
         return QStringLiteral("TxnID");
     case FlitTableModel::AddressColumn:

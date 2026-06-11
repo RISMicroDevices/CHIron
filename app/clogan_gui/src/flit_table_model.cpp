@@ -2813,7 +2813,7 @@ bool FlitTableModel::nodeLabelForIndex(const FlitRecord& record,
         return false;
     }
 
-    if (column == TargetColumn && record.dimTarget) {
+    if (column == TargetColumn && record.dimTarget && !record.channelTag.isEmpty()) {
         label = record.channelTag;
         color = NodeTypeLabelColor(label);
         return !label.isEmpty();
