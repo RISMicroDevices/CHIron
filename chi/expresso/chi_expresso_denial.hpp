@@ -2057,6 +2057,496 @@ namespace CHI {
                 }
             );
 
+            /*
+            DENIED_SRCID_MISMATCH
+            - Title Message: "Denied SrcID, not identical to previous flit"
+            - Further Message: "Unexpected SrcID: {SNP.SrcID}, not identical to previous SrcID: {complementary SNP.SrcID}"
+            - Source: [Xaction]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. SNP.SrcID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. SNP.SrcID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_SRCID_MISMATCH = (
+                "DENIED_SRCID_MISMATCH",
+                Xact::XactDenial::DENIED_SRCID_MISMATCH,
+                [](auto, SourceEnum source) -> std::string { return "Denied SrcID, not identical to previous flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t srcId = 0, complementSrcId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsSNP()) {
+                            srcId = subject.obj.firedFlitRequest->flit.snp.SrcID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsSNP()) {
+                            complementSrcId = complement.obj.firedFlitRequest->flit.snp.SrcID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected SrcID: {:#x}, not identical to previous flit SrcID: {:#x}",
+                        srcId,
+                        complementSrcId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::SrcID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::SrcID };
+                }
+            );
+
+            /*
+            DENIED_PGROUPID_MISMATCH
+            - Title Message: "Denied PGroupID, not identical to previous flit"
+            - Further Message: "Unexpected PGroupID: {RSP.PGroupID}, not identical to previous PGroupID: {complementary REQ.PGroupID}"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.PGroupID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. REQ.PGroupID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_PGROUPID_MISMATCH = (
+                "DENIED_PGROUPID_MISMATCH",
+                Xact::XactDenial::DENIED_PGROUPID_MISMATCH,
+                [](auto, SourceEnum source) -> std::string { return "Denied PGroupID, not identical to previous flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t pGroupId = 0, complementPGroupId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            pGroupId = subject.obj.firedFlitResponse->flit.rsp.PGroupID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsREQ()) {
+                            complementPGroupId = complement.obj.firedFlitRequest->flit.req.PGroupID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected PGroupID: {:#x}, not identical to previous flit PGroupID: {:#x}",
+                        pGroupId,
+                        complementPGroupId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::PGroupID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::PGroupID };
+                }
+            );
+
+            /*
+            DENIED_RSP_TXNID_MISMATCHING_REQ
+            - Title Message: "Denied TxnID in RSP flit, not identical to REQ flit"
+            - Further Message: "Unexpected RSP TxnID: {RSP.TxnID}, expecting: {REQ.TxnID} from REQ flit"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.TxnID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. REQ.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_TXNID_MISMATCHING_REQ = (
+                "DENIED_RSP_TXNID_MISMATCHING_REQ",
+                Xact::XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID in RSP flit, not identical to REQ flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t rspTxnId = 0, reqTxnId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            rspTxnId = subject.obj.firedFlitResponse->flit.rsp.TxnID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsREQ()) {
+                            reqTxnId = complement.obj.firedFlitRequest->flit.req.TxnID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected RSP TxnID: {:#x}, expecting: {:#x} from REQ flit",
+                        rspTxnId,
+                        reqTxnId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::TxnID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::TxnID };
+                }
+            );
+
+            /*
+            DENIED_DAT_TXNID_MISMATCHING_REQ
+            - Title Message: "Denied TxnID in DAT flit, not identical to REQ flit"
+            - Further Message: "Unexpected DAT TxnID: {DAT.TxnID}, expecting: {REQ.TxnID} from REQ flit"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.TxnID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. REQ.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_TXNID_MISMATCHING_REQ = (
+                "DENIED_DAT_TXNID_MISMATCHING_REQ",
+                Xact::XactDenial::DENIED_DAT_TXNID_MISMATCHING_REQ,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID in DAT flit, not identical to REQ flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t datTxnId = 0, reqTxnId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            datTxnId = subject.obj.firedFlitResponse->flit.dat.TxnID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsREQ()) {
+                            reqTxnId = complement.obj.firedFlitRequest->flit.req.TxnID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected DAT TxnID: {:#x}, expecting: {:#x} from REQ flit",
+                        datTxnId,
+                        reqTxnId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TxnID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::TxnID };
+                }
+            );
+
+            /*
+            DENIED_RSP_TXNID_MISMATCHING_DBID
+            - Title Message: "Denied TxnID in RSP flit, not identical to DBID sourced from RSP or DAT flit"
+            - Further Message: "Unexpected RSP TxnID: {RSP.TxnID}, not identical to DBID-sourced TxnID: {complementary RSP.TxnID/DAT.TxnID}"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.TxnID
+            - Complement: [FiredResponseFlit]
+            - Complement Key: 1. RSP.TxnID
+                              2. DAT.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_TXNID_MISMATCHING_DBID = (
+                "DENIED_RSP_TXNID_MISMATCHING_DBID",
+                Xact::XactDenial::DENIED_RSP_TXNID_MISMATCHING_DBID,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID in RSP flit, not identical to DBID sourced from RSP or DAT flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t rspTxnId = 0, dbidSourcedTxnId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            rspTxnId = subject.obj.firedFlitResponse->flit.rsp.TxnID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_RESPONSE && complement.obj.firedFlitResponse->flit.IsRSP()) {
+                            dbidSourcedTxnId = complement.obj.firedFlitResponse->flit.rsp.TxnID();
+                            break;
+                        }
+                        else if (complement.type == ObjectType::FIRED_FLIT_RESPONSE && complement.obj.firedFlitResponse->flit.IsDAT()) {
+                            dbidSourcedTxnId = complement.obj.firedFlitResponse->flit.dat.TxnID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected RSP TxnID: {:#x}, not identical to DBID-sourced TxnID: {:#x}",
+                        rspTxnId,
+                        dbidSourcedTxnId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::TxnID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::TxnID, Flit::Keys::DAT::TxnID };
+                }
+            );
+
+            /*
+            DENIED_DAT_TXNID_MISMATCHING_DBID
+            - Title Message: "Denied TxnID in DAT flit, not identical to DBID sourced from RSP or DAT flit"
+            - Further Message: "Unexpected DAT TxnID: {DAT.TxnID}, not identical to DBID-sourced TxnID: {complementary RSP.TxnID/DAT.TxnID}"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.TxnID
+            - Complement: [FiredResponseFlit]
+            - Complement Key: 1. RSP.TxnID
+                              2. DAT.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_TXNID_MISMATCHING_DBID = (
+                "DENIED_DAT_TXNID_MISMATCHING_DBID",
+                Xact::XactDenial::DENIED_DAT_TXNID_MISMATCHING_DBID,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID in DAT flit, not identical to DBID sourced from RSP or DAT flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t datTxnId = 0, dbidSourcedTxnId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            datTxnId = subject.obj.firedFlitResponse->flit.dat.TxnID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_RESPONSE && complement.obj.firedFlitResponse->flit.IsRSP()) {
+                            dbidSourcedTxnId = complement.obj.firedFlitResponse->flit.rsp.TxnID();
+                            break;
+                        }
+                        else if (complement.type == ObjectType::FIRED_FLIT_RESPONSE && complement.obj.firedFlitResponse->flit.IsDAT()) {
+                            dbidSourcedTxnId = complement.obj.firedFlitResponse->flit.dat.TxnID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected DAT TxnID: {:#x}, not identical to DBID-sourced TxnID: {:#x}",
+                        datTxnId,
+                        dbidSourcedTxnId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TxnID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::TxnID, Flit::Keys::DAT::TxnID };
+                }
+            );
+
+            /*
+            DENIED_RSP_TXNID_MISMATCHING_SNP
+            - Title Message: "Denied TxnID in RSP flit, not identical to SNP flit"
+            - Further Message: "Unexpected RSP TxnID: {RSP.TxnID}, not identical to SNP flit TxnID: {complementary SNP.TxnID}"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. RSP.TxnID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. SNP.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_RSP_TXNID_MISMATCHING_SNP = (
+                "DENIED_RSP_TXNID_MISMATCHING_SNP",
+                Xact::XactDenial::DENIED_RSP_TXNID_MISMATCHING_SNP,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID in RSP flit, not identical to SNP flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t rspTxnId = 0, snpTxnId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsRSP()) {
+                            rspTxnId = subject.obj.firedFlitResponse->flit.rsp.TxnID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsSNP()) {
+                            snpTxnId = complement.obj.firedFlitRequest->flit.snp.TxnID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected RSP TxnID: {:#x}, not identical to SNP flit TxnID: {:#x}",
+                        rspTxnId,
+                        snpTxnId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::RSP::TxnID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::TxnID };
+                }
+            );
+
+            /*
+            DENIED_DAT_TXNID_MISMATCHING_SNP
+            - Title Message: "Denied TxnID in DAT flit, not identical to SNP flit"
+            - Further Message: "Unexpected DAT TxnID: {DAT.TxnID}, not identical to SNP flit TxnID: {complementary SNP.TxnID}"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.TxnID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. SNP.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_TXNID_MISMATCHING_SNP = (
+                "DENIED_DAT_TXNID_MISMATCHING_SNP",
+                Xact::XactDenial::DENIED_DAT_TXNID_MISMATCHING_SNP,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID in DAT flit, not identical to SNP flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t datTxnId = 0, snpTxnId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            datTxnId = subject.obj.firedFlitResponse->flit.dat.TxnID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsSNP()) {
+                            snpTxnId = complement.obj.firedFlitRequest->flit.snp.TxnID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected DAT TxnID: {:#x}, not identical to SNP flit TxnID: {:#x}",
+                        datTxnId,
+                        snpTxnId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TxnID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::TxnID };
+                }
+            );
+
+            /*
+            DENIED_SNP_TXNID_MISMATCHING_SNP
+            - Title Message: "Denied TxnID in SNP flit, not identical to previous SNP flit"
+            - Further Message: "Unexpected SNP TxnID: {SNP.TxnID}, not identical to previous SNP flit TxnID: {complementary SNP.TxnID}"
+            - Source: [Xaction]
+            - Subject: [FiredRequestFlit]
+            - Subject Key: 1. SNP.TxnID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. SNP.TxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_SNP_TXNID_MISMATCHING_SNP = (
+                "DENIED_SNP_TXNID_MISMATCHING_SNP",
+                Xact::XactDenial::DENIED_SNP_TXNID_MISMATCHING_SNP,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID in SNP flit, not identical to previous SNP flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t snpTxnId = 0, complementSnpTxnId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_REQUEST && subject.obj.firedFlitRequest->flit.IsSNP()) {
+                            snpTxnId = subject.obj.firedFlitRequest->flit.snp.TxnID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsSNP()) {
+                            complementSnpTxnId = complement.obj.firedFlitRequest->flit.snp.TxnID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected SNP TxnID: {:#x}, not identical to previous SNP flit TxnID: {:#x}",
+                        snpTxnId,
+                        complementSnpTxnId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::TxnID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::TxnID };
+                }
+            );
+
+            /*
+            DENIED_DAT_TXNID_MISMATCHING_DMT
+            - Title Message: "Denied TxnID in DAT flit under DMT, not identical to DMT ReturnTxnID"
+            - Further Message: "Unexpected DMT DAT TxnID: {DAT.TxnID}, not identical to DMT REQ ReturnTxnID: {complementary REQ.ReturnTxnID}"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.TxnID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. REQ.ReturnTxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_TXNID_MISMATCHING_DMT = (
+                "DENIED_DAT_TXNID_MISMATCHING_DMT",
+                Xact::XactDenial::DENIED_DAT_TXNID_MISMATCHING_DMT,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID in DAT flit under DMT, not identical to DMT ReturnTxnID-sourced TxnID"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t datTxnId = 0, dmtReturnTxnId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            datTxnId = subject.obj.firedFlitResponse->flit.dat.TxnID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsREQ()) {
+                            dmtReturnTxnId = complement.obj.firedFlitRequest->flit.req.ReturnTxnID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected DMT DAT TxnID: {:#x}, not identical to DMT REQ ReturnTxnID: {:#x}",
+                        datTxnId,
+                        dmtReturnTxnId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TxnID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::REQ::ReturnTxnID };
+                }
+            );
+
+            /*
+            DENIED_DAT_TXNID_MISMATCHING_DCT
+            - Title Message: "Denied TxnID in DAT flit under DCT, not identical to DCT FwdTxnID"
+            - Further Message: "Unexpected DCT DAT TxnID: {DAT.TxnID}, not identical to DCT SNP FwdTxnID: {complementary SNP.FwdTxnID}"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.TxnID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. SNP.FwdTxnID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_TXNID_MISMATCHING_DCT = (
+                "DENIED_DAT_TXNID_MISMATCHING_DCT",
+                Xact::XactDenial::DENIED_DAT_TXNID_MISMATCHING_DCT,
+                [](auto, SourceEnum source) -> std::string { return "Denied TxnID in DAT flit under DCT, not identical to DCT FwdTxnID-sourced TxnID"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t datTxnId = 0, dctFwdTxnId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            datTxnId = subject.obj.firedFlitResponse->flit.dat.TxnID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsSNP()) {
+                            dctFwdTxnId = complement.obj.firedFlitRequest->flit.snp.FwdTxnID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected DCT DAT TxnID: {:#x}, not identical to DCT SNP FwdTxnID: {:#x}",
+                        datTxnId,
+                        dctFwdTxnId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::TxnID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::FwdTxnID };
+                }
+            );
+
+            /*
+            DENIED_DAT_HOMENID_MISMATCHING_SNP
+            - Title Message: "Denied HomeNID in DCT DAT flit, not identical to SNP flit"
+            - Further Message: "Unexpected DCT DAT HomeNID: {DAT.HomeNID}, not identical to SNP flit SrcID: {complementary SNP.SrcID}"
+            - Source: [Xaction]
+            - Subject: [FiredResponseFlit]
+            - Subject Key: 1. DAT.HomeNID
+            - Complement: [FiredRequestFlit]
+            - Complement Key: 1. SNP.SrcID
+            */
+            inline static constexpr ExplanationBack<config> DENIED_DAT_HOMENID_MISMATCHING_SNP = (
+                "DENIED_DAT_HOMENID_MISMATCHING_SNP",
+                Xact::XactDenial::DENIED_DAT_HOMENID_MISMATCHING_SNP,
+                [](auto, SourceEnum source) -> std::string { return "Denied HomeNID in DCT DAT flit, not identical to SNP flit"; },
+                [](const Xact::Global<config>& glbl, SourceEnum source, auto, const Objects<config>& subjects, const Objects<config>& complements) -> std::string {
+                    uint64_t datHomeNid = 0, snpSrcId = 0;
+                    for (const Object<config>& subject : subjects) {
+                        if (subject.type == ObjectType::FIRED_FLIT_RESPONSE && subject.obj.firedFlitResponse->flit.IsDAT()) {
+                            datHomeNid = subject.obj.firedFlitResponse->flit.dat.HomeNID();
+                            break;
+                        }
+                    }
+                    for (const Object<config>& complement : complements) {
+                        if (complement.type == ObjectType::FIRED_FLIT_REQUEST && complement.obj.firedFlitRequest->flit.IsSNP()) {
+                            snpSrcId = complement.obj.firedFlitRequest->flit.snp.SrcID();
+                            break;
+                        }
+                    }
+                    return std::format("Unexpected DCT DAT HomeNID: {:#x}, not identical to SNP flit SrcID: {:#x}",
+                        datHomeNid,
+                        snpSrcId);
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::DAT::HomeNID };
+                },
+                [](const Object<config>& obj) -> std::vector<Flit::Key> {
+                    return { Flit::Keys::SNP::SrcID };
+                }
+            );
+
             // TODO
         };
     }
