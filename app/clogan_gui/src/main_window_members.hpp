@@ -270,6 +270,8 @@
     quint64 clipboardXactionAddressInsertSessionId_ = 0;
     ClipboardScope clipboardXactionAddressInsertScope_ = ClipboardScope::Session;
     std::shared_ptr<std::stop_source> clipboardXactionAddressInsertStopSource_;
+    QTimer* clipboardMaterializeTimer_ = nullptr;
+    bool clipboardMaterializeRequested_ = false;
     struct ClipboardInsertApplyState {
         quint64 generation = 0;
         quint64 sourceSessionId = 0;

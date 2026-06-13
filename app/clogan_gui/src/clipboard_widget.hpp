@@ -62,6 +62,12 @@ public:
     void finishIncrementalRefreshFromEntries();
     void syncEntriesFromModel();
     void syncDirtyEntriesFromModel();
+    QStringList availableOptionalFields() const;
+    QStringList visibleOptionalFields() const;
+    QStringList materializedVisibleFieldNames() const;
+    void setOptionalFieldColumnsVisible(const QStringList& fieldNames);
+    bool replaceEntryRowsForStorage(const std::vector<std::pair<int, FlitRecord>>& rows);
+    void refreshRows(int firstVisibleRow, int lastVisibleRow);
     void applyTraceTableRowStyle(int referenceVisibleRowCount);
     void resizeColumnsToTraceDefaults();
     void setScope(ClipboardScope scope);

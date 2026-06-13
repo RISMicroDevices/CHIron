@@ -1226,6 +1226,82 @@ void FlitTableModel::setRows(std::vector<FlitRecord> rows)
     }
 }
 
+bool FlitTableModel::replaceRowsForStorage(const std::vector<std::pair<int, FlitRecord>>& rows)
+{
+    if (traceSession_ || rows.empty()) {
+        return false;
+    }
+
+    std::vector<std::pair<int, FlitRecord>> replacements;
+    replacements.reserve(rows.size());
+    bool resetRequired = hasActiveFilters() || searchMode_ == SearchMode::Highlight;
+    for (const auto& [logicalRow, row] : rows) {
+        if (logicalRow < 0 || logicalRow >= static_cast<int>(rows_.size())) {
+            continue;
+        }
+        const FlitRecord& existing = rows_[static_cast<std::size_t>(logicalRow)];
+        if (FlitRecordsEqualForUndo(existing, row)) {
+            continue;
+        }
+
+        if (existing.channel != row.channel) {
+            resetRequired = true;
+        }
+        for (const FieldEntry& field : row.fields) {
+            const QString& fieldName = FieldNameText(field);
+            if (!IsDefaultFieldName(fieldName) && !availableOptionalFields_.contains(fieldName)) {
+                resetRequired = true;
+                break;
+            }
+        }
+        replacements.push_back({logicalRow, row});
+    }
+
+    if (replacements.empty()) {
+        return false;
+    }
+
+    cancelAsyncFilterBuild();
+    if (resetRequired) {
+        clearSearchHighlightIndex(false);
+        clearTransactionHighlightState();
+        beginResetModel();
+        for (const auto& [logicalRow, row] : replacements) {
+            rows_[static_cast<std::size_t>(logicalRow)] = row;
+            dirtySourceRows_.remove(logicalRow);
+        }
+        identityVisibleRows_ = false;
+        identityVisibleRowCount_ = 0;
+        recountChannels();
+        rebuildAvailableOptionalFields();
+        rebuildVisibleRowsNoReset();
+        endResetModel();
+        if (searchMode_ == SearchMode::Highlight) {
+            rebuildSearchHighlightIndex();
+        } else {
+            clearSearchHighlightIndex();
+        }
+        return true;
+    }
+
+    int firstChangedVisibleRow = std::numeric_limits<int>::max();
+    int lastChangedVisibleRow = -1;
+    for (const auto& [logicalRow, row] : replacements) {
+        rows_[static_cast<std::size_t>(logicalRow)] = row;
+        dirtySourceRows_.remove(logicalRow);
+        const int visibleRow = visibleRowForLogicalRow(logicalRow);
+        if (visibleRow >= 0) {
+            firstChangedVisibleRow = std::min(firstChangedVisibleRow, visibleRow);
+            lastChangedVisibleRow = std::max(lastChangedVisibleRow, visibleRow);
+        }
+    }
+
+    if (firstChangedVisibleRow <= lastChangedVisibleRow) {
+        refreshTraceRowRange(firstChangedVisibleRow, lastChangedVisibleRow);
+    }
+    return true;
+}
+
 void FlitTableModel::appendRow(const FlitRecord& row)
 {
     appendRows(std::vector<FlitRecord>{row});
@@ -1296,6 +1372,7 @@ bool FlitTableModel::appendRowsIncrementally(const std::vector<FlitRecord>& rows
             break;
         }
     }
+    rebuildAvailableOptionalFields();
     setDirty(editable_ || dirty_);
     endInsertRows();
     return true;
@@ -1573,6 +1650,11 @@ QStringList FlitTableModel::availableOptionalFields() const
 QStringList FlitTableModel::availableOptionalFieldsForScope(const QString& scope) const
 {
     return availableOptionalFieldsByScope_.value(scope);
+}
+
+QStringList FlitTableModel::visibleOptionalFields() const
+{
+    return visibleOptionalFields_;
 }
 
 bool FlitTableModel::isFieldColumnVisible(const QString& fieldName) const noexcept

@@ -550,6 +550,127 @@ void ClipboardWidget::syncDirtyEntriesFromModel()
     updateBadges();
 }
 
+QStringList ClipboardWidget::availableOptionalFields() const
+{
+    return model_ ? model_->availableOptionalFields() : QStringList();
+}
+
+QStringList ClipboardWidget::visibleOptionalFields() const
+{
+    return model_ ? model_->visibleOptionalFields() : QStringList();
+}
+
+QStringList ClipboardWidget::materializedVisibleFieldNames() const
+{
+    QStringList fields;
+    if (!model_) {
+        return fields;
+    }
+
+    const auto appendField = [&fields](const QString& fieldName) {
+        if (!fieldName.isEmpty() && !fields.contains(fieldName)) {
+            fields.append(fieldName);
+        }
+    };
+
+    const int columns = model_->columnCount();
+    for (int column = 0; column < columns; ++column) {
+        if (table_ && table_->isColumnHidden(column)) {
+            continue;
+        }
+
+        QString fieldName;
+        switch (column) {
+        case FlitTableModel::OpcodeColumn:
+            fieldName = QStringLiteral("Opcode");
+            break;
+        case FlitTableModel::SourceColumn:
+            fieldName = QStringLiteral("SrcID");
+            break;
+        case FlitTableModel::TargetColumn:
+            fieldName = QStringLiteral("TgtID");
+            break;
+        case FlitTableModel::TxnColumn:
+            fieldName = QStringLiteral("TxnID");
+            break;
+        case FlitTableModel::AddressColumn:
+            appendField(QStringLiteral("Addr"));
+            appendField(QStringLiteral("DBID"));
+            break;
+        case FlitTableModel::DataIdColumn:
+            fieldName = QStringLiteral("DataID");
+            break;
+        case FlitTableModel::RespColumn:
+            fieldName = QStringLiteral("Resp");
+            break;
+        case FlitTableModel::FwdStateColumn:
+            fieldName = QStringLiteral("FwdState");
+            break;
+        case FlitTableModel::RespErrColumn:
+            fieldName = QStringLiteral("RespErr");
+            break;
+        default:
+            if (column >= FlitTableModel::ColumnCount) {
+                fieldName = model_->visibleOptionalFields().value(column - FlitTableModel::ColumnCount);
+            }
+            break;
+        }
+
+        appendField(fieldName);
+    }
+    return fields;
+}
+
+void ClipboardWidget::setOptionalFieldColumnsVisible(const QStringList& fieldNames)
+{
+    if (!model_) {
+        return;
+    }
+
+    bool changed = false;
+    const QStringList existingVisible = model_->visibleOptionalFields();
+    for (const QString& fieldName : existingVisible) {
+        if (!fieldNames.contains(fieldName)) {
+            model_->setFieldColumnVisible(fieldName, false);
+            changed = true;
+        }
+    }
+    for (const QString& fieldName : fieldNames) {
+        if (!model_->isFieldColumnVisible(fieldName)) {
+            model_->setFieldColumnVisible(fieldName, true);
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        resizeColumnsToTraceDefaults();
+    }
+}
+
+bool ClipboardWidget::replaceEntryRowsForStorage(const std::vector<std::pair<int, FlitRecord>>& rows)
+{
+    if (!model_ || rows.empty()) {
+        return false;
+    }
+
+    syncingModel_ = true;
+    const bool replaced = model_->replaceRowsForStorage(rows);
+    syncingModel_ = false;
+    if (replaced) {
+        modifiedBadgeDirty_ = true;
+        updateBadges();
+    }
+    return replaced;
+}
+
+void ClipboardWidget::refreshRows(const int firstVisibleRow, const int lastVisibleRow)
+{
+    if (!model_) {
+        return;
+    }
+    model_->refreshTraceRowRange(firstVisibleRow, lastVisibleRow);
+}
+
 void ClipboardWidget::applyTraceTableRowStyle(const int referenceVisibleRowCount)
 {
     if (!table_ || !table_->verticalHeader()) {

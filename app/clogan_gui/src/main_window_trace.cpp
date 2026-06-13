@@ -4,9 +4,13 @@
 #include <QComboBox>
 #include <QElapsedTimer>
 #include <QFormLayout>
+#include <QHeaderView>
+#include <QItemSelectionModel>
 #include <QLoggingCategory>
+#include <QScrollBar>
 #include <QSet>
 #include <QSpinBox>
+#include <QTimer>
 #include <QWizard>
 #include <QWizardPage>
 
@@ -430,6 +434,128 @@ bool FlitRecordsEqualForClipboard(const FlitRecord& lhs, const FlitRecord& rhs)
         }
     }
     return true;
+}
+
+const FieldEntry* FindClipboardField(const FlitRecord& record, const QString& fieldName)
+{
+    for (const FieldEntry& field : record.fields) {
+        if (FieldNameText(field) == fieldName) {
+            return &field;
+        }
+    }
+    return nullptr;
+}
+
+const FieldEntry* FindClipboardField(const FlitRecord& record, const FieldEntry& sourceField)
+{
+    const QString& sourceScope = FieldScopeText(sourceField);
+    const QString& sourceName = FieldNameText(sourceField);
+    for (const FieldEntry& field : record.fields) {
+        if (FieldScopeText(field) == sourceScope && FieldNameText(field) == sourceName) {
+            return &field;
+        }
+    }
+    return nullptr;
+}
+
+bool CopyClipboardStringField(QString& target,
+                              const QString& source,
+                              const bool overwriteExisting)
+{
+    if (source.isEmpty()) {
+        return false;
+    }
+    if (!overwriteExisting && !target.isEmpty()) {
+        return false;
+    }
+    if (target == source) {
+        return false;
+    }
+    target = source;
+    return true;
+}
+
+bool MergeClipboardFixedField(FlitRecord& target,
+                              const FlitRecord& source,
+                              const QString& fieldName,
+                              const bool overwriteExisting)
+{
+    if (fieldName == QLatin1String("Opcode")) {
+        bool changed = CopyClipboardStringField(target.opcode, source.opcode, overwriteExisting);
+        changed = CopyClipboardStringField(target.opcodeRaw, source.opcodeRaw, overwriteExisting) || changed;
+        return changed;
+    }
+    if (fieldName == QLatin1String("SrcID")) {
+        return CopyClipboardStringField(target.source, source.source, overwriteExisting);
+    }
+    if (fieldName == QLatin1String("TgtID")) {
+        bool changed = CopyClipboardStringField(target.target, source.target, overwriteExisting);
+        if (overwriteExisting && target.dimTarget != source.dimTarget) {
+            target.dimTarget = source.dimTarget;
+            changed = true;
+        }
+        changed = CopyClipboardStringField(target.channelTag, source.channelTag, overwriteExisting) || changed;
+        return changed;
+    }
+    if (fieldName == QLatin1String("TxnID")) {
+        return CopyClipboardStringField(target.txnId, source.txnId, overwriteExisting);
+    }
+    if (fieldName == QLatin1String("Addr")) {
+        return CopyClipboardStringField(target.address, source.address, overwriteExisting);
+    }
+    if (fieldName == QLatin1String("DBID")) {
+        return CopyClipboardStringField(target.dbid, source.dbid, overwriteExisting);
+    }
+    if (fieldName == QLatin1String("DataID")) {
+        return CopyClipboardStringField(target.dataId, source.dataId, overwriteExisting);
+    }
+    if (fieldName == QLatin1String("Resp")) {
+        return CopyClipboardStringField(target.resp, source.resp, overwriteExisting);
+    }
+    if (fieldName == QLatin1String("FwdState")) {
+        return CopyClipboardStringField(target.fwdState, source.fwdState, overwriteExisting);
+    }
+    if (fieldName == QLatin1String("RespErr")) {
+        return CopyClipboardStringField(target.respErr, source.respErr, overwriteExisting);
+    }
+    return false;
+}
+
+bool MergeClipboardVisibleFields(FlitRecord& target,
+                                 const FlitRecord& source,
+                                 const QStringList& visibleFields,
+                                 const bool overwriteExisting)
+{
+    bool changed = false;
+    for (const QString& fieldName : visibleFields) {
+        changed = MergeClipboardFixedField(target, source, fieldName, overwriteExisting) || changed;
+
+        const FieldEntry* sourceField = FindClipboardField(source, fieldName);
+        if (!sourceField) {
+            continue;
+        }
+
+        const FieldEntry* existingField = FindClipboardField(target, *sourceField);
+        if (!existingField) {
+            target.fields.push_back(*sourceField);
+            changed = true;
+            continue;
+        }
+
+        if (!overwriteExisting || FieldEntriesEqualForClipboard(*existingField, *sourceField)) {
+            continue;
+        }
+
+        for (FieldEntry& targetField : target.fields) {
+            if (FieldScopeText(targetField) == FieldScopeText(*sourceField)
+                && FieldNameText(targetField) == FieldNameText(*sourceField)) {
+                targetField = *sourceField;
+                changed = true;
+                break;
+            }
+        }
+    }
+    return changed;
 }
 
 QString CsvEscape(QString text)
@@ -3783,6 +3909,7 @@ void MainWindow::bindClipboardWidgetToActiveScope()
                 return sourceSession ? sourceSession->traceSession : nullptr;
             });
     }
+    scheduleClipboardVisiblePageMaterialization();
 }
 
 std::vector<ClipboardEntry>* MainWindow::clipboardEntriesForScope(const ClipboardScope scope)
@@ -3801,6 +3928,140 @@ const std::vector<ClipboardEntry>* MainWindow::clipboardEntriesForScope(const Cl
     }
     const TraceViewSession* session = activeTraceViewSession();
     return session ? &session->clipboardEntries : nullptr;
+}
+
+void MainWindow::scheduleClipboardVisiblePageMaterialization()
+{
+    if (clipboardMaterializeRequested_) {
+        return;
+    }
+    clipboardMaterializeRequested_ = true;
+
+    if (!clipboardMaterializeTimer_) {
+        clipboardMaterializeTimer_ = new QTimer(this);
+        clipboardMaterializeTimer_->setSingleShot(true);
+        connect(clipboardMaterializeTimer_, &QTimer::timeout, this, [this]() {
+            clipboardMaterializeRequested_ = false;
+            materializeClipboardVisiblePage();
+        });
+    }
+    clipboardMaterializeTimer_->start(0);
+}
+
+void MainWindow::materializeClipboardVisiblePage()
+{
+    if (!clipboardWidget_ || !clipboardWidget_->model() || !clipboardWidget_->tableView()) {
+        return;
+    }
+
+    std::vector<ClipboardEntry>* entries = clipboardWidget_->entries();
+    FlitTableModel* model = clipboardWidget_->model();
+    QTableView* table = clipboardWidget_->tableView();
+    if (!entries || entries->empty() || model->visibleCount() <= 0) {
+        return;
+    }
+
+    QStringList visibleFields = clipboardWidget_->materializedVisibleFieldNames();
+    if (visibleFields.isEmpty()) {
+        return;
+    }
+
+    int anchorVisibleRow = -1;
+    if (table->selectionModel()) {
+        const QModelIndex current = table->selectionModel()->currentIndex();
+        if (current.isValid()) {
+            anchorVisibleRow = current.row();
+        }
+    }
+    if (anchorVisibleRow < 0 && table->viewport()) {
+        anchorVisibleRow = table->indexAt(QPoint(0, 0)).row();
+    }
+    if (anchorVisibleRow < 0 && table->verticalScrollBar()) {
+        anchorVisibleRow = table->verticalScrollBar()->value();
+    }
+    if (anchorVisibleRow < 0 || anchorVisibleRow >= model->visibleCount()) {
+        anchorVisibleRow = 0;
+    }
+
+    const int anchorEntryRow = model->logicalRowAt(anchorVisibleRow);
+    if (anchorEntryRow < 0 || anchorEntryRow >= static_cast<int>(entries->size())) {
+        return;
+    }
+
+    const ClipboardEntry& anchorEntry = (*entries)[static_cast<std::size_t>(anchorEntryRow)];
+    if (anchorEntry.source.sessionId == 0 || anchorEntry.source.logicalRow < 0) {
+        return;
+    }
+
+    TraceViewSession* sourceSession = traceViewSessionById(anchorEntry.source.sessionId);
+    if (!sourceSession || !sourceSession->traceSession) {
+        return;
+    }
+
+    const std::shared_ptr<TraceSession> traceSession = sourceSession->traceSession;
+    const std::uint64_t pageSize = traceSession->pageSize();
+    if (pageSize == 0) {
+        return;
+    }
+
+    const std::uint64_t sourceAnchorRow = static_cast<std::uint64_t>(anchorEntry.source.logicalRow);
+    const std::uint64_t pageStart = (sourceAnchorRow / pageSize) * pageSize;
+    const std::uint64_t pageEnd = std::min<std::uint64_t>(pageStart + pageSize, traceSession->totalRows());
+    if (pageStart >= pageEnd) {
+        return;
+    }
+
+    std::vector<FlitRecord> pageRows;
+    CLogBTraceLoadError error;
+    if (!traceSession->readRows(pageStart, pageEnd - pageStart, pageRows, error) || pageRows.empty()) {
+        return;
+    }
+
+    clipboardWidget_->syncDirtyEntriesFromModel();
+
+    bool changed = false;
+    std::vector<std::pair<int, FlitRecord>> modelUpdates;
+    const quint64 sourceSessionId = anchorEntry.source.sessionId;
+    modelUpdates.reserve(entries->size());
+
+    for (std::size_t entryIndex = 0; entryIndex < entries->size(); ++entryIndex) {
+        ClipboardEntry& entry = (*entries)[entryIndex];
+        if (entry.source.sessionId != sourceSessionId || entry.source.logicalRow < 0) {
+            continue;
+        }
+
+        const std::uint64_t sourceRow = static_cast<std::uint64_t>(entry.source.logicalRow);
+        if (sourceRow < pageStart || sourceRow >= pageEnd) {
+            continue;
+        }
+        const std::size_t localRow = static_cast<std::size_t>(sourceRow - pageStart);
+        if (localRow >= pageRows.size()) {
+            continue;
+        }
+
+        const FlitRecord& sourceRecord = pageRows[localRow];
+        const bool clean = !ClipboardEntryModifiedForOrdering(entry);
+        const bool recordChanged = MergeClipboardVisibleFields(entry.record, sourceRecord, visibleFields, clean);
+        bool entryChanged = recordChanged;
+        if (clean) {
+            entryChanged = MergeClipboardVisibleFields(entry.originalRecord, sourceRecord, visibleFields, true)
+                || entryChanged;
+        }
+        if (entryChanged) {
+            changed = true;
+            if (recordChanged) {
+                modelUpdates.push_back({static_cast<int>(entryIndex), entry.record});
+            }
+        }
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    if (modelUpdates.empty() || !clipboardWidget_->replaceEntryRowsForStorage(modelUpdates)) {
+        clipboardWidget_->refreshFromEntries();
+    }
 }
 
 bool MainWindow::startClipboardRowsInsertAsync(const quint64 sourceSessionId,
@@ -4143,6 +4404,7 @@ void MainWindow::finishClipboardInsertApply()
             clipboardWidget_->setEntries(state->target, metadata);
         }
     }
+    scheduleClipboardVisiblePageMaterialization();
     const QString scopeText = state->scope == ClipboardScope::Global
         ? QStringLiteral("global Clipboard")
         : QStringLiteral("session Clipboard");

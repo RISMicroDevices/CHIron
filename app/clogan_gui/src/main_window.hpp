@@ -243,9 +243,14 @@ public:
     qint64 testClipboardTimestampAt(int visibleRow) const noexcept;
     QString testClipboardOpcodeAt(int visibleRow) const;
     QString testClipboardTxnIdAt(int visibleRow) const;
+    bool testSetClipboardFieldColumnVisible(const QString& fieldName, bool visible);
+    QString testClipboardFieldValueAt(int visibleRow, const QString& fieldName) const;
+    bool testSetClipboardFieldValueAt(int visibleRow, const QString& fieldName, const QString& value);
+    bool testRemoveClipboardFieldAt(int visibleRow, const QString& fieldName);
     bool testClipboardRowTransactionHighlighted(int visibleRow) const;
     bool testClickClipboardRow(int visibleRow);
     bool testEditClipboardTimestampAt(int visibleRow, qint64 timestamp);
+    void testMaterializeClipboardVisiblePage();
     void testActivateClipboardRow(int visibleRow);
     bool testInsertSelectedFlitToClipboard(ClipboardScope scope);
     bool testInsertSelectedXactionToClipboard(ClipboardScope scope);

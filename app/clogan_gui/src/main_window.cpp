@@ -5,6 +5,7 @@
 #include <QElapsedTimer>
 #include <QMouseEvent>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 
@@ -1361,6 +1362,103 @@ QString MainWindow::testClipboardTxnIdAt(const int visibleRow) const
     return record ? record->txnId : QString();
 }
 
+bool MainWindow::testSetClipboardFieldColumnVisible(const QString& fieldName, const bool visible)
+{
+    if (!clipboardWidget_ || !clipboardWidget_->model()) {
+        return false;
+    }
+
+    QStringList fields = clipboardWidget_->visibleOptionalFields();
+    if (visible) {
+        if (!fields.contains(fieldName)) {
+            fields.append(fieldName);
+        }
+    } else {
+        fields.removeAll(fieldName);
+    }
+
+    clipboardWidget_->setOptionalFieldColumnsVisible(fields);
+    return clipboardWidget_->model()->isFieldColumnVisible(fieldName) == visible;
+}
+
+QString MainWindow::testClipboardFieldValueAt(const int visibleRow, const QString& fieldName) const
+{
+    if (!clipboardWidget_ || !clipboardWidget_->model()) {
+        return {};
+    }
+
+    const FlitRecord* record = clipboardWidget_->model()->recordAt(visibleRow);
+    if (!record) {
+        return {};
+    }
+
+    for (const FieldEntry& field : record->fields) {
+        if (FieldNameText(field) == fieldName) {
+            return field.value;
+        }
+    }
+    return {};
+}
+
+bool MainWindow::testSetClipboardFieldValueAt(const int visibleRow,
+                                              const QString& fieldName,
+                                              const QString& value)
+{
+    if (!clipboardWidget_ || !clipboardWidget_->model() || !clipboardWidget_->entries()) {
+        return false;
+    }
+
+    const int logicalRow = clipboardWidget_->model()->logicalRowAt(visibleRow);
+    std::vector<ClipboardEntry>* entries = clipboardWidget_->entries();
+    if (logicalRow < 0 || logicalRow >= static_cast<int>(entries->size())) {
+        return false;
+    }
+
+    ClipboardEntry& entry = (*entries)[static_cast<std::size_t>(logicalRow)];
+    for (FieldEntry& field : entry.record.fields) {
+        if (FieldNameText(field) == fieldName) {
+            field.value = value;
+            field.raw.clear();
+            clipboardWidget_->refreshFromEntries();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MainWindow::testRemoveClipboardFieldAt(const int visibleRow, const QString& fieldName)
+{
+    if (!clipboardWidget_ || !clipboardWidget_->model() || !clipboardWidget_->entries()) {
+        return false;
+    }
+
+    const int logicalRow = clipboardWidget_->model()->logicalRowAt(visibleRow);
+    std::vector<ClipboardEntry>* entries = clipboardWidget_->entries();
+    if (logicalRow < 0 || logicalRow >= static_cast<int>(entries->size())) {
+        return false;
+    }
+
+    const auto removeField = [&fieldName](FlitRecord& record) {
+        const auto before = record.fields.size();
+        record.fields.erase(std::remove_if(record.fields.begin(),
+                                           record.fields.end(),
+                                           [&fieldName](const FieldEntry& field) {
+                                               return FieldNameText(field) == fieldName;
+                                           }),
+                            record.fields.end());
+        return record.fields.size() != before;
+    };
+
+    ClipboardEntry& entry = (*entries)[static_cast<std::size_t>(logicalRow)];
+    const bool removed = removeField(entry.record) | removeField(entry.originalRecord);
+    if (!removed) {
+        return false;
+    }
+
+    clipboardWidget_->refreshFromEntries();
+    return true;
+}
+
 bool MainWindow::testClipboardRowTransactionHighlighted(const int visibleRow) const
 {
     if (!clipboardWidget_ || !clipboardWidget_->model()) {
@@ -1400,6 +1498,15 @@ bool MainWindow::testEditClipboardTimestampAt(const int visibleRow, const qint64
     const bool edited = model->setData(target, QString::number(timestamp), Qt::EditRole);
     clipboardWidget_->syncEntriesFromModel();
     return edited;
+}
+
+void MainWindow::testMaterializeClipboardVisiblePage()
+{
+    if (clipboardMaterializeTimer_) {
+        clipboardMaterializeTimer_->stop();
+    }
+    clipboardMaterializeRequested_ = false;
+    materializeClipboardVisiblePage();
 }
 
 void MainWindow::testActivateClipboardRow(const int visibleRow)

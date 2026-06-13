@@ -1542,6 +1542,65 @@ TransactionTraceFixture makeIndexedReadNoSnpAddressPatternTrace(
     return fixture;
 }
 
+TransactionTraceFixture makeClipboardMaterializationTrace(const QString& fileName, const int rowCount)
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set materialization test NodeIDWidth."));
+    expect(params.SetReqAddrWidth(52), QStringLiteral("Failed to set materialization test ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(32), QStringLiteral("Failed to set materialization test ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(32), QStringLiteral("Failed to set materialization test DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set materialization test DataWidth."));
+    params.SetDataCheckPresent(true);
+    params.SetPoisonPresent(true);
+    params.SetMPAMPresent(true);
+
+    const auto serializeReq = [](const ReqFlit& flit, TestFlitBitWriter& writer) {
+        appendEbReqFlitForTest(flit, writer);
+    };
+
+    std::vector<CLog::CLogB::TagCHIRecords::Record> records;
+    const int clampedCount = std::max(0, rowCount);
+    records.reserve(static_cast<std::size_t>(clampedCount));
+    for (int row = 0; row < clampedCount; ++row) {
+        ReqFlit request{};
+        request.QoS() = static_cast<std::uint8_t>((row % 15) + 1);
+        request.TgtID() = 16;
+        request.SrcID() = static_cast<std::uint16_t>(1 + (row % 4));
+        request.TxnID() = static_cast<std::uint16_t>(row & 0xFF);
+        request.Opcode() = CHI::Eb::Opcodes::REQ::ReadNoSnp;
+        request.Size() = CHI::Eb::Sizes::B64;
+        request.Addr() = 0x1000 + static_cast<std::uint64_t>(row) * 0x40;
+        request.AllowRetry() = static_cast<std::uint8_t>(row % 2);
+        request.ExpCompAck() = static_cast<std::uint8_t>((row + 1) % 2);
+        request.TraceTag() = static_cast<std::uint8_t>(row % 2);
+        records.push_back(makeSerializedRecord(CLog::Channel::TXREQ,
+                                                request.SrcID(),
+                                                1,
+                                                request,
+                                                serializeReq));
+    }
+
+    TransactionTraceFixture fixture;
+    expect(fixture.tempDir.isValid(), QStringLiteral("Temporary directory creation failed."));
+    fixture.tracePath = fixture.tempDir.filePath(fileName);
+    fixture.transactionCount = clampedCount;
+    writeTraceWithTopology(fixture.tracePath,
+                           params,
+                           {
+                               {CLog::NodeType::RN_F, 1},
+                               {CLog::NodeType::RN_F, 2},
+                               {CLog::NodeType::RN_F, 3},
+                               {CLog::NodeType::RN_F, 4},
+                               {CLog::NodeType::HN_F, 16},
+                           },
+                           std::move(records));
+    return fixture;
+}
+
 TransactionTraceFixture makeCacheReadCleanTrace(const QString& fileName,
                                                 const int transactionCount)
 {
@@ -4080,6 +4139,168 @@ void testClipboardInsertionSortsOnlyEditedRows()
     expectEqual(static_cast<int>(window.testClipboardTimestampAt(3)),
                 7,
                 QStringLiteral("New unedited row should be merged into the unedited source-order subset."));
+}
+
+void testClipboardVisiblePageMaterializesVisibleColumns()
+{
+    TransactionTraceFixture fixture =
+        makeClipboardMaterializationTrace(QStringLiteral("clipboard_visible_page_materialization.clogb"),
+                                          1030);
+
+    CHIron::Gui::MainWindow window;
+    window.resize(1200, 720);
+    window.show();
+    QApplication::processEvents();
+
+    expect(window.testLoadTraceFile(fixture.tracePath),
+           QStringLiteral("Clipboard materialization fixture should load."));
+    window.testSetClipboardScope(CHIron::Gui::ClipboardScope::Session);
+
+    for (const int logicalRow : {0, 3, 6, 1026, 1027}) {
+        window.testSelectLogicalRow(logicalRow);
+        expect(window.testInsertSelectedFlitToClipboard(CHIron::Gui::ClipboardScope::Session),
+               QStringLiteral("Clipboard materialization setup insertion for logical row %1 should succeed.")
+                   .arg(logicalRow));
+    }
+    expectEqual(window.testClipboardRowCount(),
+                5,
+                QStringLiteral("Clipboard materialization setup should contain the selected rows."));
+
+    const QString retryField = QStringLiteral("AllowRetry");
+    const QString expCompAckField = QStringLiteral("ExpCompAck");
+    const QString traceTagField = QStringLiteral("TraceTag");
+    for (const QString& fieldName : {retryField, expCompAckField, traceTagField}) {
+        expect(window.testSetClipboardFieldColumnVisible(fieldName, true),
+               QStringLiteral("Clipboard materialization test should expose the %1 column.")
+                   .arg(fieldName));
+    }
+    expectEqual(window.testClipboardFieldValueAt(0, retryField),
+                QStringLiteral("0"),
+                QStringLiteral("Materialization setup should decode AllowRetry for source row 0."));
+    expectEqual(window.testClipboardFieldValueAt(1, retryField),
+                QStringLiteral("1"),
+                QStringLiteral("Materialization setup should decode AllowRetry for source row 3."));
+    expectEqual(window.testClipboardFieldValueAt(2, retryField),
+                QStringLiteral("0"),
+                QStringLiteral("Materialization setup should decode AllowRetry for source row 6."));
+    expectEqual(window.testClipboardFieldValueAt(4, retryField),
+                QStringLiteral("1"),
+                QStringLiteral("Materialization setup should decode AllowRetry for source row 1027."));
+    expectEqual(window.testClipboardFieldValueAt(0, expCompAckField),
+                QStringLiteral("1"),
+                QStringLiteral("Materialization setup should decode ExpCompAck for source row 0."));
+    expectEqual(window.testClipboardFieldValueAt(1, traceTagField),
+                QStringLiteral("1"),
+                QStringLiteral("Materialization setup should decode later TraceTag for source row 3."));
+
+    expect(window.testRemoveClipboardFieldAt(0, retryField),
+           QStringLiteral("Clipboard materialization should remove AllowRetry from first same-page row."));
+    expect(window.testRemoveClipboardFieldAt(0, expCompAckField),
+           QStringLiteral("Clipboard materialization should remove ExpCompAck from first same-page row."));
+    expect(window.testRemoveClipboardFieldAt(0, traceTagField),
+           QStringLiteral("Clipboard materialization should remove TraceTag from first same-page row."));
+    expect(window.testRemoveClipboardFieldAt(1, retryField),
+           QStringLiteral("Clipboard materialization should remove AllowRetry from second same-page row."));
+    expect(window.testRemoveClipboardFieldAt(1, expCompAckField),
+           QStringLiteral("Clipboard materialization should remove ExpCompAck from second same-page row."));
+    expect(window.testRemoveClipboardFieldAt(1, traceTagField),
+           QStringLiteral("Clipboard materialization should remove TraceTag from second same-page row."));
+    expect(window.testSetClipboardFieldValueAt(2, retryField, QStringLiteral("edited")),
+           QStringLiteral("Clipboard materialization should edit the modified same-page row's AllowRetry."));
+    expect(window.testRemoveClipboardFieldAt(2, traceTagField),
+           QStringLiteral("Clipboard materialization should remove a missing later field from modified same-page row."));
+    expect(window.testRemoveClipboardFieldAt(3, retryField),
+           QStringLiteral("Clipboard materialization should remove AllowRetry from the other-page row."));
+    expect(window.testRemoveClipboardFieldAt(3, expCompAckField),
+           QStringLiteral("Clipboard materialization should remove ExpCompAck from the other-page row."));
+    expect(window.testRemoveClipboardFieldAt(3, traceTagField),
+           QStringLiteral("Clipboard materialization should remove TraceTag from the other-page row."));
+
+    expectEqual(window.testClipboardFieldValueAt(0, retryField),
+                QString(),
+                QStringLiteral("First same-page row should initially lack AllowRetry."));
+    expectEqual(window.testClipboardFieldValueAt(0, expCompAckField),
+                QString(),
+                QStringLiteral("First same-page row should initially lack ExpCompAck."));
+    expectEqual(window.testClipboardFieldValueAt(0, traceTagField),
+                QString(),
+                QStringLiteral("First same-page row should initially lack TraceTag."));
+    expectEqual(window.testClipboardFieldValueAt(1, retryField),
+                QString(),
+                QStringLiteral("Second same-page row should initially lack AllowRetry."));
+    expectEqual(window.testClipboardFieldValueAt(1, expCompAckField),
+                QString(),
+                QStringLiteral("Second same-page row should initially lack ExpCompAck."));
+    expectEqual(window.testClipboardFieldValueAt(1, traceTagField),
+                QString(),
+                QStringLiteral("Second same-page row should initially lack TraceTag."));
+    expectEqual(window.testClipboardFieldValueAt(2, retryField),
+                QStringLiteral("edited"),
+                QStringLiteral("Modified same-page row should carry its edited AllowRetry value before hydration."));
+    expectEqual(window.testClipboardFieldValueAt(2, traceTagField),
+                QString(),
+                QStringLiteral("Modified same-page row should initially lack the later TraceTag value."));
+    expectEqual(window.testClipboardFieldValueAt(3, retryField),
+                QString(),
+                QStringLiteral("Other-page row should initially lack AllowRetry."));
+    expectEqual(window.testClipboardFieldValueAt(3, expCompAckField),
+                QString(),
+                QStringLiteral("Other-page row should initially lack ExpCompAck."));
+    expectEqual(window.testClipboardFieldValueAt(3, traceTagField),
+                QString(),
+                QStringLiteral("Other-page row should initially lack TraceTag."));
+    expect(window.testClipboardEntryModified(2),
+           QStringLiteral("Edited AllowRetry row should be marked modified before hydration."));
+
+    expect(window.testClickClipboardRow(0),
+           QStringLiteral("Clipboard materialization should select the first same-page row as anchor."));
+    window.testMaterializeClipboardVisiblePage();
+    QApplication::processEvents();
+
+    expectEqual(window.testClipboardFieldValueAt(0, retryField),
+                QStringLiteral("0"),
+                QStringLiteral("First same-page row should hydrate AllowRetry from its source page."));
+    expectEqual(window.testClipboardFieldValueAt(1, retryField),
+                QStringLiteral("1"),
+                QStringLiteral("Second same-page row should hydrate AllowRetry from the same source page."));
+    expectEqual(window.testClipboardFieldValueAt(0, expCompAckField),
+                QStringLiteral("1"),
+                QStringLiteral("First same-page row should hydrate later ExpCompAck from its source page."));
+    expectEqual(window.testClipboardFieldValueAt(1, expCompAckField),
+                QStringLiteral("0"),
+                QStringLiteral("Second same-page row should hydrate later ExpCompAck from its source page."));
+    expectEqual(window.testClipboardFieldValueAt(0, traceTagField),
+                QStringLiteral("0"),
+                QStringLiteral("First same-page row should hydrate later TraceTag from its source page."));
+    expectEqual(window.testClipboardFieldValueAt(1, traceTagField),
+                QStringLiteral("1"),
+                QStringLiteral("Second same-page row should hydrate later TraceTag from its source page."));
+    expectEqual(window.testClipboardFieldValueAt(2, retryField),
+                QStringLiteral("edited"),
+                QStringLiteral("Modified same-page row should not have its edited AllowRetry overwritten."));
+    expectEqual(window.testClipboardFieldValueAt(2, traceTagField),
+                QStringLiteral("0"),
+                QStringLiteral("Modified same-page row should fill its missing later TraceTag value."));
+    expectEqual(window.testClipboardFieldValueAt(3, retryField),
+                QString(),
+                QStringLiteral("Other-page row should not hydrate from the anchor page."));
+    expectEqual(window.testClipboardFieldValueAt(3, expCompAckField),
+                QString(),
+                QStringLiteral("Other-page row should not hydrate later ExpCompAck from the anchor page."));
+    expectEqual(window.testClipboardFieldValueAt(3, traceTagField),
+                QString(),
+                QStringLiteral("Other-page row should not hydrate later TraceTag from the anchor page."));
+    expectEqual(window.testClipboardFieldValueAt(4, retryField),
+                QStringLiteral("1"),
+                QStringLiteral("Unchanged other-page row should keep its existing AllowRetry value."));
+    expect(!window.testClipboardEntryModified(0),
+           QStringLiteral("Hydrated clean row should remain clean."));
+    expect(!window.testClipboardEntryModified(1),
+           QStringLiteral("Second hydrated clean row should remain clean."));
+    expect(window.testClipboardEntryModified(2),
+           QStringLiteral("Modified row should remain modified after hydration."));
+    expect(!window.testClipboardEntryModified(3),
+           QStringLiteral("Untouched other-page clean row should remain clean."));
 }
 
 void testClipboardReadOnlyEditableModifiedAndNavigation()
@@ -14857,6 +15078,7 @@ int main(int argc, char* argv[])
         {QStringLiteral("ClipboardAddressBatchCancelControlVisible"), testClipboardAddressBatchCancelControlVisible},
         {QStringLiteral("ClipboardSameAddressInsertionKeepsEventLoopResponsive"), testClipboardSameAddressInsertionKeepsEventLoopResponsive},
         {QStringLiteral("ClipboardInsertionSortsOnlyEditedRows"), testClipboardInsertionSortsOnlyEditedRows},
+        {QStringLiteral("ClipboardVisiblePageMaterializesVisibleColumns"), testClipboardVisiblePageMaterializesVisibleColumns},
         {QStringLiteral("ClipboardReadOnlyEditableModifiedAndNavigation"), testClipboardReadOnlyEditableModifiedAndNavigation},
         {QStringLiteral("ClipboardCsvSaveIncludesFilteredRows"), testClipboardCsvSaveIncludesFilteredRows},
         {QStringLiteral("ClipboardCLogBSaveAvailabilityAndRoundTrip"), testClipboardCLogBSaveAvailabilityAndRoundTrip},

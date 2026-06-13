@@ -851,9 +851,40 @@ void MainWindow::buildUi()
     clipboardWidget_->setCacheMinimap(clipboardCacheMinimap_);
     connect(clipboardWidget_, &ClipboardWidget::scopeChanged, this, [this](ClipboardScope) {
         bindClipboardWidgetToActiveScope();
+        scheduleClipboardVisiblePageMaterialization();
     });
     connect(clipboardWidget_, &ClipboardWidget::rowActivated, this, &MainWindow::handleClipboardRowActivated);
     connect(clipboardWidget_, &ClipboardWidget::saveRequested, this, &MainWindow::saveClipboard);
+    if (clipboardWidget_->model()) {
+        connect(clipboardWidget_->model(),
+                &FlitTableModel::modelReset,
+                this,
+                &MainWindow::scheduleClipboardVisiblePageMaterialization);
+    }
+    if (clipboardWidget_->tableView()) {
+        if (QScrollBar* scrollBar = clipboardWidget_->tableView()->verticalScrollBar()) {
+            connect(scrollBar,
+                    &QScrollBar::valueChanged,
+                    this,
+                    [this](int) {
+                        scheduleClipboardVisiblePageMaterialization();
+                    });
+        }
+        connect(clipboardWidget_->tableView(),
+                &QTableView::clicked,
+                this,
+                [this](const QModelIndex&) {
+                    scheduleClipboardVisiblePageMaterialization();
+                });
+        if (QItemSelectionModel* selectionModel = clipboardWidget_->tableView()->selectionModel()) {
+            connect(selectionModel,
+                    &QItemSelectionModel::currentChanged,
+                    this,
+                    [this](const QModelIndex&, const QModelIndex&) {
+                        scheduleClipboardVisiblePageMaterialization();
+                    });
+        }
+    }
     connect(markerWidget_, &MarkerWidget::markerActivated, this, [this](const QString& markerId) {
         selectMarker(markerId, true);
     });

@@ -93,6 +93,8 @@
     void bindClipboardWidgetToActiveScope();
     std::vector<ClipboardEntry>* clipboardEntriesForScope(ClipboardScope scope);
     const std::vector<ClipboardEntry>* clipboardEntriesForScope(ClipboardScope scope) const;
+    void scheduleClipboardVisiblePageMaterialization();
+    void materializeClipboardVisiblePage();
     bool startClipboardRowsInsertAsync(quint64 sourceSessionId,
                                        ClipboardScope scope,
                                        std::vector<std::pair<int, FlitRecord>> rows,

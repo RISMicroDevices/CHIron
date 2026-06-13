@@ -87,6 +87,7 @@ public:
     void refreshTraceRows();
     void refreshTraceRowRange(int firstRow, int lastRow);
     void setRows(std::vector<FlitRecord> rows);
+    bool replaceRowsForStorage(const std::vector<std::pair<int, FlitRecord>>& rows);
     void appendRow(const FlitRecord& row);
     void appendRows(const std::vector<FlitRecord>& rows);
     bool canAppendRowsIncrementally(const std::vector<FlitRecord>& rows) const;
@@ -123,6 +124,7 @@ public:
     void setSearchMode(SearchMode mode);
     QStringList availableOptionalFields() const;
     QStringList availableOptionalFieldsForScope(const QString& scope) const;
+    QStringList visibleOptionalFields() const;
     bool isFieldColumnVisible(const QString& fieldName) const noexcept;
     void setFieldColumnVisible(const QString& fieldName, bool visible);
     void setFieldFilter(const QString& fieldName, const QString& text);
