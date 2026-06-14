@@ -83,10 +83,10 @@ namespace CCHI {
     using ComponentTypeEnum = const ComponentTypeEnumBack*;
 
     namespace ComponentType {
-        inline constexpr ComponentTypeEnumBack TYPE_1   ("Type 1", 1, "Fully coherent"          , 1, 6, 2, 3, 1, 0, 2, true , true , true , true , true , true , true );
-        inline constexpr ComponentTypeEnumBack TYPE_2   ("Type 2", 2, "Read-only coherent"      , 0, 3, 0, 0, 1, 0, 0, true , true , true , false, true , true , false);
-        inline constexpr ComponentTypeEnumBack TYPE_3   ("Type 3", 3, "Non-coherent"            , 0, 4, 0, 3, 0, 0, 1, false, true , false, true , true , true , true );
-        inline constexpr ComponentTypeEnumBack TYPE_4   ("Type 4", 4, "Read-only non-coherent"  , 0, 2, 0, 0, 0, 0, 0, false, true , false, false, false, true , false);
+        inline constexpr ComponentTypeEnumBack TYPE_1   ("Type 1", 1, "Fully coherent"          , 1, 6, 2, 3, 1, 1, 2, true , true , true , true , true , true , true );
+        inline constexpr ComponentTypeEnumBack TYPE_2   ("Type 2", 2, "Read-only coherent"      , 0, 3, 0, 0, 1, 1, 0, true , true , true , false, true , true , false);
+        inline constexpr ComponentTypeEnumBack TYPE_3   ("Type 3", 3, "Non-coherent"            , 0, 4, 0, 3, 0, 1, 1, false, true , false, true , true , true , true );
+        inline constexpr ComponentTypeEnumBack TYPE_4   ("Type 4", 4, "Read-only non-coherent"  , 0, 2, 0, 0, 0, 1, 0, false, true , false, false, false, true , false);
         inline constexpr ComponentTypeEnumBack TYPE_5   ("Type 5", 5, "Lower-level Prefetcher"  , 0, 1, 0, 0, 0, 0, 0, false, true , false, true , false, false, false);
     }
 
