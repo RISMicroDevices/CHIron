@@ -34,7 +34,16 @@ namespace CLog {
         HN_I    = 7,
         SN_F    = 9,
         SN_I    = 11,
-        MN      = 12
+        MN      = 12,
+
+        RN_F_BeforeSAM = 13,
+        RN_D_BeforeSAM = 14,
+        RN_I_BeforeSAM = 15,
+        HN_F_BeforeSAM = 16,
+        HN_I_BeforeSAM = 17,
+        SN_F_BeforeSAM = 18,
+        SN_I_BeforeSAM = 19,
+        MN_BeforeSAM   = 20
     };
 
     std::string NodeTypeToString(NodeType type) noexcept;
@@ -267,6 +276,14 @@ namespace CLog {
             case NodeType::SN_F:    return "SN-F";
             case NodeType::SN_I:    return "SN-I";
             case NodeType::MN:      return "MN";
+            case NodeType::RN_F_BeforeSAM: return "RN-F_BeforeSAM";
+            case NodeType::RN_D_BeforeSAM: return "RN-D_BeforeSAM";
+            case NodeType::RN_I_BeforeSAM: return "RN-I_BeforeSAM";
+            case NodeType::HN_F_BeforeSAM: return "HN-F_BeforeSAM";
+            case NodeType::HN_I_BeforeSAM: return "HN-I_BeforeSAM";
+            case NodeType::SN_F_BeforeSAM: return "SN-F_BeforeSAM";
+            case NodeType::SN_I_BeforeSAM: return "SN-I_BeforeSAM";
+            case NodeType::MN_BeforeSAM:   return "MN_BeforeSAM";
             default:                return "";
         }
     }
