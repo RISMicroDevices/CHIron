@@ -203,6 +203,9 @@ namespace CCHI {
             };
         }
 
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using EVTDecoder = EVT::Decoder<_Tflit, _Tcompanion>;
+
         //
         namespace SNP {
 
@@ -225,6 +228,9 @@ namespace CCHI {
                 inline static const Decoder<_Tflit, std::monostate> INSTANCE = Decoder<_Tflit, std::monostate>();
             };
         }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using SNPDecoder = SNP::Decoder<_Tflit, _Tcompanion>;
 
         //
         namespace REQ {
@@ -249,6 +255,9 @@ namespace CCHI {
             };
         }
 
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using REQDecoder = REQ::Decoder<_Tflit, _Tcompanion>;
+
         //
         namespace DnRSP {
 
@@ -271,6 +280,9 @@ namespace CCHI {
                 inline static const Decoder<_Tflit, std::monostate> INSTANCE = Decoder<_Tflit, std::monostate>();
             };
         }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using DnRSPDecoder = DnRSP::Decoder<_Tflit, _Tcompanion>;
 
         //
         namespace UpRSP {
@@ -295,6 +307,9 @@ namespace CCHI {
             };
         }
 
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using UpRSPDecoder = UpRSP::Decoder<_Tflit, _Tcompanion>;
+
         //
         namespace DnDAT {
 
@@ -318,6 +333,9 @@ namespace CCHI {
             };
         }
 
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using DnDATDecoder = DnDAT::Decoder<_Tflit, _Tcompanion>;
+
         //
         namespace UpDAT {
 
@@ -340,7 +358,31 @@ namespace CCHI {
                 inline static const Decoder<_Tflit, std::monostate> INSTANCE = Decoder<_Tflit, std::monostate>();
             };
         }
+
+        template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+        using UpDATDecoder = UpDAT::Decoder<_Tflit, _Tcompanion>;
     }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using EVTOpcodeDecoder = Opcodes::EVTDecoder<_Tflit, _Tcompanion>;
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using SNPOpcodeDecoder = Opcodes::SNPDecoder<_Tflit, _Tcompanion>;
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using REQOpcodeDecoder = Opcodes::REQDecoder<_Tflit, _Tcompanion>;
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using DnRSPOpcodeDecoder = Opcodes::DnRSPDecoder<_Tflit, _Tcompanion>;
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using UpRSPOpcodeDecoder = Opcodes::UpRSPDecoder<_Tflit, _Tcompanion>;
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using DnDATOpcodeDecoder = Opcodes::DnDATDecoder<_Tflit, _Tcompanion>;
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
+    using UpDATOpcodeDecoder = Opcodes::UpDATDecoder<_Tflit, _Tcompanion>;
 }
 
 #endif // __CCHI__CHI_UTIL_DECODING
