@@ -70,7 +70,7 @@ namespace CCHI {
         public:
             class OpcodeIterator {
             private:
-                class DecoderBase<_Tflit, _Tcompanion>* host;
+                const DecoderBase<_Tflit, _Tcompanion>* host;
                 bool                                    masked;
                 std::bitset<OPCODE_SLOT_COUNT>          mask;
                 size_t                                  ptr;
@@ -384,6 +384,281 @@ namespace CCHI {
     template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion = std::monostate>
     using UpDATOpcodeDecoder = Opcodes::UpDATDecoder<_Tflit, _Tcompanion>;
 }
+
+
+// Implementation of: class OpcodeInfo
+namespace CCHI::Opcodes {
+
+    template<class _Topcode, class _Tcompanion>
+    inline OpcodeInfo<_Topcode, _Tcompanion>::OpcodeInfo() noexcept
+        : valid     (false)
+        , channel   ()
+        , opcode    ()
+        , name      ("")
+        , companion ()
+    { }
+
+    template<class _Topcode, class _Tcompanion>
+    inline OpcodeInfo<_Topcode, _Tcompanion>::OpcodeInfo(Channel channel, _Topcode opcode, const char* name) noexcept
+        : valid     (true)
+        , channel   (channel)
+        , opcode    (opcode)
+        , name      (name)
+        , companion ()
+    { }
+
+    template<class _Topcode, class _Tcompanion>
+    inline bool OpcodeInfo<_Topcode, _Tcompanion>::IsValid() const noexcept
+    {
+        return valid;
+    }
+
+    template<class _Topcode, class _Tcompanion>
+    inline OpcodeInfo<_Topcode, _Tcompanion>::Channel OpcodeInfo<_Topcode, _Tcompanion>::GetChannel() const noexcept
+    {
+        return channel;
+    }
+
+    template<class _Topcode, class _Tcompanion>
+    inline _Topcode OpcodeInfo<_Topcode, _Tcompanion>::GetOpcode() const noexcept
+    {
+        return opcode;
+    }
+
+    template<class _Topcode, class _Tcompanion>
+    inline const char* OpcodeInfo<_Topcode, _Tcompanion>::GetName() const noexcept
+    {
+        return name;
+    }
+
+    template<class _Topcode, class _Tcompanion>
+    inline const char* OpcodeInfo<_Topcode, _Tcompanion>::GetName(const char* whenInvalid) const noexcept
+    {
+        return IsValid() ? name : whenInvalid;
+    }
+
+    template<class _Topcode, class _Tcompanion>
+    inline void OpcodeInfo<_Topcode, _Tcompanion>::SetCompanion(const _Tcompanion& companion) noexcept
+    {
+        this->companion = companion;
+    }
+
+    template<class _Topcode, class _Tcompanion>
+    inline _Tcompanion& OpcodeInfo<_Topcode, _Tcompanion>::GetCompanion() noexcept
+    {
+        return companion;
+    }
+
+    template<class _Topcode, class _Tcompanion>
+    inline const _Tcompanion& OpcodeInfo<_Topcode, _Tcompanion>::GetCompanion() const noexcept
+    {
+        return companion;
+    }
+
+    template<class _Topcode, class _Tcompanion>
+    inline OpcodeInfo<_Topcode, _Tcompanion>::operator bool() const noexcept
+    {
+        return IsValid();
+    }
+}
+
+
+// Implementation of: class DecoderBase
+namespace CCHI::Opcodes {
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBase<_Tflit, _Tcompanion>::~DecoderBase() noexcept
+    { }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::operator[](size_t index) noexcept
+    {
+        return opcodes[(typename _Tflit::opcode_t)(index)];
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::operator[](size_t index) const noexcept
+    {
+        return opcodes[(typename _Tflit::opcode_t)(index)];
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::GetInvalid() noexcept
+    {
+        return opcode_invalid;
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::GetInvalid() const noexcept
+    {
+        return opcode_invalid;
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::Invalid() noexcept
+    {
+        return GetInvalid();
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::Invalid() const noexcept
+    {
+        return GetInvalid();
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::Decode(typename _Tflit::opcode_t opcode) const noexcept
+    {
+        const opcodeinfo_t& info = opcodes[opcode];
+
+        if (!info.IsValid())
+            return opcode_invalid;
+
+        return info;
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::DecodeType1(typename _Tflit::opcode_t opcode) const noexcept
+    {
+        if (!mask_Type1[opcode])
+            return opcode_invalid;
+
+        return Decode(opcode);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::DecodeType2(typename _Tflit::opcode_t opcode) const noexcept
+    {
+        if (!mask_Type2[opcode])
+            return opcode_invalid;
+
+        return Decode(opcode);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::DecodeType3(typename _Tflit::opcode_t opcode) const noexcept
+    {
+        if (!mask_Type3[opcode])
+            return opcode_invalid;
+
+        return Decode(opcode);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::DecodeType4(typename _Tflit::opcode_t opcode) const noexcept
+    {
+        if (!mask_Type4[opcode])
+            return opcode_invalid;
+
+        return Decode(opcode);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::DecodeType5(typename _Tflit::opcode_t opcode) const noexcept
+    {
+        if (!mask_Type5[opcode])
+            return opcode_invalid;
+
+        return Decode(opcode);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+        DecoderBase<_Tflit, _Tcompanion>::Iterate() const noexcept
+    {
+        return OpcodeIterator(this);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+        DecoderBase<_Tflit, _Tcompanion>::IterateType1() const noexcept
+    {
+        return OpcodeIterator(this, true, mask_Type1);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+        DecoderBase<_Tflit, _Tcompanion>::IterateType2() const noexcept
+    {
+        return OpcodeIterator(this, true, mask_Type2);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+        DecoderBase<_Tflit, _Tcompanion>::IterateType3() const noexcept
+    {
+        return OpcodeIterator(this, true, mask_Type3);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+        DecoderBase<_Tflit, _Tcompanion>::IterateType4() const noexcept
+    {
+        return OpcodeIterator(this, true, mask_Type4);
+    }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator
+        DecoderBase<_Tflit, _Tcompanion>::IterateType5() const noexcept
+    {
+        return OpcodeIterator(this, true, mask_Type5);
+    }
+}
+
+
+// Implementation of: class DecoderBase::OpcodeIterator
+namespace CCHI::Opcodes {
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator::OpcodeIterator(
+        const DecoderBase<_Tflit, _Tcompanion>* host
+    ) noexcept
+        : host      (host)
+        , masked    (false)
+        , mask      ()
+        , ptr       (0)
+    { }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator::OpcodeIterator(
+        const DecoderBase<_Tflit, _Tcompanion>* host,
+        bool                                    masked,
+        std::bitset<OPCODE_SLOT_COUNT>          mask
+    ) noexcept
+        : host      (host)
+        , masked    (masked)
+        , mask      (mask)
+        , ptr       (0)
+    { }
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline const OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>&
+        DecoderBase<_Tflit, _Tcompanion>::OpcodeIterator::Next() noexcept
+    {
+        while (ptr < OPCODE_SLOT_COUNT)
+        {
+            if ((!masked || mask[ptr]) && host->opcodes[ptr].IsValid())
+                return host->opcodes[ptr++];
+
+            ptr++;
+        }
+
+        return host->Invalid();
+    }
+}
+
 
 #endif // __CCHI__CHI_UTIL_DECODING
  
