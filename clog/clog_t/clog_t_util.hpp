@@ -187,7 +187,7 @@ namespace CLog::CLogT {
     template<class TContext>
     inline bool ParametersSerDes<TContext>::OnCHI_WIDTH_NODEID(Parser<TContext>& parser, TContext, std::istream& is)
     {
-        size_t nodeIdWidth;
+        uint64_t nodeIdWidth;
         if (!Sentence::CHI_WIDTH_NODEID::Term::Read(is, nodeIdWidth))
             return false;
 
@@ -200,7 +200,7 @@ namespace CLog::CLogT {
     template<class TContext>
     inline bool ParametersSerDes<TContext>::OnCHI_WIDTH_ADDR(Parser<TContext>& parser, TContext, std::istream& is)
     {
-        size_t reqAddrWidth;
+        uint64_t reqAddrWidth;
         if (!Sentence::CHI_WIDTH_ADDR::Term::Read(is, reqAddrWidth))
             return false;
 
@@ -213,7 +213,7 @@ namespace CLog::CLogT {
     template<class TContext>
     inline bool ParametersSerDes<TContext>::OnCHI_WIDTH_RSVDC_REQ(Parser<TContext>& parser, TContext, std::istream& is)
     {
-        size_t reqRsvdcWidth;
+        uint64_t reqRsvdcWidth;
         if (!Sentence::CHI_WIDTH_RSVDC_REQ::Term::Read(is, reqRsvdcWidth))
             return false;
 
@@ -226,7 +226,7 @@ namespace CLog::CLogT {
     template<class TContext>
     inline bool ParametersSerDes<TContext>::OnCHI_WIDTH_RSVDC_DAT(Parser<TContext>& parser, TContext, std::istream& is)
     {
-        size_t datRsvdcWidth;
+        uint64_t datRsvdcWidth;
         if (!Sentence::CHI_WIDTH_RSVDC_DAT::Term::Read(is, datRsvdcWidth))
             return false;
 
@@ -239,7 +239,7 @@ namespace CLog::CLogT {
     template<class TContext>
     inline bool ParametersSerDes<TContext>::OnCHI_WIDTH_DATA(Parser<TContext>& parser, TContext, std::istream& is)
     {
-        size_t dataWidth;
+        uint64_t dataWidth;
         if (!Sentence::CHI_WIDTH_DATA::Term::Read(is, dataWidth))
             return false;
 
