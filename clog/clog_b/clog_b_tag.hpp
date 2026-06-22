@@ -477,6 +477,14 @@ namespace CLog::CLogB {
                 case NodeType::SN_F:
                 case NodeType::SN_I:
                 case NodeType::MN:
+                case NodeType::RN_F_BeforeSAM:
+                case NodeType::RN_D_BeforeSAM:
+                case NodeType::RN_I_BeforeSAM:
+                case NodeType::HN_F_BeforeSAM:
+                case NodeType::HN_I_BeforeSAM:
+                case NodeType::SN_F_BeforeSAM:
+                case NodeType::SN_I_BeforeSAM:
+                case NodeType::MN_BeforeSAM:
                     break;
 
                 default:
