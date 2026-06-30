@@ -70,7 +70,7 @@ TCPtInitial* TCPtInitial::Leaf(std::string title, Xact::CacheState state, bool a
     if (!envError)
     {
         forked->rnStates.Set(addr, state);
-        denial = forked->rnStates.NextTXREQ(addr, req);
+        denial = forked->rnStates.NextTXREQ(addr, 0, req);
             
         if ((denial == Xact::XactDenial::ACCEPTED) != accept)
         {
