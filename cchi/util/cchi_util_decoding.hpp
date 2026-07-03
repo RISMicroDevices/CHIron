@@ -746,7 +746,7 @@ namespace CCHI::Opcodes::SNP {
 
         // Type 2 mask
         //================================================================
-        OPCODE_MASK_SET(Type1, SnpMakeInvalid);
+        OPCODE_MASK_SET(Type2, SnpMakeInvalid);
         //================================================================
 
         // Type 3 mask
@@ -759,6 +759,183 @@ namespace CCHI::Opcodes::SNP {
 
         // Type 5 mask
         //================================================================
+        //================================================================
+    }
+
+    #undef OPCODE_INFO_SET
+    #undef OPCODE_MASK_SET
+}
+
+
+// Implementation of: class REQ::Decoder
+namespace CCHI::Opcodes::REQ {
+
+    #define OPCODE_INFO_SET(name) \
+        this->opcodes[CCHI::REQ::name] \
+            = OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>( \
+                OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>::Channel::REQ, \
+                CCHI::REQ::name, #name)
+
+    #define OPCODE_MASK_SET(target, name) \
+        this->mask_##target[CCHI::REQ::name] = true
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseREQ<_Tflit, _Tcompanion>::~DecoderBaseREQ() noexcept
+    {}
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseREQ<_Tflit, _Tcompanion>::DecoderBaseREQ() noexcept
+    {
+        OPCODE_INFO_SET(StashShared);               // 0x00
+        OPCODE_INFO_SET(StashUnique);               // 0x01
+        OPCODE_INFO_SET(ReadNoSnp);                 // 0x02
+        OPCODE_INFO_SET(ReadOnce);                  // 0x03
+        OPCODE_INFO_SET(ReadShared);                // 0x04
+                                                    // 0x05
+                                                    // 0x06
+                                                    // 0x07
+        OPCODE_INFO_SET(WriteNoSnpPtl);             // 0x08
+        OPCODE_INFO_SET(WriteNoSnpFull);            // 0x09
+        OPCODE_INFO_SET(WriteUniquePtl);            // 0x0A
+        OPCODE_INFO_SET(WriteUniqueFull);           // 0x0B
+        OPCODE_INFO_SET(CleanShared);               // 0x0C
+        OPCODE_INFO_SET(CleanInvalid);              // 0x0D
+        OPCODE_INFO_SET(MakeInvalid);               // 0x0E
+                                                    // 0x0F
+        OPCODE_INFO_SET(ReadUnique);                // 0x10
+                                                    // 0x11
+        OPCODE_INFO_SET(MakeUnique);                // 0x12
+                                                    // 0x13
+                                                    // 0x14
+                                                    // 0x15
+                                                    // 0x16
+                                                    // 0x17
+                                                    // 0x18
+                                                    // 0x19
+                                                    // 0x1A
+                                                    // 0x1B
+                                                    // 0x1C
+                                                    // 0x1D
+        OPCODE_INFO_SET(EvictBack);                 // 0x1E
+        OPCODE_INFO_SET(EvictClean);                // 0x1F
+        OPCODE_INFO_SET(AtomicLoad::ADD);           // 0x20
+        OPCODE_INFO_SET(AtomicLoad::CLR);           // 0x21
+        OPCODE_INFO_SET(AtomicLoad::EOR);           // 0x22
+        OPCODE_INFO_SET(AtomicLoad::SET);           // 0x23
+        OPCODE_INFO_SET(AtomicLoad::SMAX);          // 0x24
+        OPCODE_INFO_SET(AtomicLoad::SMIN);          // 0x25
+        OPCODE_INFO_SET(AtomicLoad::UMAX);          // 0x26
+        OPCODE_INFO_SET(AtomicLoad::UMIN);          // 0x27
+        OPCODE_INFO_SET(AtomicStore::ADD);          // 0x28
+        OPCODE_INFO_SET(AtomicStore::CLR);          // 0x29
+        OPCODE_INFO_SET(AtomicStore::EOR);          // 0x2A
+        OPCODE_INFO_SET(AtomicStore::SET);          // 0x2B
+        OPCODE_INFO_SET(AtomicStore::SMAX);         // 0x2C
+        OPCODE_INFO_SET(AtomicStore::SMIN);         // 0x2D
+        OPCODE_INFO_SET(AtomicStore::UMAX);         // 0x2E
+        OPCODE_INFO_SET(AtomicStore::UMIN);         // 0x2F
+        OPCODE_INFO_SET(AtomicSwap);                // 0x30
+        OPCODE_INFO_SET(AtomicCompare);             // 0x31
+                                                    // 0x32
+                                                    // 0x33
+                                                    // 0x34
+                                                    // 0x35
+                                                    // 0x36
+                                                    // 0x37
+                                                    // 0x38
+                                                    // 0x39
+                                                    // 0x3A
+                                                    // 0x3B
+                                                    // 0x3C
+                                                    // 0x3D
+                                                    // 0x3E
+                                                    // 0x3F
+
+        // Type 1 mask
+        //================================================================
+        OPCODE_MASK_SET(Type1, StashShared);
+        OPCODE_MASK_SET(Type1, StashUnique);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type1, ReadNoSnp);
+        OPCODE_MASK_SET(Type1, ReadOnce);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type1, ReadShared);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type1, WriteNoSnpPtl);
+        OPCODE_MASK_SET(Type1, WriteNoSnpFull);
+        OPCODE_MASK_SET(Type1, WriteUniquePtl);
+        OPCODE_MASK_SET(Type1, WriteUniqueFull);
+        OPCODE_MASK_SET(Type1, CleanShared);
+        OPCODE_MASK_SET(Type1, CleanInvalid);
+        OPCODE_MASK_SET(Type1, MakeInvalid);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type1, ReadUnique);
+        OPCODE_MASK_SET(Type1, MakeUnique);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type1, EvictBack);
+        OPCODE_MASK_SET(Type1, EvictClean);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type1, AtomicLoad::ADD);
+        OPCODE_MASK_SET(Type1, AtomicLoad::CLR);
+        OPCODE_MASK_SET(Type1, AtomicLoad::EOR);
+        OPCODE_MASK_SET(Type1, AtomicLoad::SET);
+        OPCODE_MASK_SET(Type1, AtomicLoad::SMAX);
+        OPCODE_MASK_SET(Type1, AtomicLoad::SMIN);
+        OPCODE_MASK_SET(Type1, AtomicLoad::UMAX);
+        OPCODE_MASK_SET(Type1, AtomicLoad::UMIN);
+        OPCODE_MASK_SET(Type1, AtomicStore::ADD);
+        OPCODE_MASK_SET(Type1, AtomicStore::CLR);
+        OPCODE_MASK_SET(Type1, AtomicStore::EOR);
+        OPCODE_MASK_SET(Type1, AtomicStore::SET);
+        OPCODE_MASK_SET(Type1, AtomicStore::SMAX);
+        OPCODE_MASK_SET(Type1, AtomicStore::SMIN);
+        OPCODE_MASK_SET(Type1, AtomicStore::UMAX);
+        OPCODE_MASK_SET(Type1, AtomicStore::UMIN);
+        OPCODE_MASK_SET(Type1, AtomicSwap);
+        OPCODE_MASK_SET(Type1, AtomicCompare);
+        //================================================================
+
+        // Type 2 mask
+        //================================================================
+        OPCODE_MASK_SET(Type2, StashShared);
+        OPCODE_MASK_SET(Type2, StashUnique);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type2, ReadNoSnp);
+        OPCODE_MASK_SET(Type2, ReadOnce);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type2, ReadShared);
+        //================================================================
+
+        // Type 3 mask
+        //================================================================
+        OPCODE_MASK_SET(Type3, StashShared);
+        OPCODE_MASK_SET(Type3, StashUnique);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type3, ReadNoSnp);
+        OPCODE_MASK_SET(Type3, ReadOnce);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type3, WriteNoSnpPtl);
+        OPCODE_MASK_SET(Type3, WriteNoSnpFull);
+        OPCODE_MASK_SET(Type3, WriteUniquePtl);
+        OPCODE_MASK_SET(Type3, WriteUniqueFull);
+        OPCODE_MASK_SET(Type3, CleanShared);
+        OPCODE_MASK_SET(Type3, CleanInvalid);
+        OPCODE_MASK_SET(Type3, MakeInvalid);
+        //================================================================
+
+        // Type 4 mask
+        //================================================================
+        OPCODE_MASK_SET(Type4, StashShared);
+        OPCODE_MASK_SET(Type4, StashUnique);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type4, ReadNoSnp);
+        OPCODE_MASK_SET(Type4, ReadOnce);
+        //================================================================
+
+        // Type 5 mask
+        //================================================================
+        OPCODE_MASK_SET(Type5, StashShared);
+        OPCODE_MASK_SET(Type5, StashUnique);
         //================================================================
     }
 
