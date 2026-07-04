@@ -944,4 +944,69 @@ namespace CCHI::Opcodes::REQ {
 }
 
 
+// Implementation of: class DnRSP::Decoder
+namespace CCHI::Opcodes::DnRSP {
+
+    #define OPCODE_INFO_SET(name) \
+        this->opcodes[CCHI::DnRSP::name] \
+            = OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>( \
+                OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>::Channel::DnRSP, \
+                CCHI::DnRSP::name, #name)
+
+    #define OPCODE_MASK_SET(target, name) \
+        this->mask_##target[CCHI::DnRSP::name] = true
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseDnRSP<_Tflit, _Tcompanion>::~DecoderBaseDnRSP() noexcept
+    {}
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseDnRSP<_Tflit, _Tcompanion>::DecoderBaseDnRSP() noexcept
+    {
+        OPCODE_INFO_SET(CompStash);                 // 0x00
+        OPCODE_INFO_SET(Comp);                      // 0x01
+        OPCODE_INFO_SET(DBIDResp);                  // 0x02
+        OPCODE_INFO_SET(CompDBIDResp);              // 0x03
+        OPCODE_INFO_SET(CompCMO);                   // 0x04
+                                                    // 0x05
+                                                    // 0x06
+                                                    // 0x07
+
+        // Type 1 mask
+        //================================================================
+        OPCODE_MASK_SET(Type1, CompStash);
+        OPCODE_MASK_SET(Type1, Comp);
+        OPCODE_MASK_SET(Type1, DBIDResp);
+        OPCODE_MASK_SET(Type1, CompDBIDResp);
+        //----------------------------------------------------------------
+        OPCODE_MASK_SET(Type1, CompCMO);
+        //================================================================
+
+        // Type 2 mask
+        //================================================================
+        //================================================================
+
+        // Type 3 mask
+        //================================================================
+        OPCODE_MASK_SET(Type2, CompStash);
+        OPCODE_MASK_SET(Type2, Comp);
+        OPCODE_MASK_SET(Type2, DBIDResp);
+        OPCODE_MASK_SET(Type2, CompDBIDResp);
+        //================================================================
+
+        // Type 4 mask
+        //================================================================
+        //================================================================
+
+        // Type 5 mask
+        //================================================================
+        OPCODE_MASK_SET(Type5, CompStash);
+        //================================================================
+    }
+
+    #undef OPCODE_INFO_SET
+    #undef OPCODE_MASK_SET
+}
+
+
 #endif // __CCHI__CHI_UTIL_DECODING
