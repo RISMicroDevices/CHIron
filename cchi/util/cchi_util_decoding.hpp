@@ -988,10 +988,10 @@ namespace CCHI::Opcodes::DnRSP {
 
         // Type 3 mask
         //================================================================
-        OPCODE_MASK_SET(Type2, CompStash);
-        OPCODE_MASK_SET(Type2, Comp);
-        OPCODE_MASK_SET(Type2, DBIDResp);
-        OPCODE_MASK_SET(Type2, CompDBIDResp);
+        OPCODE_MASK_SET(Type3, CompStash);
+        OPCODE_MASK_SET(Type3, Comp);
+        OPCODE_MASK_SET(Type3, DBIDResp);
+        OPCODE_MASK_SET(Type3, CompDBIDResp);
         //================================================================
 
         // Type 4 mask
@@ -1001,6 +1001,59 @@ namespace CCHI::Opcodes::DnRSP {
         // Type 5 mask
         //================================================================
         OPCODE_MASK_SET(Type5, CompStash);
+        //================================================================
+    }
+
+    #undef OPCODE_INFO_SET
+    #undef OPCODE_MASK_SET
+}
+
+
+// Implementation of: class UpRSP::Decoder
+namespace CCHI::Opcodes::UpRSP {
+
+    #define OPCODE_INFO_SET(name) \
+        this->opcodes[CCHI::UpRSP::name] \
+            = OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>( \
+                OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>::Channel::UpRSP, \
+                CCHI::UpRSP::name, #name)
+
+    #define OPCODE_MASK_SET(target, name) \
+        this->mask_##target[CCHI::UpRSP::name] = true
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseUpRSP<_Tflit, _Tcompanion>::~DecoderBaseUpRSP() noexcept
+    {}
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseUpRSP<_Tflit, _Tcompanion>::DecoderBaseUpRSP() noexcept
+    {
+        OPCODE_INFO_SET(CompAck);
+        OPCODE_INFO_SET(SnpResp);
+
+        // Type 1 mask
+        //================================================================
+        OPCODE_MASK_SET(Type1, CompAck);
+        OPCODE_MASK_SET(Type1, SnpResp);
+        //================================================================
+
+        // Type 2 mask
+        //================================================================
+        OPCODE_MASK_SET(Type2, CompAck);
+        OPCODE_MASK_SET(Type2, SnpResp);
+        //================================================================
+
+        // Type 3 mask
+        //================================================================
+        OPCODE_MASK_SET(Type3, CompAck);
+        //================================================================
+
+        // Type 4 mask
+        //================================================================
+        //================================================================
+
+        // Type 5 mask
+        //================================================================
         //================================================================
     }
 
