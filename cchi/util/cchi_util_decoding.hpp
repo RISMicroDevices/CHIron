@@ -1062,4 +1062,55 @@ namespace CCHI::Opcodes::UpRSP {
 }
 
 
+// Implementation of: class DnDAT::Decoder
+namespace CCHI::Opcodes::DnDAT {
+
+    #define OPCODE_INFO_SET(name) \
+        this->opcodes[CCHI::DnDAT::name] \
+            = OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>( \
+                OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>::Channel::DnDAT, \
+                CCHI::DnDAT::name, #name)
+
+    #define OPCODE_MASK_SET(target, name) \
+        this->mask_##target[CCHI::DnDAT::name] = true
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseDnDAT<_Tflit, _Tcompanion>::~DecoderBaseDnDAT() noexcept
+    {}
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseDnDAT<_Tflit, _Tcompanion>::DecoderBaseDnDAT() noexcept
+    {
+        OPCODE_INFO_SET(CompData);
+
+        // Type 1 mask
+        //================================================================
+        OPCODE_MASK_SET(Type1, CompData);
+        //================================================================
+
+        // Type 2 mask
+        //================================================================
+        OPCODE_MASK_SET(Type2, CompData);
+        //================================================================
+
+        // Type 3 mask
+        //================================================================
+        OPCODE_MASK_SET(Type3, CompData);
+        //================================================================
+
+        // Type 4 mask
+        //================================================================
+        OPCODE_MASK_SET(Type4, CompData);
+        //================================================================
+
+        // Type 5 mask
+        //================================================================
+        //================================================================
+    }
+
+    #undef OPCODE_INFO_SET
+    #undef OPCODE_MASK_SET
+}
+
+
 #endif // __CCHI__CHI_UTIL_DECODING
