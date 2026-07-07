@@ -1113,4 +1113,58 @@ namespace CCHI::Opcodes::DnDAT {
 }
 
 
+// Implementation of: class UpDAT::Decoder
+namespace CCHI::Opcodes::UpDAT {
+
+    #define OPCODE_INFO_SET(name) \
+        this->opcodes[CCHI::UpDAT::name] \
+            = OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>( \
+                OpcodeInfo<typename _Tflit::opcode_t, _Tcompanion>::Channel::UpDAT, \
+                CCHI::UpDAT::name, #name)
+
+    #define OPCODE_MASK_SET(target, name) \
+        this->mask_##target[CCHI::UpDAT::name] = true
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseUpDAT<_Tflit, _Tcompanion>::~DecoderBaseUpDAT() noexcept
+    {}
+
+    template<Flits::FlitOpcodeFormatConcept _Tflit, class _Tcompanion>
+    inline DecoderBaseUpDAT<_Tflit, _Tcompanion>::DecoderBaseUpDAT() noexcept
+    {
+        OPCODE_INFO_SET(NonCopyBackWrData);         // 0x00
+                                                    // 0x01
+        OPCODE_INFO_SET(CopyBackWrData);            // 0x02
+        OPCODE_INFO_SET(SnpRespData);               // 0x03
+
+        // Type 1 mask
+        //================================================================
+        OPCODE_MASK_SET(Type1, NonCopyBackWrData);
+        OPCODE_MASK_SET(Type1, CopyBackWrData);
+        OPCODE_MASK_SET(Type1, SnpRespData);
+        //================================================================
+
+        // Type 2 mask
+        //================================================================
+        //================================================================
+
+        // Type 3 mask
+        //================================================================
+        OPCODE_MASK_SET(Type3, NonCopyBackWrData);
+        //================================================================
+
+        // Type 4 mask
+        //================================================================
+        //================================================================
+
+        // Type 5 mask
+        //================================================================
+        //================================================================
+    }
+
+    #undef OPCODE_INFO_SET
+    #undef OPCODE_MASK_SET
+}
+
+
 #endif // __CCHI__CHI_UTIL_DECODING
