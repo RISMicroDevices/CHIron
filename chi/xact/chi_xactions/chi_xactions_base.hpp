@@ -218,6 +218,9 @@ namespace CHI {
             std::shared_ptr<Xaction<config>>        GetFirstTry() const noexcept;
 
         public:
+            bool                                    HasRSP() const noexcept;
+            bool                                    HasDAT() const noexcept;
+
             bool                                    HasRSP(std::initializer_list<typename Flits::RSP<config>::opcode_t>) const noexcept;
             bool                                    HasDAT(std::initializer_list<typename Flits::DAT<config>::opcode_t>) const noexcept;
 
@@ -702,6 +705,9 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum Xaction<config>::GetSubsequentDenial(size_t index) const noexcept
     {
+        if (index >= subsequenceKeys.size())
+            return XactDenial::NOT_INITIALIZED;
+
         return subsequenceKeys[index].denial;
     }
 
@@ -719,8 +725,8 @@ namespace /*CHI::*/Xact {
     {
         if (subsequenceKeys.empty())
             this->firstDenial = denial;
-
-        subsequenceKeys.back().denial = denial;
+        else
+            subsequenceKeys.back().denial = denial;
     }
 
     template<FlitConfigurationConcept config>
@@ -751,9 +757,42 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::HasRSP() const noexcept
+    {
+        for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
+        {
+            if (iter->IsDenied())
+                continue;
+
+            if (iter->IsRSP())
+                return true;
+        }
+
+        return false;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::HasDAT() const noexcept
+    {
+        for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
+        {
+            if (iter->IsDenied())
+                continue;
+
+            if (iter->IsDAT())
+                return true;
+        }
+
+        return false;
+    }
+
+    template<FlitConfigurationConcept config>
     inline bool Xaction<config>::HasRSP(
         std::initializer_list<typename Flits::RSP<config>::opcode_t> opcodes) const noexcept
     {
+        if (opcodes.size() == 0)
+            return false;
+
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
             if (iter->IsDenied())
@@ -761,9 +800,6 @@ namespace /*CHI::*/Xact {
 
             if (!iter->IsRSP())
                 continue;
-
-            if (opcodes.size() == 0)
-                return true;
 
             for (auto opcode : opcodes)
                 if (iter->opcode.rsp == opcode)
@@ -777,6 +813,9 @@ namespace /*CHI::*/Xact {
     inline bool Xaction<config>::HasDAT(
         std::initializer_list<typename Flits::DAT<config>::opcode_t> opcodes) const noexcept
     {
+        if (opcodes.size() == 0)
+            return false;
+
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
             if (iter->IsDenied())
@@ -784,9 +823,6 @@ namespace /*CHI::*/Xact {
 
             if (!iter->IsDAT())
                 continue;
-
-            if (opcodes.size() == 0)
-                return true;
 
             for (auto opcode : opcodes)
                 if (iter->opcode.dat == opcode)
