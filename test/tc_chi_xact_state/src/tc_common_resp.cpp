@@ -276,9 +276,9 @@ TCPtResp* TCPtResp::TestAndForkInitial(std::string title, Xact::CacheState state
     Xact::XactDenialEnum denial;
     
     if (forked->isSNP)
-        denial = forked->rnStates.NextRXSNP(Flits::REQ<config>::addr_t::value_type(snp.Addr()) << 3, snp);
+        denial = forked->rnStates.NextRXSNP(Flits::REQ<config>::addr_t::value_type(snp.Addr()) << 3, 0, snp);
     else
-        denial = forked->rnStates.NextTXREQ(req.Addr(), req);
+        denial = forked->rnStates.NextTXREQ(req.Addr(), 0, req);
 
 
     if (denial == Xact::XactDenial::ACCEPTED)
@@ -320,9 +320,9 @@ TCPtResp* TCPtResp::TestAndForkTransfer(std::string title, Xact::CacheState init
     Xact::XactDenialEnum denial;
     
     if (isSNP)
-        denial = forked->rnStates.NextTXREQ(Flits::REQ<config>::addr_t::value_type(snp.Addr()) << 3, req);
+        denial = forked->rnStates.NextTXREQ(Flits::REQ<config>::addr_t::value_type(snp.Addr()) << 3, 0, req);
     else
-        denial = forked->rnStates.NextTXREQ(req.Addr(), req);
+        denial = forked->rnStates.NextTXREQ(req.Addr(), 0, req);
 
     if (denial == Xact::XactDenial::ACCEPTED)
         ;
@@ -387,9 +387,9 @@ TCPtResp* TCPtResp::TestAndLeafTransfer(std::string title, Xact::CacheState init
     Xact::XactDenialEnum denial;
     
     if (isSNP)
-        denial = forked->rnStates.NextRXSNP(Flits::REQ<config>::addr_t::value_type(snp.Addr()) << 3, snp);
+        denial = forked->rnStates.NextRXSNP(Flits::REQ<config>::addr_t::value_type(snp.Addr()) << 3, 0, snp);
     else
-        denial = forked->rnStates.NextTXREQ(req.Addr(), req);
+        denial = forked->rnStates.NextTXREQ(req.Addr(), 0, req);
 
     if (denial == Xact::XactDenial::ACCEPTED)
         ;
@@ -827,7 +827,7 @@ TCPtResp* TCPtResp::ForkInstantSnpRespFwded(std::string title, Resp resp, Xact::
             return forked;
         }
 
-        denial = forked->rnStates.NextTXRSP(addr, *forked->xaction, *forked->txrsp);
+        denial = forked->rnStates.NextTXRSP(addr, 1, *forked->xaction, *forked->txrsp);
 
         if (denial != Xact::XactDenial::ACCEPTED)
         {
@@ -897,7 +897,7 @@ TCPtResp* TCPtResp::ForkInstantSnpRespDataFwded(std::string title, Resp resp, Xa
             return forked;
         }
 
-        denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, *forked->txdat);
+        denial = forked->rnStates.NextTXDAT(addr, 1, *forked->xaction, *forked->txdat);
 
         if (denial != Xact::XactDenial::ACCEPTED)
         {
@@ -944,7 +944,7 @@ TCPtResp* TCPtResp::ForkInstantSnpRespDataFwded(std::string title, Resp resp, Xa
             return forked;
         }
 
-        denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, *forked->txdat);
+        denial = forked->rnStates.NextTXDAT(addr, 2, *forked->xaction, *forked->txdat);
 
         if (denial != Xact::XactDenial::ACCEPTED)
         {
@@ -1014,7 +1014,7 @@ TCPtResp* TCPtResp::ForkInstantDCTCompData(std::string title, Resp resp, Xact::C
             return forked;
         }
 
-        denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, *forked->txdat);
+        denial = forked->rnStates.NextTXDAT(addr, 1, *forked->xaction, *forked->txdat);
 
         if (denial != Xact::XactDenial::ACCEPTED)
         {
@@ -1061,7 +1061,7 @@ TCPtResp* TCPtResp::ForkInstantDCTCompData(std::string title, Resp resp, Xact::C
             return forked;
         }
 
-        denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, *forked->txdat);
+        denial = forked->rnStates.NextTXDAT(addr, 2, *forked->xaction, *forked->txdat);
 
         if (denial != Xact::XactDenial::ACCEPTED)
         {
@@ -1172,7 +1172,7 @@ TCPtResp* TCPtResp::LeafSnpRespFwded(std::string title, Resp resp, Xact::CacheSt
         return this;
     }
 
-    denial = forked->rnStates.NextTXRSP(addr, *forked->xaction, txrsp);
+    denial = forked->rnStates.NextTXRSP(addr, 1, *forked->xaction, txrsp);
 
     if ((denial == Xact::XactDenial::ACCEPTED) != accept)
     {
@@ -1289,7 +1289,7 @@ TCPtResp* TCPtResp::LeafSnpRespDataFwded(std::string title, Resp resp, Xact::Cac
         return this;
     }
 
-    denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, txdat);
+    denial = forked->rnStates.NextTXDAT(addr, 1, *forked->xaction, txdat);
 
     if ((denial == Xact::XactDenial::ACCEPTED) != accept)
     {
@@ -1354,7 +1354,7 @@ TCPtResp* TCPtResp::LeafSnpRespDataFwded(std::string title, Resp resp, Xact::Cac
         return this;
     }
 
-    denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, txdat);
+    denial = forked->rnStates.NextTXDAT(addr, 1, *forked->xaction, txdat);
 
     if (denial != Xact::XactDenial::ACCEPTED)
     {
@@ -1482,7 +1482,7 @@ TCPtResp* TCPtResp::LeafDCTCompData(std::string title, Resp resp, Xact::CacheSta
         return this;
     }
 
-    denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, txdat);
+    denial = forked->rnStates.NextTXDAT(addr, 1, *forked->xaction, txdat);
 
     if ((denial == Xact::XactDenial::ACCEPTED) != accept)
     {
@@ -1547,7 +1547,7 @@ TCPtResp* TCPtResp::LeafDCTCompData(std::string title, Resp resp, Xact::CacheSta
         return this;
     }
 
-    denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, txdat);
+    denial = forked->rnStates.NextTXDAT(addr, 1, *forked->xaction, txdat);
 
     if (denial != Xact::XactDenial::ACCEPTED)
     {
@@ -1718,13 +1718,13 @@ TCPtResp* TCPtResp::LeafFwd(std::string title, Resp resp, FwdState fwdState, Xac
         if (firstPass)
         {
             if (forked->rxdat)
-                denial = forked->rnStates.NextRXDAT(addr, *forked->xaction, *forked->rxdat);
+                denial = forked->rnStates.NextRXDAT(addr, 1, *forked->xaction, *forked->rxdat);
             else if (forked->rxrsp)
-                denial = forked->rnStates.NextRXRSP(addr, *forked->xaction, *forked->rxrsp);
+                denial = forked->rnStates.NextRXRSP(addr, 1, *forked->xaction, *forked->rxrsp);
             else if (forked->txdat)
-                denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, *forked->txdat);
+                denial = forked->rnStates.NextTXDAT(addr, 1, *forked->xaction, *forked->txdat);
             else if (forked->txrsp)
-                denial = forked->rnStates.NextTXRSP(addr, *forked->xaction, *forked->txrsp);
+                denial = forked->rnStates.NextTXRSP(addr, 1, *forked->xaction, *forked->txrsp);
             else
                 denial = Xact::XactDenial::ACCEPTED;
 
@@ -1907,9 +1907,9 @@ TCPtResp* TCPtResp::LeafFwdRepeat(std::string title, Resp resp, FwdState fwdStat
         if (firstPass)
         {
             if (forked->rxdat)
-                denial = forked->rnStates.NextRXDAT(addr, *forked->xaction, *forked->rxdat);
+                denial = forked->rnStates.NextRXDAT(addr, 1, *forked->xaction, *forked->rxdat);
             else if (forked->txdat)
-                denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, *forked->txdat);
+                denial = forked->rnStates.NextTXDAT(addr, 1, *forked->xaction, *forked->txdat);
             else
                 denial = Xact::XactDenial::ACCEPTED;
 
@@ -1961,9 +1961,9 @@ TCPtResp* TCPtResp::LeafFwdRepeat(std::string title, Resp resp, FwdState fwdStat
                     if (denial == Xact::XactDenial::ACCEPTED)
                     {
                         if (forked->rxdat)
-                            denial = forked->rnStates.NextRXDAT(addr, *forked->xaction, *forked->rxdat);
+                            denial = forked->rnStates.NextRXDAT(addr, 1, *forked->xaction, *forked->rxdat);
                         else if (forked->txdat)
-                            denial = forked->rnStates.NextTXDAT(addr, *forked->xaction, *forked->txdat);
+                            denial = forked->rnStates.NextTXDAT(addr, 1, *forked->xaction, *forked->txdat);
                         else
                             denial = Xact::XactDenial::ACCEPTED;
 
