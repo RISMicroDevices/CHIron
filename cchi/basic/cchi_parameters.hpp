@@ -56,6 +56,15 @@ namespace CCHI {
     {
         return wayIndexWidth >= 1 && wayIndexWidth <= 5;
     }
+
+    /*
+    Constraint checker for CCHI parameter <Data_Width>
+        -> Legal values of <Data_Width> are 64, 128, 256, or 512
+    */
+    inline static constexpr bool CheckDataWidth(size_t dataWidth) noexcept
+    {
+        return dataWidth == 64 || dataWidth == 128 || dataWidth == 256 || dataWidth == 512;
+    }
 }
 
 
