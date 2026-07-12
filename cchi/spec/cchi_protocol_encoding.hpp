@@ -3,12 +3,14 @@
 #ifndef __CCHI__CCHI_PROTOCOL_ENCODING
 #define __CCHI__CCHI_PROTOCOL_ENCODING
 
+#include <climits>
+
 #include "cchi_protocol_flits.hpp"
 
 
 namespace CCHI {
 
-    namespace REQ {
+    namespace Opcodes::REQ {
 
         /*
         See REQ channel opcodes.
@@ -124,10 +126,6 @@ namespace CCHI {
             constexpr type  AtomicSwap                  = REQ::AtomicSwap;
             constexpr type  AtomicCompare               = REQ::AtomicCompare;
             //==============================================================
-
-            // *NOTICE: For Type 1 components, CMO operations were possible to be supported with mitigation
-            //          that consider CompStash as CompCMO on CMO transactions, since the CMO transactions
-            //          often prefer to be fully tracked.
         }
 
         /*
@@ -166,6 +164,11 @@ namespace CCHI {
             constexpr type  CleanInvalid                = REQ::CleanInvalid;
             constexpr type  MakeInvalid                 = REQ::MakeInvalid;
             //==============================================================
+
+            // *NOTICE: For Type 3 components, CMO operations were possible to be supported with mitigation
+            //          that consider CompStash as CompCMO on CMO transactions, since the CMO transactions
+            //          often prefer to be fully tracked.
+            //          And this could also be applied to Type 5 components if expanding Opcode field width.
         }
 
         /*
@@ -195,14 +198,14 @@ namespace CCHI {
     }
 
 
-    namespace SNP {
+    namespace Opcodes::SNP {
 
         /*
         See SNP channel opcodes.
         */
 
         // Opcode type
-        using type = Flits::EVT<>::opcode_t;
+        using type = Flits::SNP<>::opcode_t;
 
         // Opcodes
         constexpr type      SnpMakeInvalid              = 0x00;
@@ -235,14 +238,14 @@ namespace CCHI {
     }
 
 
-    namespace EVT {
+    namespace Opcodes::EVT {
 
         /*
         See EVT channel opcodes.
         */
 
         // Opcode type
-        using type = Flits::SNP<>::opcode_t;
+        using type = Flits::EVT<>::opcode_t;
 
         // Opcodes
         constexpr type      Evict                       = 0x00;
@@ -270,7 +273,7 @@ namespace CCHI {
         }
     }
 
-    namespace DnRSP {
+    namespace Opcodes::DnRSP {
 
         /*
         See DnRSP channel opcodes.
@@ -328,7 +331,7 @@ namespace CCHI {
         }
     }
 
-    namespace UpRSP {
+    namespace Opcodes::UpRSP {
 
         /*
         See UpRSP channel opcodes.
@@ -374,7 +377,7 @@ namespace CCHI {
         }
     }
 
-    namespace DnDAT {
+    namespace Opcodes::DnDAT {
 
         /*
         See DnDAT channel opcodes.
@@ -428,7 +431,7 @@ namespace CCHI {
         }
     }
 
-    namespace UpDAT {
+    namespace Opcodes::UpDAT {
 
         /*
         See UpDAT channel opcodes.
@@ -464,6 +467,80 @@ namespace CCHI {
             constexpr type  NonCopyBackWrData           = UpDAT::NonCopyBackWrData;
             //==============================================================
         }
+    }
+
+
+    namespace cchi_protocol_encoding::details {
+
+        template<class T>
+        class EnumerationUnsaturated {
+        public:
+            const char*     name;
+            const int       value;
+            const T* const  prev;
+
+        public:
+            inline constexpr EnumerationUnsaturated(const char* name, const int value, const T* const prev = nullptr) noexcept
+            : name(name), value(value), prev(prev) { }
+
+            inline constexpr operator int() const noexcept
+            { return value; }
+
+            inline constexpr operator const T*() const noexcept
+            { return static_cast<const T*>(this); };
+
+            inline constexpr bool operator==(const T& obj) const noexcept
+            { return value == obj.value; }
+
+            inline constexpr bool operator!=(const T& obj) const noexcept
+            { return !(*this == obj); }
+
+            inline constexpr bool IsValid() const noexcept
+            { return value != INT_MIN; }
+        };
+    }
+
+
+    //
+    using Size = uint3_t;
+
+    class SizeEnumBack : public cchi_protocol_encoding::details::EnumerationUnsaturated<SizeEnumBack> {
+    public:
+        inline constexpr SizeEnumBack(const char* name, const int value, const SizeEnumBack* const prev = nullptr) noexcept
+        : EnumerationUnsaturated<SizeEnumBack>(name, value, prev) { }
+    };
+
+    using SizeEnum = const SizeEnumBack*;
+
+    namespace Sizes {
+
+        // Size type
+        using type = Size;
+
+        // Size encodings
+        inline constexpr type   B1      = 0b000;
+        inline constexpr type   B2      = 0b001;
+        inline constexpr type   B4      = 0b010;
+        inline constexpr type   B8      = 0b011;
+        inline constexpr type   B16     = 0b100;
+        inline constexpr type   B32     = 0b101;
+        inline constexpr type   B64     = 0b110;
+
+        //
+        namespace Enum {
+            inline constexpr SizeEnumBack   Invalid ("Invalid",  INT_MIN);
+
+            inline constexpr SizeEnumBack   B1      ("1 Byte"   , Sizes::B1);
+            inline constexpr SizeEnumBack   B2      ("2 Bytes"  , Sizes::B2 , B1);
+            inline constexpr SizeEnumBack   B4      ("4 Bytes"  , Sizes::B4 , B2);
+            inline constexpr SizeEnumBack   B8      ("8 Bytes"  , Sizes::B8 , B4);
+            inline constexpr SizeEnumBack   B16     ("16 Bytes" , Sizes::B16, B8);
+            inline constexpr SizeEnumBack   B32     ("32 Bytes" , Sizes::B32, B16);
+            inline constexpr SizeEnumBack   B64     ("64 Bytes" , Sizes::B64, B32);
+        }
+
+        inline constexpr SizeEnum ToEnum(Size size) noexcept;
+        inline constexpr bool IsValid(Size size) noexcept;
     }
 }
 
