@@ -1,8 +1,9 @@
 #pragma once
 
-//#ifndef __CCHI__CCHI_PROTOCOL_FLITS
-//#define __CCHI__CCHI_PROTOCOL_FLITS
+#ifndef __CCHI__CCHI_PROTOCOL_FLITS
+#define __CCHI__CCHI_PROTOCOL_FLITS
 
+#include <bit>
 #include <concepts>                             // IWYU pragma: keep
 #include <variant>
 
@@ -30,6 +31,9 @@ namespace CCHI {
 
         template<size_t WayIndexWidth>
         concept WayIndex            = CCHI::CheckWayIndexWidth(WayIndexWidth);
+
+        template<size_t DataWidth>
+        concept Data                = CCHI::CheckDataWidth(DataWidth);
     }
 
 
@@ -42,6 +46,7 @@ namespace CCHI {
              size_t UpstreamNodeIDWidth         = 5,
              size_t DownstreamNodeIDWidth       = 5,
              size_t WayIndexWidth               = 4,
+             size_t DataWidth                   = 256,
              bool   UWPersistEnable             = true,
              bool   UWPredictEnable             = true>
     requires FlitConfigurationConstraints::TxnID<TxnIDWidth>
@@ -49,6 +54,7 @@ namespace CCHI {
           && FlitConfigurationConstraints::UpstreamNodeID<UpstreamNodeIDWidth>
           && FlitConfigurationConstraints::DownstreamNodeID<DownstreamNodeIDWidth>
           && FlitConfigurationConstraints::WayIndex<WayIndexWidth>
+          && FlitConfigurationConstraints::Data<DataWidth>
     struct FlitConfiguration {
         static constexpr ComponentTypeEnum componentType        = ComponentType;
         //
@@ -72,6 +78,8 @@ namespace CCHI {
         static constexpr size_t     upstreamNodeIdWidth         = UpstreamNodeIDWidth;
         static constexpr size_t     downstreamNodeIdWidth       = DownstreamNodeIDWidth;
         static constexpr size_t     wayIndexWidth               = WayIndexWidth;
+        static constexpr size_t     dataIdWidth                 = std::bit_width(512 / DataWidth - 1);
+        static constexpr size_t     dataWidth                   = DataWidth;
         static constexpr bool       upstreamWayPersistEnable    = UWPersistEnable;
         static constexpr bool       upstreamWayPredictEnable    = UWPredictEnable;
     };
@@ -102,6 +110,7 @@ namespace CCHI {
         { T::upstreamNodeIdWidth        }   -> std::convertible_to<size_t>;
         { T::downstreamNodeIdWidth      }   -> std::convertible_to<size_t>;
         { T::wayIndexWidth              }   -> std::convertible_to<size_t>;
+        { T::dataWidth                  }   -> std::convertible_to<size_t>;
         { T::upstreamWayPersistEnable   }   -> std::convertible_to<bool>;
         { T::upstreamWayPredictEnable   }   -> std::convertible_to<bool>;
     };
@@ -192,6 +201,8 @@ namespace CCHI {
         { T::upstreamNodeIdWidth        }   -> std::convertible_to<size_t>;
         { T::downstreamNodeIdWidth      }   -> std::convertible_to<size_t>;
         { T::wayIndexWidth              }   -> std::convertible_to<size_t>;
+        { T::dataIdWidth                }   -> std::convertible_to<size_t>;
+        { T::dataWidth                  }   -> std::convertible_to<size_t>;
         { T::upstreamWayPersistEnable   }   -> std::convertible_to<bool>;
     };
 
@@ -206,6 +217,8 @@ namespace CCHI {
         { T::dbIdWidth                  }   -> std::convertible_to<size_t>;
         { T::upstreamNodeIdWidth        }   -> std::convertible_to<size_t>;
         { T::downstreamNodeIdWidth      }   -> std::convertible_to<size_t>;
+        { T::dataIdWidth                }   -> std::convertible_to<size_t>;
+        { T::dataWidth                  }   -> std::convertible_to<size_t>;
     };
 
 
@@ -435,8 +448,15 @@ namespace CCHI {
             using excl_t = uint_fit_t<EXCL_WIDTH>;
 
             /*
+            ExpCompData: 1 bit
+            Expecting CompData. Indicates whether the source node expects response with data.
+            */
+            static constexpr size_t EXPCOMPDATA_WIDTH = 1;
+            using expcompdata_t = uint_fit_t<EXPCOMPDATA_WIDTH>;
+
+            /*
             ExpCompStash: 1 bit
-            Expected Completion Stash. Indicates whether the source node expects CompStash on stash completion.
+            Expecting CompStash. Indicates whether the source node expects CompStash on stash completion.
             */
             static constexpr size_t EXPCOMPSTASH_WIDTH = 1;
             using expcompstash_t = uint_fit_t<EXPCOMPSTASH_WIDTH>;
@@ -467,8 +487,8 @@ namespace CCHI {
         public:
             static constexpr size_t WIDTH = TXNID_WIDTH         + SRCID_WIDTH       + TGTID_WIDTH           + OPCODE_WIDTH  
                                           + SIZE_WIDTH          + ADDR_WIDTH        + NS_WIDTH              + ORDER_WIDTH
-                                          + MEMATTR_WIDTH       + EXCL_WIDTH      /*+ EXPCOMPSTASH_WIDTH*/  + WAYVALID_WIDTH
-                                          + WAY_WIDTH           + TRACETAG_WIDTH;
+                                          + MEMATTR_WIDTH       + EXCL_WIDTH        + EXPCOMPDATA_WIDTH   /*+ EXPCOMPSTASH_WIDTH*/
+                                          + WAYVALID_WIDTH      + WAY_WIDTH         + TRACETAG_WIDTH;
 
         // Flit fields
         // *NOTICE: Some fields are overlapped.
@@ -482,8 +502,9 @@ namespace CCHI {
             ns_t                    NS;
             order_t                 Order;
             memattr_t               MemAttr;
-            union {
             excl_t                  Excl;
+            union {
+            expcompdata_t           ExpCompData;
             expcompstash_t          ExpCompStash;
             };
             wayvalid_t              WayValid;
@@ -534,6 +555,10 @@ namespace CCHI {
             // Excl
             typename T::excl_t;
             { T::EXCL_WIDTH                     } -> std::convertible_to<size_t>;
+
+            // ExpCompData
+            typename T::expcompdata_t;
+            { T::EXPCOMPDATA_WIDTH              } -> std::convertible_to<size_t>;
 
             // ExpCompStash
             typename T::expcompstash_t;
@@ -1006,10 +1031,19 @@ namespace CCHI {
             using way_t = uint_fit_t<WAY_WIDTH, std::monostate>;
 
             /*
-            Data: 256 bits
+            DataID: log2(512 / <Data_Width>) bits
+            Data ID. The ID of the data payload in the transaction.
+            */
+            static constexpr size_t DATAID_WIDTH = config::dataIdWidth;
+
+            static constexpr bool hasDataID = DATAID_WIDTH > 0;
+            using dataid_t = uint_fit_t<DATAID_WIDTH, std::monostate>;
+
+            /*
+            Data: <Data_Width> bits
             Data. The data payload of the transaction.
             */
-            static constexpr size_t DATA_WIDTH = 256;
+            static constexpr size_t DATA_WIDTH = config::dataWidth;
             using data_t = uint64_t[DATA_WIDTH / 64];
 
             /*
@@ -1022,8 +1056,8 @@ namespace CCHI {
         public:
             static constexpr size_t WIDTH = TXNID_WIDTH         + SRCID_WIDTH       + TGTID_WIDTH       + DBID_WIDTH
                                           + OPCODE_WIDTH        + RESPERR_WIDTH     + RESP_WIDTH        + DATASOURCE_WIDTH
-                                          + CBUSY_WIDTH         + WAYVALID_WIDTH    + WAY_WIDTH         + DATA_WIDTH
-                                          + TRACETAG_WIDTH;
+                                          + CBUSY_WIDTH         + WAYVALID_WIDTH    + WAY_WIDTH         + DATAID_WIDTH
+                                          + DATA_WIDTH          + TRACETAG_WIDTH;
 
         public:
             txnid_t                 TxnID;
@@ -1037,6 +1071,7 @@ namespace CCHI {
             cbusy_t                 CBusy;
             wayvalid_t              WayValid;
             way_t                   Way;
+            dataid_t                DataID;
             data_t                  Data;
             tracetag_t              TraceTag;
         };
@@ -1088,6 +1123,10 @@ namespace CCHI {
             // Way
             typename T::way_t;
             { T::WAY_WIDTH                      } -> std::convertible_to<size_t>;
+
+            // DataID
+            typename T::dataid_t;
+            { T::DATAID_WIDTH                   } -> std::convertible_to<size_t>;
 
             // Data
             typename T::data_t;
@@ -1148,10 +1187,19 @@ namespace CCHI {
             using resp_t = uint_fit_t<RESP_WIDTH>;
 
             /*
-            Data: 256 bits
+            DataID: log2(512 / <Data_Width>) bits
+            Data ID. The ID of the data payload in the transaction.
+            */
+            static constexpr size_t DATAID_WIDTH = config::dataIdWidth;
+
+            static constexpr bool hasDataID = DATAID_WIDTH > 0;
+            using dataid_t = uint_fit_t<DATAID_WIDTH, std::monostate>;
+
+            /*
+            Data: <Data_Width> bits
             Data. The data payload of the transaction.
             */
-            static constexpr size_t DATA_WIDTH = 256;
+            static constexpr size_t DATA_WIDTH = config::dataWidth;
             using data_t = uint64_t[DATA_WIDTH / 64];
 
             /*
@@ -1175,6 +1223,7 @@ namespace CCHI {
             opcode_t                Opcode;
             resperr_t               RespErr;
             resp_t                  Resp;
+            dataid_t                DataID;
             data_t                  Data;
             be_t                    BE;
             tracetag_t              TraceTag;
@@ -1208,6 +1257,10 @@ namespace CCHI {
             typename T::resp_t;
             { T::RESP_WIDTH                     } -> std::convertible_to<size_t>;
 
+            // DataID
+            typename T::dataid_t;
+            { T::DATAID_WIDTH                   } -> std::convertible_to<size_t>;
+
             // Data
             typename T::data_t;
             { sizeof(typename T::data_t) * 8    } -> std::convertible_to<size_t>;
@@ -1232,3 +1285,6 @@ namespace CCHI {
         };
     }
 }
+
+
+#endif // __CCHI__CCHI_PROTOCOL_FLITS
