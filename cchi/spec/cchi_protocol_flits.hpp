@@ -223,6 +223,19 @@ namespace CCHI {
 
 
     namespace Flits {
+
+        //
+        template<FlitConfigurationConcept config = FlitConfiguration<>>
+        using txnid_t = uint_fit_t<config::txnIdWidth>;
+
+        template<FlitConfigurationConcept config = FlitConfiguration<>>
+        using dbid_t = uint_fit_t<config::dbIdWidth>;
+
+        template<FlitConfigurationConcept config = FlitConfiguration<>>
+        using up_nodeid_t = uint_fit_t<config::upstreamNodeIdWidth>;
+
+        template<FlitConfigurationConcept config = FlitConfiguration<>>
+        using dn_nodeid_t = uint_fit_t<config::downstreamNodeIdWidth>;
         
         //
         template<EVTFlitConfigurationConcept config = FlitConfiguration<>>
@@ -233,21 +246,21 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
             static constexpr size_t TXNID_WIDTH = config::txnIdWidth;
-            using txnid_t = uint_fit_t<TXNID_WIDTH>;
+            using txnid_t = txnid_t<config>;
 
             /*
             SrcID: <UpstreamNodeID_Width> bits
             Source ID. The ID of the source node that initiates the transaction.
             */
             static constexpr size_t SRCID_WIDTH = config::upstreamNodeIdWidth;
-            using srcid_t = uint_fit_t<SRCID_WIDTH>;
+            using srcid_t = up_nodeid_t<config>;
 
             /*
             TgtID: <DownstreamNodeID_Width> bits
             Target ID. The ID of the target node that is the destination of the transaction.
             */
             static constexpr size_t TGTID_WIDTH = config::downstreamNodeIdWidth;
-            using tgtid_t = uint_fit_t<TGTID_WIDTH>;
+            using tgtid_t = dn_nodeid_t<config>;
 
             /*
             Opcode: "opcodeEVTWidth" bits
@@ -380,21 +393,21 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
             static constexpr size_t TXNID_WIDTH = config::txnIdWidth;
-            using txnid_t = uint_fit_t<TXNID_WIDTH>;
+            using txnid_t = txnid_t<config>;
 
             /*
             SrcID: <UpstreamNodeID_Width> bits
             Source ID. The ID of the source node that initiates the transaction.
             */
             static constexpr size_t SRCID_WIDTH = config::upstreamNodeIdWidth;
-            using srcid_t = uint_fit_t<SRCID_WIDTH>;
+            using srcid_t = up_nodeid_t<config>;
 
             /*
             TgtID: <DownstreamNodeID_Width> bits
             Target ID. The ID of the target node that is the destination of the transaction.
             */
             static constexpr size_t TGTID_WIDTH = config::downstreamNodeIdWidth;
-            using tgtid_t = uint_fit_t<TGTID_WIDTH>;
+            using tgtid_t = dn_nodeid_t<config>;
 
             /*
             Opcode: "opcodeREQWidth" bits
@@ -587,21 +600,21 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
             static constexpr size_t TXNID_WIDTH = config::dbIdWidth;
-            using txnid_t = uint_fit_t<TXNID_WIDTH>;
+            using txnid_t = dbid_t<config>;
 
             /*
             SrcID: <DownstreamNodeID_Width> bits
             Source ID. The ID of the source node that initiates the transaction.
             */
             static constexpr size_t SRCID_WIDTH = config::downstreamNodeIdWidth;
-            using srcid_t = uint_fit_t<SRCID_WIDTH>;
+            using srcid_t = dn_nodeid_t<config>;
 
             /*
             TgtID: <UpstreamNodeID_Width> bits
             Target ID. The ID of the target node that is the destination of the transaction.
             */
             static constexpr size_t TGTID_WIDTH = config::upstreamNodeIdWidth;
-            using tgtid_t = uint_fit_t<TGTID_WIDTH>;
+            using tgtid_t = up_nodeid_t<config>;
 
             /*
             Opcode: "opcodeSNPWidth" bits
@@ -692,28 +705,28 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
             static constexpr size_t TXNID_WIDTH = config::txnIdWidth;
-            using txnid_t = uint_fit_t<TXNID_WIDTH>;
+            using txnid_t = txnid_t<config>;
 
             /*
             SrcID: <DownstreamNodeID_Width> bits
             Source ID. The ID of the source node that initiates the transaction.
             */
             static constexpr size_t SRCID_WIDTH = config::downstreamNodeIdWidth;
-            using srcid_t = uint_fit_t<SRCID_WIDTH>;
+            using srcid_t = dn_nodeid_t<config>;
 
             /*
             TgtID: <UpstreamNodeID_Width> bits
             Target ID. The ID of the target node that is the destination of the transaction.
             */
             static constexpr size_t TGTID_WIDTH = config::upstreamNodeIdWidth;
-            using tgtid_t = uint_fit_t<TGTID_WIDTH>;
+            using tgtid_t = up_nodeid_t<config>;
 
             /*
             DBID: <DBID_Width> bits
             DBID. A transaction has a unique DBID per target node.
             */
             static constexpr size_t DBID_WIDTH = config::dbIdWidth;
-            using dbid_t = uint_fit_t<DBID_WIDTH>;
+            using dbid_t = dbid_t<config>;
 
             /*
             Opcode: "opcodeDnRSPWidth" bits
@@ -850,21 +863,21 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per target node.
             */
             static constexpr size_t TXNID_WIDTH = config::dbIdWidth;
-            using txnid_t = uint_fit_t<TXNID_WIDTH>;
+            using txnid_t = dbid_t<config>;
 
             /*
             SrcID: <UpstreamNodeID_Width> bits
             Source ID. The ID of the source node that initiates the transaction.
             */
             static constexpr size_t SRCID_WIDTH = config::upstreamNodeIdWidth;
-            using srcid_t = uint_fit_t<SRCID_WIDTH>;
+            using srcid_t = up_nodeid_t<config>;
 
             /*
             TgtID: <DownstreamNodeID_Width> bits
             Target ID. The ID of the target node that is the destination of the transaction.
             */
             static constexpr size_t TGTID_WIDTH = config::downstreamNodeIdWidth;
-            using tgtid_t = uint_fit_t<TGTID_WIDTH>;
+            using tgtid_t = dn_nodeid_t<config>;
 
             /*
             Opcode: "opcodeUpRSPWidth" bits
@@ -950,28 +963,28 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
             static constexpr size_t TXNID_WIDTH = config::txnIdWidth;
-            using txnid_t = uint_fit_t<TXNID_WIDTH>;
+            using txnid_t = txnid_t<config>;
 
             /*
             SrcID: <DownstreamNodeID_Width> bits
             Source ID. The ID of the source node that initiates the transaction.
             */
             static constexpr size_t SRCID_WIDTH = config::downstreamNodeIdWidth;
-            using srcid_t = uint_fit_t<SRCID_WIDTH>;
+            using srcid_t = dn_nodeid_t<config>;
 
             /*
             TgtID: <UpstreamNodeID_Width> bits
             Target ID. The ID of the target node that is the destination of the transaction.
             */
             static constexpr size_t TGTID_WIDTH = config::upstreamNodeIdWidth;
-            using tgtid_t = uint_fit_t<TGTID_WIDTH>;
+            using tgtid_t = up_nodeid_t<config>;
 
             /*
             DBID: <DBID_Width> bits
             DBID. A transaction has a unique DBID per target node.
             */
             static constexpr size_t DBID_WIDTH = config::dbIdWidth;
-            using dbid_t = uint_fit_t<DBID_WIDTH>;
+            using dbid_t = dbid_t<config>;
 
             /*
             Opcode: "opcodeDnDATWidth" bits
@@ -1147,21 +1160,21 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per target node.
             */
             static constexpr size_t TXNID_WIDTH = config::dbIdWidth;
-            using txnid_t = uint_fit_t<TXNID_WIDTH>;
+            using txnid_t = dbid_t<config>;
 
             /*
             SrcID: <UpstreamNodeID_Width> bits
             Source ID. The ID of the source node that initiates the transaction.
             */
             static constexpr size_t SRCID_WIDTH = config::upstreamNodeIdWidth;
-            using srcid_t = uint_fit_t<SRCID_WIDTH>;
+            using srcid_t = up_nodeid_t<config>;
 
             /*
             TgtID: <DownstreamNodeID_Width> bits
             Target ID. The ID of the target node that is the destination of the transaction.
             */
             static constexpr size_t TGTID_WIDTH = config::downstreamNodeIdWidth;
-            using tgtid_t = uint_fit_t<TGTID_WIDTH>;
+            using tgtid_t = dn_nodeid_t<config>;
 
             /*
             Opcode: "opcodeUpDATWidth" bits
