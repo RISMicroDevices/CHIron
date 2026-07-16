@@ -4,6 +4,7 @@
 #define __CCHI__CCHI_PROTOCOL_ENCODING
 
 #include <climits>
+#include <array>
 
 #include "cchi_protocol_flits.hpp"
 
@@ -541,6 +542,123 @@ namespace CCHI {
 
         inline constexpr SizeEnum ToEnum(Size size) noexcept;
         inline constexpr bool IsValid(Size size) noexcept;
+    }
+
+
+    //
+    using Resp = uint3_t;
+
+    class RespEnumBack : public cchi_protocol_encoding::details::EnumerationUnsaturated<RespEnumBack> {
+    private:
+        const bool isPD;
+
+    public:
+        inline constexpr RespEnumBack(const char* name, const int value, const bool isPD, const RespEnumBack* const prev = nullptr) noexcept
+        : EnumerationUnsaturated<RespEnumBack>(name, value, prev), isPD(isPD) { }
+
+    public:
+        inline constexpr bool IsPD() const noexcept { return isPD; }
+    };
+
+    using RespEnum = const RespEnumBack*;
+
+    namespace Resps {
+
+        // Resp type
+        using type = Resp;
+
+        // Resp encodings
+        inline constexpr type   I       = 0b000;
+        inline constexpr type   SC      = 0b001;
+        inline constexpr type   UC      = 0b010;
+    //                                  = 0b011;
+        inline constexpr type   I_PD    = 0b100;
+        inline constexpr type   SC_PD   = 0b101;
+        inline constexpr type   UC_PD   = 0b110;
+    //                                  = 0b111;
+
+        //
+        namespace Enum {
+            inline constexpr RespEnumBack   Invalid ("Invalid",  INT_MIN, false);
+
+            inline constexpr RespEnumBack   I       ("I"      , Resps::I     , false);
+            inline constexpr RespEnumBack   SC      ("SC"     , Resps::SC    , false, I);
+            inline constexpr RespEnumBack   UC      ("UC"     , Resps::UC    , false, SC);
+            inline constexpr RespEnumBack   I_PD    ("I_PD"   , Resps::I_PD  , true , UC);
+            inline constexpr RespEnumBack   SC_PD   ("SC_PD"  , Resps::SC_PD , true , I_PD);
+            inline constexpr RespEnumBack   UC_PD   ("UC_PD"  , Resps::UC_PD , true , SC_PD);
+        }
+
+        inline constexpr RespEnum ToEnum(Resp resp) noexcept;
+        inline constexpr bool IsValid(Resp resp) noexcept;
+    }
+}
+
+
+// Implementation of enumeration table constevals
+namespace CCHI::cchi_protocol_encoding::details {
+
+    template<class T, size_t Bits>
+    requires std::is_convertible_v<const T*, const EnumerationUnsaturated<T>*>
+    inline consteval std::array<const T*, 1 << Bits> NextElement(const T* E, std::array<const T*, 1 << Bits> A) noexcept
+    {
+        A[E->value] = E;
+
+        if (!E->prev)
+            return A;
+        else
+            return NextElement<T, Bits>(*E->prev, A);
+    }
+
+    template<class T, size_t Bits, const T* First, const T* Invalid>
+    requires std::is_convertible_v<const T*, const EnumerationUnsaturated<T>*>
+    inline consteval std::array<const T*, 1 << Bits> GetTable() noexcept
+    {
+        std::array<const T*, 1 << Bits> A;
+        for (auto& E : A)
+            E = Invalid;
+
+        return NextElement<T, Bits>(First, A);
+    }
+}
+
+
+// Implementation of Sizes enumeration functions
+namespace CCHI::Sizes {
+
+    namespace Enum::details {
+        inline constexpr std::array<SizeEnum, 1 << Size::BITS> TABLE =
+            cchi_protocol_encoding::details::GetTable<SizeEnumBack, Size::BITS, Enum::B1, Enum::Invalid>();
+    }
+
+    inline constexpr SizeEnum ToEnum(Size size) noexcept
+    {
+        return Enum::details::TABLE[size];
+    }
+
+    inline constexpr bool IsValid(Size size) noexcept
+    {
+        return ToEnum(size)->IsValid();
+    }
+}
+
+
+// Implementation of Resps enumeration functions
+namespace CCHI::Resps {
+
+    namespace Enum::details {
+        inline constexpr std::array<RespEnum, 1 << Resp::BITS> TABLE =
+            cchi_protocol_encoding::details::GetTable<RespEnumBack, Resp::BITS, Enum::I, Enum::Invalid>();
+    }
+
+    inline constexpr RespEnum ToEnum(Resp resp) noexcept
+    {
+        return Enum::details::TABLE[resp];
+    }
+
+    inline constexpr bool IsValid(Resp resp) noexcept
+    {
+        return ToEnum(resp)->IsValid();
     }
 }
 
