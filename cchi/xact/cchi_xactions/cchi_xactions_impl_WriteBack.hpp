@@ -23,8 +23,8 @@ namespace CCHI::Xact {
     public:
         bool                GotDBIDResp() const noexcept;
         bool                GotComp() const noexcept;
-        bool                GotAnyCompData() const noexcept;
-        bool                GotAllCompData() const noexcept;
+        bool                GotAnyCopyBackWrData() const noexcept;
+        bool                GotAllCopyBackWrData() const noexcept;
 
     public:
         bool                IsResponseComplete(const Global<config>& glbl) const noexcept;
@@ -97,21 +97,21 @@ namespace CCHI::Xact {
     }
 
     template<FlitConfigurationConcept config>
-    inline bool XactionWriteBack<config>::GotAnyCompData() const noexcept
+    inline bool XactionWriteBack<config>::GotAnyCopyBackWrData() const noexcept
     {
-        return this->HasDnDAT({ Opcodes::DnDAT::CompData });
+        return this->HasUpDAT({ Opcodes::UpDAT::CopyBackWrData });
     }
 
     template<FlitConfigurationConcept config>
-    inline bool XactionWriteBack<config>::GotAllCompData() const noexcept
+    inline bool XactionWriteBack<config>::GotAllCopyBackWrData() const noexcept
     {
         std::bitset<8> completeDataIDMask =
-            details::GetDataIDCompleteMask<config>(this->first.flit.req.Size);
+            details::GetDataIDCompleteMask<config>(Sizes::B64);
 
         std::bitset<8> collectedDataID =
-            details::CollectDnDataID(this->first.flit.req.Size, this->subsequence,
+            details::CollectUpDataID(this->first.flit.req.Size, this->subsequence,
                 [this](size_t i, const FiredResponseFlit<config>& flit) noexcept -> bool {
-                    return this->subsequenceKeys[i].IsAccepted() && flit.flit.dndat.Opcode == Opcodes::DnDAT::CompData;
+                    return this->subsequenceKeys[i].IsAccepted() && flit.flit.updat.Opcode == Opcodes::UpDAT::CopyBackWrData;
             });
 
         return (completeDataIDMask & ~collectedDataID).none();
@@ -126,7 +126,7 @@ namespace CCHI::Xact {
     template<FlitConfigurationConcept config>
     inline bool XactionWriteBack<config>::IsDataComplete(const Global<config>& glbl) const noexcept
     {
-        return this->GotAllCompData();
+        return this->GotAllCopyBackWrData();
     }
 
     template<FlitConfigurationConcept config>
