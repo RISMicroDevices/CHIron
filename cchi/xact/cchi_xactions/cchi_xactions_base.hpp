@@ -4,6 +4,7 @@
 #define __CCHI__CCHI_XACT_XACTIONS__BASE
 
 #include <initializer_list>
+#include <algorithm>
 #include <vector>
 #include <memory>
 #include <bitset>
@@ -393,8 +394,10 @@ namespace CCHI::Xact::details {
         const T&                                                        flits,
         std::initializer_list<typename Flits::DnDAT<config>::opcode_t>  datOpcodes) noexcept
     {
-        return CollectDataID<config>(reqSize, flits, [&datOpcodes](auto, const FiredResponseFlit<config>& flit) -> bool {
-            return datOpcodes.size() > 0 ? datOpcodes.contains(flit.flit.dndat.Opcode) : true;
+        return CollectDnDataID<config>(reqSize, flits, [&datOpcodes](auto, const FiredResponseFlit<config>& flit) -> bool {
+            return datOpcodes.size() > 0
+                ? std::find(datOpcodes.begin(), datOpcodes.end(), flit.flit.dndat.Opcode) != datOpcodes.end()
+                : true;
         });
     }
 
@@ -427,7 +430,9 @@ namespace CCHI::Xact::details {
         std::initializer_list<typename Flits::UpDAT<config>::opcode_t>  datOpcodes) noexcept
     {
         return CollectUpDataID<config>(reqSize, flits, [&datOpcodes](auto, const FiredResponseFlit<config>& flit) -> bool {
-            return datOpcodes.size() > 0 ? datOpcodes.contains(flit.flit.updat.Opcode) : true;
+            return datOpcodes.size() > 0
+                ? std::find(datOpcodes.begin(), datOpcodes.end(), flit.flit.updat.Opcode) != datOpcodes.end()
+                : true;
         });
     }
 
@@ -690,7 +695,7 @@ namespace CCHI::Xact {
     {
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
-            if (!iter->IsDenied())
+            if (iter->IsDenied())
                 continue;
 
             if (iter->IsDnRSP())
@@ -705,7 +710,7 @@ namespace CCHI::Xact {
     {
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
-            if (!iter->IsDenied())
+            if (iter->IsDenied())
                 continue;
 
             if (iter->IsUpRSP())
@@ -720,7 +725,7 @@ namespace CCHI::Xact {
     {
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
-            if (!iter->IsDenied())
+            if (iter->IsDenied())
                 continue;
 
             if (iter->IsDnDAT())
@@ -735,7 +740,7 @@ namespace CCHI::Xact {
     {
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
-            if (!iter->IsDenied())
+            if (iter->IsDenied())
                 continue;
 
             if (iter->IsUpDAT())
@@ -753,7 +758,7 @@ namespace CCHI::Xact {
 
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
-            if (!iter->IsDenied())
+            if (iter->IsDenied())
                 continue;
 
             if (!iter->IsDnRSP())
@@ -775,7 +780,7 @@ namespace CCHI::Xact {
 
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
-            if (!iter->IsDenied())
+            if (iter->IsDenied())
                 continue;
 
             if (!iter->IsUpRSP())
@@ -797,7 +802,7 @@ namespace CCHI::Xact {
 
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
-            if (!iter->IsDenied())
+            if (iter->IsDenied())
                 continue;
 
             if (!iter->IsDnDAT())
@@ -819,7 +824,7 @@ namespace CCHI::Xact {
 
         for (auto iter = subsequenceKeys.begin(); iter != subsequenceKeys.end(); iter++)
         {
-            if (!iter->IsDenied())
+            if (iter->IsDenied())
                 continue;
 
             if (!iter->IsUpDAT())
@@ -1099,6 +1104,42 @@ namespace CCHI::Xact {
     }
 
     template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDBIDSourceRSP(
+        std::initializer_list<typename Flits::DnRSP<config>::opcode_t> opcodes) const noexcept
+    {
+        for (auto keyIt = subsequenceKeys.rbegin(), flitIt = subsequence.rbegin();
+             keyIt != subsequenceKeys.rend(); ++keyIt, ++flitIt)
+        {
+            if (keyIt->IsDenied() || !keyIt->HasDBID() || !flitIt->IsDnRSP())
+                continue;
+
+            if (opcodes.size() == 0
+             || std::find(opcodes.begin(), opcodes.end(), flitIt->flit.dnrsp.Opcode) != opcodes.end())
+                return &*flitIt;
+        }
+
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const FiredResponseFlit<config>* Xaction<config>::GetLastDBIDSourceDAT(
+        std::initializer_list<typename Flits::DnDAT<config>::opcode_t> opcodes) const noexcept
+    {
+        for (auto keyIt = subsequenceKeys.rbegin(), flitIt = subsequence.rbegin();
+             keyIt != subsequenceKeys.rend(); ++keyIt, ++flitIt)
+        {
+            if (keyIt->IsDenied() || !keyIt->HasDBID() || !flitIt->IsDnDAT())
+                continue;
+
+            if (opcodes.size() == 0
+             || std::find(opcodes.begin(), opcodes.end(), flitIt->flit.dndat.Opcode) != opcodes.end())
+                return &*flitIt;
+        }
+
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
     inline XactDenialEnum Xaction<config>::Next(const Global<config>& glbl, const FiredResponseFlit<config>& flit, bool& hasDBID, bool& firstDBID) noexcept
     {
         if (flit.IsDnRSP())
@@ -1196,7 +1237,7 @@ namespace CCHI::Xact {
                 if (datFlit.IsDnDAT() && flit.IsDnDAT())
                 {
                     if (dndatOpcodes.size() > 0)
-                        opcodeMatch = dndatOpcodes.contains(flit.flit.dndat.Opcode);
+                        opcodeMatch = std::find(dndatOpcodes.begin(), dndatOpcodes.end(), flit.flit.dndat.Opcode) != dndatOpcodes.end();
                     else
                         opcodeMatch = true;
                 }
@@ -1221,7 +1262,7 @@ namespace CCHI::Xact {
                 if (datFlit.IsUpDAT() && flit.IsUpDAT())
                 {
                     if (updatOpcodes.size() > 0)
-                        opcodeMatch = updatOpcodes.contains(flit.flit.updat.Opcode);
+                        opcodeMatch = std::find(updatOpcodes.begin(), updatOpcodes.end(), flit.flit.updat.Opcode) != updatOpcodes.end();
                     else
                         opcodeMatch = true;
                 }
@@ -1237,6 +1278,8 @@ namespace CCHI::Xact {
 
             return (collectedDataID & nextDataID).none();
         }
+
+        return false;
     }
 
     template<FlitConfigurationConcept config>
@@ -1419,24 +1462,24 @@ namespace CCHI::Xact {
     inline XactionDeniedResponseFlitEvent<config>::XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const std::string& message) noexcept
         : XactionDeniedEventBase<config>    (xaction, denial, message)
         , flit                              (flit)
-        , complementResponse                (nullptr)
         , complementRequest                 (nullptr)
+        , complementResponse                (nullptr)
     { }
 
     template<FlitConfigurationConcept config>
     inline XactionDeniedResponseFlitEvent<config>::XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const FiredResponseFlit<config>& complementResponse, const std::string& message) noexcept
         : XactionDeniedEventBase<config>    (xaction, denial, message)
         , flit                              (flit)
-        , complementResponse                (&complementResponse)
         , complementRequest                 (nullptr)
+        , complementResponse                (&complementResponse)
     { }
 
     template<FlitConfigurationConcept config>
     inline XactionDeniedResponseFlitEvent<config>::XactionDeniedResponseFlitEvent(Xaction<config>& xaction, XactDenialEnum denial, const FiredResponseFlit<config>& flit, const FiredRequestFlit<config>& complementRequest, const std::string& message) noexcept
         : XactionDeniedEventBase<config>    (xaction, denial, message)
         , flit                              (flit)
-        , complementResponse                (nullptr)
         , complementRequest                 (&complementRequest)
+        , complementResponse                (nullptr)
     { }
 
     template<FlitConfigurationConcept config>
