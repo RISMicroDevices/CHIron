@@ -240,6 +240,8 @@ namespace CCHI::Xact {
         const FiredResponseFlit<config>*                GetLast(std::initializer_list<T> opcodes) const noexcept;
 
     public:
+        typename Flits::txnid_t<config>                 GetTxnID() const noexcept;
+
         bool                                            GotDBID() const noexcept;
         std::optional<typename Flits::DnRSP<config>::dbid_t>
                                                         GetDBID() const noexcept;
@@ -1045,6 +1047,17 @@ namespace CCHI::Xact {
         }
 
         return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline typename Flits::txnid_t<config> Xaction<config>::GetTxnID() const noexcept
+    {
+        if (first.IsEVT())
+            return first.flit.evt.TxnID;
+        else if (first.IsSNP())
+            return first.flit.snp.TxnID;
+        else
+            return first.flit.req.TxnID;
     }
 
     template<FlitConfigurationConcept config>
