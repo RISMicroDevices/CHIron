@@ -56,9 +56,9 @@ namespace CCHI::Xact {
         }
 
         if (
-            this->first.flit.req.Opcode() != Opcodes::REQ::CleanShared
-         && this->first.flit.req.Opcode() != Opcodes::REQ::CleanInvalid
-         && this->first.flit.req.Opcode() != Opcodes::REQ::MakeInvalid
+            this->first.flit.req.Opcode != Opcodes::REQ::CleanShared
+         && this->first.flit.req.Opcode != Opcodes::REQ::CleanInvalid
+         && this->first.flit.req.Opcode != Opcodes::REQ::MakeInvalid
         ) [[unlikely]]
         {
             this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_OPCODE, this->first,

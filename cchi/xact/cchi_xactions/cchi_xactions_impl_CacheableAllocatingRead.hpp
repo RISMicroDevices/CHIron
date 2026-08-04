@@ -62,8 +62,8 @@ namespace CCHI::Xact {
         }
 
         if (
-            this->first.flit.req.Opcode() != Opcodes::REQ::ReadShared
-         && this->first.flit.req.Opcode() != Opcodes::REQ::ReadUnique
+            this->first.flit.req.Opcode != Opcodes::REQ::ReadShared
+         && this->first.flit.req.Opcode != Opcodes::REQ::ReadUnique
         ) [[unlikely]]
         {
             this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_OPCODE, this->first,
@@ -114,7 +114,7 @@ namespace CCHI::Xact {
             details::GetDataIDCompleteMask<config>(this->first.flit.req.Size);
 
         std::bitset<8> collectedDataID =
-            details::CollectDnDataID(this->first.flit.req.Size, this->subsequence, 
+            details::CollectDnDataID<config>(this->first.flit.req.Size, this->subsequence, 
                 [this](size_t i, const FiredResponseFlit<config>& flit) {
                     return this->subsequenceKeys[i].IsAccepted() && flit.flit.dndat.Opcode == Opcodes::DnDAT::CompData;
             });
@@ -186,19 +186,19 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_DNRSP_TXNID_MISMATCHING_REQ, dnrspFlit, this->first);
 
             if (this->HasDnRSP({ Opcodes::DnRSP::Comp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
 
             if (this->HasDnDAT({ Opcodes::DnDAT::CompData }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMPDATA, dnrspFlit, this->GetLastDnDAT({ Opcodes::DnDAT::CompData }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMPDATA, dnrspFlit, *this->GetLastDnDAT({ Opcodes::DnDAT::CompData }));
 
             if (this->first.flit.req.ExpCompData)
                 return this->ResponseFlitDenied(XactDenial::DENIED_COMP_ON_EXPCOMPDATA, dnrspFlit, this->first);
 
             const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
-            if (!optDBIDSource)
+            if (optDBIDSource)
             {
-                if (optDBIDSource->IsDnRSP() && dnrspFlit.flit.dnrsp.DBID != optDBIDSource->flit.dnrsp.DBID
-                 || optDBIDSource->IsDnDAT() && dnrspFlit.flit.dnrsp.DBID != optDBIDSource->flit.dndat.DBID)
+                if ((optDBIDSource->IsDnRSP() && dnrspFlit.flit.dnrsp.DBID != optDBIDSource->flit.dnrsp.DBID)
+                 || (optDBIDSource->IsDnDAT() && dnrspFlit.flit.dnrsp.DBID != optDBIDSource->flit.dndat.DBID))
                     return this->ResponseFlitDenied(XactDenial::DENIED_DNRSP_DBID_MISMATCH, dnrspFlit, *optDBIDSource);
             }
             else
@@ -287,7 +287,7 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_DNDAT_TXNID_MISMATCHING_REQ, dndatFlit, this->first);
 
             if (this->HasDnRSP({ Opcodes::DnRSP::Comp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMPDATA_AFTER_COMP, dndatFlit, this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMPDATA_AFTER_COMP, dndatFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
 
             if (auto p = this->GetLastDnDAT({ Opcodes::DnDAT::CompData }))
             {
@@ -299,10 +299,10 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_DNDAT_DUPLICATED_DATAID, dndatFlit);
 
             const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
-            if (!optDBIDSource)
+            if (optDBIDSource)
             {
-                if (optDBIDSource->IsDnRSP() && dndatFlit.flit.dndat.DBID != optDBIDSource->flit.dnrsp.DBID
-                 || optDBIDSource->IsDnDAT() && dndatFlit.flit.dndat.DBID != optDBIDSource->flit.dndat.DBID)
+                if ((optDBIDSource->IsDnRSP() && dndatFlit.flit.dndat.DBID != optDBIDSource->flit.dnrsp.DBID)
+                 || (optDBIDSource->IsDnDAT() && dndatFlit.flit.dndat.DBID != optDBIDSource->flit.dndat.DBID))
                     return this->ResponseFlitDenied(XactDenial::DENIED_DNDAT_DBID_MISMATCH, dndatFlit, *optDBIDSource);
             }
             else

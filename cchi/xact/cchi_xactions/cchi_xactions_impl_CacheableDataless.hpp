@@ -139,7 +139,7 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_DNRSP_TXNID_MISMATCHING_REQ, dnrspFlit, this->first);
 
             if (this->HasDnRSP({ Opcodes::DnRSP::Comp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
 
             hasDBID = true;
             firstDBID = true;

@@ -61,8 +61,8 @@ namespace CCHI::Xact {
         }
 
         if (
-            this->first.flit.req.Opcode() != Opcodes::REQ::WriteNoSnpPtl
-         && this->first.flit.req.Opcode() != Opcodes::REQ::WriteNoSnpFull
+            this->first.flit.req.Opcode != Opcodes::REQ::WriteNoSnpPtl
+         && this->first.flit.req.Opcode != Opcodes::REQ::WriteNoSnpFull
         ) [[unlikely]]
         {
             this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_OPCODE, this->first,
@@ -108,7 +108,7 @@ namespace CCHI::Xact {
             details::GetDataIDCompleteMask<config>(this->first.flit.req.Size);
 
         std::bitset<8> collectedDataID =
-            details::CollectUpDataID(this->first.flit.req.Size, this->subsequence,
+            details::CollectUpDataID<config>(this->first.flit.req.Size, this->subsequence,
                 [this](size_t i, const FiredResponseFlit<config>& flit) {
                     return this->subsequenceKeys[i].IsAccepted() && flit.flit.updat.Opcode == Opcodes::UpDAT::NonCopyBackWrData;
             });
@@ -164,10 +164,10 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_DNRSP_TXNID_MISMATCHING_REQ, dnrspFlit, this->first);
 
             if (this->HasDnRSP({ Opcodes::DnRSP::Comp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
 
             if (this->HasDnRSP({ Opcodes::DnRSP::CompDBIDResp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::CompDBIDResp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::CompDBIDResp }));
 
             // TODO: Field Mapping Check
 
@@ -182,10 +182,10 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_DNRSP_TXNID_MISMATCHING_REQ, dnrspFlit, this->first);
 
             if (this->HasDnRSP({ Opcodes::DnRSP::DBIDResp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_DBIDRESP_AFTER_DBIDRESP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::DBIDResp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_DBIDRESP_AFTER_DBIDRESP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::DBIDResp }));
 
             if (this->HasDnRSP({ Opcodes::DnRSP::CompDBIDResp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_DBIDRESP_AFTER_COMPDBIDRESP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::CompDBIDResp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_DBIDRESP_AFTER_COMPDBIDRESP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::CompDBIDResp }));
 
             hasDBID = true;
             firstDBID = true;
@@ -203,13 +203,13 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_DNRSP_TXNID_MISMATCHING_REQ, dnrspFlit, this->first);
 
             if (this->HasDnRSP({ Opcodes::DnRSP::CompDBIDResp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMPDBIDRESP_AFTER_COMPDBIDRESP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::CompDBIDResp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMPDBIDRESP_AFTER_COMPDBIDRESP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::CompDBIDResp }));
 
             if (this->HasDnRSP({ Opcodes::DnRSP::Comp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMPDBIDRESP_AFTER_COMP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMPDBIDRESP_AFTER_COMP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
 
             if (this->HasDnRSP({ Opcodes::DnRSP::DBIDResp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMPDBIDRESP_AFTER_DBIDRESP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::DBIDResp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMPDBIDRESP_AFTER_DBIDRESP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::DBIDResp }));
 
             hasDBID = true;
             firstDBID = true;

@@ -90,13 +90,13 @@ namespace CCHI::Xact {
     template<FlitConfigurationConcept config>
     inline bool XactionSnoop<config>::GotSnpResp() const noexcept
     {
-        return this->HasDnRSP({ Opcodes::UpRSP::SnpResp });
+        return this->HasUpRSP({ Opcodes::UpRSP::SnpResp });
     }
 
     template<FlitConfigurationConcept config>
     inline bool XactionSnoop<config>::GotAnySnpRespData() const noexcept
     {
-        return this->HasDnDAT({ Opcodes::UpDAT::SnpRespData });
+        return this->HasUpDAT({ Opcodes::UpDAT::SnpRespData });
     }
 
     template<FlitConfigurationConcept config>
@@ -106,7 +106,7 @@ namespace CCHI::Xact {
             details::GetDataIDCompleteMask<config>(Sizes::B64);
 
         std::bitset<8> collectedDataID =
-            details::CollectUpDataID(Sizes::B64, this->subsequence,
+            details::CollectUpDataID<config>(Sizes::B64, this->subsequence,
                 [this](size_t i, const FiredResponseFlit<config>& flit) {
                     return this->subsequenceKeys[i].IsAccepted() && flit.flit.updat.Opcode == Opcodes::UpDAT::SnpRespData;
             });
@@ -169,7 +169,7 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_UPRSP_TXNID_MISMATCHING_SNP, uprspFlit, this->first);
 
             if (this->HasUpDAT({ Opcodes::UpDAT::SnpRespData }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_SNPRESP_AFTER_SNPRESPDATA, uprspFlit, this->GetLastUpDAT({ Opcodes::UpDAT::SnpRespData }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_SNPRESP_AFTER_SNPRESPDATA, uprspFlit, *this->GetLastUpDAT({ Opcodes::UpDAT::SnpRespData }));
 
             // TODO: Field Mapping Check
 
@@ -205,7 +205,7 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_UPDAT_TXNID_MISMATCHING_SNP, updatFlit, this->first);
 
             if (this->HasUpRSP({ Opcodes::UpRSP::SnpResp }))
-                return this->ResponseFlitDenied(XactDenial::DENIED_SNPRESPDATA_AFTER_SNPRESP, updatFlit, this->GetLastUpRSP({ Opcodes::UpRSP::SnpResp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_SNPRESPDATA_AFTER_SNPRESP, updatFlit, *this->GetLastUpRSP({ Opcodes::UpRSP::SnpResp }));
 
             if (!this->NextSNPDataID(updatFlit))
                 return this->ResponseFlitDenied(XactDenial::DENIED_UPDAT_DUPLICATED_DATAID, updatFlit);

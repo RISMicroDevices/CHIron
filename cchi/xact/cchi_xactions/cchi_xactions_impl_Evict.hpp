@@ -128,7 +128,7 @@ namespace CCHI::Xact {
                 return this->ResponseFlitDenied(XactDenial::DENIED_DNRSP_TXNID_MISMATCHING_EVT, dnrspFlit, this->first);
 
             if (this->HasDnRSP({ Opcodes::DnRSP::Comp })) [[unlikely]]
-                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMP, dnrspFlit, this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
+                return this->ResponseFlitDenied(XactDenial::DENIED_COMP_AFTER_COMP, dnrspFlit, *this->GetLastDnRSP({ Opcodes::DnRSP::Comp }));
 
             // TODO: Field Mapping Check
 

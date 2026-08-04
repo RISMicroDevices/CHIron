@@ -70,6 +70,12 @@ namespace CCHI::Xact {
     }
 
     template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xaction<config>> XactionStash<config>::Clone() const noexcept
+    {
+        return std::static_pointer_cast<Xaction<config>>(CloneAsIs());
+    }
+
+    template<FlitConfigurationConcept config>
     inline std::shared_ptr<XactionStash<config>> XactionStash<config>::CloneAsIs() const noexcept
     {
         return std::make_shared<XactionStash<config>>(*this);

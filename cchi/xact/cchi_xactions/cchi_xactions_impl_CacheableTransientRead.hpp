@@ -110,7 +110,7 @@ namespace CCHI::Xact {
             details::GetDataIDCompleteMask<config>(this->first.flit.req.Size);
 
         std::bitset<8> collectedDataID =
-            details::CollectDnDataID(this->first.flit.req.Size, this->subsequence,
+            details::CollectDnDataID<config>(this->first.flit.req.Size, this->subsequence,
                 [this](size_t i, const FiredResponseFlit<config>& flit) {
                     return this->subsequenceKeys[i].IsAccepted() && flit.flit.dndat.Opcode == Opcodes::DnDAT::CompData;
             });
