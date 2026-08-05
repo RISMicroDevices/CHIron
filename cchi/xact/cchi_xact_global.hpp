@@ -26,4 +26,13 @@ namespace CCHI::Xact {
     };
 }
 
+
+namespace CCHI::Xact {
+
+    template<FlitConfigurationConcept config>
+    inline Global<config>::Global() noexcept
+        : TOPOLOGY()
+    { }
+}
+
 #endif // __CCHI__CCHI_XACT_GLOBAL
