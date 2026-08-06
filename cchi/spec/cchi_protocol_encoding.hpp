@@ -628,7 +628,7 @@ namespace CCHI::Sizes {
 
     namespace Enum::details {
         inline constexpr std::array<SizeEnum, 1 << Size::BITS> TABLE =
-            cchi_protocol_encoding::details::GetTable<SizeEnumBack, Size::BITS, Enum::B1, Enum::Invalid>();
+            cchi_protocol_encoding::details::GetTable<SizeEnumBack, Size::BITS, Enum::B64, Enum::Invalid>();
     }
 
     inline constexpr SizeEnum ToEnum(Size size) noexcept
@@ -648,7 +648,7 @@ namespace CCHI::Resps {
 
     namespace Enum::details {
         inline constexpr std::array<RespEnum, 1 << Resp::BITS> TABLE =
-            cchi_protocol_encoding::details::GetTable<RespEnumBack, Resp::BITS, Enum::I, Enum::Invalid>();
+            cchi_protocol_encoding::details::GetTable<RespEnumBack, Resp::BITS, Enum::UC_PD, Enum::Invalid>();
     }
 
     inline constexpr RespEnum ToEnum(Resp resp) noexcept
