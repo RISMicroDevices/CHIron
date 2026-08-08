@@ -12,7 +12,6 @@
 
 #include "../../common/nonstdint.hpp"           // IWYU pragma: export
 
-
 namespace CCHI {
 
     namespace FlitConfigurationConstraints {
@@ -246,7 +245,7 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
             static constexpr size_t TXNID_WIDTH = config::txnIdWidth;
-            using txnid_t = txnid_t<config>;
+            using txnid_t = CCHI::Flits::txnid_t<config>;
 
             /*
             SrcID: <UpstreamNodeID_Width> bits
@@ -393,7 +392,7 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
             static constexpr size_t TXNID_WIDTH = config::txnIdWidth;
-            using txnid_t = txnid_t<config>;
+            using txnid_t = CCHI::Flits::txnid_t<config>;
 
             /*
             SrcID: <UpstreamNodeID_Width> bits
@@ -422,8 +421,8 @@ namespace CCHI {
             Size: 3 bits
             Size. The size of the transaction in terms of number of bytes.
             */
-            static constexpr ssize_t SIZE_WIDTH = 3;
-            using ssize_t = uint_fit_t<SIZE_WIDTH>;
+            static constexpr size_t SSIZE_WIDTH = 3;
+            using ssize_t = uint_fit_t<SSIZE_WIDTH>;
 
             /*
             Addr: 48 bits
@@ -499,7 +498,7 @@ namespace CCHI {
 
         public:
             static constexpr size_t WIDTH = TXNID_WIDTH         + SRCID_WIDTH       + TGTID_WIDTH           + OPCODE_WIDTH  
-                                          + SIZE_WIDTH          + ADDR_WIDTH        + NS_WIDTH              + ORDER_WIDTH
+                                          + SSIZE_WIDTH         + ADDR_WIDTH        + NS_WIDTH              + ORDER_WIDTH
                                           + MEMATTR_WIDTH       + EXCL_WIDTH        + EXPCOMPDATA_WIDTH   /*+ EXPCOMPSTASH_WIDTH*/
                                           + WAYVALID_WIDTH      + WAY_WIDTH         + TRACETAG_WIDTH;
 
@@ -547,7 +546,7 @@ namespace CCHI {
 
             // Size
             typename T::ssize_t;
-            { T::SIZE_WIDTH                     } -> std::convertible_to<size_t>;
+            { T::SSIZE_WIDTH                    } -> std::convertible_to<size_t>;
 
             // Addr
             typename T::addr_t;
@@ -705,7 +704,7 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
             static constexpr size_t TXNID_WIDTH = config::txnIdWidth;
-            using txnid_t = txnid_t<config>;
+            using txnid_t = CCHI::Flits::txnid_t<config>;
 
             /*
             SrcID: <DownstreamNodeID_Width> bits
@@ -726,7 +725,7 @@ namespace CCHI {
             DBID. A transaction has a unique DBID per target node.
             */
             static constexpr size_t DBID_WIDTH = config::dbIdWidth;
-            using dbid_t = dbid_t<config>;
+            using dbid_t = CCHI::Flits::dbid_t<config>;
 
             /*
             Opcode: "opcodeDnRSPWidth" bits
@@ -963,7 +962,7 @@ namespace CCHI {
             Transaction ID. A transaction has a unique transaction ID per source node.
             */
             static constexpr size_t TXNID_WIDTH = config::txnIdWidth;
-            using txnid_t = txnid_t<config>;
+            using txnid_t = CCHI::Flits::txnid_t<config>;
 
             /*
             SrcID: <DownstreamNodeID_Width> bits
@@ -984,7 +983,7 @@ namespace CCHI {
             DBID. A transaction has a unique DBID per target node.
             */
             static constexpr size_t DBID_WIDTH = config::dbIdWidth;
-            using dbid_t = dbid_t<config>;
+            using dbid_t = CCHI::Flits::dbid_t<config>;
 
             /*
             Opcode: "opcodeDnDATWidth" bits
