@@ -363,7 +363,7 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsEVTConversionSafe()
+        inline constexpr bool IsEVTConversionSafe()
         {
             return (EVT<configDst>::TXNID_WIDTH      >= EVT<configSrc>::TXNID_WIDTH)
                 && (EVT<configDst>::SRCID_WIDTH      >= EVT<configSrc>::SRCID_WIDTH)
@@ -374,13 +374,13 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsEVTConversionSafe([[maybe_unused]] const EVT<configSrc>& src)
+        inline constexpr bool IsEVTConversionSafe([[maybe_unused]] const EVT<configSrc>& src)
         {
             return IsEVTConversionSafe<configDst, configSrc>();
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsEVTConversionSafe([[maybe_unused]] const EVT<configSrc>& src, [[maybe_unused]] const EVT<configDst>& dst)
+        inline constexpr bool IsEVTConversionSafe([[maybe_unused]] const EVT<configSrc>& src, [[maybe_unused]] const EVT<configDst>& dst)
         {
             return IsEVTConversionSafe<configDst, configSrc>();
         }
@@ -602,7 +602,7 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsREQConversionSafe()
+        inline constexpr bool IsREQConversionSafe()
         {
             return (REQ<configDst>::TXNID_WIDTH      >= REQ<configSrc>::TXNID_WIDTH)
                 && (REQ<configDst>::SRCID_WIDTH      >= REQ<configSrc>::SRCID_WIDTH)
@@ -613,13 +613,13 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsREQConversionSafe([[maybe_unused]] const REQ<configSrc>& srcFlit)
+        inline constexpr bool IsREQConversionSafe([[maybe_unused]] const REQ<configSrc>& srcFlit)
         {
             return IsREQConversionSafe<configDst, configSrc>();
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsxREQConversionSafe([[maybe_unused]] const REQ<configSrc>& srcFlit, [[maybe_unused]] const REQ<configDst>& dstFlit)
+        inline constexpr bool IsxREQConversionSafe([[maybe_unused]] const REQ<configSrc>& srcFlit, [[maybe_unused]] const REQ<configDst>& dstFlit)
         {
             return IsREQConversionSafe<configDst, configSrc>();
         }
@@ -784,7 +784,7 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsSNPConversionSafe()
+        inline constexpr bool IsSNPConversionSafe()
         {
             return (SNP<configDst>::TXNID_WIDTH      >= SNP<configSrc>::TXNID_WIDTH)
                 && (SNP<configDst>::SRCID_WIDTH      >= SNP<configSrc>::SRCID_WIDTH)
@@ -794,13 +794,13 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsSNPConversionSafe([[maybe_unused]] const SNP<configSrc>& src)
+        inline constexpr bool IsSNPConversionSafe([[maybe_unused]] const SNP<configSrc>& src)
         {
             return IsSNPConversionSafe<configDst, configSrc>();
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsSNPConversionSafe([[maybe_unused]] const SNP<configSrc>& src, [[maybe_unused]] const SNP<configDst>& dst)
+        inline constexpr bool IsSNPConversionSafe([[maybe_unused]] const SNP<configSrc>& src, [[maybe_unused]] const SNP<configDst>& dst)
         {
             return IsSNPConversionSafe<configDst, configSrc>();
         }
@@ -974,7 +974,7 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsDnRSPConversionSafe()
+        inline constexpr bool IsDnRSPConversionSafe()
         {
             return (DnRSP<configDst>::TXNID_WIDTH      >= DnRSP<configSrc>::TXNID_WIDTH)
                 && (DnRSP<configDst>::SRCID_WIDTH      >= DnRSP<configSrc>::SRCID_WIDTH)
@@ -985,13 +985,13 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsDnRSPConversionSafe([[maybe_unused]] const DnRSP<configSrc>& src)
+        inline constexpr bool IsDnRSPConversionSafe([[maybe_unused]] const DnRSP<configSrc>& src)
         {
             return IsDnRSPConversionSafe<configDst, configSrc>();
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsDnRSPConversionSafe([[maybe_unused]] const DnRSP<configSrc>& src, [[maybe_unused]] const DnRSP<configDst>& dst)
+        inline constexpr bool IsDnRSPConversionSafe([[maybe_unused]] const DnRSP<configSrc>& src, [[maybe_unused]] const DnRSP<configDst>& dst)
         {
             return IsDnRSPConversionSafe<configDst, configSrc>();
         }
@@ -1135,7 +1135,7 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsUpRSPConversionSafe()
+        inline constexpr bool IsUpRSPConversionSafe()
         {
             return (UpRSP<configDst>::TXNID_WIDTH      >= UpRSP<configSrc>::TXNID_WIDTH)
                 && (UpRSP<configDst>::SRCID_WIDTH      >= UpRSP<configSrc>::SRCID_WIDTH)
@@ -1144,13 +1144,13 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsUpRSPConversionSafe([[maybe_unused]] const UpRSP<configSrc>& src)
+        inline constexpr bool IsUpRSPConversionSafe([[maybe_unused]] const UpRSP<configSrc>& src)
         {
             return IsUpRSPConversionSafe<configDst, configSrc>();
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsUpRSPConversionSafe([[maybe_unused]] const UpRSP<configSrc>& src, [[maybe_unused]] const UpRSP<configDst>& dst)
+        inline constexpr bool IsUpRSPConversionSafe([[maybe_unused]] const UpRSP<configSrc>& src, [[maybe_unused]] const UpRSP<configDst>& dst)
         {
             return IsUpRSPConversionSafe<configDst, configSrc>();
         }
@@ -1357,7 +1357,7 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsDnDATConversionSafe()
+        inline constexpr bool IsDnDATConversionSafe()
         {
             return (DnDAT<configDst>::TXNID_WIDTH      >= DnDAT<configSrc>::TXNID_WIDTH)
                 && (DnDAT<configDst>::SRCID_WIDTH      >= DnDAT<configSrc>::SRCID_WIDTH)
@@ -1370,13 +1370,13 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsDnDATConversionSafe([[maybe_unused]] const DnDAT<configSrc>& src)
+        inline constexpr bool IsDnDATConversionSafe([[maybe_unused]] const DnDAT<configSrc>& src)
         {
             return IsDnDATConversionSafe<configDst, configSrc>();
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsDnDATConversionSafe([[maybe_unused]] const DnDAT<configSrc>& src, [[maybe_unused]] const DnDAT<configDst>& dst)
+        inline constexpr bool IsDnDATConversionSafe([[maybe_unused]] const DnDAT<configSrc>& src, [[maybe_unused]] const DnDAT<configDst>& dst)
         {
             return IsDnDATConversionSafe<configDst, configSrc>();
         }
@@ -1563,7 +1563,7 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsUpDATConversionSafe()
+        inline constexpr bool IsUpDATConversionSafe()
         {
             return (UpDAT<configDst>::TXNID_WIDTH      >= UpDAT<configSrc>::TXNID_WIDTH)
                 && (UpDAT<configDst>::SRCID_WIDTH      >= UpDAT<configSrc>::SRCID_WIDTH)
@@ -1574,13 +1574,13 @@ namespace CCHI {
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsUpDATConversionSafe([[maybe_unused]] const UpDAT<configSrc>& src)
+        inline constexpr bool IsUpDATConversionSafe([[maybe_unused]] const UpDAT<configSrc>& src)
         {
             return IsUpDATConversionSafe<configDst, configSrc>();
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
-        inline bool IsUpDATConversionSafe([[maybe_unused]] const UpDAT<configSrc>& src, [[maybe_unused]] const UpDAT<configDst>& dst)
+        inline constexpr bool IsUpDATConversionSafe([[maybe_unused]] const UpDAT<configSrc>& src, [[maybe_unused]] const UpDAT<configDst>& dst)
         {
             return IsUpDATConversionSafe<configDst, configSrc>();
         }
