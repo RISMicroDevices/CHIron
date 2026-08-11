@@ -1342,7 +1342,7 @@ namespace CCHI {
             dst.Way        = static_cast<typename DnDAT<configDst>::way_t>(src.Way);
             dst.DataID     = static_cast<typename DnDAT<configDst>::dataid_t>(src.DataID);
 
-            for (size_t i = 0; i < sizeof(dst.Data) / sizeof(dst.Data[0]); ++i)
+            for (size_t i = 0; i < DnDAT<configDst>::DATA_WIDTH / 64; ++i)
                 dst.Data[i] = src.Data[i];
 
             dst.TraceTag   = static_cast<typename DnDAT<configDst>::tracetag_t>(src.TraceTag);
@@ -1547,7 +1547,7 @@ namespace CCHI {
             dst.Resp       = static_cast<typename UpDAT<configDst>::resp_t>(src.Resp);
             dst.DataID     = static_cast<typename UpDAT<configDst>::dataid_t>(src.DataID);
 
-            for (size_t i = 0; i < sizeof(dst.Data) / sizeof(dst.Data[0]); ++i)
+            for (size_t i = 0; i < UpDAT<configDst>::DATA_WIDTH / 64; ++i)
                 dst.Data[i] = src.Data[i];
 
             dst.BE         = static_cast<typename UpDAT<configDst>::be_t>(src.BE);
