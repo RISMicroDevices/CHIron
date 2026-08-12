@@ -61,7 +61,7 @@ namespace CCHI::Xact {
         }
 
         if (
-            this->first.flit.req.Opcode != Opcodes::EVT::WriteBackFull
+            this->first.flit.evt.Opcode != Opcodes::EVT::WriteBackFull
         ) [[unlikely]]
         {
             this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_EVT_OPCODE, this->first,

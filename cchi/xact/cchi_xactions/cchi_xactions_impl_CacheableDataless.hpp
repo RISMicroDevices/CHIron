@@ -58,7 +58,7 @@ namespace CCHI::Xact {
         }
 
         if (
-            Opcodes::REQ::MakeUnique
+            this->first.flit.req.Opcode != Opcodes::REQ::MakeUnique
         ) [[unlikely]]
         {
             this->firstDenial = this->RequestFlitDenied(XactDenial::DENIED_REQ_OPCODE, this->first,
