@@ -1343,6 +1343,29 @@ namespace CCHI::Xact {
 
         if (xaction->GetFirst().IsREQ() || xaction->GetFirst().IsEVT())
         {
+            // on TxnID free
+            if (xaction->IsTxnIDComplete(glbl))
+            {
+                // event on TxnID free
+                this->XactionTxnIDFreed(xaction);
+
+                // remove related TxnID mapping
+                reqid_t key;
+                key.value   = 0;
+                if (xaction->GetFirst().IsREQ())
+                {
+                    key.id.src  = xaction->GetFirst().flit.req.SrcID;
+                    key.id.txn  = xaction->GetFirst().flit.req.TxnID;
+                }
+                else // EVT
+                {
+                    key.id.src  = xaction->GetFirst().flit.evt.SrcID;
+                    key.id.txn  = xaction->GetFirst().flit.evt.TxnID;
+                }
+
+                upTransactions.erase(key);
+            }
+
             // on DBID free
             if (xaction->IsDBIDComplete(glbl))
             {
