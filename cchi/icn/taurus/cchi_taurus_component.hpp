@@ -161,8 +161,9 @@ namespace CCHI::Taurus {
         std::list<std::shared_ptr<CacheLine>>   queueTXRSP;
         std::list<std::shared_ptr<CacheLine>>   queueTXDAT;
 
-        std::vector<std::shared_ptr<Xact::Xaction<config>>>
-                                                queueTxnID;
+        // TxnID allocation bitmap for upstream-initiated (REQ/EVT) transactions,
+        // one bit per ID of the configured total xaction limit
+        std::vector<bool>                       usedTxnID;
 
     public:
         uint64_t                                time;
@@ -188,9 +189,8 @@ namespace CCHI::Taurus {
         ) noexcept;
 
     protected:
-        std::optional<size_t>                   NextTxnID() const noexcept;
+        std::optional<size_t>                   AllocateTxnID() noexcept;
         void                                    FreeTxnID(size_t txnID) noexcept;
-        void                                    OccupyTxnID(size_t txnID, std::shared_ptr<Xact::Xaction<config>> xaction) noexcept;
 
         bool                                    IsEVTInFlight(const CacheLine& cacheLine) const noexcept;
         bool                                    IsSNPInFlight(const CacheLine& cacheLine) const noexcept;
@@ -273,7 +273,7 @@ namespace CCHI::Taurus {
         , queueTXREQ                ()
         , queueTXRSP                ()
         , queueTXDAT                ()
-        , queueTxnID                (xactionLimitTotal)
+        , usedTxnID                 (xactionLimitTotal, false)
         , time                      (0)
         , glbl                      ()
         , nodeID                    (nodeID)
@@ -388,7 +388,7 @@ namespace CCHI::Taurus {
         }
 
         //
-        auto txnID = NextTxnID();
+        auto txnID = AllocateTxnID();
 
         if (!txnID)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
@@ -456,7 +456,7 @@ namespace CCHI::Taurus {
         }
 
         //
-        auto txnID = NextTxnID();
+        auto txnID = AllocateTxnID();
 
         if (!txnID)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
@@ -526,7 +526,7 @@ namespace CCHI::Taurus {
         }
 
         //
-        auto txnID = NextTxnID();
+        auto txnID = AllocateTxnID();
 
         if (!txnID)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
@@ -588,7 +588,7 @@ namespace CCHI::Taurus {
             return std::make_shared<FutureNow<EvictedEvent>>(Denial::REJECTED_TAURUS_PA_EVT_BUSY);
 
         //
-        auto txnID = NextTxnID();
+        auto txnID = AllocateTxnID();
 
         if (!txnID)
             return std::make_shared<FutureNow<EvictedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
@@ -763,6 +763,13 @@ namespace CCHI::Taurus {
                         cacheLine.activeEVTFuture->Fire(EvictedEvent(xactionWriteBack.GetFirst().flit.evt.Addr, it->second));
                     }
                 }
+            }
+
+            // release the TxnID of a fully completed EVT transaction
+            if (cacheLine.activeEVT && cacheLine.activeEVT->IsComplete(glbl))
+            {
+                FreeTxnID(cacheLine.activeEVT->GetFirst().flit.evt.TxnID);
+                cacheLine.activeEVT.reset();
             }
         }
     }
@@ -1065,6 +1072,13 @@ namespace CCHI::Taurus {
                     }
                 }
             }
+
+            // release the TxnID of a fully completed REQ transaction
+            if (cacheLine.activeREQ && cacheLine.activeREQ->IsComplete(glbl))
+            {
+                FreeTxnID(cacheLine.activeREQ->GetFirst().flit.req.TxnID);
+                cacheLine.activeREQ.reset();
+            }
         }
     }
 
@@ -1099,6 +1113,7 @@ namespace CCHI::Taurus {
                 if (denial != XactDenial::ACCEPTED)
                 {
                     // TODO: denial event
+                    FreeTxnID(flit->TxnID);
                 }
 
                 cacheLine.activeEVT = xaction;
@@ -1141,6 +1156,7 @@ namespace CCHI::Taurus {
                 if (denial != XactDenial::ACCEPTED)
                 {
                     // TODO: denial event
+                    FreeTxnID(flit->TxnID);
                 }
 
                 cacheLine.activeREQ = xaction;
@@ -1680,12 +1696,17 @@ namespace CCHI::Taurus {
     { }
 
     template<FlitConfigurationConcept config>
-    inline std::optional<size_t> UpstreamNode<config>::NextTxnID() const noexcept
+    inline std::optional<size_t> UpstreamNode<config>::AllocateTxnID() noexcept
     {
-        for (size_t i = 0; i < queueTxnID.size(); ++i)
+        // allocate and mark the first free TxnID; the ID stays occupied until the
+        // transaction completes (TickREQ/TickEVT) or its flit is denied by the joint
+        for (size_t i = 0; i < usedTxnID.size(); ++i)
         {
-            if (!queueTxnID[i])
+            if (!usedTxnID[i])
+            {
+                usedTxnID[i] = true;
                 return { i };
+            }
         }
 
         return std::nullopt;
@@ -1694,13 +1715,7 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline void UpstreamNode<config>::FreeTxnID(size_t txnID) noexcept
     {
-        queueTxnID.at(txnID) = nullptr;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline void UpstreamNode<config>::OccupyTxnID(size_t txnID, std::shared_ptr<Xact::Xaction<config>> xaction) noexcept
-    {
-        queueTxnID.at(txnID) = xaction;
+        usedTxnID.at(txnID) = false;
     }
 
     template<FlitConfigurationConcept config>
@@ -1854,7 +1869,7 @@ namespace CCHI::Taurus {
                 const Xact::XactionCacheableAllocatingRead<config>& xaction
                     = static_cast<const Xact::XactionCacheableAllocatingRead<config>&>(*activeREQ);
 
-                if (!xaction.GotAllCompData())
+                if (xaction.GotAnyCompData() && !xaction.GotAllCompData())
                     return true;
             }
         }
@@ -1875,7 +1890,7 @@ namespace CCHI::Taurus {
                 const Xact::XactionCacheableAllocatingRead<config>& xaction
                     = static_cast<const Xact::XactionCacheableAllocatingRead<config>&>(*activeREQ);
 
-                if (!xaction.GotComp() && !xaction.GotAnyCompData())
+                if (xaction.GotAnyCompData() && !xaction.GotAllCompData())
                     return true;
             }
         }
