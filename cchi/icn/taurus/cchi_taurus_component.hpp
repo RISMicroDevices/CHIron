@@ -13,6 +13,9 @@
 
 #include "../../xact/cchi_joint.hpp"
 
+#include "cchi_taurus_component_afx.hpp"
+#include "cchi_taurus_component_events.hpp"
+
 #include "cchi_taurus_denial.hpp"
 #include "cchi_taurus_state.hpp"
 #include "cchi_taurus_sam.hpp"
@@ -65,7 +68,21 @@ namespace CCHI::Taurus {
     public:
         class EventHub {
         public:
-            
+            Gravity::EventBus<UpstreamNodeXactAcceptedEVTEvent<config>>     OnAcceptedEVT;
+            Gravity::EventBus<UpstreamNodeXactAcceptedSNPEvent<config>>     OnAcceptedSNP;
+            Gravity::EventBus<UpstreamNodeXactAcceptedREQEvent<config>>     OnAcceptedREQ;
+            Gravity::EventBus<UpstreamNodeXactAcceptedDnRSPEvent<config>>   OnAcceptedDnRSP;
+            Gravity::EventBus<UpstreamNodeXactAcceptedUpRSPEvent<config>>   OnAcceptedUpRSP;
+            Gravity::EventBus<UpstreamNodeXactAcceptedDnDATEvent<config>>   OnAcceptedDnDAT;
+            Gravity::EventBus<UpstreamNodeXactAcceptedUpDATEvent<config>>   OnAcceptedUpDAT;
+
+            Gravity::EventBus<UpstreamNodeXactDeniedEVTEvent<config>>       OnDeniedEVT;
+            Gravity::EventBus<UpstreamNodeXactDeniedSNPEvent<config>>       OnDeniedSNP;
+            Gravity::EventBus<UpstreamNodeXactDeniedREQEvent<config>>       OnDeniedREQ;
+            Gravity::EventBus<UpstreamNodeXactDeniedDnRSPEvent<config>>     OnDeniedDnRSP;
+            Gravity::EventBus<UpstreamNodeXactDeniedUpRSPEvent<config>>     OnDeniedUpRSP;
+            Gravity::EventBus<UpstreamNodeXactDeniedDnDATEvent<config>>     OnDeniedDnDAT;
+            Gravity::EventBus<UpstreamNodeXactDeniedUpDATEvent<config>>     OnDeniedUpDAT;
             
         public:
             EventHub() noexcept;
@@ -369,6 +386,8 @@ namespace CCHI::Taurus {
              || cacheLine->state == CacheState::UniqueClean
              || cacheLine->state == CacheState::UniqueDirty)
             {
+                // TODO: event: LoadHitEvent
+
                 // Immediate hit
                 return std::make_shared<FutureNow<GrantedEvent>>(Denial::DONE, GrantedEvent(PA, cacheLine));
             }
@@ -393,6 +412,8 @@ namespace CCHI::Taurus {
         if (!txnID)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
 
+        // TODO: event: REQAllocationEvent (By DoLoad)
+
         //
         Flits::REQ<config> reqFlit;
         reqFlit.TxnID = *txnID;
@@ -410,13 +431,29 @@ namespace CCHI::Taurus {
         reqFlit.Way = 0;
         reqFlit.TraceTag = 0;
 
+        // TODO: event: REQPreHazardDetectionEvent
+
+        // TODO: event: REQPostHazardDetectionEvent
+
         if (hazard)
+        {
+            // TODO: event: REQPreHazardPendingEvent
+
             cacheLine->pendingREQHazardTXREQ = { reqFlit };
+
+            // TODO: event: REQPostHazardPendingEvent
+        }
         else
         {
+            // TODO: event REQPreChannelPendingEvent
+
             cacheLine->pendingREQChannelTXREQ = { reqFlit };
             queueTXREQ.push_back(cacheLine);
+
+            // TODO: event REQPostChannelPendingEvent
         }
+
+        // TODO: event LoadMissEvent
 
         std::shared_ptr<FutureNow<GrantedEvent>> future 
             = std::make_shared<FutureNow<GrantedEvent>>(Denial::ACCEPTED);
@@ -437,6 +474,8 @@ namespace CCHI::Taurus {
             if (cacheLine->state == CacheState::UniqueClean
              || cacheLine->state == CacheState::UniqueDirty)
             {
+                // TODO: event: StoreHitEvent
+
                 // Immediate hit
                 return std::make_shared<FutureNow<GrantedEvent>>(Denial::DONE, GrantedEvent(PA, cacheLine));
             }
@@ -461,6 +500,8 @@ namespace CCHI::Taurus {
         if (!txnID)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
 
+        // TODO: event REQAllocationEvent (By DoStore)
+
         //
         Flits::REQ<config> reqFlit;
         reqFlit.TxnID = *txnID;
@@ -479,14 +520,30 @@ namespace CCHI::Taurus {
         reqFlit.TraceTag = 0;
         // *NOTE: 'ExpCompData' should be refreshed on releasing hazard for ReadUnique
 
+        // TODO: event: REQPreHazardDetectionEvent
+
+        // TODO: event: REQPostHazardDetectionEvent
+
         if (hazard)
+        {
+            // TODO: event: REQPreHazardPendingEvent
+
             cacheLine->pendingREQHazardTXREQ = { reqFlit };
+
+            // TODO: event: REQPostHazardPendingEvent
+        }
         else
         {
+            // TODO: event: REQPreChannelPendingEvent
+
             reqFlit.ExpCompData = cacheLine->state == CacheState::Invalid ? 1 : 0;
             cacheLine->pendingREQChannelTXREQ = { reqFlit };
             queueTXREQ.push_back(cacheLine);
+
+            // TODO: event REQPostChannelPendingEvent
         }
+
+        // TODO: event: StoreMissEvent
 
         std::shared_ptr<FutureNow<GrantedEvent>> future 
             = std::make_shared<FutureNow<GrantedEvent>>(Denial::ACCEPTED);
@@ -507,6 +564,8 @@ namespace CCHI::Taurus {
             if (cacheLine->state == CacheState::UniqueClean
              || cacheLine->state == CacheState::UniqueDirty)
             {
+                // TODO: event: StoreHitEvent
+
                 // Immediate hit
                 return std::make_shared<FutureNow<GrantedEvent>>(Denial::DONE, GrantedEvent(PA, cacheLine));
             }
@@ -531,6 +590,8 @@ namespace CCHI::Taurus {
         if (!txnID)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
 
+        // TODO: event REQAllocationEvent (By DoStoreAll)
+
         //
         Flits::REQ<config> reqFlit;
         reqFlit.TxnID = *txnID;
@@ -548,13 +609,29 @@ namespace CCHI::Taurus {
         reqFlit.Way = 0;
         reqFlit.TraceTag = 0;
 
+        // TODO: event: REQPreHazardDetectionEvent
+
+        // TODO: event: REQPostHazardDetectionEvent
+
         if (hazard)
+        {
+            // TODO: event: REQPreHazardPendingEvent
+
             cacheLine->pendingREQHazardTXREQ = { reqFlit };
+
+            // TODO: event: REQPostHazardPendingEvent
+        }
         else
         {
+            // TODO: event: REQPreChannelPendingEvent
+
             cacheLine->pendingREQChannelTXREQ = { reqFlit };
             queueTXREQ.push_back(cacheLine);
+
+            // TODO: event: REQPostChannelPendingEvent
         }
+
+        // TODO: event: StoreMissEvent
 
         std::shared_ptr<FutureNow<GrantedEvent>> future 
             = std::make_shared<FutureNow<GrantedEvent>>(Denial::ACCEPTED);
@@ -578,9 +655,7 @@ namespace CCHI::Taurus {
         {
             // REQ with same PA in-flight, cannot accept new eviction;
             // otherwise the eviction could deadlock with the snoops that the
-            // in-flight REQ's competitors are waiting for, and, since upstream
-            // TxnIDs are currently always 0, the REQ and the EVT could not be
-            // told apart on the joint and the DnRSP channel either
+            // in-flight REQ's competitors are waiting for
             return std::make_shared<FutureNow<EvictedEvent>>(Denial::REJECTED_TAURUS_PA_REQ_BUSY);
         }
 
@@ -592,6 +667,8 @@ namespace CCHI::Taurus {
 
         if (!txnID)
             return std::make_shared<FutureNow<EvictedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
+
+        // TODO: event EVTAllocationEvent
 
         //
         Flits::EVT<config> evtFlit;
@@ -606,12 +683,30 @@ namespace CCHI::Taurus {
         evtFlit.Way = 0;
         evtFlit.TraceTag = 0;
 
-        if (HasEVTHazard(*cacheLine))
+        bool hazard = HasEVTHazard(*cacheLine);
+
+        // TODO: event: EVTPreHazardDetectionEvent
+
+        // TODO: event: EVTPostHazardDetectionEvent
+
+        if (hazard)
+        {
+            // TODO: event: EVTPreHazardPendingEvent
+
             cacheLine->pendingEVTHazardTXEVT = { evtFlit };
+
+            // TODO: event: EVTPostHazardPendingEvent
+        }
         else
         {
+            // TODO: event: EVTPreChannelPendingEvent
+
             cacheLine->pendingEVTChannelTXEVT = { evtFlit };
+
+            // TODO: event: EVTPostChannelPendingEvent
         }
+
+        // TODO: event: EvictHitEvent
 
         std::shared_ptr<FutureNow<EvictedEvent>> future 
             = std::make_shared<FutureNow<EvictedEvent>>(Denial::ACCEPTED);
@@ -786,14 +881,20 @@ namespace CCHI::Taurus {
                 if (HasSNPHazard(cacheLine))
                     continue;
 
-                auto flit = cacheLine.pendingSNPHazardRXSNP;
+                auto& flit = *cacheLine.pendingSNPHazardRXSNP;
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
-                XactDenialEnum denial = joint.NextSNP(glbl, time, *flit, &xaction);
+                XactDenialEnum denial = joint.NextSNP(glbl, time, flit, &xaction);
 
-                if (denial != XactDenial::ACCEPTED)
+                if (denial == XactDenial::ACCEPTED)
                 {
-                    // TODO: denial event
+                    if (events)
+                        events->OnAcceptedSNP(*this, it->first << 3, cacheLine, xaction, flit);
+                }
+                else 
+                {
+                    if (events)
+                        events->OnDeniedSNP(*this, it->first << 3, cacheLine, denial, xaction, flit);
                 }
 
                 cacheLine.activeSNP = xaction;
@@ -1105,20 +1206,28 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingEVTChannelTXEVT)
             {
-                auto flit = cacheLine.pendingEVTChannelTXEVT;
+                auto& flit = *cacheLine.pendingEVTChannelTXEVT;
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
-                XactDenialEnum denial = joint.NextEVT(glbl, time, *flit, &xaction);
+                XactDenialEnum denial = joint.NextEVT(glbl, time, flit, &xaction);
 
-                if (denial != XactDenial::ACCEPTED)
+                if (denial == XactDenial::ACCEPTED)
                 {
-                    // TODO: denial event
-                    FreeTxnID(flit->TxnID);
+                    if (events)
+                        events->OnAcceptedEVT(*this, it->first << 3, cacheLine, xaction, flit);
+                }
+                else
+                {
+                    if (events)
+                        events->OnDeniedEVT(*this, it->first << 3, cacheLine, denial, xaction, flit);
+
+                    FreeTxnID(flit.TxnID);
                 }
 
                 cacheLine.activeEVT = xaction;
                 cacheLine.pendingEVTChannelTXEVT.reset();
-                return { *flit };
+
+                return { flit };
             }
         }
 
@@ -1148,20 +1257,28 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingREQChannelTXREQ)
             {
-                auto flit = cacheLine.pendingREQChannelTXREQ;
+                auto& flit = *cacheLine.pendingREQChannelTXREQ;
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
-                XactDenialEnum denial = joint.NextREQ(glbl, time, *flit, &xaction);
+                XactDenialEnum denial = joint.NextREQ(glbl, time, flit, &xaction);
 
-                if (denial != XactDenial::ACCEPTED)
+                if (denial == XactDenial::ACCEPTED)
                 {
-                    // TODO: denial event
-                    FreeTxnID(flit->TxnID);
+                    if (events)
+                        events->OnAcceptedREQ(*this, it->first << 3, cacheLine, xaction, flit);
+                }
+                else
+                {
+                    if (events)
+                        events->OnDeniedREQ(*this, it->first << 3, cacheLine, denial, xaction, flit);
+
+                    FreeTxnID(flit.TxnID);
                 }
 
                 cacheLine.activeREQ = xaction;
                 cacheLine.pendingREQChannelTXREQ.reset();
-                return { *flit };
+
+                return { flit };
             }
         }
 
@@ -1196,9 +1313,15 @@ namespace CCHI::Taurus {
             std::shared_ptr<Xact::Xaction<config>> xaction;
             XactDenialEnum denial = joint.NextSNP(glbl, time, snpFlit, &xaction);
 
-            if (denial != XactDenial::ACCEPTED)
+            if (denial == XactDenial::ACCEPTED)
             {
-                // TODO: denial event
+                if (events)
+                    events->OnAcceptedSNP(*this, snpFlit.Addr << 3, *cacheLine, xaction, snpFlit);
+            }
+            else
+            {
+                if (events)
+                    events->OnDeniedSNP(*this, snpFlit.Addr << 3, *cacheLine, denial, xaction, snpFlit);
             }
 
             cacheLine->activeSNP = xaction;
@@ -1233,30 +1356,48 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXRSP)
             {
-                auto flit = cacheLine.pendingSNPChannelTXRSP;
-                XactDenialEnum denial = joint.NextUpRSP(glbl, time, *flit);
+                auto& flit = *cacheLine.pendingSNPChannelTXRSP;
 
-                if (denial != XactDenial::ACCEPTED)
+                std::shared_ptr<Xact::Xaction<config>> xaction;
+                XactDenialEnum denial = joint.NextUpRSP(glbl, time, flit, &xaction);
+
+                if (denial == XactDenial::ACCEPTED)
                 {
-                    // TODO: denial event
+                    if (events)
+                        events->OnAcceptedUpRSP(*this, it->first << 3, cacheLine, xaction, flit);
+                }
+                else
+                {
+                    if (events)
+                        events->OnDeniedUpRSP(*this, it->first << 3, cacheLine, denial, xaction, flit);
                 }
 
                 cacheLine.pendingSNPChannelTXRSP.reset();
-                return { *flit };
+
+                return { flit };
             }
 
             if (cacheLine.pendingREQChannelTXRSP)
             {
-                auto flit = cacheLine.pendingREQChannelTXRSP;
-                XactDenialEnum denial = joint.NextUpRSP(glbl, time, *flit);
+                auto& flit = *cacheLine.pendingREQChannelTXRSP;
 
-                if (denial != XactDenial::ACCEPTED)
+                std::shared_ptr<Xact::Xaction<config>> xaction;
+                XactDenialEnum denial = joint.NextUpRSP(glbl, time, flit, &xaction);
+
+                if (denial == XactDenial::ACCEPTED)
                 {
-                    // TODO: denial event
+                    if (events)
+                        events->OnAcceptedUpRSP(*this, it->first << 3, cacheLine, xaction, flit);
+                }
+                else
+                {
+                    if (events)
+                        events->OnDeniedUpRSP(*this, it->first << 3, cacheLine, denial, xaction, flit);
                 }
 
                 cacheLine.pendingREQChannelTXRSP.reset();
-                return { *flit };
+
+                return { flit };
             }
         }
 
@@ -1295,66 +1436,94 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXDAT0)
             {
-                auto flit = cacheLine.pendingSNPChannelTXDAT0;
+                auto& flit = *cacheLine.pendingSNPChannelTXDAT0;
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
-                XactDenialEnum denial = joint.NextUpDAT(glbl, time, *flit, &xaction);
+                XactDenialEnum denial = joint.NextUpDAT(glbl, time, flit, &xaction);
 
-                if (denial != XactDenial::ACCEPTED)
+                if (denial == XactDenial::ACCEPTED)
                 {
-                    // TODO: denial event
+                    if (events)
+                        events->OnAcceptedUpDAT(*this, it->first << 3, cacheLine, xaction, flit);
+                }
+                else
+                {
+                    if (events)
+                        events->OnDeniedUpDAT(*this, it->first << 3, cacheLine, denial, xaction, flit);
                 }
 
                 cacheLine.pendingSNPChannelTXDAT0.reset();
-                return { *flit };
+
+                return { flit };
             }
 
             if (cacheLine.pendingSNPChannelTXDAT1)
             {
-                auto flit = cacheLine.pendingSNPChannelTXDAT1;
+                auto& flit = *cacheLine.pendingSNPChannelTXDAT1;
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
-                XactDenialEnum denial = joint.NextUpDAT(glbl, time, *flit, &xaction);
+                XactDenialEnum denial = joint.NextUpDAT(glbl, time, flit, &xaction);
 
-                if (denial != XactDenial::ACCEPTED)
+                if (denial == XactDenial::ACCEPTED)
                 {
-                    // TODO: denial event
+                    if (events)
+                        events->OnAcceptedUpDAT(*this, it->first << 3, cacheLine, xaction, flit);
+                }
+                else
+                {
+                    if (events)
+                        events->OnDeniedUpDAT(*this, it->first << 3, cacheLine, denial, xaction, flit);
                 }
 
                 cacheLine.pendingSNPChannelTXDAT1.reset();
-                return { *flit };
+
+                return { flit };
             }
 
             if (cacheLine.pendingEVTChannelTXDAT0)
             {
-                auto flit = cacheLine.pendingEVTChannelTXDAT0;
+                auto& flit = *cacheLine.pendingEVTChannelTXDAT0;
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
-                XactDenialEnum denial = joint.NextUpDAT(glbl, time, *flit, &xaction);
+                XactDenialEnum denial = joint.NextUpDAT(glbl, time, flit, &xaction);
 
-                if (denial != XactDenial::ACCEPTED)
+                if (denial == XactDenial::ACCEPTED)
                 {
-                    // TODO: denial event
+                    if (events)
+                        events->OnAcceptedUpDAT(*this, it->first << 3, cacheLine, xaction, flit);
+                }
+                else
+                {
+                    if (events)
+                        events->OnDeniedUpDAT(*this, it->first << 3, cacheLine, denial, xaction, flit);
                 }
 
                 cacheLine.pendingEVTChannelTXDAT0.reset();
-                return { *flit };
+
+                return { flit };
             }
 
             if (cacheLine.pendingEVTChannelTXDAT1)
             {
-                auto flit = cacheLine.pendingEVTChannelTXDAT1;
+                auto& flit = *cacheLine.pendingEVTChannelTXDAT1;
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
-                XactDenialEnum denial = joint.NextUpDAT(glbl, time, *flit, &xaction);
+                XactDenialEnum denial = joint.NextUpDAT(glbl, time, flit, &xaction);
 
-                if (denial != XactDenial::ACCEPTED)
+                if (denial == XactDenial::ACCEPTED)
                 {
-                    // TODO: denial event
+                    if (events)
+                        events->OnAcceptedUpDAT(*this, it->first << 3, cacheLine, xaction, flit);
+                }
+                else
+                {
+                    if (events)
+                        events->OnDeniedUpDAT(*this, it->first << 3, cacheLine, denial, xaction, flit);
                 }
 
                 cacheLine.pendingEVTChannelTXDAT1.reset();
-                return { *flit };
+                
+                return { flit };
             }
         }
 
@@ -1384,11 +1553,18 @@ namespace CCHI::Taurus {
                  && !cacheLine.activeREQ->IsComplete(glbl)
                  && cacheLine.activeREQ->GetTxnID() == dnrspFlit.TxnID)
                 {
-                    XactDenialEnum denial = joint.NextDnRSP(glbl, time, dnrspFlit);
+                    std::shared_ptr<Xact::Xaction<config>> xaction;
+                    XactDenialEnum denial = joint.NextDnRSP(glbl, time, dnrspFlit, &xaction);
 
-                    if (denial != XactDenial::ACCEPTED)
+                    if (denial == XactDenial::ACCEPTED)
                     {
-                        // TODO: denial event
+                        if (events)
+                            events->OnAcceptedDnRSP(*this, it->first << 3, cacheLine, xaction, dnrspFlit);
+                    }
+                    else
+                    {
+                        if (events)
+                            events->OnDeniedDnRSP(*this, it->first << 3, cacheLine, denial, xaction, dnrspFlit);
                     }
 
                     return true;
@@ -1397,11 +1573,18 @@ namespace CCHI::Taurus {
                  && !cacheLine.activeEVT->IsComplete(glbl)
                  && cacheLine.activeEVT->GetTxnID() == dnrspFlit.TxnID)
                 {
-                    XactDenialEnum denial = joint.NextDnRSP(glbl, time, dnrspFlit);
+                    std::shared_ptr<Xact::Xaction<config>> xaction;
+                    XactDenialEnum denial = joint.NextDnRSP(glbl, time, dnrspFlit, &xaction);
 
-                    if (denial != XactDenial::ACCEPTED)
+                    if (denial == XactDenial::ACCEPTED)
                     {
-                        // TODO: denial event
+                        if (events)
+                            events->OnAcceptedDnRSP(*this, it->first << 3, cacheLine, xaction, dnrspFlit);
+                    }
+                    else
+                    {
+                        if (events)
+                            events->OnDeniedDnRSP(*this, it->first << 3, cacheLine, denial, xaction, dnrspFlit);
                     }
 
                     return true;
@@ -1426,11 +1609,18 @@ namespace CCHI::Taurus {
                  && !cacheLine.activeEVT->IsComplete(glbl)
                  && cacheLine.activeEVT->GetTxnID() == dnrspFlit.TxnID)
                 {
-                    XactDenialEnum denial = joint.NextDnRSP(glbl, time, dnrspFlit);
+                    std::shared_ptr<Xact::Xaction<config>> xaction;
+                    XactDenialEnum denial = joint.NextDnRSP(glbl, time, dnrspFlit, &xaction);
 
-                    if (denial != XactDenial::ACCEPTED)
+                    if (denial == XactDenial::ACCEPTED)
                     {
-                        // TODO: denial event
+                        if (events)
+                            events->OnAcceptedDnRSP(*this, it->first << 3, cacheLine, xaction, dnrspFlit);
+                    }
+                    else
+                    {
+                        if (events)
+                            events->OnDeniedDnRSP(*this, it->first << 3, cacheLine, denial, xaction, dnrspFlit);
                     }
 
                     return true;
@@ -1455,11 +1645,18 @@ namespace CCHI::Taurus {
                  && !cacheLine.activeEVT->IsComplete(glbl)
                  && cacheLine.activeEVT->GetTxnID() == dnrspFlit.TxnID)
                 {
-                    XactDenialEnum denial = joint.NextDnRSP(glbl, time, dnrspFlit);
+                    std::shared_ptr<Xact::Xaction<config>> xaction;
+                    XactDenialEnum denial = joint.NextDnRSP(glbl, time, dnrspFlit, &xaction);
 
-                    if (denial != XactDenial::ACCEPTED)
+                    if (denial == XactDenial::ACCEPTED)
                     {
-                        // TODO: denial event
+                        if (events)
+                            events->OnAcceptedDnRSP(*this, it->first << 3, cacheLine, xaction, dnrspFlit);
+                    }
+                    else
+                    {
+                        if (events)
+                            events->OnDeniedDnRSP(*this, it->first << 3, cacheLine, denial, xaction, dnrspFlit);
                     }
 
                     return true;
@@ -1494,11 +1691,18 @@ namespace CCHI::Taurus {
                  && !cacheLine.activeREQ->IsComplete(glbl)
                  && cacheLine.activeREQ->GetTxnID() == dndatFlit.TxnID)
                 {
-                    XactDenialEnum denial = joint.NextDnDAT(glbl, time, dndatFlit);
+                    std::shared_ptr<Xact::Xaction<config>> xaction;
+                    XactDenialEnum denial = joint.NextDnDAT(glbl, time, dndatFlit, &xaction);
 
-                    if (denial != XactDenial::ACCEPTED)
+                    if (denial == XactDenial::ACCEPTED)
                     {
-                        // TODO: denial event
+                        if (events)
+                            events->OnAcceptedDnDAT(*this, it->first << 3, cacheLine, xaction, dndatFlit);
+                    }
+                    else
+                    {
+                        if (events)
+                            events->OnDeniedDnDAT(*this, it->first << 3, cacheLine, denial, xaction, dndatFlit);
                     }
 
                     return true;
