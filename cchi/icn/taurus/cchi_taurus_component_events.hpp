@@ -670,83 +670,49 @@ namespace CCHI::Taurus {
     };
 
     template<FlitConfigurationConcept config>
-    class UpstreamNodeEVTDataPreHazardPendingEvent : public UpDATFlitEventBase<config>
+    class UpstreamNodeEVTDataPreHazardPendingEvent : public Gravity::CancellableEvent
+                                                   , public UpDATFlitEventBase<config>
                                                    , public UpstreamNodeCacheLineEventBase<config>
                                                    , public Gravity::Event<UpstreamNodeEVTDataPreHazardPendingEvent<config>> {
-    protected:
-        DenialEnum  denial  = Denial::ACCEPTED;
-
     public:
         UpstreamNodeEVTDataPreHazardPendingEvent(UpstreamNode<config>&                            upstream,
                                                  uint64_t                                         PA,
                                                  const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                  Flits::UpDAT<config>&                            updatFlit) noexcept;
-
-    public:
-        DenialEnum  GetDenial() const noexcept;
-        bool        IsDenied() const noexcept;
-
-        void        SetDenial(DenialEnum denial) noexcept;
-        void        Deny(DenialEnum denial = Denial::REJECTED_TAURUS_EVENT) noexcept;
     };
 
     template<FlitConfigurationConcept config>
     class UpstreamNodeEVTDataPostHazardPendingEvent : public UpDATFlitEventBase<config>
                                                     , public UpstreamNodeCacheLineEventBase<config>
                                                     , public Gravity::Event<UpstreamNodeEVTDataPostHazardPendingEvent<config>> {
-    protected:
-        DenialEnum  denial;
-
     public:
         UpstreamNodeEVTDataPostHazardPendingEvent(UpstreamNode<config>&                            upstream,
                                                   uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
-                                                  Flits::UpDAT<config>&                            updatFlit,
-                                                  DenialEnum                                       denial) noexcept;
-
-    public:
-        DenialEnum  GetDenial() const noexcept;
-        bool        IsDenied() const noexcept;
+                                                  Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
 
     template<FlitConfigurationConcept config>
-    class UpstreamNodeEVTDataPreChannelPendingEvent : public UpDATFlitEventBase<config>
+    class UpstreamNodeEVTDataPreChannelPendingEvent : public Gravity::CancellableEvent
+                                                    , public UpDATFlitEventBase<config>
                                                     , public UpstreamNodeCacheLineEventBase<config>
                                                     , public Gravity::Event<UpstreamNodeEVTDataPreChannelPendingEvent<config>> {
-    protected:
-        DenialEnum  denial  = Denial::ACCEPTED;
-
     public:
         UpstreamNodeEVTDataPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
                                                   uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::UpDAT<config>&                            updatFlit) noexcept;
-
-    public:
-        DenialEnum  GetDenial() const noexcept;
-        bool        IsDenied() const noexcept;
-
-        void        SetDenial(DenialEnum denial) noexcept;
-        void        Deny(DenialEnum denial = Denial::REJECTED_TAURUS_EVENT) noexcept;
     };
 
     template<FlitConfigurationConcept config>
     class UpstreamNodeEVTDataPostChannelPendingEvent : public UpDATFlitEventBase<config>
                                                      , public UpstreamNodeCacheLineEventBase<config>
                                                      , public Gravity::Event<UpstreamNodeEVTDataPostChannelPendingEvent<config>> {
-    protected:
-        DenialEnum  denial;
-
     public:
         UpstreamNodeEVTDataPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
                                                    uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
-                                                   Flits::UpDAT<config>&                            updatFlit,
-                                                   DenialEnum                                       denial) noexcept;
-
-    public:
-        DenialEnum  GetDenial() const noexcept;
-        bool        IsDenied() const noexcept;
+                                                   Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
 
     template<FlitConfigurationConcept config>
@@ -812,6 +778,202 @@ namespace CCHI::Taurus {
                                                      , public Gravity::Event<UpstreamNodeEVTUpDATPostChannelChosenEvent<config>> {
     public:
         UpstreamNodeEVTUpDATPostChannelChosenEvent(UpstreamNode<config>&                            upstream,
+                                                   uint64_t                                         PA,
+                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                   Flits::UpDAT<config>&                            updatFlit) noexcept;
+    };
+
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPPreHazardDetectionEvent : public SNPFlitEventBase<config>
+                                                 , public UpstreamNodeCacheLineEventBase<config>
+                                                 , public Gravity::Event<UpstreamNodeSNPPreHazardDetectionEvent<config>> {
+    protected:
+        bool&   hazard;
+
+    public:
+        UpstreamNodeSNPPreHazardDetectionEvent(UpstreamNode<config>&                            upstream,
+                                               uint64_t                                         PA,
+                                               const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                               Flits::SNP<config>&                              snpFlit,
+                                               bool&                                            hazard) noexcept;
+
+    public:
+        bool    HasHazard() const noexcept;
+        void    SetHazard() noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPPostHazardDetectionEvent : public SNPFlitEventBase<config>
+                                                  , public UpstreamNodeCacheLineEventBase<config>
+                                                  , public Gravity::Event<UpstreamNodeSNPPostHazardDetectionEvent<config>> {
+    protected:
+        bool    hazard;
+
+    public:
+        UpstreamNodeSNPPostHazardDetectionEvent(UpstreamNode<config>&                            upstream,
+                                                uint64_t                                         PA,
+                                                const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                Flits::SNP<config>&                              snpFlit,
+                                                bool                                             hazard) noexcept;
+
+    public:
+        bool    HasHazard() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPPreHazardPendingEvent : public SNPFlitEventBase<config>
+                                               , public UpstreamNodeCacheLineEventBase<config>
+                                               , public Gravity::Event<UpstreamNodeSNPPreHazardPendingEvent<config>> {
+    protected:
+        DenialEnum  denial  = Denial::ACCEPTED;
+                                            
+    public:
+        UpstreamNodeSNPPreHazardPendingEvent(UpstreamNode<config>&                            upstream,
+                                             uint64_t                                         PA,
+                                             const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                             Flits::SNP<config>&                              snpFlit) noexcept;
+
+    public:
+        DenialEnum  GetDenial() const noexcept;
+        bool        IsDenied() const noexcept;
+
+        void        SetDenial(DenialEnum denial) noexcept;
+        void        Deny(DenialEnum denial = Denial::REJECTED_TAURUS_EVENT) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPPostHazardPendingEvent : public SNPFlitEventBase<config>
+                                                , public UpstreamNodeCacheLineEventBase<config>
+                                                , public Gravity::Event<UpstreamNodeSNPPostHazardPendingEvent<config>> {
+    protected:
+        DenialEnum  denial;
+    
+    public:
+        UpstreamNodeSNPPostHazardPendingEvent(UpstreamNode<config>&                            upstream,
+                                              uint64_t                                         PA,
+                                              const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                              Flits::SNP<config>&                              snpFlit,
+                                              DenialEnum                                       denial) noexcept;
+
+    public:
+        DenialEnum  GetDenial() const noexcept;
+        bool        IsDenied() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPCacheStatePreDemotionEvent : public SNPFlitEventBase<config>
+                                                    , public CacheStatePreDemotionEventBase
+                                                    , public UpstreamNodeCacheLineEventBase<config>
+                                                    , public Gravity::Event<UpstreamNodeSNPCacheStatePreDemotionEvent<config>> {
+    public:
+        UpstreamNodeSNPCacheStatePreDemotionEvent(UpstreamNode<config>&                            upstream,
+                                                  uint64_t                                         PA,
+                                                  const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                  Flits::SNP<config>&                              snpFlit,
+                                                  CacheStateEnum                                   prevState,
+                                                  CacheStateEnum&                                  nextState) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPCacheStatePostDemotionEvent : public SNPFlitEventBase<config>
+                                                     , public CacheStatePostDemotionEventBase
+                                                     , public UpstreamNodeCacheLineEventBase<config>
+                                                     , public Gravity::Event<UpstreamNodeSNPCacheStatePostDemotionEvent<config>> {
+    public:
+        UpstreamNodeSNPCacheStatePostDemotionEvent(UpstreamNode<config>&                            upstream,
+                                                   uint64_t                                         PA,
+                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                   Flits::SNP<config>&                              snpFlit,
+                                                   CacheStateEnum                                   prevState,
+                                                   CacheStateEnum                                   nextState) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPRespPreChannelPendingEvent : public UpRSPFlitEventBase<config>
+                                                    , public UpstreamNodeCacheLineEventBase<config>
+                                                    , public Gravity::Event<UpstreamNodeSNPRespPreChannelPendingEvent<config>> {
+    public:
+        UpstreamNodeSNPRespPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
+                                                  uint64_t                                         PA,
+                                                  const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                  Flits::UpRSP<config>&                            uprspFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPRespPostChannelPendingEvent : public UpRSPFlitEventBase<config>
+                                                     , public UpstreamNodeCacheLineEventBase<config>
+                                                     , public Gravity::Event<UpstreamNodeSNPRespPostChannelPendingEvent<config>> {
+    public:
+        UpstreamNodeSNPRespPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
+                                                   uint64_t                                         PA,
+                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                   Flits::UpRSP<config>&                            uprspFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPRespDataPreChannelPendingEvent : public UpDATFlitEventBase<config>
+                                                        , public UpstreamNodeCacheLineEventBase<config>
+                                                        , public Gravity::Event<UpstreamNodeSNPRespDataPreChannelPendingEvent<config>> {
+    public:
+        UpstreamNodeSNPRespDataPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
+                                                      uint64_t                                         PA,
+                                                      const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                      Flits::UpDAT<config>&                            updatFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPRespDataPostChannelPendingEvent : public UpDATFlitEventBase<config>
+                                                         , public UpstreamNodeCacheLineEventBase<config>
+                                                         , public Gravity::Event<UpstreamNodeSNPRespDataPostChannelPendingEvent<config>> {
+    public:
+        UpstreamNodeSNPRespDataPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
+                                                       uint64_t                                         PA,
+                                                       const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                       Flits::UpDAT<config>&                            updatFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPUpRSPPreChannelChosenEvent : public Gravity::CancellableEvent
+                                                    , public UpRSPFlitEventBase<config>
+                                                    , public UpstreamNodeCacheLineEventBase<config>
+                                                    , public Gravity::Event<UpstreamNodeSNPUpRSPPreChannelChosenEvent<config>> {
+    public:
+        UpstreamNodeSNPUpRSPPreChannelChosenEvent(UpstreamNode<config>&                            upstream,
+                                                  uint64_t                                         PA,
+                                                  const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                  Flits::UpRSP<config>&                            uprspFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPUpRSPPostChannelChosenEvent : public UpRSPFlitEventBase<config>
+                                                     , public UpstreamNodeCacheLineEventBase<config>
+                                                     , public Gravity::Event<UpstreamNodeSNPUpRSPPostChannelChosenEvent<config>> {
+    public:
+        UpstreamNodeSNPUpRSPPostChannelChosenEvent(UpstreamNode<config>&                            upstream,
+                                                   uint64_t                                         PA,
+                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                   Flits::UpRSP<config>&                            uprspFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPUpDATPreChannelChosenEvent : public Gravity::CancellableEvent
+                                                    , public UpDATFlitEventBase<config>
+                                                    , public UpstreamNodeCacheLineEventBase<config>
+                                                    , public Gravity::Event<UpstreamNodeSNPUpDATPreChannelChosenEvent<config>> {
+    public:
+        UpstreamNodeSNPUpDATPreChannelChosenEvent(UpstreamNode<config>&                            upstream,
+                                                  uint64_t                                         PA,
+                                                  const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                  Flits::UpDAT<config>&                            updatFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeSNPUpDATPostChannelChosenEvent : public UpDATFlitEventBase<config>
+                                                     , public UpstreamNodeCacheLineEventBase<config>
+                                                     , public Gravity::Event<UpstreamNodeSNPUpDATPostChannelChosenEvent<config>> {
+    public:
+        UpstreamNodeSNPUpDATPostChannelChosenEvent(UpstreamNode<config>&                            upstream,
                                                    uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                    Flits::UpDAT<config>&                            updatFlit) noexcept;
@@ -933,6 +1095,97 @@ namespace CCHI::Taurus {
     public:
         DenialEnum  GetDenial() const noexcept;
         bool        IsDenied() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeREQPreHazardToChannelPendingEvent : public REQFlitEventBase<config>
+                                                        , public UpstreamNodeCacheLineEventBase<config>
+                                                        , public Gravity::Event<UpstreamNodeREQPreHazardToChannelPendingEvent<config>> {
+    public:
+        UpstreamNodeREQPreHazardToChannelPendingEvent(UpstreamNode<config>&                            upstream,
+                                                      uint64_t                                         PA,
+                                                      const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                      Flits::REQ<config>&                              reqFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeREQPostHazardToChannelPendingEvent : public REQFlitEventBase<config>
+                                                         , public UpstreamNodeCacheLineEventBase<config>
+                                                         , public Gravity::Event<UpstreamNodeREQPostHazardToChannelPendingEvent<config>> {
+    public:
+        UpstreamNodeREQPostHazardToChannelPendingEvent(UpstreamNode<config>&                            upstream,
+                                                       uint64_t                                         PA,
+                                                       const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                       Flits::REQ<config>&                              reqFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeREQCompAckPreChannelPendingEvent : public Gravity::CancellableEvent
+                                                       , public UpRSPFlitEventBase<config>
+                                                       , public UpstreamNodeCacheLineEventBase<config>
+                                                       , public Gravity::Event<UpstreamNodeREQCompAckPreChannelPendingEvent<config>> {
+    public:
+        UpstreamNodeREQCompAckPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
+                                                     uint64_t                                         PA,
+                                                     const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                     Flits::UpRSP<config>&                            uprspFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeREQCompAckPostChannelPendingEvent : public UpRSPFlitEventBase<config>
+                                                        , public UpstreamNodeCacheLineEventBase<config>
+                                                        , public Gravity::Event<UpstreamNodeREQCompAckPostChannelPendingEvent<config>> {
+    public:
+        UpstreamNodeREQCompAckPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
+                                                      uint64_t                                         PA,
+                                                      const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                      Flits::UpRSP<config>&                            uprspFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeREQPreChannelChosenEvent : public Gravity::CancellableEvent
+                                               , public REQFlitEventBase<config>
+                                               , public UpstreamNodeCacheLineEventBase<config>
+                                               , public Gravity::Event<UpstreamNodeREQPreChannelChosenEvent<config>> {
+    public:
+        UpstreamNodeREQPreChannelChosenEvent(UpstreamNode<config>&                            upstream,
+                                             uint64_t                                         PA,
+                                             const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                             Flits::REQ<config>&                              reqFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeREQPostChannelChosenEvent : public REQFlitEventBase<config>
+                                                , public UpstreamNodeCacheLineEventBase<config>
+                                                , public Gravity::Event<UpstreamNodeREQPostChannelChosenEvent<config>> {
+    public:
+        UpstreamNodeREQPostChannelChosenEvent(UpstreamNode<config>&                            upstream,
+                                              uint64_t                                         PA,
+                                              const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                              Flits::REQ<config>&                              reqFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeREQUpRSPPreChannelChosenEvent : public Gravity::CancellableEvent
+                                                    , public UpRSPFlitEventBase<config>
+                                                    , public UpstreamNodeCacheLineEventBase<config>
+                                                    , public Gravity::Event<UpstreamNodeREQUpRSPPreChannelChosenEvent<config>> {
+    public:
+        UpstreamNodeREQUpRSPPreChannelChosenEvent(UpstreamNode<config>&                           upstream,
+                                                 uint64_t                                         PA,
+                                                 const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                 Flits::UpRSP<config>&                            upRspFlit) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeREQUpRSPPostChannelChosenEvent : public UpRSPFlitEventBase<config>
+                                                     , public UpstreamNodeCacheLineEventBase<config>
+                                                     , public Gravity::Event<UpstreamNodeREQUpRSPPostChannelChosenEvent<config>> {
+    public:
+        UpstreamNodeREQUpRSPPostChannelChosenEvent(UpstreamNode<config>&                           upstream,
+                                                  uint64_t                                         PA,
+                                                  const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                                  Flits::UpRSP<config>&                            upRspFlit) noexcept;
     };
 }
 
@@ -1897,30 +2150,6 @@ namespace CCHI::Taurus {
         : UpDATFlitEventBase<config>            (updatFlit)
         , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
     { }
-
-    template<FlitConfigurationConcept config>
-    inline DenialEnum UpstreamNodeEVTDataPreHazardPendingEvent<config>::GetDenial() const noexcept
-    {
-        return denial;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline bool UpstreamNodeEVTDataPreHazardPendingEvent<config>::IsDenied() const noexcept
-    {
-        return denial->IsRejected();
-    }
-
-    template<FlitConfigurationConcept config>
-    inline void UpstreamNodeEVTDataPreHazardPendingEvent<config>::SetDenial(DenialEnum denial) noexcept
-    {
-        this->denial = denial;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline void UpstreamNodeEVTDataPreHazardPendingEvent<config>::Deny(DenialEnum denial) noexcept
-    {
-        this->denial = denial;
-    }
 }
 
 
@@ -1932,24 +2161,10 @@ namespace CCHI::Taurus {
         UpstreamNode<config>&                           upstream,
         uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
-        Flits::UpDAT<config>&                           updatFlit,
-        DenialEnum                                      denial) noexcept
+        Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
         , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
-        , denial                                (denial)
     { }
-
-    template<FlitConfigurationConcept config>
-    inline DenialEnum UpstreamNodeEVTDataPostHazardPendingEvent<config>::GetDenial() const noexcept
-    {
-        return denial;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline bool UpstreamNodeEVTDataPostHazardPendingEvent<config>::IsDenied() const noexcept
-    {
-        return denial->IsRejected();
-    }
 }
 
 
@@ -1965,30 +2180,6 @@ namespace CCHI::Taurus {
         : UpDATFlitEventBase<config>            (updatFlit)
         , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
     { }
-
-    template<FlitConfigurationConcept config>
-    inline DenialEnum UpstreamNodeEVTDataPreChannelPendingEvent<config>::GetDenial() const noexcept
-    {
-        return denial;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline bool UpstreamNodeEVTDataPreChannelPendingEvent<config>::IsDenied() const noexcept
-    {
-        return denial->IsRejected();
-    }
-
-    template<FlitConfigurationConcept config>
-    inline void UpstreamNodeEVTDataPreChannelPendingEvent<config>::SetDenial(DenialEnum denial) noexcept
-    {
-        this->denial = denial;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline void UpstreamNodeEVTDataPreChannelPendingEvent<config>::Deny(DenialEnum denial) noexcept
-    {
-        this->denial = denial;
-    }
 }
 
 
@@ -2000,24 +2191,10 @@ namespace CCHI::Taurus {
         UpstreamNode<config>&                           upstream,
         uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
-        Flits::UpDAT<config>&                           updatFlit,
-        DenialEnum                                      denial) noexcept
+        Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
         , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
-        , denial                                (denial)
     { }
-
-    template<FlitConfigurationConcept config>
-    inline DenialEnum UpstreamNodeEVTDataPostChannelPendingEvent<config>::GetDenial() const noexcept
-    {
-        return denial;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline bool UpstreamNodeEVTDataPostChannelPendingEvent<config>::IsDenied() const noexcept
-    {
-        return denial->IsRejected();
-    }
 }
 
 
@@ -2101,6 +2278,282 @@ namespace CCHI::Taurus {
 
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTUpDATPostChannelChosenEvent<config>::UpstreamNodeEVTUpDATPostChannelChosenEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpDAT<config>&                           updatFlit) noexcept
+        : UpDATFlitEventBase<config>            (updatFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPPreHazardDetectionEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPPreHazardDetectionEvent<config>::UpstreamNodeSNPPreHazardDetectionEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::SNP<config>&                             snpFlit,
+        bool&                                           hazard) noexcept
+        : SNPFlitEventBase<config>              (snpFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , hazard                                (hazard)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline bool UpstreamNodeSNPPreHazardDetectionEvent<config>::HasHazard() const noexcept
+    {
+        return hazard;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNodeSNPPreHazardDetectionEvent<config>::SetHazard() noexcept
+    {
+        hazard = true;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeSNPPostHazardDetectionEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPPostHazardDetectionEvent<config>::UpstreamNodeSNPPostHazardDetectionEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::SNP<config>&                             snpFlit,
+        bool                                            hazard) noexcept
+        : SNPFlitEventBase<config>              (snpFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , hazard                                (hazard)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline bool UpstreamNodeSNPPostHazardDetectionEvent<config>::HasHazard() const noexcept
+    {
+        return hazard;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeSNPPreHazardPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPPreHazardPendingEvent<config>::UpstreamNodeSNPPreHazardPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::SNP<config>&                             snpFlit) noexcept
+        : SNPFlitEventBase<config>              (snpFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline DenialEnum UpstreamNodeSNPPreHazardPendingEvent<config>::GetDenial() const noexcept
+    {
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool UpstreamNodeSNPPreHazardPendingEvent<config>::IsDenied() const noexcept
+    {
+        return denial->IsRejected();
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNodeSNPPreHazardPendingEvent<config>::SetDenial(DenialEnum denial) noexcept
+    {
+        this->denial = denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNodeSNPPreHazardPendingEvent<config>::Deny(DenialEnum denial) noexcept
+    {
+        this->denial = denial;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeSNPPostHazardPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPPostHazardPendingEvent<config>::UpstreamNodeSNPPostHazardPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::SNP<config>&                             snpFlit,
+        DenialEnum                                      denial) noexcept
+        : SNPFlitEventBase<config>              (snpFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , denial                                (denial)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline DenialEnum UpstreamNodeSNPPostHazardPendingEvent<config>::GetDenial() const noexcept
+    {
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool UpstreamNodeSNPPostHazardPendingEvent<config>::IsDenied() const noexcept
+    {
+        return denial->IsRejected();
+    }
+}
+
+
+// Implementation of: class UpstreamNodeSNPCacheStatePreDemotionEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPCacheStatePreDemotionEvent<config>::UpstreamNodeSNPCacheStatePreDemotionEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::SNP<config>&                             snpFlit,
+        CacheStateEnum                                  prevState,
+        CacheStateEnum&                                 nextState) noexcept
+        : SNPFlitEventBase<config>              (snpFlit)
+        , CacheStatePreDemotionEventBase        (prevState, nextState)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPCacheStatePostDemotionEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPCacheStatePostDemotionEvent<config>::UpstreamNodeSNPCacheStatePostDemotionEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::SNP<config>&                             snpFlit,
+        CacheStateEnum                                  prevState,
+        CacheStateEnum                                  nextState) noexcept
+        : SNPFlitEventBase<config>              (snpFlit)
+        , CacheStatePostDemotionEventBase       (prevState, nextState)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPRespPreChannelPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPRespPreChannelPendingEvent<config>::UpstreamNodeSNPRespPreChannelPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpRSP<config>&                           uprspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (uprspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPRespPostChannelPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPRespPostChannelPendingEvent<config>::UpstreamNodeSNPRespPostChannelPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpRSP<config>&                           uprspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (uprspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPRespDataPreChannelPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPRespDataPreChannelPendingEvent<config>::UpstreamNodeSNPRespDataPreChannelPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpDAT<config>&                           updatFlit) noexcept
+        : UpDATFlitEventBase<config>            (updatFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPRespDataPostChannelPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPRespDataPostChannelPendingEvent<config>::UpstreamNodeSNPRespDataPostChannelPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpDAT<config>&                           updatFlit) noexcept
+        : UpDATFlitEventBase<config>            (updatFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPUpRSPPreChannelChosenEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPUpRSPPreChannelChosenEvent<config>::UpstreamNodeSNPUpRSPPreChannelChosenEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpRSP<config>&                           uprspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (uprspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPUpRSPPostChannelChosenEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPUpRSPPostChannelChosenEvent<config>::UpstreamNodeSNPUpRSPPostChannelChosenEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpRSP<config>&                           uprspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (uprspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPUpDATPreChannelChosenEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPUpDATPreChannelChosenEvent<config>::UpstreamNodeSNPUpDATPreChannelChosenEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpDAT<config>&                           updatFlit) noexcept
+        : UpDATFlitEventBase<config>            (updatFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeSNPUpDATPostChannelChosenEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeSNPUpDATPostChannelChosenEvent<config>::UpstreamNodeSNPUpDATPostChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
         uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
@@ -2296,6 +2749,126 @@ namespace CCHI::Taurus {
     {
         return denial->IsRejected();
     }
+}
+
+
+// Implementation of: class UpstreamNodeREQPreHazardToChannelPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeREQPreHazardToChannelPendingEvent<config>::UpstreamNodeREQPreHazardToChannelPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::REQ<config>&                             reqFlit) noexcept
+        : REQFlitEventBase<config>              (reqFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeREQPostHazardToChannelPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeREQPostHazardToChannelPendingEvent<config>::UpstreamNodeREQPostHazardToChannelPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::REQ<config>&                             reqFlit) noexcept
+        : REQFlitEventBase<config>              (reqFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeREQCompAckPreChannelPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeREQCompAckPreChannelPendingEvent<config>::UpstreamNodeREQCompAckPreChannelPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpRSP<config>&                           uprspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (uprspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeREQCompAckPostChannelPendingEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeREQCompAckPostChannelPendingEvent<config>::UpstreamNodeREQCompAckPostChannelPendingEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpRSP<config>&                           uprspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (uprspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeREQPreChannelChosenEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeREQPreChannelChosenEvent<config>::UpstreamNodeREQPreChannelChosenEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::REQ<config>&                             reqFlit) noexcept
+        : REQFlitEventBase<config>              (reqFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeREQPostChannelChosenEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeREQPostChannelChosenEvent<config>::UpstreamNodeREQPostChannelChosenEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::REQ<config>&                             reqFlit) noexcept
+        : REQFlitEventBase<config>              (reqFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeREQUpRSPPreChannelChosenEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeREQUpRSPPreChannelChosenEvent<config>::UpstreamNodeREQUpRSPPreChannelChosenEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpRSP<config>&                           upRspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (upRspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeREQUpRSPPostChannelChosenEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeREQUpRSPPostChannelChosenEvent<config>::UpstreamNodeREQUpRSPPostChannelChosenEvent(
+        UpstreamNode<config>&                           upstream,
+        uint64_t                                        PA,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        Flits::UpRSP<config>&                           upRspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (upRspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+    { }
 }
 
 

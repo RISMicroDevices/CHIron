@@ -93,12 +93,35 @@ namespace CCHI::Taurus {
             Gravity::EventBus<UpstreamNodeEVTUpDATPreChannelChosenEvent<config>>        OnEVTUpDATPreChannelChosen;
             Gravity::EventBus<UpstreamNodeEVTUpDATPostChannelChosenEvent<config>>       OnEVTUpDATPostChannelChosen;
 
+            Gravity::EventBus<UpstreamNodeSNPPreHazardDetectionEvent<config>>           OnSNPPreHazardDetection;
+            Gravity::EventBus<UpstreamNodeSNPPostHazardDetectionEvent<config>>          OnSNPPostHazardDetection;
+            Gravity::EventBus<UpstreamNodeSNPPreHazardPendingEvent<config>>             OnSNPPreHazardPending;
+            Gravity::EventBus<UpstreamNodeSNPPostHazardPendingEvent<config>>            OnSNPPostHazardPending;
+            Gravity::EventBus<UpstreamNodeSNPCacheStatePreDemotionEvent<config>>        OnSNPCacheStatePreDemotion;
+            Gravity::EventBus<UpstreamNodeSNPCacheStatePostDemotionEvent<config>>       OnSNPCacheStatePostDemotion;
+            Gravity::EventBus<UpstreamNodeSNPRespPreChannelPendingEvent<config>>        OnSNPRespPreChannelPending;
+            Gravity::EventBus<UpstreamNodeSNPRespPostChannelPendingEvent<config>>       OnSNPRespPostChannelPending;
+            Gravity::EventBus<UpstreamNodeSNPRespDataPreChannelPendingEvent<config>>    OnSNPRespDataPreChannelPending;
+            Gravity::EventBus<UpstreamNodeSNPRespDataPostChannelPendingEvent<config>>   OnSNPRespDataPostChannelPending;
+            Gravity::EventBus<UpstreamNodeSNPUpRSPPreChannelChosenEvent<config>>        OnSNPUpRSPPreChannelChosen;
+            Gravity::EventBus<UpstreamNodeSNPUpRSPPostChannelChosenEvent<config>>       OnSNPUpRSPPostChannelChosen;
+            Gravity::EventBus<UpstreamNodeSNPUpDATPreChannelChosenEvent<config>>        OnSNPUpDATPreChannelChosen;
+            Gravity::EventBus<UpstreamNodeSNPUpDATPostChannelChosenEvent<config>>       OnSNPUpDATPostChannelChosen;
+
             Gravity::EventBus<UpstreamNodeREQPreHazardDetectionEvent<config>>           OnREQPreHazardDetection;
             Gravity::EventBus<UpstreamNodeREQPostHazardDetectionEvent<config>>          OnREQPostHazardDetection;
             Gravity::EventBus<UpstreamNodeREQPreHazardPendingEvent<config>>             OnREQPreHazardPending;
             Gravity::EventBus<UpstreamNodeREQPostHazardPendingEvent<config>>            OnREQPostHazardPending;
             Gravity::EventBus<UpstreamNodeREQPreChannelPendingEvent<config>>            OnREQPreChannelPending;
             Gravity::EventBus<UpstreamNodeREQPostChannelPendingEvent<config>>           OnREQPostChannelPending;
+            Gravity::EventBus<UpstreamNodeREQPreHazardToChannelPendingEvent<config>>    OnREQPreHazardToChannelPending;
+            Gravity::EventBus<UpstreamNodeREQPostHazardToChannelPendingEvent<config>>   OnREQPostHazardToChannelPending;
+            Gravity::EventBus<UpstreamNodeREQCompAckPreChannelPendingEvent<config>>     OnREQCompAckPreChannelPending;
+            Gravity::EventBus<UpstreamNodeREQCompAckPostChannelPendingEvent<config>>    OnREQCompAckPostChannelPending;
+            Gravity::EventBus<UpstreamNodeREQPreChannelChosenEvent<config>>             OnREQPreChannelChosen;
+            Gravity::EventBus<UpstreamNodeREQPostChannelChosenEvent<config>>            OnREQPostChannelChosen;
+            Gravity::EventBus<UpstreamNodeREQUpRSPPreChannelChosenEvent<config>>        OnREQUpRSPPreChannelChosen;
+            Gravity::EventBus<UpstreamNodeREQUpRSPPostChannelChosenEvent<config>>       OnREQUpRSPPostChannelChosen;
 
             Gravity::EventBus<UpstreamNodeXactAcceptedEVTEvent<config>>                 OnAcceptedEVT;
             Gravity::EventBus<UpstreamNodeXactAcceptedSNPEvent<config>>                 OnAcceptedSNP;
@@ -324,12 +347,12 @@ namespace CCHI::Taurus {
         std::optional<Flits::EVT<config>>       PeekTXEVT() noexcept;
         std::optional<Flits::EVT<config>>       PopTXEVT() noexcept;
 
-        std::optional<Flits::REQ<config>>       PeekTXREQ() const noexcept;
+        std::optional<Flits::REQ<config>>       PeekTXREQ() noexcept;
         std::optional<Flits::REQ<config>>       PopTXREQ() noexcept;
 
         bool                                    PushRXSNP(const Flits::SNP<config>& snpFlit) noexcept;
 
-        std::optional<Flits::UpRSP<config>>     PeekTXRSP() const noexcept;
+        std::optional<Flits::UpRSP<config>>     PeekTXRSP() noexcept;
         std::optional<Flits::UpRSP<config>>     PopTXRSP() noexcept;
 
         std::optional<Flits::UpDAT<config>>     PeekTXDAT() noexcept;
@@ -989,8 +1012,6 @@ namespace CCHI::Taurus {
 
                                 if (events)
                                     events->OnEVTDataPostHazardToChannelPending(*this, it->first << 3, cacheLine, *cacheLine.pendingEVTChannelTXDAT0);
-
-                                // EVT TXDAT cannot be actually rejected by events and would try to pend the flit again on next Tick
                             }
                         }
                         else if (cacheLine.pendingEVTChannelTXDAT0)
@@ -1057,33 +1078,37 @@ namespace CCHI::Taurus {
 
                             if (hazard)
                             {
-                                DenialEnum denial = Denial::ACCEPTED;
+                                bool cancelled = false;
 
                                 if (events)
-                                    denial = events->OnEVTDataPreHazardPending(*this, it->first << 3, cacheLine, datFlit).GetDenial();
+                                    cancelled = events->OnEVTDataPreHazardPending(*this, it->first << 3, cacheLine, datFlit).IsCancelled();
 
-                                if (!denial->IsRejected())
+                                if (!cancelled)
+                                {
                                     cacheLine.pendingEVTHazardTXDAT0 = datFlit;
 
-                                if (events)
-                                    events->OnEVTDataPostHazardPending(*this, it->first << 3, cacheLine, datFlit, denial);
+                                    if (events)
+                                        events->OnEVTDataPostHazardPending(*this, it->first << 3, cacheLine, datFlit);
+                                }
 
-                                // EVT cannot be actually rejected by events and would try to pend the flit again on next Tick
+                                // EVT UpDAT cannot be actually cancelled by events and would try to pend the flit again on next Tick
                             }
                             else
                             {
-                                DenialEnum denial = Denial::ACCEPTED;
+                                bool cancelled = false;
 
                                 if (events)
-                                    denial = events->OnEVTDataPreChannelPending(*this, it->first << 3, cacheLine, datFlit).GetDenial();
+                                    cancelled = events->OnEVTDataPreChannelPending(*this, it->first << 3, cacheLine, datFlit).IsCancelled();
 
-                                if (!denial->IsRejected())
+                                if (!cancelled)
+                                {
                                     cacheLine.pendingEVTChannelTXDAT0 = datFlit;
 
-                                if (events)
-                                    events->OnEVTDataPostChannelPending(*this, it->first << 3, cacheLine, datFlit, denial);
+                                    if (events)
+                                        events->OnEVTDataPostChannelPending(*this, it->first << 3, cacheLine, datFlit);
+                                }
 
-                                // EVT cannot be actually rejected by events and would try to pend the flit again on next Tick
+                                // EVT UpDAT cannot be actually cancelled by events and would try to pend the flit again on next Tick
                             }
                         }
 
@@ -1115,33 +1140,37 @@ namespace CCHI::Taurus {
 
                             if (hazard)
                             {
-                                DenialEnum denial = Denial::ACCEPTED;
+                                bool cancelled = false;
 
                                 if (events)
-                                    denial = events->OnEVTDataPreHazardPending(*this, it->first << 3, cacheLine, datFlit).GetDenial();
+                                    cancelled = events->OnEVTDataPreHazardPending(*this, it->first << 3, cacheLine, datFlit).IsCancelled();
 
-                                if (!denial->IsRejected())
+                                if (!cancelled)
+                                {
                                     cacheLine.pendingEVTHazardTXDAT1 = datFlit;
 
-                                if (events)
-                                    events->OnEVTDataPostHazardPending(*this, it->first << 3, cacheLine, datFlit, denial);
+                                    if (events)
+                                        events->OnEVTDataPostHazardPending(*this, it->first << 3, cacheLine, datFlit);
+                                }
 
-                                // EVT cannot be actually rejected by events and would try to pend the flit again on next Tick
+                                // EVT UpDAT cannot be actually cancelled by events and would try to pend the flit again on next Tick
                             }
                             else
                             {
-                                DenialEnum denial = Denial::ACCEPTED;
+                                bool cancelled = false;
 
                                 if (events)
-                                    denial = events->OnEVTDataPreChannelPending(*this, it->first << 3, cacheLine, datFlit).GetDenial();
+                                    cancelled = events->OnEVTDataPreChannelPending(*this, it->first << 3, cacheLine, datFlit).IsCancelled();
 
-                                if (!denial->IsRejected())
+                                if (!cancelled)
+                                {
                                     cacheLine.pendingEVTChannelTXDAT1 = datFlit;
 
-                                if (events)
-                                    events->OnEVTDataPostChannelPending(*this, it->first << 3, cacheLine, datFlit, denial);
+                                    if (events)
+                                        events->OnEVTDataPostChannelPending(*this, it->first << 3, cacheLine, datFlit);
+                                }
 
-                                // EVT cannot be actually rejected by events and would try to pend the flit again on next Tick
+                                // EVT UpDAT cannot be actually cancelled by events and would try to pend the flit again on next Tick
                             }
                         }
                     }
@@ -1177,9 +1206,11 @@ namespace CCHI::Taurus {
             {
                 bool hazard = HasSNPHazard(cacheLine);
 
-                // TODO: event: SNPPreHazardDetectionEvent
+                if (events)
+                    events->OnSNPPreHazardDetection(*this, it->first << 3, cacheLine, *cacheLine.pendingSNPHazardRXSNP, hazard);
                 
-                // TODO: event: SNPPostHazardDetectionEvent
+                if (events)
+                    events->OnSNPPostHazardDetection(*this, it->first << 3, cacheLine, *cacheLine.pendingSNPHazardRXSNP, hazard);
 
                 if (HasSNPHazard(cacheLine))
                     continue;
@@ -1222,7 +1253,7 @@ namespace CCHI::Taurus {
                         continue;
                     }
 
-                    const Flits::SNP<config>& flit = xactionSnoop.GetFirst().flit.snp;
+                    Flits::SNP<config> flit = xactionSnoop.GetFirst().flit.snp;
 
                     // state transition and snoop response combinations
                     bool retToSrc;
@@ -1356,9 +1387,13 @@ namespace CCHI::Taurus {
                             break;
                     }
 
-                    // TODO: event: SNPPreStateTransitionEvent
+                    if (events)
+                        events->OnSNPCacheStatePreDemotion(*this, it->first << 3, cacheLine, flit, cacheLine.state, state);
 
-                    // TODO: event SNPPostStateTransitionEvent
+                    if (events)
+                        events->OnSNPCacheStatePostDemotion(*this, it->first << 3, cacheLine, flit, cacheLine.state, state);
+
+                    // TODO: The cache state demotion event of SNPs might should be associated with the final Resp and RetToSrc
 
                     if (retToSrc)
                     {
@@ -1378,7 +1413,13 @@ namespace CCHI::Taurus {
                         datFlit.Data[2] = cacheLine.data[2];
                         datFlit.Data[3] = cacheLine.data[3];
 
+                        if (events)
+                            events->OnSNPRespDataPreChannelPending(*this, it->first << 3, cacheLine, datFlit);
+
                         cacheLine.pendingSNPChannelTXDAT0 = datFlit;
+
+                        if (events)
+                            events->OnSNPRespDataPostChannelPending(*this, it->first << 3, cacheLine, datFlit);
 
                         datFlit.DataID = 1;
                         datFlit.Data[0] = cacheLine.data[4];
@@ -1386,11 +1427,13 @@ namespace CCHI::Taurus {
                         datFlit.Data[2] = cacheLine.data[6];
                         datFlit.Data[3] = cacheLine.data[7];
 
-                        // TODO: event: SNPRespDataPreChannelPendingEvent
+                        if (events)
+                            events->OnSNPRespDataPreChannelPending(*this, it->first << 3, cacheLine, datFlit);
 
                         cacheLine.pendingSNPChannelTXDAT1 = datFlit;
 
-                        // TODO: event: SNPRespDataPostChannelPendingEvent
+                        if (events)
+                            events->OnSNPRespDataPostChannelPending(*this, it->first << 3, cacheLine, datFlit);
                     }
                     else
                     {
@@ -1403,11 +1446,13 @@ namespace CCHI::Taurus {
                         rspFlit.Resp = resp->value;
                         rspFlit.TraceTag = 0;
 
-                        // TODO: event: SNPRespPreChannelPendingEvent
+                        if (events)
+                            events->OnSNPRespPreChannelPending(*this, it->first << 3, cacheLine, rspFlit);
 
                         cacheLine.pendingSNPChannelTXRSP = rspFlit;
 
-                        // TODO: event: SNPRespPostChannelPendingEvent
+                        if (events)
+                            events->OnSNPRespPostChannelPending(*this, it->first << 3, cacheLine, rspFlit);
                     }
 
                     cacheLine.state = state;
@@ -1436,12 +1481,14 @@ namespace CCHI::Taurus {
                 if (hazard)
                     continue;
 
-                // TODO: event: REQPreHazardToChannelPendingEvent
+                if (events)
+                    events->OnREQPreHazardToChannelPending(*this, it->first << 3, cacheLine, *cacheLine.pendingREQHazardTXREQ);
 
                 cacheLine.pendingREQChannelTXREQ = cacheLine.pendingREQHazardTXREQ;
                 cacheLine.pendingREQHazardTXREQ.reset();
 
-                // TODO: event: REQPostHazardToChannelPendingEvent
+                if (events)
+                    events->OnREQPostHazardToChannelPending(*this, it->first << 3, cacheLine, *cacheLine.pendingREQChannelTXREQ);
             }
             else if (cacheLine.activeREQ)
             {
@@ -1472,11 +1519,20 @@ namespace CCHI::Taurus {
                         rspFlit.Resp = 0;
                         rspFlit.TraceTag = 0;
 
-                        // TODO: event: REQCompAckPreChannelPendingEvent
+                        bool cancelled = false;
 
-                        cacheLine.pendingREQChannelTXRSP = rspFlit;
+                        if (events)
+                            cancelled = events->OnREQCompAckPreChannelPending(*this, it->first << 3, cacheLine, rspFlit).IsCancelled();
 
-                        // TODO: event: REQCompAckPostChannelPendingEvent
+                        if (!cancelled)
+                        {
+                            cacheLine.pendingREQChannelTXRSP = rspFlit;
+
+                            if (events)
+                                events->OnREQCompAckPostChannelPending(*this, it->first << 3, cacheLine, rspFlit);
+                        }
+
+                        // CompAck cannot be actually cancalled by events and would try to pend the flit again on next Tick
                     }
                 }
                 else if (cacheLine.activeREQ->GetType() == Xact::XactionType::CacheableAllocatingRead)
@@ -1508,11 +1564,20 @@ namespace CCHI::Taurus {
                         rspFlit.Resp = 0;
                         rspFlit.TraceTag = 0;
 
-                        // TODO: event: REQCompAckPreChannelPendingEvent
+                        bool cancelled = false;
 
-                        cacheLine.pendingREQChannelTXRSP = rspFlit;
+                        if (events)
+                            cancelled = events->OnREQCompAckPreChannelPending(*this, it->first << 3, cacheLine, rspFlit).IsCancelled();
 
-                        // TODO: event: REQCompAckPostChannelPendingEvent
+                        if (!cancelled)
+                        {
+                            cacheLine.pendingREQChannelTXRSP = rspFlit;
+
+                            if (events)
+                                events->OnREQCompAckPostChannelPending(*this, it->first << 3, cacheLine, rspFlit);
+                        }
+
+                        // CompAck cannot be actually cancalled by events and would try to pend the flit again on next Tick
                     }
                 }
             }
@@ -1596,7 +1661,7 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline std::optional<Flits::REQ<config>> UpstreamNode<config>::PeekTXREQ() const noexcept
+    inline std::optional<Flits::REQ<config>> UpstreamNode<config>::PeekTXREQ() noexcept
     {
         for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
         {
@@ -1604,9 +1669,12 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingREQChannelTXREQ)
             {
-                // TODO: event: REQPreChannelChosenEvent
+                if (events)
+                    if (events->OnREQPreChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingREQChannelTXREQ).IsCancelled())
+                        continue;
 
-                // TODO: event: REQPostChannelChosenEvent
+                if (events)
+                    events->OnREQPostChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingREQChannelTXREQ);
 
                 return { *cacheLine.pendingREQChannelTXREQ };
             }
@@ -1624,11 +1692,14 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingREQChannelTXREQ)
             {
-                // TODO: event: REQPreChannelChosenEvent
-
                 auto& flit = *cacheLine.pendingREQChannelTXREQ;
 
-                // TODO: event: REQPostChannelChosenEvent
+                if (events)
+                    if (events->OnREQPreChannelChosen(*this, it->first << 3, cacheLine, flit).IsCancelled())
+                        continue;
+
+                if (events)
+                    events->OnREQPostChannelChosen(*this, it->first << 3, cacheLine, flit);
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
                 XactDenialEnum denial = joint.NextREQ(glbl, time, flit, &xaction);
@@ -1659,7 +1730,9 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline bool UpstreamNode<config>::PushRXSNP(const Flits::SNP<config>& snpFlit) noexcept
     {
-        std::shared_ptr<CacheLine> cacheLine = GetCacheLine(snpFlit.Addr << 3);
+        Flits::SNP<config> flit = snpFlit;
+
+        std::shared_ptr<CacheLine> cacheLine = GetCacheLine(flit.Addr << 3);
 
         if (cacheLine)
         {
@@ -1672,37 +1745,47 @@ namespace CCHI::Taurus {
         else
         {
             cacheLine = std::make_shared<CacheLine>();
-            SetCacheLine(snpFlit.Addr << 3, cacheLine);
+            SetCacheLine(flit.Addr << 3, cacheLine);
         }
 
         bool hazard = HasSNPHazard(*cacheLine);
 
-        // TODO: event: SNPPreHazardDetectionEvent
+        if (events)
+            events->OnSNPPreHazardDetection(*this, flit.Addr << 3, *cacheLine, flit, hazard);
 
-        // TODO: event: SNPPostHazardDetectionEvent
+        if (events)
+            events->OnSNPPostHazardDetection(*this, flit.Addr << 3, *cacheLine, flit, hazard);
 
         if (hazard)
         {
-            // TODO: event: SNPPreHazardPendingEvent
+            DenialEnum denial = Denial::ACCEPTED;
 
-            cacheLine->pendingSNPHazardRXSNP = snpFlit;
+            if (events)
+                denial = events->OnSNPPreHazardPending(*this, flit.Addr << 3, *cacheLine, flit).GetDenial();
 
-            // TODO: event: SNPPostHazardPendingEvent
+            if (!denial->IsRejected())
+                cacheLine->pendingSNPHazardRXSNP = flit;
+
+            if (events)
+                events->OnSNPPostHazardPending(*this, flit.Addr << 3, *cacheLine, flit, denial);
+
+            if (denial->IsRejected())
+                return false;
         }
         else
         {
             std::shared_ptr<Xact::Xaction<config>> xaction;
-            XactDenialEnum denial = joint.NextSNP(glbl, time, snpFlit, &xaction);
+            XactDenialEnum denial = joint.NextSNP(glbl, time, flit, &xaction);
 
             if (denial == XactDenial::ACCEPTED)
             {
                 if (events)
-                    events->OnAcceptedSNP(*this, snpFlit.Addr << 3, *cacheLine, xaction, snpFlit);
+                    events->OnAcceptedSNP(*this, flit.Addr << 3, *cacheLine, xaction, flit);
             }
             else
             {
                 if (events)
-                    events->OnDeniedSNP(*this, snpFlit.Addr << 3, *cacheLine, denial, xaction, snpFlit);
+                    events->OnDeniedSNP(*this, flit.Addr << 3, *cacheLine, denial, xaction, flit);
             }
 
             cacheLine->activeSNP = xaction;
@@ -1712,7 +1795,7 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline std::optional<Flits::UpRSP<config>> UpstreamNode<config>::PeekTXRSP() const noexcept
+    inline std::optional<Flits::UpRSP<config>> UpstreamNode<config>::PeekTXRSP() noexcept
     {
         for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
         {
@@ -1720,18 +1803,24 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXRSP)
             {
-                // TODO: event: SNPUpRSPPreChannelChosenEvent
+                if (events)
+                    if (events->OnSNPUpRSPPreChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingSNPChannelTXRSP).IsCancelled())
+                        continue;
 
-                // TODO: event: SNPUpRSPPostChannelChosenEvent
+                if (events)
+                    events->OnSNPUpRSPPostChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingSNPChannelTXRSP);
 
                 return { *cacheLine.pendingSNPChannelTXRSP };
             }
 
             if (cacheLine.pendingREQChannelTXRSP)
             {
-                // TODO: event: REQUpRSPPreChannelChosenEvent
+                if (events)
+                    if (events->OnREQUpRSPPreChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingREQChannelTXRSP).IsCancelled())
+                        continue;
 
-                // TODO: event: REQUpRSPPostChannelChosenEvent
+                if (events)
+                    events->OnREQUpRSPPostChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingREQChannelTXRSP);
 
                 return { *cacheLine.pendingREQChannelTXRSP };
             }
@@ -1751,9 +1840,12 @@ namespace CCHI::Taurus {
             {
                 auto& flit = *cacheLine.pendingSNPChannelTXRSP;
 
-                // TODO: event: SNPUpRSPPreChannelChosenEvent
+                if (events)
+                    if (events->OnSNPUpRSPPreChannelChosen(*this, it->first << 3, cacheLine, flit).IsCancelled())
+                        continue;
 
-                // TODO: event: SNPUpRSPPostChannelChosenEvent
+                if (events)
+                    events->OnSNPUpRSPPostChannelChosen(*this, it->first << 3, cacheLine, flit);
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
                 XactDenialEnum denial = joint.NextUpRSP(glbl, time, flit, &xaction);
@@ -1778,9 +1870,12 @@ namespace CCHI::Taurus {
             {
                 auto& flit = *cacheLine.pendingREQChannelTXRSP;
 
-                // TODO: event: REQUpRSPPreChannelChosenEvent
+                if (events)
+                    if (events->OnREQUpRSPPreChannelChosen(*this, it->first << 3, cacheLine, flit).IsCancelled())
+                        continue;
 
-                // TODO: event: REQUpRSPPostChannelChosenEvent
+                if (events)
+                    events->OnREQUpRSPPostChannelChosen(*this, it->first << 3, cacheLine, flit);
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
                 XactDenialEnum denial = joint.NextUpRSP(glbl, time, flit, &xaction);
@@ -1814,18 +1909,24 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXDAT0)
             {
-                // TODO: event: SNPUpDATPreChannelChosenEvent
+                if (events)
+                    if (events->OnSNPUpDATPreChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingSNPChannelTXDAT0).IsCancelled())
+                        continue;
 
-                // TODO: event: SNPUpDATPostChannelChosenEvent
+                if (events)
+                    events->OnSNPUpDATPostChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingSNPChannelTXDAT0);
 
                 return { *cacheLine.pendingSNPChannelTXDAT0 };
             }
 
             if (cacheLine.pendingSNPChannelTXDAT1)
             {
-                // TODO: event: SNPUpDATPreChannelChosenEvent
+                if (events)
+                    if (events->OnSNPUpDATPreChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingSNPChannelTXDAT1).IsCancelled())
+                        continue;
 
-                // TODO: event: SNPUpDATPostChannelChosenEvent
+                if (events)
+                    events->OnSNPUpDATPostChannelChosen(*this, it->first << 3, cacheLine, *cacheLine.pendingSNPChannelTXDAT1);
 
                 return { *cacheLine.pendingSNPChannelTXDAT1 };
             }
@@ -1869,9 +1970,12 @@ namespace CCHI::Taurus {
             {
                 auto& flit = *cacheLine.pendingSNPChannelTXDAT0;
 
-                // TODO: event: SNPUpDATPreChannelChosenEvent
+                if (events)
+                    if (events->OnSNPUpDATPreChannelChosen(*this, it->first << 3, cacheLine, flit).IsCancelled())
+                        continue;
 
-                // TODO: event: SNPUpDATPostChannelChosenEvent
+                if (events)
+                    events->OnSNPUpDATPostChannelChosen(*this, it->first << 3, cacheLine, flit);
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
                 XactDenialEnum denial = joint.NextUpDAT(glbl, time, flit, &xaction);
@@ -1896,9 +2000,12 @@ namespace CCHI::Taurus {
             {
                 auto& flit = *cacheLine.pendingSNPChannelTXDAT1;
 
-                // TODO: event: SNPUpDATPreChannelChosenEvent
-                
-                // TODO: event: SNPUpDATPostChannelChosenEvent
+                if (events)
+                    if (events->OnSNPUpDATPreChannelChosen(*this, it->first << 3, cacheLine, flit).IsCancelled())
+                        continue;
+
+                if (events)
+                    events->OnSNPUpDATPostChannelChosen(*this, it->first << 3, cacheLine, flit);
 
                 std::shared_ptr<Xact::Xaction<config>> xaction;
                 XactDenialEnum denial = joint.NextUpDAT(glbl, time, flit, &xaction);
