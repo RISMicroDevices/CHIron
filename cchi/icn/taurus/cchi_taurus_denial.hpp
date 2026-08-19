@@ -54,6 +54,8 @@ namespace CCHI::Taurus {
         inline constexpr DenialEnumBack REJECTED_TAURUS_PA_REQ_BUSY         ("REJECTED_TAURUS_PA_REQ_BUSY",     0x00010000 |  2, false, true );
         inline constexpr DenialEnumBack REJECTED_TAURUS_PA_EVT_BUSY         ("REJECTED_TAURUS_PA_EVT_BUSY",     0x00010000 |  3, false, true );
         inline constexpr DenialEnumBack REJECTED_TAURUS_EVICT_MISS          ("REJECTED_TAURUS_EVICT_MISS",      0x00010000 |  4, false, true );
+
+        inline constexpr DenialEnumBack REJECTED_TAURUS_EVENT               ("REJECTED_TAURUS_EVENT",           0x00020000 |  0, false, true );
     }
 }
 
