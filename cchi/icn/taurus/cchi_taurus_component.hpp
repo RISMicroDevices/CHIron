@@ -177,6 +177,17 @@ namespace CCHI::Taurus {
             std::optional<Flits::REQ<config>>           pendingREQHazardTXREQ   = std::nullopt;
             std::optional<Flits::REQ<config>>           pendingREQChannelTXREQ  = std::nullopt;
             std::optional<Flits::UpRSP<config>>         pendingREQChannelTXRSP  = std::nullopt;
+
+        public:
+            std::optional<uint64_t>                 Load64(size_t alignedOffset) const noexcept;
+            std::optional<uint32_t>                 Load32(size_t alignedOffset) const noexcept;
+            std::optional<uint16_t>                 Load16(size_t alignedOffset) const noexcept;
+            std::optional<uint8_t>                  Load8(size_t alignedOffset) const noexcept;
+
+            bool                                    Store64(size_t alignedOffset, uint64_t value) noexcept;
+            bool                                    Store32(size_t alignedOffset, uint32_t value) noexcept;
+            bool                                    Store16(size_t alignedOffset, uint16_t value) noexcept;
+            bool                                    Store8(size_t alignedOffset, uint8_t value) noexcept;
         
         public:
             bool                                    IsEVTInFlight(const Xact::Global<config>& glbl) const noexcept;
@@ -230,8 +241,8 @@ namespace CCHI::Taurus {
         public:
             uint64_t                                GetPA() const noexcept;
 
-            uint64_t*                               GetData() noexcept;
-            const uint64_t*                         GetData() const noexcept;
+            std::shared_ptr<uint64_t[]>             GetData() noexcept;
+            std::shared_ptr<const uint64_t[]>       GetData() const noexcept;
         };
 
         class CompleteEvent {
@@ -638,7 +649,7 @@ namespace CCHI::Taurus {
         reqFlit.WayValid = 0;
         reqFlit.Way = 0;
         reqFlit.TraceTag = 0;
-        // *NOTE: 'ExpCompData' should be refreshed on releasing hazard for ReadUnique
+        // *NOTE: 'ExpCompData' must not be refreshed on releasing hazard for ReadUnique
 
         if (events)
             events->OnREQPreHazardDetection(*this, PA, *cacheLine, reqFlit, hazard);
@@ -1330,7 +1341,7 @@ namespace CCHI::Taurus {
                             {
                                 case CacheState::Invalid:
                                     retToSrc = false;
-                                    state = CacheState::Shared;
+                                    state = CacheState::Invalid;
                                     resp = Resps::Enum::I;
                                     break;
 
@@ -1384,6 +1395,10 @@ namespace CCHI::Taurus {
                                     break;
                             }
                         
+                            break;
+
+                        default:
+                            // should not reach here
                             break;
                     }
 
@@ -2128,6 +2143,53 @@ namespace CCHI::Taurus {
                     {
                         if (events)
                             events->OnAcceptedDnRSP(*this, it->first << 3, cacheLine, xaction, dnrspFlit);
+
+                        CacheStateEnum state;
+
+                        if (xaction->GetType() == Xact::XactionType::CacheableDataless)
+                        {
+                            std::shared_ptr<Xact::XactionCacheableDataless<config>> xactionCacheableDataless
+                                = std::static_pointer_cast<Xact::XactionCacheableDataless<config>>(xaction);
+
+                            switch (xactionCacheableDataless->GetFirst().flit.req.Opcode)
+                            {
+                                case Opcodes::REQ::MakeUnique:
+                                {
+                                    state = CacheState::UniqueClean;
+                                    break;
+                                }
+
+                                default:
+                                    // may be should not reach here, or unsupported REQ
+                                    break;
+                            }
+                        }
+                        else if (xaction->GetType() == Xact::XactionType::CacheableAllocatingRead)
+                        {
+                            std::shared_ptr<Xact::XactionCacheableAllocatingRead<config>> xactionCacheableAllocatingRead
+                                = std::static_pointer_cast<Xact::XactionCacheableAllocatingRead<config>>(xaction);
+
+                            switch (xactionCacheableAllocatingRead->GetFirst().flit.req.Opcode)
+                            {
+                                case Opcodes::REQ::ReadUnique:
+                                {
+                                    state = CacheState::UniqueClean;
+                                    break;
+                                }
+
+                                default:
+                                    // may be should not reach here, or unsupported REQ
+                                    break;
+                            }
+                        }
+                        else
+                            return true;
+
+                        // TODO: REQDnRSPCacheStatePrePromotionEvent should be supported after state checker was implemented
+
+                        // TODO: event: REQDnRSPCacheStatePostPromotionEvent
+
+                        cacheLine.state = state;
                     }
                     else
                     {
@@ -2286,6 +2348,57 @@ namespace CCHI::Taurus {
                     {
                         if (events)
                             events->OnAcceptedDnDAT(*this, it->first << 3, cacheLine, xaction, dndatFlit);
+
+                        CacheStateEnum state;
+
+                        if (xaction->GetType() == Xact::XactionType::CacheableAllocatingRead)
+                        {
+                            std::shared_ptr<Xact::XactionCacheableAllocatingRead<config>> xactionCacheableAllocatingRead
+                                = std::static_pointer_cast<Xact::XactionCacheableAllocatingRead<config>>(xaction);
+
+                            if (xaction->GetFirstDnDAT({ Opcodes::DnDAT::CompData }) != xaction->GetLastDnDAT({ Opcodes::DnDAT::CompData }))
+                            {
+                                // no longer the first DnDAT flit, state already updated
+                                return true;
+                            }
+
+                            switch (xactionCacheableAllocatingRead->GetFirst().flit.req.Opcode)
+                            {
+                                case Opcodes::REQ::ReadShared:
+                                {
+                                    if (dndatFlit.Resp == Resps::SC)
+                                        state = CacheState::Shared;
+                                    else if (dndatFlit.Resp == Resps::UC)
+                                        state = CacheState::UniqueClean;
+                                    else if (dndatFlit.Resp == Resps::UC_PD)
+                                        state = CacheState::UniqueDirty;
+                                    else
+                                    {
+                                        // TODO: should not reach here maybe, filtered by state checker
+                                    }
+
+                                    break;
+                                }
+
+                                case Opcodes::REQ::ReadUnique:
+                                {
+                                    state = CacheState::UniqueClean;
+                                    break;
+                                }
+
+                                default:
+                                    // may be should not reach here, or unsupported REQ
+                                    break;
+                            }
+
+                            // TODO: REQDnDATCacheStatePrePromotionEvent should be supported after state checker was implemented
+
+                            // TODO: event: REQDnDATCacheStatePostPromotionEvent
+
+                            cacheLine.state = state;
+                        }
+                        else
+                            return true;
                     }
                     else
                     {
@@ -2307,7 +2420,28 @@ namespace CCHI::Taurus {
         return true;
     }
 
-    // TODO
+    template<FlitConfigurationConcept config>
+    inline std::optional<size_t> UpstreamNode<config>::AllocateTxnID() noexcept
+    {
+        // allocate and mark the first free TxnID; the ID stays occupied until the
+        // transaction completes (TickREQ/TickEVT) or its flit is denied by the joint
+        for (size_t i = 0; i < usedTxnID.size(); ++i)
+        {
+            if (!usedTxnID[i])
+            {
+                usedTxnID[i] = true;
+                return { i };
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::FreeTxnID(size_t txnID) noexcept
+    {
+        usedTxnID.at(txnID) = false;
+    }
 }
 
 
@@ -2488,26 +2622,174 @@ namespace CCHI::Taurus {
     { }
 
     template<FlitConfigurationConcept config>
-    inline std::optional<size_t> UpstreamNode<config>::AllocateTxnID() noexcept
-    {
-        // allocate and mark the first free TxnID; the ID stays occupied until the
-        // transaction completes (TickREQ/TickEVT) or its flit is denied by the joint
-        for (size_t i = 0; i < usedTxnID.size(); ++i)
-        {
-            if (!usedTxnID[i])
-            {
-                usedTxnID[i] = true;
-                return { i };
-            }
-        }
+    inline UpstreamNode<config>::EmittedEvent::EmittedEvent(
+        uint64_t PA,
+        std::shared_ptr<CacheLine> cacheLine) noexcept
+        : CacheLineEventBase(PA, std::move(cacheLine))
+    { }
 
-        return std::nullopt;
+    template<FlitConfigurationConcept config>
+    inline UpstreamNode<config>::ReadEvent::ReadEvent(uint64_t PA) noexcept
+        : PA    (PA)
+        , data  (nullptr)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNode<config>::ReadEvent::ReadEvent(
+        uint64_t PA,
+        std::shared_ptr<uint64_t[]> data) noexcept
+        : PA    (PA)
+        , data  (std::move(data))
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::ReadEvent::GetPA() const noexcept
+    {
+        return PA;
     }
 
     template<FlitConfigurationConcept config>
-    inline void UpstreamNode<config>::FreeTxnID(size_t txnID) noexcept
+    inline std::shared_ptr<uint64_t[]> UpstreamNode<config>::ReadEvent::GetData() noexcept
     {
-        usedTxnID.at(txnID) = false;
+        return data;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const uint64_t[]> UpstreamNode<config>::ReadEvent::GetData() const noexcept
+    {
+        return data;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNode<config>::CompleteEvent::CompleteEvent(uint64_t PA) noexcept
+        : PA(PA)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::CompleteEvent::GetPA() const noexcept
+    {
+        return PA;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::optional<uint64_t> UpstreamNode<config>::CacheLine::Load64(size_t alignedOffset) const noexcept
+    {
+        if (this->state == CacheState::Invalid)
+            return std::nullopt;
+
+        if (alignedOffset >= 8)
+            return std::nullopt;
+
+        return { data[alignedOffset] };
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::optional<uint32_t> UpstreamNode<config>::CacheLine::Load32(size_t alignedOffset) const noexcept
+    {
+        if (this->state == CacheState::Invalid)
+            return std::nullopt;
+
+        if (alignedOffset >= 16)
+            return std::nullopt;
+
+        return { uint32_t(data[alignedOffset >> 1] >> ((alignedOffset & 1) * 32)) };
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::optional<uint16_t> UpstreamNode<config>::CacheLine::Load16(size_t alignedOffset) const noexcept
+    {
+        if (this->state == CacheState::Invalid)
+            return std::nullopt;
+
+        if (alignedOffset >= 32)
+            return std::nullopt;
+
+        return { uint16_t(data[alignedOffset >> 2] >> ((alignedOffset & 3) * 16)) };
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::optional<uint8_t> UpstreamNode<config>::CacheLine::Load8(size_t alignedOffset) const noexcept
+    {
+        if (this->state == CacheState::Invalid)
+            return std::nullopt;
+
+        if (alignedOffset >= 64)
+            return std::nullopt;
+
+        return { uint8_t(data[alignedOffset >> 3] >> ((alignedOffset & 7) * 8)) };
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool UpstreamNode<config>::CacheLine::Store64(size_t alignedOffset, uint64_t value) noexcept
+    {
+        if (this->state != CacheState::UniqueClean && this->state != CacheState::UniqueDirty)
+            return false;
+
+        if (alignedOffset >= 8)
+            return false;
+
+        data[alignedOffset] = value;
+
+        this->state = CacheState::UniqueDirty;
+
+        return true;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool UpstreamNode<config>::CacheLine::Store32(size_t alignedOffset, uint32_t value) noexcept
+    {
+        if (this->state != CacheState::UniqueClean && this->state != CacheState::UniqueDirty)
+            return false;
+
+        if (alignedOffset >= 16)
+            return false;
+
+        uint64_t& lane = data[alignedOffset >> 1];
+        const uint64_t mask = uint64_t(0xFFFFFFFF) << ((alignedOffset & 1) * 32);
+
+        lane = (lane & ~mask) | ((uint64_t(value) << ((alignedOffset & 1) * 32)) & mask);
+
+        this->state = CacheState::UniqueDirty;
+
+        return true;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool UpstreamNode<config>::CacheLine::Store16(size_t alignedOffset, uint16_t value) noexcept
+    {
+        if (this->state != CacheState::UniqueClean && this->state != CacheState::UniqueDirty)
+            return false;
+
+        if (alignedOffset >= 32)
+            return false;
+
+        uint64_t& lane = data[alignedOffset >> 2];
+        const uint64_t mask = uint64_t(0xFFFF) << ((alignedOffset & 3) * 16);
+
+        lane = (lane & ~mask) | ((uint64_t(value) << ((alignedOffset & 3) * 16)) & mask);
+
+        this->state = CacheState::UniqueDirty;
+
+        return true;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool UpstreamNode<config>::CacheLine::Store8(size_t alignedOffset, uint8_t value) noexcept
+    {
+        if (this->state != CacheState::UniqueClean && this->state != CacheState::UniqueDirty)
+            return false;
+
+        if (alignedOffset >= 64)
+            return false;
+
+        uint64_t& lane = data[alignedOffset >> 3];
+        const uint64_t mask = uint64_t(0xFF) << ((alignedOffset & 7) * 8);
+
+        lane = (lane & ~mask) | ((uint64_t(value) << ((alignedOffset & 7) * 8)) & mask);
+
+        this->state = CacheState::UniqueDirty;
+
+        return true;
     }
 
     template<FlitConfigurationConcept config>
