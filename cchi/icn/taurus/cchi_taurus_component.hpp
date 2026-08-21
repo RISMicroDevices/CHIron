@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 #include <list>
+#include <deque>
+#include <span>
 
 #include "../../xact/cchi_joint.hpp"
 
@@ -154,6 +156,7 @@ namespace CCHI::Taurus {
             friend class UpstreamNode<config>;
 
         protected:
+            uint64_t                                    PA;
             uint64_t                                    data[8]                 = {};
             CacheStateEnum                              state                   = CacheState::Invalid;
 
@@ -179,15 +182,25 @@ namespace CCHI::Taurus {
             std::optional<Flits::UpRSP<config>>         pendingREQChannelTXRSP  = std::nullopt;
 
         public:
+            CacheLine(uint64_t PA) noexcept;
+
+        public:
+            std::optional<const std::span<uint64_t, 8>>   
+                                                    Load() const noexcept;
             std::optional<uint64_t>                 Load64(size_t alignedOffset) const noexcept;
             std::optional<uint32_t>                 Load32(size_t alignedOffset) const noexcept;
             std::optional<uint16_t>                 Load16(size_t alignedOffset) const noexcept;
             std::optional<uint8_t>                  Load8(size_t alignedOffset) const noexcept;
 
+            bool                                    Store(const std::span<const uint64_t, 8>& lineValue) noexcept;
             bool                                    Store64(size_t alignedOffset, uint64_t value) noexcept;
             bool                                    Store32(size_t alignedOffset, uint32_t value) noexcept;
             bool                                    Store16(size_t alignedOffset, uint16_t value) noexcept;
             bool                                    Store8(size_t alignedOffset, uint8_t value) noexcept;
+
+        public:
+            uint64_t                                GetPA() const noexcept;
+            CacheStateEnum                          GetState() const noexcept;
         
         public:
             bool                                    IsEVTInFlight(const Xact::Global<config>& glbl) const noexcept;
@@ -224,11 +237,71 @@ namespace CCHI::Taurus {
             EvictedEvent(uint64_t PA, std::shared_ptr<CacheLine> cacheLine) noexcept;
         };
 
-        class EmittedEvent : public CacheLineEventBase {
+    public:
+        class PrefetchEmittedEvent;
+
+        class PrefetchEntry {
+            friend class UpstreamNode<config>;
+
+        protected:
+            Flits::REQ<config>                          prefetchFlit;
+            std::shared_ptr<FutureNow<PrefetchEmittedEvent>>
+                                                        future;
+
         public:
-            EmittedEvent(uint64_t PA, std::shared_ptr<CacheLine> cacheLine) noexcept;
+            PrefetchEntry(const Flits::REQ<config>& prefetchFlit, std::shared_ptr<FutureNow<PrefetchEmittedEvent>> future) noexcept;
+
+        public:
+            Flits::REQ<config>&                         GetPrefetchFlit() noexcept;
+            const Flits::REQ<config>&                   GetPrefetchFlit() const noexcept;
         };
 
+        class PrefetchEmittedEvent {
+        protected:
+            uint64_t                                PA;
+            const Flits::REQ<config>&               prefetchFlit;
+
+        public:
+            PrefetchEmittedEvent(uint64_t PA, const Flits::REQ<config>& prefetchFlit) noexcept;
+
+        public:
+            uint64_t                                GetPA() const noexcept;
+            const Flits::REQ<config>&               GetPrefetchFlit() const noexcept;
+        };
+
+    public:
+        class CMOCompleteEvent;
+
+        class CMOEntry {
+            friend class UpstreamNode<config>;
+
+        protected:
+            Flits::REQ<config>                          cmoFlit;
+            std::shared_ptr<FutureNow<CMOCompleteEvent>> 
+                                                        future;
+
+        public:
+            CMOEntry(const Flits::REQ<config>& cmoFlit, std::shared_ptr<FutureNow<CMOCompleteEvent>> future) noexcept;
+
+        public:
+            Flits::REQ<config>&                         GetCMOFlit() noexcept;
+            const Flits::REQ<config>&                   GetCMOFlit() const noexcept;
+        };
+
+        class CMOCompleteEvent {
+        protected:
+            uint64_t                                PA;
+            const Flits::REQ<config>&               cmoFlit;
+
+        public:
+            CMOCompleteEvent(uint64_t PA, const Flits::REQ<config>& cmoFlit) noexcept;
+
+        public:
+            uint64_t                                GetPA() const noexcept;
+            const Flits::REQ<config>&               GetCMOFlit() const noexcept;
+        };
+
+    public:
         class ReadEvent {
         protected:
             uint64_t                                PA;
@@ -262,6 +335,9 @@ namespace CCHI::Taurus {
         size_t                                  xactionLimitREQ;
         size_t                                  xactionLimitTotal;
 
+        size_t                                  prefetchQueueLimit;
+        size_t                                  cmoQueueLimit;
+
     protected:
         Xact::Joint<config>                     joint;
 
@@ -270,6 +346,10 @@ namespace CCHI::Taurus {
 
         std::unordered_map<uint64_t, std::shared_ptr<Xact::Xaction<config>>>
                                                 noncacheable;
+
+        std::deque<PrefetchEntry>               prefetchQueue;
+
+        std::deque<CMOEntry>                    cmoQueue;
 
     protected:
         std::list<std::shared_ptr<CacheLine>>   queueTXREQ;
@@ -295,10 +375,12 @@ namespace CCHI::Taurus {
         UpstreamNode(
             Flits::up_nodeid_t<config>      nodeID = 0,
             std::shared_ptr<SAM<config>>    sam = nullptr,
-            size_t                          xactionLimitEVT = 1,
-            size_t                          xactionLimitSNP = 1,
-            size_t                          xactionLimitREQ = 1,
+            size_t                          xactionLimitEVT = 16,
+            size_t                          xactionLimitSNP = 16,
+            size_t                          xactionLimitREQ = 16,
             size_t                          xactionLimitTotal = (size_t{1} << config::txnIdWidth),
+            size_t                          prefetchQueueLimit = 4,
+            size_t                          cmoQueueLimit = 4,
             bool                            enableSilentEviction = false,
             bool                            enableStrictInitialState = true
         ) noexcept;
@@ -325,26 +407,28 @@ namespace CCHI::Taurus {
         void                                    SetCacheLine(uint64_t PA, std::shared_ptr<CacheLine> cacheLine) noexcept;
 
     public:
-        std::shared_ptr<FutureNow<GrantedEvent>>    DoLoad(uint64_t PA) noexcept;
-        std::shared_ptr<FutureNow<GrantedEvent>>    DoStore(uint64_t PA) noexcept;
-        std::shared_ptr<FutureNow<GrantedEvent>>    DoStoreLine(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<GrantedEvent>>        DoLoad(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<GrantedEvent>>        DoStore(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<GrantedEvent>>        DoStoreLine(uint64_t PA) noexcept;
 
-        std::shared_ptr<FutureNow<EvictedEvent>>    DoEvict(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<EvictedEvent>>        DoEvict(uint64_t PA) noexcept;
 
-        bool                                        DoEvictSilently(uint64_t PA) noexcept;
+        bool                                            DoEvictSilently(uint64_t PA) noexcept;
 
-        std::shared_ptr<FutureNow<EmittedEvent>>    DoPrefetchLoad(uint64_t PA) noexcept;
-        std::shared_ptr<FutureNow<EmittedEvent>>    DoPrefetchStore(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<PrefetchEmittedEvent>>
+                                                        DoPrefetchLoad(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<PrefetchEmittedEvent>>
+                                                        DoPrefetchStore(uint64_t PA) noexcept;
 
-        std::shared_ptr<FutureNow<ReadEvent>>       DoCacheableRead(uint64_t PA) noexcept;
-        std::shared_ptr<FutureNow<CompleteEvent>>   DoCacheableWrite(uint64_t PA, const uint64_t data[8]) noexcept;
+        std::shared_ptr<FutureNow<ReadEvent>>           DoLoadThrough(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<CompleteEvent>>       DoStoreThrough(uint64_t PA, const uint64_t data[8]) noexcept;
 
-        std::shared_ptr<FutureNow<ReadEvent>>       DoNonCacheableRead(uint64_t PA) noexcept;
-        std::shared_ptr<FutureNow<CompleteEvent>>   DoNonCacheableWrite(uint64_t PA, const uint64_t data[8]) noexcept;
+        std::shared_ptr<FutureNow<ReadEvent>>           DoNonCacheableRead(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<CompleteEvent>>       DoNonCacheableWrite(uint64_t PA, const uint64_t data[8]) noexcept;
 
-        std::shared_ptr<FutureNow<CompleteEvent>>   DoCBOClean(uint64_t PA) noexcept;
-        std::shared_ptr<FutureNow<CompleteEvent>>   DoCBOFlush(uint64_t PA) noexcept;
-        std::shared_ptr<FutureNow<CompleteEvent>>   DoCBOInval(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<CMOCompleteEvent>>    DoCBOClean(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<CMOCompleteEvent>>    DoCBOFlush(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<CMOCompleteEvent>>    DoCBOInval(uint64_t PA) noexcept;
 
     public:
         void                                    Tick(uint64_t time) noexcept;
@@ -387,6 +471,8 @@ namespace CCHI::Taurus {
         size_t                          xactionLimitSNP,
         size_t                          xactionLimitREQ,
         size_t                          xactionLimitTotal,
+        size_t                          prefetchQueueLimit,
+        size_t                          cmoQueueLimit,
         bool                            enableSilentEviction,
         bool                            enableStrictInitialState
     ) noexcept
@@ -395,6 +481,8 @@ namespace CCHI::Taurus {
         , xactionLimitSNP           (xactionLimitSNP)
         , xactionLimitREQ           (xactionLimitREQ)
         , xactionLimitTotal         (xactionLimitTotal)
+        , prefetchQueueLimit        (prefetchQueueLimit)
+        , cmoQueueLimit             (cmoQueueLimit)
         , joint                     ()
         , cacheable                 ()
         , noncacheable              ()
@@ -910,6 +998,228 @@ namespace CCHI::Taurus {
         // TODO: Future support for silent eviction
 
         return false;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::PrefetchEmittedEvent>> UpstreamNode<config>::DoPrefetchLoad(uint64_t PA) noexcept
+    {
+        auto txnID = AllocateTxnID();
+
+        if (!txnID)
+            return std::make_shared<FutureNow<PrefetchEmittedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
+
+        // TODO: event: REQAllocationEvent (By DoPrefetchLoad)
+
+        Flits::REQ<config> flit;
+        flit.TxnID = *txnID;
+        flit.SrcID = nodeID;
+        flit.TgtID = sam->Map(PA);
+        flit.Opcode = Opcodes::REQ::StashShared;
+        flit.Size = Sizes::B64;
+        flit.Addr = PA;
+        flit.NS = 0;
+        flit.Order = 0;
+        flit.MemAttr = 0;
+        flit.Excl = 0;
+        flit.ExpCompStash = 0;
+        flit.WayValid = 0;
+        flit.Way = 0;
+        flit.TraceTag = 0;
+
+        // TODO: event: PrefetchPreQueueEvent
+
+        std::shared_ptr<FutureNow<PrefetchEmittedEvent>> future 
+            = std::make_shared<FutureNow<PrefetchEmittedEvent>>(Denial::ACCEPTED);
+
+        prefetchQueue.emplace_back(flit, future);
+        
+        // TODO: event: PrefetchPostQueueEvent
+
+        return future;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::PrefetchEmittedEvent>> UpstreamNode<config>::DoPrefetchStore(uint64_t PA) noexcept
+    {
+        auto txnID = AllocateTxnID();
+
+        if (!txnID)
+            return std::make_shared<FutureNow<PrefetchEmittedEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
+
+        // TODO: event: REQAllocationEvent (By DoPrefetchStore)
+
+        Flits::REQ<config> flit;
+        flit.TxnID = *txnID;
+        flit.SrcID = nodeID;
+        flit.TgtID = sam->Map(PA);
+        flit.Opcode = Opcodes::REQ::StashUnique;
+        flit.Size = Sizes::B64;
+        flit.Addr = PA;
+        flit.NS = 0;
+        flit.Order = 0;
+        flit.MemAttr = 0;
+        flit.Excl = 0;
+        flit.ExpCompStash = 0;
+        flit.WayValid = 0;
+        flit.Way = 0;
+        flit.TraceTag = 0;
+
+        // TODO: event: PrefetchPreQueueEvent
+
+        std::shared_ptr<FutureNow<PrefetchEmittedEvent>> future 
+            = std::make_shared<FutureNow<PrefetchEmittedEvent>>(Denial::ACCEPTED);
+
+        prefetchQueue.emplace_back(flit, future);
+        
+        // TODO: event: PrefetchPostQueueEvent
+
+        return future;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::ReadEvent>> UpstreamNode<config>::DoLoadThrough(uint64_t PA) noexcept
+    {
+        // TODO: not supported yet
+
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::CompleteEvent>> UpstreamNode<config>::DoStoreThrough(uint64_t PA, const uint64_t data[8]) noexcept
+    {
+        // TODO: not supported yet
+
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::ReadEvent>> UpstreamNode<config>::DoNonCacheableRead(uint64_t PA) noexcept
+    {
+        // TODO: not supported yet
+
+        return nullptr;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::CompleteEvent>> UpstreamNode<config>::DoNonCacheableWrite(uint64_t PA, const uint64_t data[8]) noexcept
+    {
+        // TODO: not supported yet
+
+        return nullptr;
+    }
+    
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::CMOCompleteEvent>> UpstreamNode<config>::DoCBOClean(uint64_t PA) noexcept
+    {
+        auto txnID = AllocateTxnID();
+
+        if (!txnID)
+            return std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
+
+        // TODO: event: REQAllocationEvent (By DoCBOClean)
+
+        Flits::REQ<config> flit;
+        flit.TxnID = *txnID;
+        flit.SrcID = nodeID;
+        flit.TgtID = sam->Map(PA);
+        flit.Opcode = Opcodes::REQ::CleanShared;
+        flit.Size = Sizes::B64;
+        flit.Addr = PA;
+        flit.NS = 0;
+        flit.Order = 0;
+        flit.MemAttr = 0;
+        flit.Excl = 0;
+        flit.ExpCompData = 0;
+        flit.WayValid = 0;
+        flit.Way = 0;
+        flit.TraceTag = 0;
+
+        // TODO: event: CMOPreQueueEvent
+
+        std::shared_ptr<FutureNow<CMOCompleteEvent>> future 
+            = std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::ACCEPTED);
+
+        cmoQueue.emplace_back(flit, future);
+
+        // TODO: event: CMOPostQueueEvent
+
+        return future;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::CMOCompleteEvent>> UpstreamNode<config>::DoCBOFlush(uint64_t PA) noexcept
+    {
+        auto txnID = AllocateTxnID();
+
+        if (!txnID)
+            return std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
+
+        // TODO: event: REQAllocationEvent (By DoCBOFlush)
+
+        Flits::REQ<config> flit;
+        flit.TxnID = *txnID;
+        flit.SrcID = nodeID;
+        flit.TgtID = sam->Map(PA);
+        flit.Opcode = Opcodes::REQ::CleanInvalid;
+        flit.Size = Sizes::B64;
+        flit.Addr = PA;
+        flit.NS = 0;
+        flit.Order = 0;
+        flit.MemAttr = 0;
+        flit.Excl = 0;
+        flit.ExpCompData = 0;
+        flit.WayValid = 0;
+        flit.Way = 0;
+        flit.TraceTag = 0;
+
+        // TODO: event: CMOPreQueueEvent
+
+        std::shared_ptr<FutureNow<CMOCompleteEvent>> future 
+            = std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::ACCEPTED);
+
+        cmoQueue.emplace_back(flit, future);
+
+        // TODO: event: CMOPostQueueEvent
+
+        return future;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::CMOCompleteEvent>> UpstreamNode<config>::DoCBOInval(uint64_t PA) noexcept
+    {
+        auto txnID = AllocateTxnID();
+
+        if (!txnID)
+            return std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::REJECTED_TAURUS_TXNID_BUSY);
+
+        // TODO: event: REQAllocationEvent (By DoCBOInval)
+
+        Flits::REQ<config> flit;
+        flit.TxnID = *txnID;
+        flit.SrcID = nodeID;
+        flit.TgtID = sam->Map(PA);
+        flit.Opcode = Opcodes::REQ::MakeInvalid;
+        flit.Size = Sizes::B64;
+        flit.Addr = PA;
+        flit.NS = 0;
+        flit.Order = 0;
+        flit.MemAttr = 0;
+        flit.Excl = 0;
+        flit.ExpCompData = 0;
+        flit.WayValid = 0;
+        flit.Way = 0;
+        flit.TraceTag = 0;
+
+        // TODO: event: CMOPreQueueEvent
+
+        std::shared_ptr<FutureNow<CMOCompleteEvent>> future 
+            = std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::ACCEPTED);
+
+        cmoQueue.emplace_back(flit, future);
+
+        // TODO: event: CMOPostQueueEvent
+
+        return future;
     }
 
     template<FlitConfigurationConcept config>
@@ -1516,7 +1826,7 @@ namespace CCHI::Taurus {
                      && cacheLine.activeREQFuture 
                      && !cacheLine.activeREQFuture->Fired())
                     {
-                        // TODO: event: ReadCompleteEvent
+                        // TODO: event: LoadGrantedEvent
 
                         cacheLine.activeREQFuture->Fire(GrantedEvent(xactionCacheableDataless.GetFirst().flit.req.Addr, it->second));
                     }
@@ -1559,7 +1869,7 @@ namespace CCHI::Taurus {
                      && cacheLine.activeREQFuture 
                      && !cacheLine.activeREQFuture->Fired())
                     {
-                        // TODO: event: ReadCompleteEvent
+                        // TODO: event: LoadGrantedEvent
 
                         cacheLine.activeREQFuture->Fire(GrantedEvent(xactionCacheableAllocatingRead.GetFirst().flit.req.Addr, it->second));
                     }
@@ -1678,6 +1988,30 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::REQ<config>> UpstreamNode<config>::PeekTXREQ() noexcept
     {
+        if (!prefetchQueue.empty())
+        {
+            // TODO: event: PrefetchPreChannelChosenEvent
+
+            if (true) // result of event
+            {
+                // TODO: event: PrefetchPostChannelChosenEvent
+
+                return { prefetchQueue.front().GetPrefetchFlit() };
+            }
+        }
+
+        if (!cmoQueue.empty())
+        {
+            // TODO: event: CMOPreChannelChosenEvent
+
+            if (true) // result of event
+            {
+                // TODO: event: CMOPostChannelChosenEvent
+
+                return { cmoQueue.front().GetCMOFlit() };
+            }
+        }
+
         for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
         {
             CacheLine& cacheLine = *it->second;
@@ -1701,6 +2035,46 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::REQ<config>> UpstreamNode<config>::PopTXREQ() noexcept
     {
+        if (!prefetchQueue.empty())
+        {
+            // TODO: event: PrefetchPreChannelChosenEvent
+
+            if (true) // result of event
+            {
+                // TODO: event: PrefetchPostChannelChosenEvent
+
+                PrefetchEntry& prefetch = prefetchQueue.front();
+                auto& flit = prefetch.GetPrefetchFlit();
+
+                prefetch.future->Fire(PrefetchEmittedEvent(flit.Addr, flit));
+
+                auto out = flit;
+                prefetchQueue.pop_front();
+
+                return { out };
+            }
+        }
+
+        if (!cmoQueue.empty())
+        {
+            // TODO: event: CMOPreChannelChosenEvent
+
+            if (true) // result of event
+            {
+                // TODO: event: CMOPostChannelChosenEvent
+
+                CMOEntry& cmo = cmoQueue.front();
+                auto& flit = cmo.GetCMOFlit();
+
+                cmo.future->Fire(CMOCompleteEvent(flit.Addr, flit));
+
+                auto out = flit;
+                cmoQueue.pop_front();
+
+                return { out };
+            }
+        }
+
         for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
         {
             CacheLine& cacheLine = *it->second;
@@ -2551,7 +2925,7 @@ namespace CCHI::Taurus {
     template<class TEvent>
     inline void FutureNow<TEvent>::Fire(const TEvent& event) noexcept
     {
-        this->event = event;
+        this->event.emplace(event);
 
         for (auto& func : future)
             func(event);
@@ -2622,11 +2996,84 @@ namespace CCHI::Taurus {
     { }
 
     template<FlitConfigurationConcept config>
-    inline UpstreamNode<config>::EmittedEvent::EmittedEvent(
-        uint64_t PA,
-        std::shared_ptr<CacheLine> cacheLine) noexcept
-        : CacheLineEventBase(PA, std::move(cacheLine))
+    inline UpstreamNode<config>::PrefetchEntry::PrefetchEntry(
+        const Flits::REQ<config>& prefetchFlit,
+        std::shared_ptr<FutureNow<PrefetchEmittedEvent>> future) noexcept
+        : prefetchFlit  (prefetchFlit)
+        , future        (std::move(future))
     { }
+
+    template<FlitConfigurationConcept config>
+    inline Flits::REQ<config>& UpstreamNode<config>::PrefetchEntry::GetPrefetchFlit() noexcept
+    {
+        return prefetchFlit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::REQ<config>& UpstreamNode<config>::PrefetchEntry::GetPrefetchFlit() const noexcept
+    {
+        return prefetchFlit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNode<config>::PrefetchEmittedEvent::PrefetchEmittedEvent(
+        uint64_t PA,
+        const Flits::REQ<config>& prefetchFlit) noexcept
+        : PA            (PA)
+        , prefetchFlit  (prefetchFlit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::PrefetchEmittedEvent::GetPA() const noexcept
+    {
+        return PA;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::REQ<config>& UpstreamNode<config>::PrefetchEmittedEvent::GetPrefetchFlit() const noexcept
+    {
+        return prefetchFlit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNode<config>::CMOEntry::CMOEntry(
+        const Flits::REQ<config>& cmoFlit,
+        std::shared_ptr<FutureNow<CMOCompleteEvent>> future) noexcept
+        : cmoFlit   (cmoFlit)
+        , future    (std::move(future))
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline Flits::REQ<config>& UpstreamNode<config>::CMOEntry::GetCMOFlit() noexcept
+    {
+        return cmoFlit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::REQ<config>& UpstreamNode<config>::CMOEntry::GetCMOFlit() const noexcept
+    {
+        return cmoFlit;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNode<config>::CMOCompleteEvent::CMOCompleteEvent(
+        uint64_t PA,
+        const Flits::REQ<config>& cmoFlit) noexcept
+        : PA        (PA)
+        , cmoFlit   (cmoFlit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::CMOCompleteEvent::GetPA() const noexcept
+    {
+        return PA;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::REQ<config>& UpstreamNode<config>::CMOCompleteEvent::GetCMOFlit() const noexcept
+    {
+        return cmoFlit;
+    }
 
     template<FlitConfigurationConcept config>
     inline UpstreamNode<config>::ReadEvent::ReadEvent(uint64_t PA) noexcept
@@ -2672,6 +3119,21 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
+    inline std::optional<const std::span<uint64_t, 8>> UpstreamNode<config>::CacheLine::Load() const noexcept
+    {
+        if (this->state == CacheState::Invalid)
+            return std::nullopt;
+
+        // TODO: CacheLinePreLoadEvent
+
+        auto span = std::span<uint64_t, 8>(data);
+
+        // TODO: CacheLinePostLoadEvent
+
+        return { span };
+    }
+
+    template<FlitConfigurationConcept config>
     inline std::optional<uint64_t> UpstreamNode<config>::CacheLine::Load64(size_t alignedOffset) const noexcept
     {
         if (this->state == CacheState::Invalid)
@@ -2680,7 +3142,13 @@ namespace CCHI::Taurus {
         if (alignedOffset >= 8)
             return std::nullopt;
 
-        return { data[alignedOffset] };
+        // TODO: CacheLinePreLoadEvent
+
+        uint64_t value = data[alignedOffset];
+
+        // TODO: CacheLinePostLoadEvent
+
+        return { value };
     }
 
     template<FlitConfigurationConcept config>
@@ -2692,7 +3160,14 @@ namespace CCHI::Taurus {
         if (alignedOffset >= 16)
             return std::nullopt;
 
-        return { uint32_t(data[alignedOffset >> 1] >> ((alignedOffset & 1) * 32)) };
+        // TODO: CacheLinePreLoadEvent
+
+        uint32_t value = uint32_t(data[alignedOffset >> 1] >> ((alignedOffset & 1) * 32));
+
+        // TODO: CacheLinePostLoadEvent
+
+        return { value };
+
     }
 
     template<FlitConfigurationConcept config>
@@ -2704,7 +3179,13 @@ namespace CCHI::Taurus {
         if (alignedOffset >= 32)
             return std::nullopt;
 
-        return { uint16_t(data[alignedOffset >> 2] >> ((alignedOffset & 3) * 16)) };
+        // TODO: CacheLinePreLoadEvent
+
+        uint16_t value = uint16_t(data[alignedOffset >> 2] >> ((alignedOffset & 3) * 16));
+
+        // TODO: CacheLinePostLoadEvent
+
+        return { value };
     }
 
     template<FlitConfigurationConcept config>
@@ -2716,7 +3197,37 @@ namespace CCHI::Taurus {
         if (alignedOffset >= 64)
             return std::nullopt;
 
-        return { uint8_t(data[alignedOffset >> 3] >> ((alignedOffset & 7) * 8)) };
+        // TODO: CacheLinePreLoadEvent
+
+        uint8_t value = uint8_t(data[alignedOffset >> 3] >> ((alignedOffset & 7) * 8));
+
+        // TODO: CacheLinePostLoadEvent
+
+        return { value };
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool UpstreamNode<config>::CacheLine::Store(const std::span<const uint64_t, 8>& newData) noexcept
+    {
+        if (this->state != CacheState::UniqueClean && this->state != CacheState::UniqueDirty)
+            return false;
+        
+        // TODO: CacheLinePreStoreEvent
+
+        data[0] = newData[0];
+        data[1] = newData[1];
+        data[2] = newData[2];
+        data[3] = newData[3];
+        data[4] = newData[4];
+        data[5] = newData[5];
+        data[6] = newData[6];
+        data[7] = newData[7];
+
+        this->state = CacheState::UniqueDirty;
+
+        // TODO: CacheLinePostStoreEvent
+
+        return true;
     }
 
     template<FlitConfigurationConcept config>
@@ -2728,9 +3239,13 @@ namespace CCHI::Taurus {
         if (alignedOffset >= 8)
             return false;
 
+        // TODO: CacheLinePreStoreEvent
+
         data[alignedOffset] = value;
 
         this->state = CacheState::UniqueDirty;
+
+        // TODO: CacheLinePostStoreEvent
 
         return true;
     }
@@ -2744,12 +3259,16 @@ namespace CCHI::Taurus {
         if (alignedOffset >= 16)
             return false;
 
+        // TODO: CacheLinePreStoreEvent
+
         uint64_t& lane = data[alignedOffset >> 1];
         const uint64_t mask = uint64_t(0xFFFFFFFF) << ((alignedOffset & 1) * 32);
 
         lane = (lane & ~mask) | ((uint64_t(value) << ((alignedOffset & 1) * 32)) & mask);
 
         this->state = CacheState::UniqueDirty;
+
+        // TODO: CacheLinePostStoreEvent
 
         return true;
     }
@@ -2763,12 +3282,16 @@ namespace CCHI::Taurus {
         if (alignedOffset >= 32)
             return false;
 
+        // TODO: CacheLinePreStoreEvent
+
         uint64_t& lane = data[alignedOffset >> 2];
         const uint64_t mask = uint64_t(0xFFFF) << ((alignedOffset & 3) * 16);
 
         lane = (lane & ~mask) | ((uint64_t(value) << ((alignedOffset & 3) * 16)) & mask);
 
         this->state = CacheState::UniqueDirty;
+
+        // TODO: CacheLinePostStoreEvent
 
         return true;
     }
@@ -2782,6 +3305,8 @@ namespace CCHI::Taurus {
         if (alignedOffset >= 64)
             return false;
 
+        // TODO: CacheLinePreStoreEvent
+
         uint64_t& lane = data[alignedOffset >> 3];
         const uint64_t mask = uint64_t(0xFF) << ((alignedOffset & 7) * 8);
 
@@ -2789,7 +3314,21 @@ namespace CCHI::Taurus {
 
         this->state = CacheState::UniqueDirty;
 
+        // TODO: CacheLinePostStoreEvent
+
         return true;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::CacheLine::GetPA() const noexcept
+    {
+        return PA;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline CacheStateEnum UpstreamNode<config>::CacheLine::GetState() const noexcept
+    {
+        return state;
     }
 
     template<FlitConfigurationConcept config>
