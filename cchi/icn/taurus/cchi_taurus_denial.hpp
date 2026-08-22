@@ -55,6 +55,16 @@ namespace CCHI::Taurus {
         inline constexpr DenialEnumBack REJECTED_TAURUS_PA_EVT_BUSY         ("REJECTED_TAURUS_PA_EVT_BUSY",     0x00010000 |  3, false, true );
         inline constexpr DenialEnumBack REJECTED_TAURUS_EVICT_MISS          ("REJECTED_TAURUS_EVICT_MISS",      0x00010000 |  4, false, true );
 
+        inline constexpr DenialEnumBack REJECTED_TAURUS_EVT_LIMIT_EXCEEDED  ("REJECTED_TAURUS_EVT_LIMIT_EXCEEDED", 0x00010000 |  5, false, true );
+        inline constexpr DenialEnumBack REJECTED_TAURUS_SNP_LIMIT_EXCEEDED  ("REJECTED_TAURUS_SNP_LIMIT_EXCEEDED", 0x00010000 |  6, false, true );
+        inline constexpr DenialEnumBack REJECTED_TAURUS_REQ_LIMIT_EXCEEDED  ("REJECTED_TAURUS_REQ_LIMIT_EXCEEDED", 0x00010000 |  7, false, true );
+        inline constexpr DenialEnumBack REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED("REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED", 0x00010000 |  8, false, true );
+
+        inline constexpr DenialEnumBack REJECTED_TAURUS_PREFETCH_LIMIT_EXCEEDED("REJECTED_TAURUS_PREFETCH_LIMIT_EXCEEDED", 0x00010000 |  9, false, true );
+        inline constexpr DenialEnumBack REJECTED_TAURUS_CMO_LIMIT_EXCEEDED("REJECTED_TAURUS_CMO_LIMIT_EXCEEDED", 0x00010000 | 10, false, true );
+
+        inline constexpr DenialEnumBack REJECTED_TAURUS_PROTOCOL_DENIED    ("REJECTED_TAURUS_PROTOCOL_DENIED", 0x00010000 | 11, false, true );
+
         inline constexpr DenialEnumBack REJECTED_TAURUS_EVENT               ("REJECTED_TAURUS_EVENT",           0x00020000 |  0, false, true );
     }
 }
