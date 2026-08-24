@@ -3,11 +3,15 @@
 #ifndef __CCHI__CCHI_ICN_TAURUS__COMPONENT_EVENTS
 #define __CCHI__CCHI_ICN_TAURUS__COMPONENT_EVENTS
 
+#include <cstdint>
 #include <memory>
+#include <utility>
 
 #include "cchi_taurus_component_afx.hpp"
 #include "cchi_taurus_denial.hpp"
 #include "cchi_taurus_state.hpp"
+
+#include "../../../common/eventbus.hpp"
 
 #include "../../xact/cchi_joint.hpp"            // IWYU pragma: keep
 
@@ -156,13 +160,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     class UpstreamNodeCacheLineEventBase : public UpstreamNodeEventBase<config> {
     protected:
-        uint64_t                    PA;
         const typename UpstreamNode<config>::CacheLine&
                                     cacheLine;
 
     public:
         UpstreamNodeCacheLineEventBase(UpstreamNode<config>&                            upstream, 
-                                       uint64_t                                         PA, 
                                        const typename UpstreamNode<config>::CacheLine&  cacheLine) noexcept;
     
     public:
@@ -180,7 +182,6 @@ namespace CCHI::Taurus {
     
     public:
         UpstreamNodeXactDeniedEventBase(UpstreamNode<config>&                           upstream, 
-                                        uint64_t                                        PA, 
                                         const typename UpstreamNode<config>::CacheLine& cacheLine,
                                         XactDenialEnum                                  denial,
                                         std::shared_ptr<Xact::Xaction<config>>          xaction) noexcept;
@@ -201,7 +202,6 @@ namespace CCHI::Taurus {
     
     public:
         UpstreamNodeXactAcceptedEventBase(UpstreamNode<config>&                             upstream,
-                                          uint64_t                                          PA, 
                                           const typename UpstreamNode<config>::CacheLine&   cacheLine,
                                           std::shared_ptr<Xact::Xaction<config>>            xaction) noexcept;
 
@@ -221,7 +221,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactDeniedSNPEvent(UpstreamNode<config>&                            upstream,
-                                       uint64_t                                         PA, 
                                        const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                        XactDenialEnum                                   denial,
                                        std::shared_ptr<Xact::Xaction<config>>           xaction,
@@ -239,7 +238,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactAcceptedSNPEvent(UpstreamNode<config>&                            upstream,
-                                         uint64_t                                         PA, 
                                          const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                          std::shared_ptr<Xact::Xaction<config>>           xaction,
                                          const Flits::SNP<config>&                        snpFlit) noexcept;
@@ -257,7 +255,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactDeniedEVTEvent(UpstreamNode<config>&                            upstream,
-                                       uint64_t                                         PA, 
                                        const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                        XactDenialEnum                                   denial,
                                        std::shared_ptr<Xact::Xaction<config>>           xaction,
@@ -275,7 +272,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactAcceptedEVTEvent(UpstreamNode<config>&                            upstream,
-                                         uint64_t                                         PA, 
                                          const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                          std::shared_ptr<Xact::Xaction<config>>           xaction,
                                          const Flits::EVT<config>&                        evtFlit) noexcept;
@@ -293,7 +289,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactDeniedREQEvent(UpstreamNode<config>&                            upstream,
-                                       uint64_t                                         PA,
                                        const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                        XactDenialEnum                                   denial,
                                        std::shared_ptr<Xact::Xaction<config>>           xaction,
@@ -311,13 +306,138 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactAcceptedREQEvent(UpstreamNode<config>&                            upstream,
-                                         uint64_t                                         PA,
                                          const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                          std::shared_ptr<Xact::Xaction<config>>           xaction,
                                          const Flits::REQ<config>&                        reqFlit) noexcept;
 
     public:
         const Flits::REQ<config>&   GetREQFlit() const noexcept;
+    };
+
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeXactDeniedPrefetchEvent : public UpstreamNodeEventBase<config>
+                                              , public Gravity::Event<UpstreamNodeXactDeniedPrefetchEvent<config>> {
+    protected:
+        XactDenialEnum                          denial;
+        std::shared_ptr<Xact::Xaction<config>>  xaction;
+        const Flits::REQ<config>&               reqFlit;
+
+    public:
+        UpstreamNodeXactDeniedPrefetchEvent(UpstreamNode<config>&                   upstream,
+                                            XactDenialEnum                          denial,
+                                            std::shared_ptr<Xact::Xaction<config>>  xaction,
+                                            const Flits::REQ<config>&               reqFlit) noexcept;
+
+    public:
+        XactDenialEnum                          GetDenial() const noexcept;
+        std::shared_ptr<Xact::Xaction<config>>  GetXaction() noexcept;
+        std::shared_ptr<const Xact::Xaction<config>>
+                                                GetXaction() const noexcept;
+        const Flits::REQ<config>&               GetREQFlit() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeXactAcceptedPrefetchEvent : public UpstreamNodeEventBase<config>
+                                                , public Gravity::Event<UpstreamNodeXactAcceptedPrefetchEvent<config>> {
+    protected:
+        std::shared_ptr<Xact::Xaction<config>>  xaction;
+        const Flits::REQ<config>&               reqFlit;
+
+    public:
+        UpstreamNodeXactAcceptedPrefetchEvent(UpstreamNode<config>&                 upstream,
+                                              std::shared_ptr<Xact::Xaction<config>>  xaction,
+                                              const Flits::REQ<config>&               reqFlit) noexcept;
+
+    public:
+        std::shared_ptr<Xact::Xaction<config>>  GetXaction() noexcept;
+        std::shared_ptr<const Xact::Xaction<config>>
+                                                GetXaction() const noexcept;
+        const Flits::REQ<config>&               GetREQFlit() const noexcept;
+    };
+
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeXactDeniedCMOEvent : public UpstreamNodeEventBase<config>
+                                         , public Gravity::Event<UpstreamNodeXactDeniedCMOEvent<config>> {
+    protected:
+        XactDenialEnum                          denial;
+        std::shared_ptr<Xact::Xaction<config>>  xaction;
+        const Flits::REQ<config>&               reqFlit;
+
+    public:
+        UpstreamNodeXactDeniedCMOEvent(UpstreamNode<config>&                        upstream,
+                                       XactDenialEnum                               denial,
+                                       std::shared_ptr<Xact::Xaction<config>>       xaction,
+                                       const Flits::REQ<config>&                    reqFlit) noexcept;
+
+    public:
+        XactDenialEnum                          GetDenial() const noexcept;
+        std::shared_ptr<Xact::Xaction<config>>  GetXaction() noexcept;
+        std::shared_ptr<const Xact::Xaction<config>>
+                                                GetXaction() const noexcept;
+        const Flits::REQ<config>&               GetREQFlit() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeXactAcceptedCMOEvent : public UpstreamNodeEventBase<config>
+                                           , public Gravity::Event<UpstreamNodeXactAcceptedCMOEvent<config>> {
+    protected:
+        std::shared_ptr<Xact::Xaction<config>>  xaction;
+        const Flits::REQ<config>&               reqFlit;
+
+    public:
+        UpstreamNodeXactAcceptedCMOEvent(UpstreamNode<config>&                      upstream,
+                                         std::shared_ptr<Xact::Xaction<config>>       xaction,
+                                         const Flits::REQ<config>&                    reqFlit) noexcept;
+
+    public:
+        std::shared_ptr<Xact::Xaction<config>>  GetXaction() noexcept;
+        std::shared_ptr<const Xact::Xaction<config>>
+                                                GetXaction() const noexcept;
+        const Flits::REQ<config>&               GetREQFlit() const noexcept;
+    };
+
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeXactDeniedCompCMOEvent : public UpstreamNodeEventBase<config>
+                                             , public Gravity::Event<UpstreamNodeXactDeniedCompCMOEvent<config>> {
+    protected:
+        XactDenialEnum                          denial;
+        std::shared_ptr<Xact::Xaction<config>>  xaction;
+        const Flits::DnRSP<config>&             dnrspFlit;
+
+    public:
+        UpstreamNodeXactDeniedCompCMOEvent(UpstreamNode<config>&                    upstream,
+                                           XactDenialEnum                           denial,
+                                           std::shared_ptr<Xact::Xaction<config>>   xaction,
+                                           const Flits::DnRSP<config>&              dnrspFlit) noexcept;
+
+    public:
+        XactDenialEnum                          GetDenial() const noexcept;
+        std::shared_ptr<Xact::Xaction<config>>  GetXaction() noexcept;
+        std::shared_ptr<const Xact::Xaction<config>>
+                                                GetXaction() const noexcept;
+        const Flits::DnRSP<config>&             GetDnRSPFlit() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeXactAcceptedCompCMOEvent : public UpstreamNodeEventBase<config>
+                                               , public Gravity::Event<UpstreamNodeXactAcceptedCompCMOEvent<config>> {
+    protected:
+        std::shared_ptr<Xact::Xaction<config>>  xaction;
+        const Flits::DnRSP<config>&             dnrspFlit;
+
+    public:
+        UpstreamNodeXactAcceptedCompCMOEvent(UpstreamNode<config>&                  upstream,
+                                             std::shared_ptr<Xact::Xaction<config>>   xaction,
+                                             const Flits::DnRSP<config>&              dnrspFlit) noexcept;
+
+    public:
+        std::shared_ptr<Xact::Xaction<config>>  GetXaction() noexcept;
+        std::shared_ptr<const Xact::Xaction<config>>
+                                                GetXaction() const noexcept;
+        const Flits::DnRSP<config>&             GetDnRSPFlit() const noexcept;
     };
 
 
@@ -329,7 +449,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactDeniedDnRSPEvent(UpstreamNode<config>&                            upstream,
-                                         uint64_t                                         PA,
                                          const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                          XactDenialEnum                                   denial,
                                          std::shared_ptr<Xact::Xaction<config>>           xaction,
@@ -347,7 +466,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactAcceptedDnRSPEvent(UpstreamNode<config>&                            upstream,
-                                           uint64_t                                         PA,
                                            const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                            std::shared_ptr<Xact::Xaction<config>>           xaction,
                                            const Flits::DnRSP<config>&                      dnrspFlit) noexcept;
@@ -365,7 +483,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactDeniedUpRSPEvent(UpstreamNode<config>&                            upstream,
-                                         uint64_t                                         PA,
                                          const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                          XactDenialEnum                                   denial,
                                          std::shared_ptr<Xact::Xaction<config>>           xaction,
@@ -383,7 +500,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactAcceptedUpRSPEvent(UpstreamNode<config>&                            upstream,
-                                           uint64_t                                         PA,
                                            const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                            std::shared_ptr<Xact::Xaction<config>>           xaction,
                                            const Flits::UpRSP<config>&                      uprspFlit) noexcept;
@@ -401,7 +517,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactDeniedDnDATEvent(UpstreamNode<config>&                            upstream,
-                                         uint64_t                                         PA,
                                          const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                          XactDenialEnum                                   denial,
                                          std::shared_ptr<Xact::Xaction<config>>           xaction,
@@ -419,7 +534,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactAcceptedDnDATEvent(UpstreamNode<config>&                            upstream,
-                                           uint64_t                                         PA,
                                            const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                            std::shared_ptr<Xact::Xaction<config>>           xaction,
                                            const Flits::DnDAT<config>&                      dndatFlit) noexcept;
@@ -437,7 +551,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactDeniedUpDATEvent(UpstreamNode<config>&                            upstream,
-                                         uint64_t                                         PA,
                                          const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                          XactDenialEnum                                   denial,
                                          std::shared_ptr<Xact::Xaction<config>>           xaction,
@@ -455,7 +568,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeXactAcceptedUpDATEvent(UpstreamNode<config>&                            upstream,
-                                           uint64_t                                         PA,
                                            const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                            std::shared_ptr<Xact::Xaction<config>>           xaction,
                                            const Flits::UpDAT<config>&                      updatFlit) noexcept;
@@ -474,7 +586,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeEVTPreHazardDetectionEvent(UpstreamNode<config>&                            upstream,
-                                               uint64_t                                         PA,
                                                const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                Flits::EVT<config>&                              evtFlit,
                                                bool&                                            hazard) noexcept;
@@ -493,7 +604,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeEVTPostHazardDetectionEvent(UpstreamNode<config>&                            upstream,
-                                                uint64_t                                         PA,
                                                 const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                 Flits::EVT<config>&                              evtFlit,
                                                 bool                                             hazard) noexcept;
@@ -511,7 +621,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeEVTPreHazardPendingEvent(UpstreamNode<config>&                            upstream,
-                                             uint64_t                                         PA,
                                              const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                              Flits::EVT<config>&                              evtFlit) noexcept;
 
@@ -532,7 +641,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeEVTPostHazardPendingEvent(UpstreamNode<config>&                            upstream,
-                                              uint64_t                                         PA,
                                               const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                               Flits::EVT<config>&                              evtFlit,
                                               DenialEnum                                       denial) noexcept;
@@ -551,7 +659,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeEVTPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                              uint64_t                                         PA,
                                               const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                               Flits::EVT<config>&                              evtFlit) noexcept;
 
@@ -572,7 +679,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeEVTPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                               uint64_t                                         PA,
                                                const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                Flits::EVT<config>&                              evtFlit,
                                                DenialEnum                                       denial) noexcept;
@@ -588,7 +694,6 @@ namespace CCHI::Taurus {
                                                         , public Gravity::Event<UpstreamNodeEVTPreHazardToChannelPendingEvent<config>> {
     public:
         UpstreamNodeEVTPreHazardToChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                      uint64_t                                         PA,
                                                       const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                       Flits::EVT<config>&                              evtFlit) noexcept;
     };
@@ -599,7 +704,6 @@ namespace CCHI::Taurus {
                                                          , public Gravity::Event<UpstreamNodeEVTPostHazardToChannelPendingEvent<config>> {
     public:
         UpstreamNodeEVTPostHazardToChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                       uint64_t                                         PA,
                                                        const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                        Flits::EVT<config>&                              evtFlit) noexcept;
     };
@@ -611,7 +715,6 @@ namespace CCHI::Taurus {
                                                     , public Gravity::Event<UpstreamNodeEVTCacheStatePreDemotionEvent<config>> {
     public:
         UpstreamNodeEVTCacheStatePreDemotionEvent(UpstreamNode<config>&                            upstream,
-                                                  uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::EVT<config>&                              evtFlit,
                                                   CacheStateEnum                                   prevState,
@@ -625,7 +728,6 @@ namespace CCHI::Taurus {
                                                      , public Gravity::Event<UpstreamNodeEVTCacheStatePostDemotionEvent<config>> {
     public:
         UpstreamNodeEVTCacheStatePostDemotionEvent(UpstreamNode<config>&                            upstream,
-                                                   uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                    Flits::EVT<config>&                              evtFlit,
                                                    CacheStateEnum                                   prevState,
@@ -641,7 +743,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeEVTDataPreHazardDetectionEvent(UpstreamNode<config>&                            upstream,
-                                                   uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                    Flits::UpDAT<config>&                            updatFlit,
                                                    bool&                                            hazard) noexcept;
@@ -660,7 +761,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeEVTDataPostHazardDetectionEvent(UpstreamNode<config>&                            upstream,
-                                                    uint64_t                                         PA,
                                                     const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                     Flits::UpDAT<config>&                            updatFlit,
                                                     bool                                             hazard) noexcept;
@@ -670,13 +770,11 @@ namespace CCHI::Taurus {
     };
 
     template<FlitConfigurationConcept config>
-    class UpstreamNodeEVTDataPreHazardPendingEvent : public Gravity::CancellableEvent
-                                                   , public UpDATFlitEventBase<config>
+    class UpstreamNodeEVTDataPreHazardPendingEvent : public UpDATFlitEventBase<config>
                                                    , public UpstreamNodeCacheLineEventBase<config>
                                                    , public Gravity::Event<UpstreamNodeEVTDataPreHazardPendingEvent<config>> {
     public:
         UpstreamNodeEVTDataPreHazardPendingEvent(UpstreamNode<config>&                            upstream,
-                                                 uint64_t                                         PA,
                                                  const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                  Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -687,19 +785,16 @@ namespace CCHI::Taurus {
                                                     , public Gravity::Event<UpstreamNodeEVTDataPostHazardPendingEvent<config>> {
     public:
         UpstreamNodeEVTDataPostHazardPendingEvent(UpstreamNode<config>&                            upstream,
-                                                  uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
 
     template<FlitConfigurationConcept config>
-    class UpstreamNodeEVTDataPreChannelPendingEvent : public Gravity::CancellableEvent
-                                                    , public UpDATFlitEventBase<config>
+    class UpstreamNodeEVTDataPreChannelPendingEvent : public UpDATFlitEventBase<config>
                                                     , public UpstreamNodeCacheLineEventBase<config>
                                                     , public Gravity::Event<UpstreamNodeEVTDataPreChannelPendingEvent<config>> {
     public:
         UpstreamNodeEVTDataPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                  uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -710,7 +805,6 @@ namespace CCHI::Taurus {
                                                      , public Gravity::Event<UpstreamNodeEVTDataPostChannelPendingEvent<config>> {
     public:
         UpstreamNodeEVTDataPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                   uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                    Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -721,7 +815,6 @@ namespace CCHI::Taurus {
                                                             , public Gravity::Event<UpstreamNodeEVTDataPreHazardToChannelPendingEvent<config>> {
     public:
         UpstreamNodeEVTDataPreHazardToChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                          uint64_t                                         PA,
                                                           const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                           Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -732,7 +825,6 @@ namespace CCHI::Taurus {
                                                              , public Gravity::Event<UpstreamNodeEVTDataPostHazardToChannelPendingEvent<config>> {
     public:
         UpstreamNodeEVTDataPostHazardToChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                           uint64_t                                         PA,
                                                            const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                            Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -744,7 +836,6 @@ namespace CCHI::Taurus {
                                                , public Gravity::Event<UpstreamNodeEVTPreChannelChosenEvent<config>> {
     public:
         UpstreamNodeEVTPreChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                             uint64_t                                         PA,
                                              const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                              Flits::EVT<config>&                              evtFlit) noexcept;
     };
@@ -755,7 +846,6 @@ namespace CCHI::Taurus {
                                                 , public Gravity::Event<UpstreamNodeEVTPostChannelChosenEvent<config>> {
     public:
         UpstreamNodeEVTPostChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                              uint64_t                                         PA,
                                               const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                               Flits::EVT<config>&                              evtFlit) noexcept;
     };
@@ -767,7 +857,6 @@ namespace CCHI::Taurus {
                                                     , public Gravity::Event<UpstreamNodeEVTUpDATPreChannelChosenEvent<config>> {
     public:
         UpstreamNodeEVTUpDATPreChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                                  uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -778,7 +867,6 @@ namespace CCHI::Taurus {
                                                      , public Gravity::Event<UpstreamNodeEVTUpDATPostChannelChosenEvent<config>> {
     public:
         UpstreamNodeEVTUpDATPostChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                                   uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                    Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -793,7 +881,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeSNPPreHazardDetectionEvent(UpstreamNode<config>&                            upstream,
-                                               uint64_t                                         PA,
                                                const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                Flits::SNP<config>&                              snpFlit,
                                                bool&                                            hazard) noexcept;
@@ -812,7 +899,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeSNPPostHazardDetectionEvent(UpstreamNode<config>&                            upstream,
-                                                uint64_t                                         PA,
                                                 const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                 Flits::SNP<config>&                              snpFlit,
                                                 bool                                             hazard) noexcept;
@@ -830,7 +916,6 @@ namespace CCHI::Taurus {
                                             
     public:
         UpstreamNodeSNPPreHazardPendingEvent(UpstreamNode<config>&                            upstream,
-                                             uint64_t                                         PA,
                                              const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                              Flits::SNP<config>&                              snpFlit) noexcept;
 
@@ -851,7 +936,6 @@ namespace CCHI::Taurus {
     
     public:
         UpstreamNodeSNPPostHazardPendingEvent(UpstreamNode<config>&                            upstream,
-                                              uint64_t                                         PA,
                                               const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                               Flits::SNP<config>&                              snpFlit,
                                               DenialEnum                                       denial) noexcept;
@@ -868,7 +952,6 @@ namespace CCHI::Taurus {
                                                     , public Gravity::Event<UpstreamNodeSNPCacheStatePreDemotionEvent<config>> {
     public:
         UpstreamNodeSNPCacheStatePreDemotionEvent(UpstreamNode<config>&                            upstream,
-                                                  uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::SNP<config>&                              snpFlit,
                                                   CacheStateEnum                                   prevState,
@@ -882,7 +965,6 @@ namespace CCHI::Taurus {
                                                      , public Gravity::Event<UpstreamNodeSNPCacheStatePostDemotionEvent<config>> {
     public:
         UpstreamNodeSNPCacheStatePostDemotionEvent(UpstreamNode<config>&                            upstream,
-                                                   uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                    Flits::SNP<config>&                              snpFlit,
                                                    CacheStateEnum                                   prevState,
@@ -895,7 +977,6 @@ namespace CCHI::Taurus {
                                                     , public Gravity::Event<UpstreamNodeSNPRespPreChannelPendingEvent<config>> {
     public:
         UpstreamNodeSNPRespPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                  uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::UpRSP<config>&                            uprspFlit) noexcept;
     };
@@ -906,7 +987,6 @@ namespace CCHI::Taurus {
                                                      , public Gravity::Event<UpstreamNodeSNPRespPostChannelPendingEvent<config>> {
     public:
         UpstreamNodeSNPRespPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                   uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                    Flits::UpRSP<config>&                            uprspFlit) noexcept;
     };
@@ -917,7 +997,6 @@ namespace CCHI::Taurus {
                                                         , public Gravity::Event<UpstreamNodeSNPRespDataPreChannelPendingEvent<config>> {
     public:
         UpstreamNodeSNPRespDataPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                      uint64_t                                         PA,
                                                       const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                       Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -928,7 +1007,6 @@ namespace CCHI::Taurus {
                                                          , public Gravity::Event<UpstreamNodeSNPRespDataPostChannelPendingEvent<config>> {
     public:
         UpstreamNodeSNPRespDataPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                       uint64_t                                         PA,
                                                        const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                        Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -940,7 +1018,6 @@ namespace CCHI::Taurus {
                                                     , public Gravity::Event<UpstreamNodeSNPUpRSPPreChannelChosenEvent<config>> {
     public:
         UpstreamNodeSNPUpRSPPreChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                                  uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::UpRSP<config>&                            uprspFlit) noexcept;
     };
@@ -951,7 +1028,6 @@ namespace CCHI::Taurus {
                                                      , public Gravity::Event<UpstreamNodeSNPUpRSPPostChannelChosenEvent<config>> {
     public:
         UpstreamNodeSNPUpRSPPostChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                                   uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                    Flits::UpRSP<config>&                            uprspFlit) noexcept;
     };
@@ -963,7 +1039,6 @@ namespace CCHI::Taurus {
                                                     , public Gravity::Event<UpstreamNodeSNPUpDATPreChannelChosenEvent<config>> {
     public:
         UpstreamNodeSNPUpDATPreChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                                  uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -974,7 +1049,6 @@ namespace CCHI::Taurus {
                                                      , public Gravity::Event<UpstreamNodeSNPUpDATPostChannelChosenEvent<config>> {
     public:
         UpstreamNodeSNPUpDATPostChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                                   uint64_t                                         PA,
                                                    const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                    Flits::UpDAT<config>&                            updatFlit) noexcept;
     };
@@ -989,7 +1063,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeREQPreHazardDetectionEvent(UpstreamNode<config>&                            upstream,
-                                               uint64_t                                         PA,
                                                const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                Flits::REQ<config>&                              reqFlit,
                                                bool&                                            hazard) noexcept;
@@ -1008,7 +1081,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeREQPostHazardDetectionEvent(UpstreamNode<config>&                            upstream,
-                                                uint64_t                                         PA,
                                                 const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                 Flits::REQ<config>&                              reqFlit,
                                                 bool                                             hazard) noexcept;
@@ -1026,7 +1098,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeREQPreHazardPendingEvent(UpstreamNode<config>&                            upstream,
-                                             uint64_t                                         PA,
                                              const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                              Flits::REQ<config>&                              reqFlit) noexcept;
 
@@ -1047,7 +1118,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeREQPostHazardPendingEvent(UpstreamNode<config>&                            upstream,
-                                              uint64_t                                         PA,
                                               const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                               Flits::REQ<config>&                              reqFlit,
                                               DenialEnum                                       denial) noexcept;
@@ -1066,7 +1136,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeREQPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                              uint64_t                                         PA,
                                               const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                               Flits::REQ<config>&                              reqFlit) noexcept;
 
@@ -1087,7 +1156,6 @@ namespace CCHI::Taurus {
 
     public:
         UpstreamNodeREQPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                               uint64_t                                         PA,
                                                const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                Flits::REQ<config>&                              reqFlit,
                                                DenialEnum                                       denial) noexcept;
@@ -1103,7 +1171,6 @@ namespace CCHI::Taurus {
                                                         , public Gravity::Event<UpstreamNodeREQPreHazardToChannelPendingEvent<config>> {
     public:
         UpstreamNodeREQPreHazardToChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                      uint64_t                                         PA,
                                                       const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                       Flits::REQ<config>&                              reqFlit) noexcept;
     };
@@ -1114,19 +1181,16 @@ namespace CCHI::Taurus {
                                                          , public Gravity::Event<UpstreamNodeREQPostHazardToChannelPendingEvent<config>> {
     public:
         UpstreamNodeREQPostHazardToChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                       uint64_t                                         PA,
                                                        const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                        Flits::REQ<config>&                              reqFlit) noexcept;
     };
 
     template<FlitConfigurationConcept config>
-    class UpstreamNodeREQCompAckPreChannelPendingEvent : public Gravity::CancellableEvent
-                                                       , public UpRSPFlitEventBase<config>
+    class UpstreamNodeREQCompAckPreChannelPendingEvent : public UpRSPFlitEventBase<config>
                                                        , public UpstreamNodeCacheLineEventBase<config>
                                                        , public Gravity::Event<UpstreamNodeREQCompAckPreChannelPendingEvent<config>> {
     public:
         UpstreamNodeREQCompAckPreChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                     uint64_t                                         PA,
                                                      const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                      Flits::UpRSP<config>&                            uprspFlit) noexcept;
     };
@@ -1137,7 +1201,6 @@ namespace CCHI::Taurus {
                                                         , public Gravity::Event<UpstreamNodeREQCompAckPostChannelPendingEvent<config>> {
     public:
         UpstreamNodeREQCompAckPostChannelPendingEvent(UpstreamNode<config>&                            upstream,
-                                                      uint64_t                                         PA,
                                                       const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                       Flits::UpRSP<config>&                            uprspFlit) noexcept;
     };
@@ -1149,7 +1212,6 @@ namespace CCHI::Taurus {
                                                , public Gravity::Event<UpstreamNodeREQPreChannelChosenEvent<config>> {
     public:
         UpstreamNodeREQPreChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                             uint64_t                                         PA,
                                              const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                              Flits::REQ<config>&                              reqFlit) noexcept;
     };
@@ -1160,7 +1222,6 @@ namespace CCHI::Taurus {
                                                 , public Gravity::Event<UpstreamNodeREQPostChannelChosenEvent<config>> {
     public:
         UpstreamNodeREQPostChannelChosenEvent(UpstreamNode<config>&                            upstream,
-                                              uint64_t                                         PA,
                                               const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                               Flits::REQ<config>&                              reqFlit) noexcept;
     };
@@ -1172,9 +1233,8 @@ namespace CCHI::Taurus {
                                                     , public Gravity::Event<UpstreamNodeREQUpRSPPreChannelChosenEvent<config>> {
     public:
         UpstreamNodeREQUpRSPPreChannelChosenEvent(UpstreamNode<config>&                           upstream,
-                                                 uint64_t                                         PA,
                                                  const typename UpstreamNode<config>::CacheLine&  cacheLine,
-                                                 Flits::UpRSP<config>&                            upRspFlit) noexcept;
+                                                 Flits::UpRSP<config>&                            uprspFlit) noexcept;
     };
 
     template<FlitConfigurationConcept config>
@@ -1183,9 +1243,8 @@ namespace CCHI::Taurus {
                                                      , public Gravity::Event<UpstreamNodeREQUpRSPPostChannelChosenEvent<config>> {
     public:
         UpstreamNodeREQUpRSPPostChannelChosenEvent(UpstreamNode<config>&                           upstream,
-                                                  uint64_t                                         PA,
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
-                                                  Flits::UpRSP<config>&                            upRspFlit) noexcept;
+                                                  Flits::UpRSP<config>&                            uprspFlit) noexcept;
     };
 }
 
@@ -1429,17 +1488,15 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeCacheLineEventBase<config>::UpstreamNodeCacheLineEventBase(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine) noexcept
         : UpstreamNodeEventBase<config>(upstream)
-        , PA        (PA)
         , cacheLine (cacheLine)
     { }
 
     template<FlitConfigurationConcept config>
     inline uint64_t UpstreamNodeCacheLineEventBase<config>::GetPA() const noexcept
     {
-        return PA;
+        return cacheLine.GetPA();
     }
 
     template<FlitConfigurationConcept config>
@@ -1457,11 +1514,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactDeniedEventBase<config>::UpstreamNodeXactDeniedEventBase(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         XactDenialEnum                                  denial,
         std::shared_ptr<Xact::Xaction<config>>          xaction) noexcept
-        : UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        : UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , denial  (denial)
         , xaction (std::move(xaction))
     { }
@@ -1494,10 +1550,9 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactAcceptedEventBase<config>::UpstreamNodeXactAcceptedEventBase(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         std::shared_ptr<Xact::Xaction<config>>          xaction) noexcept
-        : UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        : UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , xaction (std::move(xaction))
     { }
 
@@ -1523,12 +1578,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactDeniedSNPEvent<config>::UpstreamNodeXactDeniedSNPEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         XactDenialEnum                                  denial,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::SNP<config>&                       snpFlit) noexcept
-        : UpstreamNodeXactDeniedEventBase<config>(upstream, PA, cacheLine, denial, std::move(xaction))
+        : UpstreamNodeXactDeniedEventBase<config>(upstream, cacheLine, denial, std::move(xaction))
         , snpFlit   (snpFlit)
     { }
 
@@ -1546,11 +1600,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactAcceptedSNPEvent<config>::UpstreamNodeXactAcceptedSNPEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::SNP<config>&                       snpFlit) noexcept
-        : UpstreamNodeXactAcceptedEventBase<config>(upstream, PA, cacheLine, std::move(xaction))
+        : UpstreamNodeXactAcceptedEventBase<config>(upstream, cacheLine, std::move(xaction))
         , snpFlit   (snpFlit)
     { }
 
@@ -1568,12 +1621,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactDeniedEVTEvent<config>::UpstreamNodeXactDeniedEVTEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         XactDenialEnum                                  denial,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::EVT<config>&                       evtFlit) noexcept
-        : UpstreamNodeXactDeniedEventBase<config>(upstream, PA, cacheLine, denial, std::move(xaction))
+        : UpstreamNodeXactDeniedEventBase<config>(upstream, cacheLine, denial, std::move(xaction))
         , evtFlit   (evtFlit)
     { }
 
@@ -1591,11 +1643,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactAcceptedEVTEvent<config>::UpstreamNodeXactAcceptedEVTEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::EVT<config>&                       evtFlit) noexcept
-        : UpstreamNodeXactAcceptedEventBase<config>(upstream, PA, cacheLine, std::move(xaction))
+        : UpstreamNodeXactAcceptedEventBase<config>(upstream, cacheLine, std::move(xaction))
         , evtFlit   (evtFlit)
     { }
 
@@ -1613,12 +1664,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactDeniedREQEvent<config>::UpstreamNodeXactDeniedREQEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         XactDenialEnum                                  denial,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::REQ<config>&                       reqFlit) noexcept
-        : UpstreamNodeXactDeniedEventBase<config>(upstream, PA, cacheLine, denial, std::move(xaction))
+        : UpstreamNodeXactDeniedEventBase<config>(upstream, cacheLine, denial, std::move(xaction))
         , reqFlit   (reqFlit)
     { }
 
@@ -1636,11 +1686,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactAcceptedREQEvent<config>::UpstreamNodeXactAcceptedREQEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::REQ<config>&                       reqFlit) noexcept
-        : UpstreamNodeXactAcceptedEventBase<config>(upstream, PA, cacheLine, std::move(xaction))
+        : UpstreamNodeXactAcceptedEventBase<config>(upstream, cacheLine, std::move(xaction))
         , reqFlit   (reqFlit)
     { }
 
@@ -1652,18 +1701,251 @@ namespace CCHI::Taurus {
 }
 
 
+// Implementation of: class UpstreamNodeXactDeniedPrefetchEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeXactDeniedPrefetchEvent<config>::UpstreamNodeXactDeniedPrefetchEvent(
+        UpstreamNode<config>&                   upstream,
+        XactDenialEnum                          denial,
+        std::shared_ptr<Xact::Xaction<config>>  xaction,
+        const Flits::REQ<config>&               reqFlit) noexcept
+        : UpstreamNodeEventBase<config>(upstream)
+        , denial    (denial)
+        , xaction   (std::move(xaction))
+        , reqFlit   (reqFlit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum UpstreamNodeXactDeniedPrefetchEvent<config>::GetDenial() const noexcept
+    {
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xact::Xaction<config>>
+    UpstreamNodeXactDeniedPrefetchEvent<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xact::Xaction<config>>
+    UpstreamNodeXactDeniedPrefetchEvent<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::REQ<config>& UpstreamNodeXactDeniedPrefetchEvent<config>::GetREQFlit() const noexcept
+    {
+        return reqFlit;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeXactAcceptedPrefetchEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeXactAcceptedPrefetchEvent<config>::UpstreamNodeXactAcceptedPrefetchEvent(
+        UpstreamNode<config>&                   upstream,
+        std::shared_ptr<Xact::Xaction<config>>  xaction,
+        const Flits::REQ<config>&               reqFlit) noexcept
+        : UpstreamNodeEventBase<config>(upstream)
+        , xaction   (std::move(xaction))
+        , reqFlit   (reqFlit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xact::Xaction<config>>
+    UpstreamNodeXactAcceptedPrefetchEvent<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xact::Xaction<config>>
+    UpstreamNodeXactAcceptedPrefetchEvent<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::REQ<config>& UpstreamNodeXactAcceptedPrefetchEvent<config>::GetREQFlit() const noexcept
+    {
+        return reqFlit;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeXactDeniedCMOEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeXactDeniedCMOEvent<config>::UpstreamNodeXactDeniedCMOEvent(
+        UpstreamNode<config>&                   upstream,
+        XactDenialEnum                          denial,
+        std::shared_ptr<Xact::Xaction<config>>  xaction,
+        const Flits::REQ<config>&               reqFlit) noexcept
+        : UpstreamNodeEventBase<config>(upstream)
+        , denial    (denial)
+        , xaction   (std::move(xaction))
+        , reqFlit   (reqFlit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum UpstreamNodeXactDeniedCMOEvent<config>::GetDenial() const noexcept
+    {
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xact::Xaction<config>>
+    UpstreamNodeXactDeniedCMOEvent<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xact::Xaction<config>>
+    UpstreamNodeXactDeniedCMOEvent<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::REQ<config>& UpstreamNodeXactDeniedCMOEvent<config>::GetREQFlit() const noexcept
+    {
+        return reqFlit;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeXactAcceptedCMOEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeXactAcceptedCMOEvent<config>::UpstreamNodeXactAcceptedCMOEvent(
+        UpstreamNode<config>&                   upstream,
+        std::shared_ptr<Xact::Xaction<config>>  xaction,
+        const Flits::REQ<config>&               reqFlit) noexcept
+        : UpstreamNodeEventBase<config>(upstream)
+        , xaction   (std::move(xaction))
+        , reqFlit   (reqFlit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xact::Xaction<config>>
+    UpstreamNodeXactAcceptedCMOEvent<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xact::Xaction<config>>
+    UpstreamNodeXactAcceptedCMOEvent<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::REQ<config>& UpstreamNodeXactAcceptedCMOEvent<config>::GetREQFlit() const noexcept
+    {
+        return reqFlit;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeXactDeniedCompCMOEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeXactDeniedCompCMOEvent<config>::UpstreamNodeXactDeniedCompCMOEvent(
+        UpstreamNode<config>&                   upstream,
+        XactDenialEnum                          denial,
+        std::shared_ptr<Xact::Xaction<config>>  xaction,
+        const Flits::DnRSP<config>&             dnrspFlit) noexcept
+        : UpstreamNodeEventBase<config>(upstream)
+        , denial    (denial)
+        , xaction   (std::move(xaction))
+        , dnrspFlit (dnrspFlit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum UpstreamNodeXactDeniedCompCMOEvent<config>::GetDenial() const noexcept
+    {
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xact::Xaction<config>>
+    UpstreamNodeXactDeniedCompCMOEvent<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xact::Xaction<config>>
+    UpstreamNodeXactDeniedCompCMOEvent<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::DnRSP<config>& UpstreamNodeXactDeniedCompCMOEvent<config>::GetDnRSPFlit() const noexcept
+    {
+        return dnrspFlit;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeXactAcceptedCompCMOEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeXactAcceptedCompCMOEvent<config>::UpstreamNodeXactAcceptedCompCMOEvent(
+        UpstreamNode<config>&                   upstream,
+        std::shared_ptr<Xact::Xaction<config>>  xaction,
+        const Flits::DnRSP<config>&             dnrspFlit) noexcept
+        : UpstreamNodeEventBase<config>(upstream)
+        , xaction   (std::move(xaction))
+        , dnrspFlit (dnrspFlit)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xact::Xaction<config>>
+    UpstreamNodeXactAcceptedCompCMOEvent<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xact::Xaction<config>>
+    UpstreamNodeXactAcceptedCompCMOEvent<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Flits::DnRSP<config>& UpstreamNodeXactAcceptedCompCMOEvent<config>::GetDnRSPFlit() const noexcept
+    {
+        return dnrspFlit;
+    }
+}
+
+
 // Implementation of: class UpstreamNodeXactDeniedDnRSPEvent
 namespace CCHI::Taurus {
 
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactDeniedDnRSPEvent<config>::UpstreamNodeXactDeniedDnRSPEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         XactDenialEnum                                  denial,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::DnRSP<config>&                     dnrspFlit) noexcept
-        : UpstreamNodeXactDeniedEventBase<config>(upstream, PA, cacheLine, denial, std::move(xaction))
+        : UpstreamNodeXactDeniedEventBase<config>(upstream, cacheLine, denial, std::move(xaction))
         , dnrspFlit (dnrspFlit)
     { }
 
@@ -1681,11 +1963,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactAcceptedDnRSPEvent<config>::UpstreamNodeXactAcceptedDnRSPEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::DnRSP<config>&                     dnrspFlit) noexcept
-        : UpstreamNodeXactAcceptedEventBase<config>(upstream, PA, cacheLine, std::move(xaction))
+        : UpstreamNodeXactAcceptedEventBase<config>(upstream, cacheLine, std::move(xaction))
         , dnrspFlit (dnrspFlit)
     { }
 
@@ -1703,12 +1984,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactDeniedUpRSPEvent<config>::UpstreamNodeXactDeniedUpRSPEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         XactDenialEnum                                  denial,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::UpRSP<config>&                     uprspFlit) noexcept
-        : UpstreamNodeXactDeniedEventBase<config>(upstream, PA, cacheLine, denial, std::move(xaction))
+        : UpstreamNodeXactDeniedEventBase<config>(upstream, cacheLine, denial, std::move(xaction))
         , uprspFlit (uprspFlit)
     { }
 
@@ -1726,11 +2006,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactAcceptedUpRSPEvent<config>::UpstreamNodeXactAcceptedUpRSPEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::UpRSP<config>&                     uprspFlit) noexcept
-        : UpstreamNodeXactAcceptedEventBase<config>(upstream, PA, cacheLine, std::move(xaction))
+        : UpstreamNodeXactAcceptedEventBase<config>(upstream, cacheLine, std::move(xaction))
         , uprspFlit (uprspFlit)
     { }
 
@@ -1748,12 +2027,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactDeniedDnDATEvent<config>::UpstreamNodeXactDeniedDnDATEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         XactDenialEnum                                  denial,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::DnDAT<config>&                     dndatFlit) noexcept
-        : UpstreamNodeXactDeniedEventBase<config>(upstream, PA, cacheLine, denial, std::move(xaction))
+        : UpstreamNodeXactDeniedEventBase<config>(upstream, cacheLine, denial, std::move(xaction))
         , dndatFlit (dndatFlit)
     { }
 
@@ -1771,11 +2049,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactAcceptedDnDATEvent<config>::UpstreamNodeXactAcceptedDnDATEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::DnDAT<config>&                     dndatFlit) noexcept
-        : UpstreamNodeXactAcceptedEventBase<config>(upstream, PA, cacheLine, std::move(xaction))
+        : UpstreamNodeXactAcceptedEventBase<config>(upstream, cacheLine, std::move(xaction))
         , dndatFlit (dndatFlit)
     { }
 
@@ -1793,12 +2070,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactDeniedUpDATEvent<config>::UpstreamNodeXactDeniedUpDATEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         XactDenialEnum                                  denial,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::UpDAT<config>&                     updatFlit) noexcept
-        : UpstreamNodeXactDeniedEventBase<config>(upstream, PA, cacheLine, denial, std::move(xaction))
+        : UpstreamNodeXactDeniedEventBase<config>(upstream, cacheLine, denial, std::move(xaction))
         , updatFlit (updatFlit)
     { }
 
@@ -1816,11 +2092,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeXactAcceptedUpDATEvent<config>::UpstreamNodeXactAcceptedUpDATEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         std::shared_ptr<Xact::Xaction<config>>          xaction,
         const Flits::UpDAT<config>&                     updatFlit) noexcept
-        : UpstreamNodeXactAcceptedEventBase<config>(upstream, PA, cacheLine, std::move(xaction))
+        : UpstreamNodeXactAcceptedEventBase<config>(upstream, cacheLine, std::move(xaction))
         , updatFlit (updatFlit)
     { }
 
@@ -1838,12 +2113,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPreHazardDetectionEvent<config>::UpstreamNodeEVTPreHazardDetectionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit,
         bool&                                           hazard) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , hazard                                (hazard)
     { }
 
@@ -1867,12 +2141,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPostHazardDetectionEvent<config>::UpstreamNodeEVTPostHazardDetectionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit,
         bool                                            hazard) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , hazard                                (hazard)
     { }
 
@@ -1890,11 +2163,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPreHazardPendingEvent<config>::UpstreamNodeEVTPreHazardPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 
     template<FlitConfigurationConcept config>
@@ -1929,12 +2201,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPostHazardPendingEvent<config>::UpstreamNodeEVTPostHazardPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit,
         DenialEnum                                      denial) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , denial                                (denial)
     { }
 
@@ -1958,11 +2229,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPreChannelPendingEvent<config>::UpstreamNodeEVTPreChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 
     template<FlitConfigurationConcept config>
@@ -1997,12 +2267,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPostChannelPendingEvent<config>::UpstreamNodeEVTPostChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit,
         DenialEnum                                      denial) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , denial                                (denial)
     { }
 
@@ -2026,11 +2295,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPreHazardToChannelPendingEvent<config>::UpstreamNodeEVTPreHazardToChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2041,11 +2309,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPostHazardToChannelPendingEvent<config>::UpstreamNodeEVTPostHazardToChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2056,14 +2323,13 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTCacheStatePreDemotionEvent<config>::UpstreamNodeEVTCacheStatePreDemotionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit,
         CacheStateEnum                                  prevState,
         CacheStateEnum&                                 nextState) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
         , CacheStatePreDemotionEventBase        (prevState, nextState)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2074,14 +2340,13 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTCacheStatePostDemotionEvent<config>::UpstreamNodeEVTCacheStatePostDemotionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit,
         CacheStateEnum                                  prevState,
         CacheStateEnum                                  nextState) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
         , CacheStatePostDemotionEventBase       (prevState, nextState)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2092,12 +2357,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTDataPreHazardDetectionEvent<config>::UpstreamNodeEVTDataPreHazardDetectionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit,
         bool&                                           hazard) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , hazard                                (hazard)
     { }
 
@@ -2121,12 +2385,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTDataPostHazardDetectionEvent<config>::UpstreamNodeEVTDataPostHazardDetectionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit,
         bool                                            hazard) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , hazard                                (hazard)
     { }
 
@@ -2144,11 +2407,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTDataPreHazardPendingEvent<config>::UpstreamNodeEVTDataPreHazardPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2159,11 +2421,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTDataPostHazardPendingEvent<config>::UpstreamNodeEVTDataPostHazardPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2174,11 +2435,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTDataPreChannelPendingEvent<config>::UpstreamNodeEVTDataPreChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2189,11 +2449,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTDataPostChannelPendingEvent<config>::UpstreamNodeEVTDataPostChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2204,11 +2463,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTDataPreHazardToChannelPendingEvent<config>::UpstreamNodeEVTDataPreHazardToChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2219,11 +2477,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTDataPostHazardToChannelPendingEvent<config>::UpstreamNodeEVTDataPostHazardToChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2234,11 +2491,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPreChannelChosenEvent<config>::UpstreamNodeEVTPreChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2249,11 +2505,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTPostChannelChosenEvent<config>::UpstreamNodeEVTPostChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::EVT<config>&                             evtFlit) noexcept
         : EVTFlitEventBase<config>              (evtFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2264,11 +2519,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTUpDATPreChannelChosenEvent<config>::UpstreamNodeEVTUpDATPreChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2279,11 +2533,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeEVTUpDATPostChannelChosenEvent<config>::UpstreamNodeEVTUpDATPostChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2294,12 +2547,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPPreHazardDetectionEvent<config>::UpstreamNodeSNPPreHazardDetectionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::SNP<config>&                             snpFlit,
         bool&                                           hazard) noexcept
         : SNPFlitEventBase<config>              (snpFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , hazard                                (hazard)
     { }
 
@@ -2323,12 +2575,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPPostHazardDetectionEvent<config>::UpstreamNodeSNPPostHazardDetectionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::SNP<config>&                             snpFlit,
         bool                                            hazard) noexcept
         : SNPFlitEventBase<config>              (snpFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , hazard                                (hazard)
     { }
 
@@ -2346,11 +2597,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPPreHazardPendingEvent<config>::UpstreamNodeSNPPreHazardPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::SNP<config>&                             snpFlit) noexcept
         : SNPFlitEventBase<config>              (snpFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 
     template<FlitConfigurationConcept config>
@@ -2385,12 +2635,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPPostHazardPendingEvent<config>::UpstreamNodeSNPPostHazardPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::SNP<config>&                             snpFlit,
         DenialEnum                                      denial) noexcept
         : SNPFlitEventBase<config>              (snpFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , denial                                (denial)
     { }
 
@@ -2414,14 +2663,13 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPCacheStatePreDemotionEvent<config>::UpstreamNodeSNPCacheStatePreDemotionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::SNP<config>&                             snpFlit,
         CacheStateEnum                                  prevState,
         CacheStateEnum&                                 nextState) noexcept
         : SNPFlitEventBase<config>              (snpFlit)
         , CacheStatePreDemotionEventBase        (prevState, nextState)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2432,14 +2680,13 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPCacheStatePostDemotionEvent<config>::UpstreamNodeSNPCacheStatePostDemotionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::SNP<config>&                             snpFlit,
         CacheStateEnum                                  prevState,
         CacheStateEnum                                  nextState) noexcept
         : SNPFlitEventBase<config>              (snpFlit)
         , CacheStatePostDemotionEventBase       (prevState, nextState)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2450,11 +2697,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPRespPreChannelPendingEvent<config>::UpstreamNodeSNPRespPreChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpRSP<config>&                           uprspFlit) noexcept
         : UpRSPFlitEventBase<config>            (uprspFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2465,11 +2711,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPRespPostChannelPendingEvent<config>::UpstreamNodeSNPRespPostChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpRSP<config>&                           uprspFlit) noexcept
         : UpRSPFlitEventBase<config>            (uprspFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2480,11 +2725,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPRespDataPreChannelPendingEvent<config>::UpstreamNodeSNPRespDataPreChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2495,11 +2739,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPRespDataPostChannelPendingEvent<config>::UpstreamNodeSNPRespDataPostChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2510,11 +2753,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPUpRSPPreChannelChosenEvent<config>::UpstreamNodeSNPUpRSPPreChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpRSP<config>&                           uprspFlit) noexcept
         : UpRSPFlitEventBase<config>            (uprspFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2525,11 +2767,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPUpRSPPostChannelChosenEvent<config>::UpstreamNodeSNPUpRSPPostChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpRSP<config>&                           uprspFlit) noexcept
         : UpRSPFlitEventBase<config>            (uprspFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2540,11 +2781,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPUpDATPreChannelChosenEvent<config>::UpstreamNodeSNPUpDATPreChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2555,11 +2795,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeSNPUpDATPostChannelChosenEvent<config>::UpstreamNodeSNPUpDATPostChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpDAT<config>&                           updatFlit) noexcept
         : UpDATFlitEventBase<config>            (updatFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2570,12 +2809,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPreHazardDetectionEvent<config>::UpstreamNodeREQPreHazardDetectionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit,
         bool&                                           hazard) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , hazard                                (hazard)
     { }
 
@@ -2599,12 +2837,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPostHazardDetectionEvent<config>::UpstreamNodeREQPostHazardDetectionEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit,
         bool                                            hazard) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , hazard                                (hazard)
     { }
 
@@ -2622,11 +2859,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPreHazardPendingEvent<config>::UpstreamNodeREQPreHazardPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 
     template<FlitConfigurationConcept config>
@@ -2661,12 +2897,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPostHazardPendingEvent<config>::UpstreamNodeREQPostHazardPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit,
         DenialEnum                                      denial) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , denial                                (denial)
     { }
 
@@ -2690,11 +2925,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPreChannelPendingEvent<config>::UpstreamNodeREQPreChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 
     template<FlitConfigurationConcept config>
@@ -2729,12 +2963,11 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPostChannelPendingEvent<config>::UpstreamNodeREQPostChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit,
         DenialEnum                                      denial) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
         , denial                                (denial)
     { }
 
@@ -2758,11 +2991,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPreHazardToChannelPendingEvent<config>::UpstreamNodeREQPreHazardToChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2773,11 +3005,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPostHazardToChannelPendingEvent<config>::UpstreamNodeREQPostHazardToChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2788,11 +3019,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQCompAckPreChannelPendingEvent<config>::UpstreamNodeREQCompAckPreChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpRSP<config>&                           uprspFlit) noexcept
         : UpRSPFlitEventBase<config>            (uprspFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2803,11 +3033,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQCompAckPostChannelPendingEvent<config>::UpstreamNodeREQCompAckPostChannelPendingEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::UpRSP<config>&                           uprspFlit) noexcept
         : UpRSPFlitEventBase<config>            (uprspFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2818,11 +3047,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPreChannelChosenEvent<config>::UpstreamNodeREQPreChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2833,11 +3061,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQPostChannelChosenEvent<config>::UpstreamNodeREQPostChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         Flits::REQ<config>&                             reqFlit) noexcept
         : REQFlitEventBase<config>              (reqFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2848,11 +3075,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQUpRSPPreChannelChosenEvent<config>::UpstreamNodeREQUpRSPPreChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
-        Flits::UpRSP<config>&                           upRspFlit) noexcept
-        : UpRSPFlitEventBase<config>            (upRspFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        Flits::UpRSP<config>&                           uprspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (uprspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
@@ -2863,11 +3089,10 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNodeREQUpRSPPostChannelChosenEvent<config>::UpstreamNodeREQUpRSPPostChannelChosenEvent(
         UpstreamNode<config>&                           upstream,
-        uint64_t                                        PA,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
-        Flits::UpRSP<config>&                           upRspFlit) noexcept
-        : UpRSPFlitEventBase<config>            (upRspFlit)
-        , UpstreamNodeCacheLineEventBase<config>(upstream, PA, cacheLine)
+        Flits::UpRSP<config>&                           uprspFlit) noexcept
+        : UpRSPFlitEventBase<config>            (uprspFlit)
+        , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
     { }
 }
 
