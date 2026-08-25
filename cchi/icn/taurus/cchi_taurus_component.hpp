@@ -157,6 +157,12 @@ namespace CCHI::Taurus {
             Gravity::EventBus<UpstreamNodeXactDeniedPrefetchEvent<config>>              OnDeniedPrefetch;
             Gravity::EventBus<UpstreamNodeXactDeniedCMOEvent<config>>                   OnDeniedCMO;
             Gravity::EventBus<UpstreamNodeXactDeniedCompCMOEvent<config>>               OnDeniedCompCMO;
+
+            Gravity::EventBus<UpstreamNodeCacheLineGrantedEvent<config>>                OnCacheLineGranted;
+            Gravity::EventBus<UpstreamNodeCacheLinePreLoadEvent<config>>                OnCacheLinePreLoad;
+            Gravity::EventBus<UpstreamNodeCacheLinePostLoadEvent<config>>               OnCacheLinePostLoad;
+            Gravity::EventBus<UpstreamNodeCacheLinePreStoreEvent<config>>               OnCacheLinePreStore;
+            Gravity::EventBus<UpstreamNodeCacheLinePostStoreEvent<config>>              OnCacheLinePostStore;
             
         public:
             EventHub() noexcept;
@@ -173,6 +179,19 @@ namespace CCHI::Taurus {
             friend class UpstreamNode<config>;
 
         protected:
+            // owning node - lets the Load/Store accessors reach the node's
+            // EventHub to fire the CacheLine Pre/Post Load/Store events.
+            // *NOTE: lifetime contract - a shared_ptr handle from GetCacheLine()
+            //        keeps the line object alive past reap and past node
+            //        destruction, but must not be USED after the node is gone:
+            //        every Load*/Store* accessor dereferences this raw pointer
+            //        to fire events that reference the node (use-after-free).
+            //        Event payloads hold the line by weak_ptr: their
+            //        GetCacheLine() locks to null once the line is reaped or
+            //        the node is destroyed - always check it. GetData()/GetPA()/
+            //        GetState() and the in-flight/hazard predicates never touch
+            //        owner and stay safe on an escaped shared_ptr handle.
+            UpstreamNode<config>*                       owner;
             uint64_t                                    PA;
             uint64_t                                    data[8]                 = {};
             CacheStateEnum                              state                   = CacheState::Invalid;
@@ -198,8 +217,20 @@ namespace CCHI::Taurus {
             std::optional<Flits::REQ<config>>           pendingREQChannelTXREQ  = std::nullopt;
             std::optional<Flits::UpRSP<config>>         pendingREQChannelTXRSP  = std::nullopt;
 
+            // *NOTE: emission ages - each is generated once at action start (in the
+            //        Do* entry point or at snoop acceptance, hazard pend included) and
+            //        covers every flit the action emits on the channel(s): ageTXEVT
+            //        covers the TXEVT flit and its TXDAT copyback beats, ageTXREQ the
+            //        TXREQ flit and its TXRSP CompAck, ageSNP the TXRSP SnpResp and
+            //        the TXDAT SnpRespData beats. An age is only consulted while a
+            //        slot it covers is pending; Is*InFlight includes the pended
+            //        slots, so a covered age field is never overwritten early.
+            uint64_t                                    ageTXEVT                = 0;
+            uint64_t                                    ageTXREQ                = 0;
+            uint64_t                                    ageSNP                  = 0;
+
         public:
-            CacheLine(uint64_t PA) noexcept;
+            CacheLine(UpstreamNode<config>* owner, uint64_t PA) noexcept;
 
         public:
             // *NOTE: raw unchecked view - no Invalid/fill guards; prefer Load/LoadXX
@@ -246,13 +277,21 @@ namespace CCHI::Taurus {
 
         class CacheLineEventBase {
         protected:
-            std::shared_ptr<CacheLine>              cacheLine;
+            // non-owning: breaking the line -> future -> fired-event -> line
+            // cycle - the cacheable map is the sole long-term owner, so the
+            // reap erase actually frees the line
+            std::weak_ptr<CacheLine>                cacheLine;
+            // value-cached: GetPA() stays valid on an expired payload
+            uint64_t                                PA;
 
         public:
             CacheLineEventBase(std::shared_ptr<CacheLine> cacheLine) noexcept;
 
         public:
             uint64_t                                GetPA() const noexcept;
+            // non-owning: locks to null once the line is reaped or the node is
+            // destroyed - always check the result (see the lifetime contract
+            // on CacheLine::owner)
             std::shared_ptr<CacheLine>              GetCacheLine() noexcept;
             std::shared_ptr<const CacheLine>        GetCacheLine() const noexcept;
         };
@@ -277,6 +316,9 @@ namespace CCHI::Taurus {
             Flits::REQ<config>                          prefetchFlit;
             std::shared_ptr<FutureNow<PrefetchEmittedEvent>>
                                                         future;
+
+            // action-start age of the DoPrefetch* call (see CacheLine::ageTXEVT)
+            uint64_t                                    age = 0;
 
         public:
             PrefetchEntry(const Flits::REQ<config>& prefetchFlit, std::shared_ptr<FutureNow<PrefetchEmittedEvent>> future) noexcept;
@@ -310,6 +352,9 @@ namespace CCHI::Taurus {
             Flits::REQ<config>                          cmoFlit;
             std::shared_ptr<FutureNow<CMOCompleteEvent>> 
                                                         future;
+
+            // action-start age of the DoCBO* call (see CacheLine::ageTXEVT)
+            uint64_t                                    age = 0;
 
         public:
             CMOEntry(const Flits::REQ<config>& cmoFlit, std::shared_ptr<FutureNow<CMOCompleteEvent>> future) noexcept;
@@ -455,10 +500,12 @@ namespace CCHI::Taurus {
     public:
         bool                                    IsValid(uint64_t PA) const noexcept;
         CacheStateEnum                          GetState(uint64_t PA) const noexcept;
+        // the returned handle must not be used after this node is destroyed -
+        // see the lifetime contract on CacheLine::owner
         std::shared_ptr<CacheLine>              GetCacheLine(uint64_t PA) const noexcept;
 
     protected:
-        void                                    SetCacheLine(uint64_t PA, std::shared_ptr<CacheLine> cacheLine) noexcept;
+        void                                    SetCacheLine(std::shared_ptr<CacheLine> cacheLine) noexcept;
 
     public:
         std::shared_ptr<FutureNow<GrantedEvent>>        DoLoad(uint64_t PA) noexcept;
@@ -492,7 +539,67 @@ namespace CCHI::Taurus {
         void                                    TickSNP() noexcept;
         void                                    TickREQ() noexcept;
 
+    protected:
+        // monotonic action-age source: one stamp per action, generated at action
+        // start (the Do* entry points and snoop acceptance) - see CacheLine::ageTXEVT
+        uint64_t                                emissionAgeCounter = 0;
+
+        // per-channel emission order: one (action age, LineKey) entry per pending
+        // channel slot, kept sorted by AgedPush - the emission order per channel
+        // equals the action-start (Do* call) order
+        std::deque<std::pair<uint64_t, uint64_t>>
+                                                agedTXEVT;
+        std::deque<std::pair<uint64_t, uint64_t>>
+                                                agedTXREQ;  // per-line REQs only
+        std::deque<std::pair<uint64_t, uint64_t>>
+                                                agedTXRSP;  // SNP-RSP and CompAck slots
+        std::deque<std::pair<uint64_t, uint64_t>>
+                                                agedTXDAT;  // SNP-DAT0/1 and EVT-DAT0/1 slots
+
+    protected:
+        uint64_t                                NextEmissionAge() noexcept;
+
+        // insert at the first position with a greater age (stable for equal
+        // ages); the common case - the new entry is the youngest - is O(1) at
+        // the back. Sorted insertion (not plain push_back) because hazard-to-
+        // channel transfers, Tick-time pends and hash-order Tick releases can
+        // push ages older than entries already in the deque.
+        void                                    AgedPush(std::deque<std::pair<uint64_t, uint64_t>>& queue,
+                                                         uint64_t age, uint64_t key) noexcept;
+
+        // erase the first entry matching (age, key) - O(m), m = pending
+        // candidates on that channel (tiny)
+        void                                    AgedErase(std::deque<std::pair<uint64_t, uint64_t>>& queue,
+                                                          uint64_t age, uint64_t key) noexcept;
+
+        // pend helpers: every channel-slot assignment goes through these, so a
+        // pended slot and its aged* deque entry can never diverge
+        void                                    PendEVTChannelTXEVT(CacheLine& cacheLine, const Flits::EVT<config>& flit, uint64_t age) noexcept;
+        void                                    PendREQChannelTXREQ(CacheLine& cacheLine, const Flits::REQ<config>& flit, uint64_t age) noexcept;
+        void                                    PendREQChannelTXRSP(CacheLine& cacheLine, const Flits::UpRSP<config>& flit) noexcept;
+        void                                    PendSNPChannelTXRSP(CacheLine& cacheLine, const Flits::UpRSP<config>& flit) noexcept;
+        void                                    PendSNPChannelTXDAT0(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept;
+        void                                    PendSNPChannelTXDAT1(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept;
+        void                                    PendEVTChannelTXDAT0(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept;
+        void                                    PendEVTChannelTXDAT1(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept;
+
     public:
+        // *NOTE: emission-order contract - per channel, pending flits are offered
+        //        in action-start order: the emission order extracted from the
+        //        action ages is identical to the Do* call order (snoops ordered
+        //        by acceptance), across lines and across action classes
+        //        (DoLoad/DoStore*/DoEvict, DoPrefetch*, DoCBO* - no action class
+        //        has fixed precedence; TXREQ merges per-line REQs and the
+        //        prefetch/CMO queue fronts into one age order). Per-line slot
+        //        priorities are unchanged (SNP-RSP before CompAck; SNP-DAT0,
+        //        SNP-DAT1, EVT-DAT0, EVT-DAT1) - a line selected through an
+        //        older slot's deque entry may emit its newer slot's flit.
+        //        Hazard-parked flits enter the order with their action-start
+        //        age when they are released to the channel. A PreChannelChosen
+        //        cancellation keeps the flit pended, skips that line for the
+        //        rest of the call and picks the next candidate strictly in age
+        //        order - a cancelled candidate is never re-offered within the
+        //        same call, and is offered first again on the next call.
         std::optional<Flits::EVT<config>>       PeekTXEVT() noexcept;
         std::optional<Flits::EVT<config>>       PopTXEVT() noexcept;
 
@@ -688,9 +795,97 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline void UpstreamNode<config>::SetCacheLine(uint64_t PA, std::shared_ptr<CacheLine> cacheLine) noexcept
+    inline void UpstreamNode<config>::SetCacheLine(std::shared_ptr<CacheLine> cacheLine) noexcept
     {
-        cacheable[LineKey(PA)] = cacheLine;
+        // key by the line's own normalized PA (never a caller-supplied
+        // argument): the map key and the line can never disagree
+        cacheable[LineKey(cacheLine->PA)] = cacheLine;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::NextEmissionAge() noexcept
+    {
+        return ++emissionAgeCounter;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::AgedPush(std::deque<std::pair<uint64_t, uint64_t>>& queue, uint64_t age, uint64_t key) noexcept
+    {
+        size_t pos = queue.size();
+
+        while (pos > 0 && queue[pos - 1].first > age)
+            --pos;
+
+        queue.insert(queue.begin() + pos, { age, key });
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::AgedErase(std::deque<std::pair<uint64_t, uint64_t>>& queue, uint64_t age, uint64_t key) noexcept
+    {
+        for (auto it = queue.begin(); it != queue.end(); ++it)
+            if (it->first == age && it->second == key)
+            {
+                queue.erase(it);
+                return;
+            }
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::PendEVTChannelTXEVT(CacheLine& cacheLine, const Flits::EVT<config>& flit, uint64_t age) noexcept
+    {
+        cacheLine.pendingEVTChannelTXEVT = flit;
+        cacheLine.ageTXEVT = age;
+        AgedPush(agedTXEVT, age, LineKey(cacheLine.PA));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::PendREQChannelTXREQ(CacheLine& cacheLine, const Flits::REQ<config>& flit, uint64_t age) noexcept
+    {
+        cacheLine.pendingREQChannelTXREQ = flit;
+        cacheLine.ageTXREQ = age;
+        AgedPush(agedTXREQ, age, LineKey(cacheLine.PA));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::PendREQChannelTXRSP(CacheLine& cacheLine, const Flits::UpRSP<config>& flit) noexcept
+    {
+        cacheLine.pendingREQChannelTXRSP = flit;
+        AgedPush(agedTXRSP, cacheLine.ageTXREQ, LineKey(cacheLine.PA));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::PendSNPChannelTXRSP(CacheLine& cacheLine, const Flits::UpRSP<config>& flit) noexcept
+    {
+        cacheLine.pendingSNPChannelTXRSP = flit;
+        AgedPush(agedTXRSP, cacheLine.ageSNP, LineKey(cacheLine.PA));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::PendSNPChannelTXDAT0(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept
+    {
+        cacheLine.pendingSNPChannelTXDAT0 = flit;
+        AgedPush(agedTXDAT, cacheLine.ageSNP, LineKey(cacheLine.PA));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::PendSNPChannelTXDAT1(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept
+    {
+        cacheLine.pendingSNPChannelTXDAT1 = flit;
+        AgedPush(agedTXDAT, cacheLine.ageSNP, LineKey(cacheLine.PA));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::PendEVTChannelTXDAT0(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept
+    {
+        cacheLine.pendingEVTChannelTXDAT0 = flit;
+        AgedPush(agedTXDAT, cacheLine.ageTXEVT, LineKey(cacheLine.PA));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::PendEVTChannelTXDAT1(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept
+    {
+        cacheLine.pendingEVTChannelTXDAT1 = flit;
+        AgedPush(agedTXDAT, cacheLine.ageTXEVT, LineKey(cacheLine.PA));
     }
 
     template<FlitConfigurationConcept config>
@@ -711,6 +906,10 @@ namespace CCHI::Taurus {
             {
                 // TODO: event: LoadHitEvent
 
+                // *NOTE: no OnCacheLineGranted here - the hub event carries the granting
+                //        xaction and a hit has none (it never creates a REQ); the
+                //        LoadHitEvent TODO above covers hit-path observability
+
                 // Immediate hit
                 return std::make_shared<FutureNow<GrantedEvent>>(Denial::DONE, GrantedEvent(cacheLine));
             }
@@ -725,8 +924,8 @@ namespace CCHI::Taurus {
         }
         else
         {
-            cacheLine = std::make_shared<CacheLine>(PA);
-            SetCacheLine(PA, cacheLine);
+            cacheLine = std::make_shared<CacheLine>(this, PA);
+            SetCacheLine(cacheLine);
         }
 
         //
@@ -735,6 +934,7 @@ namespace CCHI::Taurus {
 
         //
         auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge(); // action-start age, orders all its flits
 
         if (!txnID)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
@@ -772,7 +972,10 @@ namespace CCHI::Taurus {
                 denial = events->OnREQPreHazardPending(*this, *cacheLine, reqFlit).GetDenial();
 
             if (!denial->IsRejected())
+            {
                 cacheLine->pendingREQHazardTXREQ = { reqFlit };
+                cacheLine->ageTXREQ = actionAge;
+            }
 
             if (events)
                 events->OnREQPostHazardPending(*this, *cacheLine, reqFlit, denial);
@@ -792,7 +995,7 @@ namespace CCHI::Taurus {
 
             if (!denial->IsRejected())
             {
-                cacheLine->pendingREQChannelTXREQ = { reqFlit };
+                PendREQChannelTXREQ(*cacheLine, reqFlit, actionAge);
             }
 
             if (events)
@@ -845,8 +1048,8 @@ namespace CCHI::Taurus {
         }
         else
         {
-            cacheLine = std::make_shared<CacheLine>(PA);
-            SetCacheLine(PA, cacheLine);
+            cacheLine = std::make_shared<CacheLine>(this, PA);
+            SetCacheLine(cacheLine);
         }
 
         //
@@ -855,6 +1058,7 @@ namespace CCHI::Taurus {
 
         //
         auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge(); // action-start age, orders all its flits
 
         if (!txnID)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
@@ -893,7 +1097,10 @@ namespace CCHI::Taurus {
                 denial = events->OnREQPreHazardPending(*this, *cacheLine, reqFlit).GetDenial();
 
             if (!denial->IsRejected())
+            {
                 cacheLine->pendingREQHazardTXREQ = { reqFlit };
+                cacheLine->ageTXREQ = actionAge;
+            }
 
             if (events)
                 events->OnREQPostHazardPending(*this, *cacheLine, reqFlit, denial);
@@ -908,13 +1115,14 @@ namespace CCHI::Taurus {
         {
             DenialEnum denial = Denial::ACCEPTED;
 
+            reqFlit.ExpCompData = cacheLine->state == CacheState::Invalid ? 1 : 0;
+
             if (events)
                 denial = events->OnREQPreChannelPending(*this, *cacheLine, reqFlit).GetDenial();
 
             if (!denial->IsRejected())
             {
-                reqFlit.ExpCompData = cacheLine->state == CacheState::Invalid ? 1 : 0;
-                cacheLine->pendingREQChannelTXREQ = { reqFlit };
+                PendREQChannelTXREQ(*cacheLine, reqFlit, actionAge);
             }
 
             if (events)
@@ -967,8 +1175,8 @@ namespace CCHI::Taurus {
         }
         else
         {
-            cacheLine = std::make_shared<CacheLine>(PA);
-            SetCacheLine(PA, cacheLine);
+            cacheLine = std::make_shared<CacheLine>(this, PA);
+            SetCacheLine(cacheLine);
         }
 
         //
@@ -977,6 +1185,7 @@ namespace CCHI::Taurus {
 
         //
         auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge(); // action-start age, orders all its flits
 
         if (!txnID)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
@@ -1014,7 +1223,10 @@ namespace CCHI::Taurus {
                 denial = events->OnREQPreHazardPending(*this, *cacheLine, reqFlit).GetDenial();
 
             if (!denial->IsRejected())
+            {
                 cacheLine->pendingREQHazardTXREQ = { reqFlit };
+                cacheLine->ageTXREQ = actionAge;
+            }
 
             if (events)
                 events->OnREQPostHazardPending(*this, *cacheLine, reqFlit, denial);
@@ -1034,7 +1246,7 @@ namespace CCHI::Taurus {
 
             if (!denial->IsRejected())
             {
-                cacheLine->pendingREQChannelTXREQ = { reqFlit };
+                PendREQChannelTXREQ(*cacheLine, reqFlit, actionAge);
             }
 
             if (events)
@@ -1086,6 +1298,7 @@ namespace CCHI::Taurus {
 
         //
         auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge(); // action-start age, orders all its flits
 
         if (!txnID)
             return std::make_shared<FutureNow<EvictedEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
@@ -1121,7 +1334,10 @@ namespace CCHI::Taurus {
                 denial = events->OnEVTPreHazardPending(*this, *cacheLine, evtFlit).GetDenial();
 
             if (!denial->IsRejected())
+            {
                 cacheLine->pendingEVTHazardTXEVT = { evtFlit };
+                cacheLine->ageTXEVT = actionAge;
+            }
 
             if (events)
                 events->OnEVTPostHazardPending(*this, *cacheLine, evtFlit, denial);
@@ -1141,7 +1357,7 @@ namespace CCHI::Taurus {
 
             if (!denial->IsRejected())
             {
-                cacheLine->pendingEVTChannelTXEVT = { evtFlit };
+                PendEVTChannelTXEVT(*cacheLine, evtFlit, actionAge);
 
                 CacheStateEnum nextState = CacheState::Invalid;
 
@@ -1193,6 +1409,7 @@ namespace CCHI::Taurus {
 
         //
         auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge(); // action-start age, orders all its flits
 
         if (!txnID)
             return std::make_shared<FutureNow<PrefetchEmittedEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
@@ -1221,6 +1438,7 @@ namespace CCHI::Taurus {
             = std::make_shared<FutureNow<PrefetchEmittedEvent>>(Denial::ACCEPTED);
 
         prefetchQueue.emplace_back(flit, future);
+        prefetchQueue.back().age = actionAge;
         
         // TODO: event: PrefetchPostQueueEvent
 
@@ -1238,6 +1456,7 @@ namespace CCHI::Taurus {
 
         //
         auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge(); // action-start age, orders all its flits
 
         if (!txnID)
             return std::make_shared<FutureNow<PrefetchEmittedEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
@@ -1266,6 +1485,7 @@ namespace CCHI::Taurus {
             = std::make_shared<FutureNow<PrefetchEmittedEvent>>(Denial::ACCEPTED);
 
         prefetchQueue.emplace_back(flit, future);
+        prefetchQueue.back().age = actionAge;
         
         // TODO: event: PrefetchPostQueueEvent
 
@@ -1315,6 +1535,7 @@ namespace CCHI::Taurus {
 
         //
         auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge(); // action-start age, orders all its flits
 
         if (!txnID)
             return std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
@@ -1343,6 +1564,7 @@ namespace CCHI::Taurus {
             = std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::ACCEPTED);
 
         cmoQueue.emplace_back(flit, future);
+        cmoQueue.back().age = actionAge;
 
         // TODO: event: CMOPostQueueEvent
 
@@ -1360,6 +1582,7 @@ namespace CCHI::Taurus {
 
         //
         auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge(); // action-start age, orders all its flits
 
         if (!txnID)
             return std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
@@ -1388,6 +1611,7 @@ namespace CCHI::Taurus {
             = std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::ACCEPTED);
 
         cmoQueue.emplace_back(flit, future);
+        cmoQueue.back().age = actionAge;
 
         // TODO: event: CMOPostQueueEvent
 
@@ -1405,6 +1629,7 @@ namespace CCHI::Taurus {
 
         //
         auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge(); // action-start age, orders all its flits
 
         if (!txnID)
             return std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
@@ -1433,6 +1658,7 @@ namespace CCHI::Taurus {
             = std::make_shared<FutureNow<CMOCompleteEvent>>(Denial::ACCEPTED);
 
         cmoQueue.emplace_back(flit, future);
+        cmoQueue.back().age = actionAge;
 
         // TODO: event: CMOPostQueueEvent
 
@@ -1487,7 +1713,7 @@ namespace CCHI::Taurus {
                 if (events)
                     events->OnEVTPreHazardToChannelPending(*this, cacheLine, *cacheLine.pendingEVTHazardTXEVT);
 
-                cacheLine.pendingEVTChannelTXEVT = cacheLine.pendingEVTHazardTXEVT;
+                PendEVTChannelTXEVT(cacheLine, *cacheLine.pendingEVTHazardTXEVT, cacheLine.ageTXEVT);
                 cacheLine.pendingEVTHazardTXEVT.reset();
 
                 if (events)
@@ -1545,7 +1771,7 @@ namespace CCHI::Taurus {
                                 if (events)
                                     events->OnEVTDataPreHazardToChannelPending(*this, cacheLine, *cacheLine.pendingEVTHazardTXDAT0);
 
-                                cacheLine.pendingEVTChannelTXDAT0 = cacheLine.pendingEVTHazardTXDAT0;
+                                PendEVTChannelTXDAT0(cacheLine, *cacheLine.pendingEVTHazardTXDAT0);
                                 cacheLine.pendingEVTHazardTXDAT0.reset();
 
                                 if (events)
@@ -1574,13 +1800,11 @@ namespace CCHI::Taurus {
                                 if (events)
                                     events->OnEVTDataPreHazardToChannelPending(*this, cacheLine, *cacheLine.pendingEVTHazardTXDAT1);
 
-                                cacheLine.pendingEVTChannelTXDAT1 = cacheLine.pendingEVTHazardTXDAT1;
+                                PendEVTChannelTXDAT1(cacheLine, *cacheLine.pendingEVTHazardTXDAT1);
                                 cacheLine.pendingEVTHazardTXDAT1.reset();
 
                                 if (events)
                                     events->OnEVTDataPostHazardToChannelPending(*this, cacheLine, *cacheLine.pendingEVTChannelTXDAT1);
-
-                                // EVT TXDAT cannot be actually rejected by events and would try to pend the flit again on next Tick
                             }
                         }
                         else if (cacheLine.pendingEVTChannelTXDAT1)
@@ -1629,7 +1853,7 @@ namespace CCHI::Taurus {
                                 if (events)
                                     events->OnEVTDataPreChannelPending(*this, cacheLine, datFlit);
 
-                                cacheLine.pendingEVTChannelTXDAT0 = datFlit;
+                                PendEVTChannelTXDAT0(cacheLine, datFlit);
 
                                 if (events)
                                     events->OnEVTDataPostChannelPending(*this, cacheLine, datFlit);
@@ -1677,7 +1901,7 @@ namespace CCHI::Taurus {
                                 if (events)
                                     events->OnEVTDataPreChannelPending(*this, cacheLine, datFlit);
 
-                                cacheLine.pendingEVTChannelTXDAT1 = datFlit;
+                                PendEVTChannelTXDAT1(cacheLine, datFlit);
 
                                 if (events)
                                     events->OnEVTDataPostChannelPending(*this, cacheLine, datFlit);
@@ -1958,7 +2182,7 @@ namespace CCHI::Taurus {
                         if (events)
                             events->OnSNPRespDataPreChannelPending(*this, cacheLine, datFlit);
 
-                        cacheLine.pendingSNPChannelTXDAT0 = datFlit;
+                        PendSNPChannelTXDAT0(cacheLine, datFlit);
 
                         if (events)
                             events->OnSNPRespDataPostChannelPending(*this, cacheLine, datFlit);
@@ -1972,7 +2196,7 @@ namespace CCHI::Taurus {
                         if (events)
                             events->OnSNPRespDataPreChannelPending(*this, cacheLine, datFlit);
 
-                        cacheLine.pendingSNPChannelTXDAT1 = datFlit;
+                        PendSNPChannelTXDAT1(cacheLine, datFlit);
 
                         if (events)
                             events->OnSNPRespDataPostChannelPending(*this, cacheLine, datFlit);
@@ -1991,7 +2215,7 @@ namespace CCHI::Taurus {
                         if (events)
                             events->OnSNPRespPreChannelPending(*this, cacheLine, rspFlit);
 
-                        cacheLine.pendingSNPChannelTXRSP = rspFlit;
+                        PendSNPChannelTXRSP(cacheLine, rspFlit);
 
                         if (events)
                             events->OnSNPRespPostChannelPending(*this, cacheLine, rspFlit);
@@ -2026,7 +2250,7 @@ namespace CCHI::Taurus {
                 if (events)
                     events->OnREQPreHazardToChannelPending(*this, cacheLine, *cacheLine.pendingREQHazardTXREQ);
 
-                cacheLine.pendingREQChannelTXREQ = cacheLine.pendingREQHazardTXREQ;
+                PendREQChannelTXREQ(cacheLine, *cacheLine.pendingREQHazardTXREQ, cacheLine.ageTXREQ);
                 cacheLine.pendingREQHazardTXREQ.reset();
 
                 if (events)
@@ -2043,7 +2267,8 @@ namespace CCHI::Taurus {
                      && cacheLine.activeREQFuture 
                      && !cacheLine.activeREQFuture->Fired())
                     {
-                        // TODO: event: CacheLineGrantedEvent
+                        if (events)
+                            events->OnCacheLineGranted(*this, cacheLine, cacheLine.activeREQ);
 
                         cacheLine.activeREQFuture->Fire(GrantedEvent(it->second));
                     }
@@ -2064,7 +2289,7 @@ namespace CCHI::Taurus {
                         if (events)
                             events->OnREQCompAckPreChannelPending(*this, cacheLine, rspFlit);
 
-                        cacheLine.pendingREQChannelTXRSP = rspFlit;
+                        PendREQChannelTXRSP(cacheLine, rspFlit);
 
                         if (events)
                             events->OnREQCompAckPostChannelPending(*this, cacheLine, rspFlit);
@@ -2079,7 +2304,8 @@ namespace CCHI::Taurus {
                      && cacheLine.activeREQFuture 
                      && !cacheLine.activeREQFuture->Fired())
                     {
-                        // TODO: event: CacheLineGrantedEvent
+                        if (events)
+                            events->OnCacheLineGranted(*this, cacheLine, cacheLine.activeREQ);
 
                         cacheLine.activeREQFuture->Fire(GrantedEvent(it->second));
                     }
@@ -2102,7 +2328,7 @@ namespace CCHI::Taurus {
                         if (events)
                             events->OnREQCompAckPreChannelPending(*this, cacheLine, rspFlit);
 
-                        cacheLine.pendingREQChannelTXRSP = rspFlit;
+                        PendREQChannelTXRSP(cacheLine, rspFlit);
 
                         if (events)
                             events->OnREQCompAckPostChannelPending(*this, cacheLine, rspFlit);
@@ -2124,22 +2350,36 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::EVT<config>> UpstreamNode<config>::PeekTXEVT() noexcept
     {
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
+        // single-slot channel: exactly one deque entry per line, so a cancelled
+        // candidate can never be re-offered through a second entry of the same
+        // line - a plain continue suffices (no skip set needed)
+        for (size_t i = 0; i < agedTXEVT.size(); ++i)
         {
-            CacheLine& cacheLine = *it->second;
+            auto [age, key] = agedTXEVT[i];
 
-            if (cacheLine.pendingEVTChannelTXEVT)
+            auto lineIt = cacheable.find(key);
+            // self-heal: the entry is stale if the line is gone or no pending
+            // slot carries this age
+            if (lineIt == cacheable.end()
+             || !lineIt->second->pendingEVTChannelTXEVT
+             || lineIt->second->ageTXEVT != age)
             {
-                if (events)
-                    if (events->OnEVTPreChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXEVT).IsCancelled())
-                        continue;
-
-                if (events)
-                    events->OnEVTPostChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXEVT);
-
-                return { *cacheLine.pendingEVTChannelTXEVT };
+                agedTXEVT.erase(agedTXEVT.begin() + i);
+                --i;
+                continue;
             }
-        }        
+
+            CacheLine& cacheLine = *lineIt->second;
+
+            if (events)
+                if (events->OnEVTPreChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXEVT).IsCancelled())
+                    continue;
+
+            if (events)
+                events->OnEVTPostChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXEVT);
+
+            return { *cacheLine.pendingEVTChannelTXEVT };
+        }
 
         return std::nullopt;
     }
@@ -2147,42 +2387,64 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::EVT<config>> UpstreamNode<config>::PopTXEVT() noexcept
     {
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
+        // single-slot channel: exactly one deque entry per line, so a cancelled
+        // candidate can never be re-offered through a second entry of the same
+        // line - a plain continue suffices (no skip set needed)
+        for (size_t i = 0; i < agedTXEVT.size(); ++i)
         {
-            CacheLine& cacheLine = *it->second;
+            auto [age, key] = agedTXEVT[i];
 
-            if (cacheLine.pendingEVTChannelTXEVT)
+            auto lineIt = cacheable.find(key);
+            // self-heal: the entry is stale if the line is gone or no pending
+            // slot carries this age
+            if (lineIt == cacheable.end()
+             || !lineIt->second->pendingEVTChannelTXEVT
+             || lineIt->second->ageTXEVT != age)
             {
-                auto& flit = *cacheLine.pendingEVTChannelTXEVT;
-
-                if (events)
-                    if (events->OnEVTPreChannelChosen(*this, cacheLine, flit).IsCancelled())
-                        continue;
-
-                if (events)
-                    events->OnEVTPostChannelChosen(*this, cacheLine, flit);
-
-                std::shared_ptr<Xact::Xaction<config>> xaction;
-                XactDenialEnum denial = joint.NextEVT(glbl, time, flit, &xaction);
-
-                if (denial == XactDenial::ACCEPTED)
-                {
-                    if (events)
-                        events->OnAcceptedEVT(*this, cacheLine, xaction, flit);
-                }
-                else
-                {
-                    if (events)
-                        events->OnDeniedEVT(*this, cacheLine, denial, xaction, flit);
-
-                    FreeTxnID(flit.TxnID);
-                }
-
-                cacheLine.activeEVT = xaction;
-                cacheLine.pendingEVTChannelTXEVT.reset();
-
-                return { flit };
+                agedTXEVT.erase(agedTXEVT.begin() + i);
+                --i;
+                continue;
             }
+
+            CacheLine& cacheLine = *lineIt->second;
+
+            auto& flit = *cacheLine.pendingEVTChannelTXEVT;
+
+            if (events)
+                if (events->OnEVTPreChannelChosen(*this, cacheLine, flit).IsCancelled())
+                    continue;
+
+            if (events)
+                events->OnEVTPostChannelChosen(*this, cacheLine, flit);
+
+            std::shared_ptr<Xact::Xaction<config>> xaction;
+            XactDenialEnum denial = joint.NextEVT(glbl, time, flit, &xaction);
+
+            if (denial == XactDenial::ACCEPTED)
+            {
+                if (events)
+                    events->OnAcceptedEVT(*this, cacheLine, xaction, flit);
+            }
+            else
+            {
+                if (events)
+                    events->OnDeniedEVT(*this, cacheLine, denial, xaction, flit);
+
+                FreeTxnID(flit.TxnID);
+            }
+
+            // a completed predecessor still holds its bitmap TxnID: completion
+            // needs no Tick (the joint completes on the last copyback-beat pop)
+            // but the TickEVT trailing block is the only other free site, and it
+            // can never see the predecessor once overwritten here
+            if (cacheLine.activeEVT && cacheLine.activeEVT->IsComplete(glbl))
+                FreeTxnID(cacheLine.activeEVT->GetFirst().flit.evt.TxnID);
+
+            cacheLine.activeEVT = xaction;
+            cacheLine.pendingEVTChannelTXEVT.reset();
+            AgedErase(agedTXEVT, cacheLine.ageTXEVT, key);
+
+            return { flit };
         }
 
         return std::nullopt;
@@ -2191,7 +2453,60 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::REQ<config>> UpstreamNode<config>::PeekTXREQ() noexcept
     {
-        if (!prefetchQueue.empty())
+        // TXREQ merges the three action classes into one age order: per-line REQs
+        // from agedTXREQ, prefetches and CMOs from their queue fronts (FIFO push
+        // order = call order, so the front is the class's oldest) - an O(1)
+        // three-way min, re-evaluated at every iteration: a cancelled per-line
+        // REQ yields to an older prefetch/CMO next (rule 3)
+        for (size_t i = 0; i < agedTXREQ.size(); ++i)
+        {
+            const bool queuePrefetchWins = !prefetchQueue.empty()
+                                        && (cmoQueue.empty() || prefetchQueue.front().age < cmoQueue.front().age);
+            const bool queueCMOWins      = !cmoQueue.empty() && !queuePrefetchWins;
+            const uint64_t queueAge      = queuePrefetchWins ? prefetchQueue.front().age
+                                         : (queueCMOWins ? cmoQueue.front().age : 0);
+
+            auto [age, key] = agedTXREQ[i];
+
+            // the queue candidate is older than this line candidate: the per-line
+            // walk is done, the queue branch dispatches after the loop
+            if ((queuePrefetchWins || queueCMOWins) && queueAge < age)
+                break;
+
+            auto lineIt = cacheable.find(key);
+            // self-heal: the entry is stale if the line is gone or no pending
+            // slot carries this age
+            if (lineIt == cacheable.end()
+             || !lineIt->second->pendingREQChannelTXREQ
+             || lineIt->second->ageTXREQ != age)
+            {
+                agedTXREQ.erase(agedTXREQ.begin() + i);
+                --i;
+                continue;
+            }
+
+            CacheLine& cacheLine = *lineIt->second;
+
+            // single-slot channel: exactly one deque entry per line, so a
+            // cancelled candidate can never be re-offered through a second entry
+            // of the same line - a plain continue suffices (no skip set needed)
+            if (events)
+                if (events->OnREQPreChannelChosen(*this, cacheLine, *cacheLine.pendingREQChannelTXREQ).IsCancelled())
+                    continue;
+
+            if (events)
+                events->OnREQPostChannelChosen(*this, cacheLine, *cacheLine.pendingREQChannelTXREQ);
+
+            return { *cacheLine.pendingREQChannelTXREQ };
+        }
+
+        // a remaining queue candidate dispatches here: it is older than every
+        // per-line candidate, or no per-line candidate survived the walk
+        const bool queuePrefetchWins = !prefetchQueue.empty()
+                                    && (cmoQueue.empty() || prefetchQueue.front().age < cmoQueue.front().age);
+        const bool queueCMOWins      = !cmoQueue.empty() && !queuePrefetchWins;
+
+        if (queuePrefetchWins)
         {
             // TODO: event: PrefetchPreChannelChosenEvent
 
@@ -2203,7 +2518,7 @@ namespace CCHI::Taurus {
             }
         }
 
-        if (!cmoQueue.empty())
+        if (queueCMOWins)
         {
             // TODO: event: CMOPreChannelChosenEvent
 
@@ -2215,30 +2530,95 @@ namespace CCHI::Taurus {
             }
         }
 
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
-        {
-            CacheLine& cacheLine = *it->second;
-
-            if (cacheLine.pendingREQChannelTXREQ)
-            {
-                if (events)
-                    if (events->OnREQPreChannelChosen(*this, cacheLine, *cacheLine.pendingREQChannelTXREQ).IsCancelled())
-                        continue;
-
-                if (events)
-                    events->OnREQPostChannelChosen(*this, cacheLine, *cacheLine.pendingREQChannelTXREQ);
-
-                return { *cacheLine.pendingREQChannelTXREQ };
-            }
-        }        
-
         return std::nullopt;
     }
 
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::REQ<config>> UpstreamNode<config>::PopTXREQ() noexcept
     {
-        if (!prefetchQueue.empty())
+        // TXREQ merges the three action classes into one age order: per-line REQs
+        // from agedTXREQ, prefetches and CMOs from their queue fronts (FIFO push
+        // order = call order, so the front is the class's oldest) - an O(1)
+        // three-way min, re-evaluated at every iteration: a cancelled per-line
+        // REQ yields to an older prefetch/CMO next (rule 3)
+        for (size_t i = 0; i < agedTXREQ.size(); ++i)
+        {
+            const bool queuePrefetchWins = !prefetchQueue.empty()
+                                        && (cmoQueue.empty() || prefetchQueue.front().age < cmoQueue.front().age);
+            const bool queueCMOWins      = !cmoQueue.empty() && !queuePrefetchWins;
+            const uint64_t queueAge      = queuePrefetchWins ? prefetchQueue.front().age
+                                         : (queueCMOWins ? cmoQueue.front().age : 0);
+
+            auto [age, key] = agedTXREQ[i];
+
+            // the queue candidate is older than this line candidate: the per-line
+            // walk is done, the queue branch dispatches after the loop
+            if ((queuePrefetchWins || queueCMOWins) && queueAge < age)
+                break;
+
+            auto lineIt = cacheable.find(key);
+            // self-heal: the entry is stale if the line is gone or no pending
+            // slot carries this age
+            if (lineIt == cacheable.end()
+             || !lineIt->second->pendingREQChannelTXREQ
+             || lineIt->second->ageTXREQ != age)
+            {
+                agedTXREQ.erase(agedTXREQ.begin() + i);
+                --i;
+                continue;
+            }
+
+            CacheLine& cacheLine = *lineIt->second;
+
+            auto& flit = *cacheLine.pendingREQChannelTXREQ;
+
+            // single-slot channel: exactly one deque entry per line, so a
+            // cancelled candidate can never be re-offered through a second entry
+            // of the same line - a plain continue suffices (no skip set needed)
+            if (events)
+                if (events->OnREQPreChannelChosen(*this, cacheLine, flit).IsCancelled())
+                    continue;
+
+            if (events)
+                events->OnREQPostChannelChosen(*this, cacheLine, flit);
+
+            std::shared_ptr<Xact::Xaction<config>> xaction;
+            XactDenialEnum denial = joint.NextREQ(glbl, time, flit, &xaction);
+
+            if (denial == XactDenial::ACCEPTED)
+            {
+                if (events)
+                    events->OnAcceptedREQ(*this, cacheLine, xaction, flit);
+            }
+            else
+            {
+                if (events)
+                    events->OnDeniedREQ(*this, cacheLine, denial, xaction, flit);
+
+                FreeTxnID(flit.TxnID);
+            }
+
+            // a completed predecessor still holds its bitmap TxnID: completion
+            // needs no Tick (the joint completes on the CompAck pop) but the
+            // TickREQ trailing block is the only other free site, and it can
+            // never see the predecessor once overwritten here
+            if (cacheLine.activeREQ && cacheLine.activeREQ->IsComplete(glbl))
+                FreeTxnID(cacheLine.activeREQ->GetFirst().flit.req.TxnID);
+
+            cacheLine.activeREQ = xaction;
+            cacheLine.pendingREQChannelTXREQ.reset();
+            AgedErase(agedTXREQ, cacheLine.ageTXREQ, key);
+
+            return { flit };
+        }
+
+        // a remaining queue candidate dispatches here: it is older than every
+        // per-line candidate, or no per-line candidate survived the walk
+        const bool queuePrefetchWins = !prefetchQueue.empty()
+                                    && (cmoQueue.empty() || prefetchQueue.front().age < cmoQueue.front().age);
+        const bool queueCMOWins      = !cmoQueue.empty() && !queuePrefetchWins;
+
+        if (queuePrefetchWins)
         {
             // TODO: event: PrefetchPreChannelChosenEvent
 
@@ -2276,7 +2656,7 @@ namespace CCHI::Taurus {
             }
         }
 
-        if (!cmoQueue.empty())
+        if (queueCMOWins)
         {
             // TODO: event: CMOPreChannelChosenEvent
 
@@ -2315,44 +2695,6 @@ namespace CCHI::Taurus {
             }
         }
 
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
-        {
-            CacheLine& cacheLine = *it->second;
-
-            if (cacheLine.pendingREQChannelTXREQ)
-            {
-                auto& flit = *cacheLine.pendingREQChannelTXREQ;
-
-                if (events)
-                    if (events->OnREQPreChannelChosen(*this, cacheLine, flit).IsCancelled())
-                        continue;
-
-                if (events)
-                    events->OnREQPostChannelChosen(*this, cacheLine, flit);
-
-                std::shared_ptr<Xact::Xaction<config>> xaction;
-                XactDenialEnum denial = joint.NextREQ(glbl, time, flit, &xaction);
-
-                if (denial == XactDenial::ACCEPTED)
-                {
-                    if (events)
-                        events->OnAcceptedREQ(*this, cacheLine, xaction, flit);
-                }
-                else
-                {
-                    if (events)
-                        events->OnDeniedREQ(*this, cacheLine, denial, xaction, flit);
-
-                    FreeTxnID(flit.TxnID);
-                }
-
-                cacheLine.activeREQ = xaction;
-                cacheLine.pendingREQChannelTXREQ.reset();
-
-                return { flit };
-            }
-        }
-
         return std::nullopt;
     }
 
@@ -2361,7 +2703,12 @@ namespace CCHI::Taurus {
     {
         Flits::SNP<config> flit = snpFlit;
 
-        std::shared_ptr<CacheLine> cacheLine = GetCacheLine(flit.Addr << 3);
+        // reconstruct the full PA in 64 bits: the SNP Addr field carries
+        // PA >> 3 in a 45-bit truncated type, whose own operator<< would
+        // re-mask PA[47:45] away
+        const uint64_t PA = uint64_t(flit.Addr) << 3;
+
+        std::shared_ptr<CacheLine> cacheLine = GetCacheLine(PA);
 
         if (cacheLine)
         {
@@ -2378,9 +2725,13 @@ namespace CCHI::Taurus {
 
         if (!cacheLine)
         {
-            cacheLine = std::make_shared<CacheLine>(flit.Addr << 3);
-            SetCacheLine(flit.Addr << 3, cacheLine);
+            cacheLine = std::make_shared<CacheLine>(this, PA);
+            SetCacheLine(cacheLine);
         }
+
+        // acceptance point: the snoop's action-start age covers its SnpResp and
+        // SnpRespData beats (a backpressured snoop above never reaches this stamp)
+        cacheLine->ageSNP = NextEmissionAge();
 
         bool hazard = HasSNPHazard(*cacheLine);
 
@@ -2431,15 +2782,48 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::UpRSP<config>> UpstreamNode<config>::PeekTXRSP() noexcept
     {
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
+        // line keys already offered (and cancelled) this call; empty in the
+        // common case - a line occupies one deque entry per pending slot kind,
+        // and after a cancellation its remaining entries must not re-offer it
+        std::vector<uint64_t> skipped;
+
+        for (size_t i = 0; i < agedTXRSP.size(); ++i)
         {
-            CacheLine& cacheLine = *it->second;
+            auto [age, key] = agedTXRSP[i];
+
+            bool isSkipped = false;
+            for (uint64_t skippedKey : skipped)
+                if (skippedKey == key)
+                {
+                    isSkipped = true;
+                    break;
+                }
+
+            if (isSkipped)
+                continue;
+
+            auto lineIt = cacheable.find(key);
+            // self-heal: the entry is stale if the line is gone or no pending
+            // slot carries this age
+            if (lineIt == cacheable.end()
+             || (!(lineIt->second->pendingSNPChannelTXRSP && lineIt->second->ageSNP == age)
+              && !(lineIt->second->pendingREQChannelTXRSP && lineIt->second->ageTXREQ == age)))
+            {
+                agedTXRSP.erase(agedTXRSP.begin() + i);
+                --i;
+                continue;
+            }
+
+            CacheLine& cacheLine = *lineIt->second;
 
             if (cacheLine.pendingSNPChannelTXRSP)
             {
                 if (events)
                     if (events->OnSNPUpRSPPreChannelChosen(*this, cacheLine, *cacheLine.pendingSNPChannelTXRSP).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnSNPUpRSPPostChannelChosen(*this, cacheLine, *cacheLine.pendingSNPChannelTXRSP);
@@ -2451,7 +2835,10 @@ namespace CCHI::Taurus {
             {
                 if (events)
                     if (events->OnREQUpRSPPreChannelChosen(*this, cacheLine, *cacheLine.pendingREQChannelTXRSP).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnREQUpRSPPostChannelChosen(*this, cacheLine, *cacheLine.pendingREQChannelTXRSP);
@@ -2466,9 +2853,39 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::UpRSP<config>> UpstreamNode<config>::PopTXRSP() noexcept
     {
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
+        // line keys already offered (and cancelled) this call; empty in the
+        // common case - a line occupies one deque entry per pending slot kind,
+        // and after a cancellation its remaining entries must not re-offer it
+        std::vector<uint64_t> skipped;
+
+        for (size_t i = 0; i < agedTXRSP.size(); ++i)
         {
-            CacheLine& cacheLine = *it->second;
+            auto [age, key] = agedTXRSP[i];
+
+            bool isSkipped = false;
+            for (uint64_t skippedKey : skipped)
+                if (skippedKey == key)
+                {
+                    isSkipped = true;
+                    break;
+                }
+
+            if (isSkipped)
+                continue;
+
+            auto lineIt = cacheable.find(key);
+            // self-heal: the entry is stale if the line is gone or no pending
+            // slot carries this age
+            if (lineIt == cacheable.end()
+             || (!(lineIt->second->pendingSNPChannelTXRSP && lineIt->second->ageSNP == age)
+              && !(lineIt->second->pendingREQChannelTXRSP && lineIt->second->ageTXREQ == age)))
+            {
+                agedTXRSP.erase(agedTXRSP.begin() + i);
+                --i;
+                continue;
+            }
+
+            CacheLine& cacheLine = *lineIt->second;
 
             if (cacheLine.pendingSNPChannelTXRSP)
             {
@@ -2476,7 +2893,10 @@ namespace CCHI::Taurus {
 
                 if (events)
                     if (events->OnSNPUpRSPPreChannelChosen(*this, cacheLine, flit).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnSNPUpRSPPostChannelChosen(*this, cacheLine, flit);
@@ -2496,6 +2916,9 @@ namespace CCHI::Taurus {
                 }
 
                 cacheLine.pendingSNPChannelTXRSP.reset();
+                // erase the POPPED slot's entry (its own age), not necessarily the
+                // entry that won the iteration
+                AgedErase(agedTXRSP, cacheLine.ageSNP, key);
 
                 return { flit };
             }
@@ -2506,7 +2929,10 @@ namespace CCHI::Taurus {
 
                 if (events)
                     if (events->OnREQUpRSPPreChannelChosen(*this, cacheLine, flit).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnREQUpRSPPostChannelChosen(*this, cacheLine, flit);
@@ -2526,6 +2952,9 @@ namespace CCHI::Taurus {
                 }
 
                 cacheLine.pendingREQChannelTXRSP.reset();
+                // erase the POPPED slot's entry (its own age), not necessarily the
+                // entry that won the iteration
+                AgedErase(agedTXRSP, cacheLine.ageTXREQ, key);
 
                 return { flit };
             }
@@ -2537,15 +2966,50 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::UpDAT<config>> UpstreamNode<config>::PeekTXDAT() noexcept
     {
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
+        // line keys already offered (and cancelled) this call; empty in the
+        // common case - a line occupies one deque entry per pending beat, and
+        // after a cancellation its remaining entries must not re-offer it
+        std::vector<uint64_t> skipped;
+
+        for (size_t i = 0; i < agedTXDAT.size(); ++i)
         {
-            CacheLine& cacheLine = *it->second;
+            auto [age, key] = agedTXDAT[i];
+
+            bool isSkipped = false;
+            for (uint64_t skippedKey : skipped)
+                if (skippedKey == key)
+                {
+                    isSkipped = true;
+                    break;
+                }
+
+            if (isSkipped)
+                continue;
+
+            auto lineIt = cacheable.find(key);
+            // self-heal: the entry is stale if the line is gone or no pending
+            // slot carries this age
+            if (lineIt == cacheable.end()
+             || (!(lineIt->second->pendingSNPChannelTXDAT0 && lineIt->second->ageSNP == age)
+              && !(lineIt->second->pendingSNPChannelTXDAT1 && lineIt->second->ageSNP == age)
+              && !(lineIt->second->pendingEVTChannelTXDAT0 && lineIt->second->ageTXEVT == age)
+              && !(lineIt->second->pendingEVTChannelTXDAT1 && lineIt->second->ageTXEVT == age)))
+            {
+                agedTXDAT.erase(agedTXDAT.begin() + i);
+                --i;
+                continue;
+            }
+
+            CacheLine& cacheLine = *lineIt->second;
 
             if (cacheLine.pendingSNPChannelTXDAT0)
             {
                 if (events)
                     if (events->OnSNPUpDATPreChannelChosen(*this, cacheLine, *cacheLine.pendingSNPChannelTXDAT0).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnSNPUpDATPostChannelChosen(*this, cacheLine, *cacheLine.pendingSNPChannelTXDAT0);
@@ -2557,7 +3021,10 @@ namespace CCHI::Taurus {
             {
                 if (events)
                     if (events->OnSNPUpDATPreChannelChosen(*this, cacheLine, *cacheLine.pendingSNPChannelTXDAT1).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnSNPUpDATPostChannelChosen(*this, cacheLine, *cacheLine.pendingSNPChannelTXDAT1);
@@ -2569,7 +3036,10 @@ namespace CCHI::Taurus {
             {
                 if (events)
                     if (events->OnEVTUpDATPreChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXDAT0).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnEVTUpDATPostChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXDAT0);
@@ -2581,7 +3051,10 @@ namespace CCHI::Taurus {
             {
                 if (events)
                     if (events->OnEVTUpDATPreChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXDAT1).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnEVTUpDATPostChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXDAT1);
@@ -2596,9 +3069,41 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline std::optional<Flits::UpDAT<config>> UpstreamNode<config>::PopTXDAT() noexcept
     {
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
+        // line keys already offered (and cancelled) this call; empty in the
+        // common case - a line occupies one deque entry per pending beat, and
+        // after a cancellation its remaining entries must not re-offer it
+        std::vector<uint64_t> skipped;
+
+        for (size_t i = 0; i < agedTXDAT.size(); ++i)
         {
-            CacheLine& cacheLine = *it->second;
+            auto [age, key] = agedTXDAT[i];
+
+            bool isSkipped = false;
+            for (uint64_t skippedKey : skipped)
+                if (skippedKey == key)
+                {
+                    isSkipped = true;
+                    break;
+                }
+
+            if (isSkipped)
+                continue;
+
+            auto lineIt = cacheable.find(key);
+            // self-heal: the entry is stale if the line is gone or no pending
+            // slot carries this age
+            if (lineIt == cacheable.end()
+             || (!(lineIt->second->pendingSNPChannelTXDAT0 && lineIt->second->ageSNP == age)
+              && !(lineIt->second->pendingSNPChannelTXDAT1 && lineIt->second->ageSNP == age)
+              && !(lineIt->second->pendingEVTChannelTXDAT0 && lineIt->second->ageTXEVT == age)
+              && !(lineIt->second->pendingEVTChannelTXDAT1 && lineIt->second->ageTXEVT == age)))
+            {
+                agedTXDAT.erase(agedTXDAT.begin() + i);
+                --i;
+                continue;
+            }
+
+            CacheLine& cacheLine = *lineIt->second;
 
             if (cacheLine.pendingSNPChannelTXDAT0)
             {
@@ -2606,7 +3111,10 @@ namespace CCHI::Taurus {
 
                 if (events)
                     if (events->OnSNPUpDATPreChannelChosen(*this, cacheLine, flit).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnSNPUpDATPostChannelChosen(*this, cacheLine, flit);
@@ -2626,6 +3134,11 @@ namespace CCHI::Taurus {
                 }
 
                 cacheLine.pendingSNPChannelTXDAT0.reset();
+                // erase the POPPED slot's entry (its own age), not necessarily the
+                // entry that won the iteration; the two SNP-DAT beats of one snoop
+                // share ageSNP, so this erases one of the two identical pairs and
+                // the remaining one keeps beat 1 a candidate
+                AgedErase(agedTXDAT, cacheLine.ageSNP, key);
 
                 return { flit };
             }
@@ -2636,7 +3149,10 @@ namespace CCHI::Taurus {
 
                 if (events)
                     if (events->OnSNPUpDATPreChannelChosen(*this, cacheLine, flit).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnSNPUpDATPostChannelChosen(*this, cacheLine, flit);
@@ -2656,6 +3172,7 @@ namespace CCHI::Taurus {
                 }
 
                 cacheLine.pendingSNPChannelTXDAT1.reset();
+                AgedErase(agedTXDAT, cacheLine.ageSNP, key);
 
                 return { flit };
             }
@@ -2666,7 +3183,10 @@ namespace CCHI::Taurus {
 
                 if (events)
                     if (events->OnEVTUpDATPreChannelChosen(*this, cacheLine, flit).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnEVTUpDATPostChannelChosen(*this, cacheLine, flit);
@@ -2686,6 +3206,7 @@ namespace CCHI::Taurus {
                 }
 
                 cacheLine.pendingEVTChannelTXDAT0.reset();
+                AgedErase(agedTXDAT, cacheLine.ageTXEVT, key);
 
                 return { flit };
             }
@@ -2696,7 +3217,10 @@ namespace CCHI::Taurus {
 
                 if (events)
                     if (events->OnEVTUpDATPreChannelChosen(*this, cacheLine, flit).IsCancelled())
+                    {
+                        skipped.push_back(key);
                         continue;
+                    }
 
                 if (events)
                     events->OnEVTUpDATPostChannelChosen(*this, cacheLine, flit);
@@ -2716,7 +3240,8 @@ namespace CCHI::Taurus {
                 }
 
                 cacheLine.pendingEVTChannelTXDAT1.reset();
-                
+                AgedErase(agedTXDAT, cacheLine.ageTXEVT, key);
+
                 return { flit };
             }
         }
@@ -3319,6 +3844,12 @@ namespace CCHI::Taurus {
         OnDeniedPrefetch.UnregisterAll();
         OnDeniedCMO.UnregisterAll();
         OnDeniedCompCMO.UnregisterAll();
+
+        OnCacheLineGranted.UnregisterAll();
+        OnCacheLinePreLoad.UnregisterAll();
+        OnCacheLinePostLoad.UnregisterAll();
+        OnCacheLinePreStore.UnregisterAll();
+        OnCacheLinePostStore.UnregisterAll();
     }
 }
 
@@ -3329,27 +3860,28 @@ namespace CCHI::Taurus {
     template<FlitConfigurationConcept config>
     inline UpstreamNode<config>::CacheLineEventBase::CacheLineEventBase(
         std::shared_ptr<CacheLine> cacheLine) noexcept
-        : cacheLine (std::move(cacheLine))
+        : cacheLine (cacheLine)
+        , PA        (cacheLine->GetPA())
     { }
 
     template<FlitConfigurationConcept config>
     inline uint64_t UpstreamNode<config>::CacheLineEventBase::GetPA() const noexcept
     {
-        return cacheLine->GetPA();
+        return PA;
     }
 
     template<FlitConfigurationConcept config>
     inline std::shared_ptr<typename UpstreamNode<config>::CacheLine>
     UpstreamNode<config>::CacheLineEventBase::GetCacheLine() noexcept
     {
-        return cacheLine;
+        return cacheLine.lock();
     }
 
     template<FlitConfigurationConcept config>
     inline std::shared_ptr<const typename UpstreamNode<config>::CacheLine>
     UpstreamNode<config>::CacheLineEventBase::GetCacheLine() const noexcept
     {
-        return cacheLine;
+        return cacheLine.lock();
     }
 
     template<FlitConfigurationConcept config>
@@ -3509,11 +4041,15 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return std::nullopt;
 
-        // TODO: CacheLinePreLoadEvent
+        using LoadType = UpstreamNodeCacheLineLoadEventBase<config>::LoadType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreLoad(*owner, *this, LoadType::LOAD_LINE, 0);
 
         auto span = std::span<const uint64_t, 8>(data);
 
-        // TODO: CacheLinePostLoadEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostLoad(*owner, *this, LoadType::LOAD_LINE, 0);
 
         return { span };
     }
@@ -3530,11 +4066,15 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return std::nullopt;
 
-        // TODO: CacheLinePreLoadEvent
+        using LoadType = UpstreamNodeCacheLineLoadEventBase<config>::LoadType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreLoad(*owner, *this, LoadType::LOAD_64, alignedOffset);
 
         uint64_t value = data[alignedOffset];
 
-        // TODO: CacheLinePostLoadEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostLoad(*owner, *this, LoadType::LOAD_64, alignedOffset);
 
         return { value };
     }
@@ -3551,11 +4091,15 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return std::nullopt;
 
-        // TODO: CacheLinePreLoadEvent
+        using LoadType = UpstreamNodeCacheLineLoadEventBase<config>::LoadType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreLoad(*owner, *this, LoadType::LOAD_32, alignedOffset);
 
         uint32_t value = uint32_t(data[alignedOffset >> 1] >> ((alignedOffset & 1) * 32));
 
-        // TODO: CacheLinePostLoadEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostLoad(*owner, *this, LoadType::LOAD_32, alignedOffset);
 
         return { value };
 
@@ -3573,11 +4117,15 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return std::nullopt;
 
-        // TODO: CacheLinePreLoadEvent
+        using LoadType = UpstreamNodeCacheLineLoadEventBase<config>::LoadType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreLoad(*owner, *this, LoadType::LOAD_16, alignedOffset);
 
         uint16_t value = uint16_t(data[alignedOffset >> 2] >> ((alignedOffset & 3) * 16));
 
-        // TODO: CacheLinePostLoadEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostLoad(*owner, *this, LoadType::LOAD_16, alignedOffset);
 
         return { value };
     }
@@ -3594,11 +4142,15 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return std::nullopt;
 
-        // TODO: CacheLinePreLoadEvent
+        using LoadType = UpstreamNodeCacheLineLoadEventBase<config>::LoadType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreLoad(*owner, *this, LoadType::LOAD_8, alignedOffset);
 
         uint8_t value = uint8_t(data[alignedOffset >> 3] >> ((alignedOffset & 7) * 8));
 
-        // TODO: CacheLinePostLoadEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostLoad(*owner, *this, LoadType::LOAD_8, alignedOffset);
 
         return { value };
     }
@@ -3612,7 +4164,10 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return false;
         
-        // TODO: CacheLinePreStoreEvent
+        using StoreType = UpstreamNodeCacheLineStoreEventBase<config>::StoreType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreStore(*owner, *this, StoreType::STORE_LINE, 0);
 
         data[0] = newData[0];
         data[1] = newData[1];
@@ -3625,7 +4180,8 @@ namespace CCHI::Taurus {
 
         this->state = CacheState::UniqueDirty;
 
-        // TODO: CacheLinePostStoreEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostStore(*owner, *this, StoreType::STORE_LINE, 0);
 
         return true;
     }
@@ -3642,13 +4198,17 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return false;
 
-        // TODO: CacheLinePreStoreEvent
+        using StoreType = UpstreamNodeCacheLineStoreEventBase<config>::StoreType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreStore(*owner, *this, StoreType::STORE_64, alignedOffset);
 
         data[alignedOffset] = value;
 
         this->state = CacheState::UniqueDirty;
 
-        // TODO: CacheLinePostStoreEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostStore(*owner, *this, StoreType::STORE_64, alignedOffset);
 
         return true;
     }
@@ -3665,7 +4225,10 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return false;
 
-        // TODO: CacheLinePreStoreEvent
+        using StoreType = UpstreamNodeCacheLineStoreEventBase<config>::StoreType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreStore(*owner, *this, StoreType::STORE_32, alignedOffset);
 
         uint64_t& lane = data[alignedOffset >> 1];
         const uint64_t mask = uint64_t(0xFFFFFFFF) << ((alignedOffset & 1) * 32);
@@ -3674,7 +4237,8 @@ namespace CCHI::Taurus {
 
         this->state = CacheState::UniqueDirty;
 
-        // TODO: CacheLinePostStoreEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostStore(*owner, *this, StoreType::STORE_32, alignedOffset);
 
         return true;
     }
@@ -3691,7 +4255,10 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return false;
 
-        // TODO: CacheLinePreStoreEvent
+        using StoreType = UpstreamNodeCacheLineStoreEventBase<config>::StoreType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreStore(*owner, *this, StoreType::STORE_16, alignedOffset);
 
         uint64_t& lane = data[alignedOffset >> 2];
         const uint64_t mask = uint64_t(0xFFFF) << ((alignedOffset & 3) * 16);
@@ -3700,7 +4267,8 @@ namespace CCHI::Taurus {
 
         this->state = CacheState::UniqueDirty;
 
-        // TODO: CacheLinePostStoreEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostStore(*owner, *this, StoreType::STORE_16, alignedOffset);
 
         return true;
     }
@@ -3717,7 +4285,10 @@ namespace CCHI::Taurus {
         if (IsREQFilling())
             return false;
 
-        // TODO: CacheLinePreStoreEvent
+        using StoreType = UpstreamNodeCacheLineStoreEventBase<config>::StoreType;
+
+        if (owner->events)
+            owner->events->OnCacheLinePreStore(*owner, *this, StoreType::STORE_8, alignedOffset);
 
         uint64_t& lane = data[alignedOffset >> 3];
         const uint64_t mask = uint64_t(0xFF) << ((alignedOffset & 7) * 8);
@@ -3726,14 +4297,16 @@ namespace CCHI::Taurus {
 
         this->state = CacheState::UniqueDirty;
 
-        // TODO: CacheLinePostStoreEvent
+        if (owner->events)
+            owner->events->OnCacheLinePostStore(*owner, *this, StoreType::STORE_8, alignedOffset);
 
         return true;
     }
 
     template<FlitConfigurationConcept config>
-    inline UpstreamNode<config>::CacheLine::CacheLine(uint64_t PA) noexcept
-        : PA (LineBase(PA))
+    inline UpstreamNode<config>::CacheLine::CacheLine(UpstreamNode<config>* owner, uint64_t PA) noexcept
+        : owner (owner)
+        , PA    (LineBase(PA))
     { }
 
     template<FlitConfigurationConcept config>
@@ -3972,28 +4545,21 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline bool UpstreamNode<config>::CacheLine::HasEVTDataHazard(const Xact::Global<config>& glbl, Flits::DnDAT<config>::dataid_t dataId) const noexcept
+    inline bool UpstreamNode<config>::CacheLine::HasEVTDataHazard(const Xact::Global<config>&, Flits::DnDAT<config>::dataid_t) const noexcept
     {
-        if (activeREQ)
-        {
-            if (activeREQ->GetType() == Xact::XactionType::CacheableAllocatingRead)
-            {
-                const Xact::XactionCacheableAllocatingRead<config>& xaction
-                    = static_cast<const Xact::XactionCacheableAllocatingRead<config>&>(*activeREQ);
-
-                if (!xaction.GotComp() && !xaction.GotCompData(dataId))
-                    return true;
-            }
-            else if (activeREQ->GetType() == Xact::XactionType::CacheableDataless)
-            {
-                // dataless requests (e.g. MakeUnique) carry no CompData, no data hazard with CopyBackWrData
-            }
-            else
-            {
-                // TODO: maybe should not reach here
-            }
-        }
-
+        // *NOTE: no data hazard can exist between CopyBackWrData and an in-flight
+        //        allocating read. A conforming downstream never returns CompData before
+        //        receiving the corresponding CopyBackWrData, and both beats are built at
+        //        the first post-DBIDResp Tick - strictly before any fill can land in
+        //        cacheLine.data (the only other writers are Store*, rejected on the
+        //        Invalid state the line was demoted to at DoEvict time, and snoops to an
+        //        Invalid line answer SnpResp I without touching data; a split
+        //        DBIDResp-before-Comp flow is likewise safe because HasREQHazard then
+        //        still holds the read). The build therefore always snapshots the
+        //        evicted data, and this predicate is always false. The
+        //        pendingEVTHazardTXDAT0/1 machinery and the hazard-detection events are
+        //        retained for the listener SetHazard() override, which can only inject
+        //        bounded backpressure.
         return false;
     }
 }

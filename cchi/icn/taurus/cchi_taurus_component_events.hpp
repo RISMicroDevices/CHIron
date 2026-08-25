@@ -174,11 +174,79 @@ namespace CCHI::Taurus {
     };
 
     template<FlitConfigurationConcept config>
-    class UpstreamNodeXactDeniedEventBase : public UpstreamNodeCacheLineEventBase<config> {
+    class UpstreamNodeCacheLineLoadEventBase : public UpstreamNodeCacheLineEventBase<config> {
+    public:
+        enum class LoadType : uint8_t {
+            LOAD_LINE       = 0,
+            LOAD_64         = 1,
+            LOAD_32         = 2,
+            LOAD_16         = 3,
+            LOAD_8          = 4
+        };
+
     protected:
-        XactDenialEnum              denial;
+        LoadType                    loadType;
+        size_t                      loadOffset;
+
+    public:
+        UpstreamNodeCacheLineLoadEventBase(UpstreamNode<config>&                            upstream, 
+                                           const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                           LoadType                                         loadType,
+                                           size_t                                           loadOffset) noexcept;
+
+    public:
+        LoadType                    GetLoadType() const noexcept;
+        size_t                      GetLoadOffset() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeCacheLineStoreEventBase : public UpstreamNodeCacheLineEventBase<config> {
+    public:
+        enum class StoreType : uint8_t {
+            STORE_LINE      = 0,
+            STORE_64        = 1,
+            STORE_32        = 2,
+            STORE_16        = 3,
+            STORE_8         = 4
+        };
+
+    protected:
+        StoreType                   storeType;
+        size_t                      storeOffset;
+
+    public:
+        UpstreamNodeCacheLineStoreEventBase(UpstreamNode<config>&                            upstream, 
+                                            const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                            StoreType                                        storeType,
+                                            size_t                                           storeOffset) noexcept;
+
+    public:
+        StoreType                   GetStoreType() const noexcept;
+        size_t                      GetStoreOffset() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeXactionEventBase : public UpstreamNodeCacheLineEventBase<config> {
+    protected:
         std::shared_ptr<Xact::Xaction<config>> 
                                     xaction;
+
+    public:
+        UpstreamNodeXactionEventBase(UpstreamNode<config>&                            upstream, 
+                                     const typename UpstreamNode<config>::CacheLine&  cacheLine,
+                                     std::shared_ptr<Xact::Xaction<config>>           xaction) noexcept;
+
+    public:
+        std::shared_ptr<Xact::Xaction<config>>
+                                    GetXaction() noexcept;
+        std::shared_ptr<const Xact::Xaction<config>>
+                                    GetXaction() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeXactDeniedEventBase : public UpstreamNodeXactionEventBase<config> {
+    protected:
+        XactDenialEnum              denial;
     
     public:
         UpstreamNodeXactDeniedEventBase(UpstreamNode<config>&                           upstream, 
@@ -188,28 +256,14 @@ namespace CCHI::Taurus {
 
     public:
         XactDenialEnum              GetDenial() const noexcept;
-        std::shared_ptr<Xact::Xaction<config>>
-                                    GetXaction() noexcept;
-        std::shared_ptr<const Xact::Xaction<config>>
-                                    GetXaction() const noexcept;
     };
 
     template<FlitConfigurationConcept config>
-    class UpstreamNodeXactAcceptedEventBase : public UpstreamNodeCacheLineEventBase<config> {
-    protected:
-        std::shared_ptr<Xact::Xaction<config>> 
-                                    xaction;
-    
+    class UpstreamNodeXactAcceptedEventBase : public UpstreamNodeXactionEventBase<config> {
     public:
         UpstreamNodeXactAcceptedEventBase(UpstreamNode<config>&                             upstream,
                                           const typename UpstreamNode<config>::CacheLine&   cacheLine,
                                           std::shared_ptr<Xact::Xaction<config>>            xaction) noexcept;
-
-    public:
-        std::shared_ptr<Xact::Xaction<config>>
-                                    GetXaction() noexcept;
-        std::shared_ptr<const Xact::Xaction<config>>
-                                    GetXaction() const noexcept;
     };
 
 
@@ -1246,6 +1300,68 @@ namespace CCHI::Taurus {
                                                   const typename UpstreamNode<config>::CacheLine&  cacheLine,
                                                   Flits::UpRSP<config>&                            uprspFlit) noexcept;
     };
+
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeCacheLinePreLoadEvent : public UpstreamNodeCacheLineLoadEventBase<config>
+                                            , public Gravity::Event<UpstreamNodeCacheLinePreLoadEvent<config>> {
+    public:
+        using LoadType = typename UpstreamNodeCacheLineLoadEventBase<config>::LoadType;
+                                            
+    public:
+        UpstreamNodeCacheLinePreLoadEvent(UpstreamNode<config>&                             upstream,
+                                          const typename UpstreamNode<config>::CacheLine&   cacheLine,
+                                          LoadType                                          loadType,
+                                          size_t                                            loadOffset) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeCacheLinePostLoadEvent : public UpstreamNodeCacheLineLoadEventBase<config>
+                                             , public Gravity::Event<UpstreamNodeCacheLinePostLoadEvent<config>> {
+    public:
+        using LoadType = typename UpstreamNodeCacheLineLoadEventBase<config>::LoadType;
+
+    public:
+        UpstreamNodeCacheLinePostLoadEvent(UpstreamNode<config>&                             upstream,
+                                           const typename UpstreamNode<config>::CacheLine&   cacheLine,
+                                           LoadType                                          loadType,
+                                           size_t                                            loadOffset) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeCacheLinePreStoreEvent : public UpstreamNodeCacheLineStoreEventBase<config>
+                                             , public Gravity::Event<UpstreamNodeCacheLinePreStoreEvent<config>> {
+    public:
+        using StoreType = typename UpstreamNodeCacheLineStoreEventBase<config>::StoreType;
+
+    public:
+        UpstreamNodeCacheLinePreStoreEvent(UpstreamNode<config>&                             upstream,
+                                           const typename UpstreamNode<config>::CacheLine&   cacheLine,
+                                           StoreType                                         storeType,
+                                           size_t                                            storeOffset) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeCacheLinePostStoreEvent : public UpstreamNodeCacheLineStoreEventBase<config>
+                                              , public Gravity::Event<UpstreamNodeCacheLinePostStoreEvent<config>> {
+    public:
+        using StoreType = typename UpstreamNodeCacheLineStoreEventBase<config>::StoreType;
+
+    public:
+        UpstreamNodeCacheLinePostStoreEvent(UpstreamNode<config>&                             upstream,
+                                            const typename UpstreamNode<config>::CacheLine&   cacheLine,
+                                            StoreType                                         storeType,
+                                            size_t                                            storeOffset) noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeCacheLineGrantedEvent : public UpstreamNodeXactionEventBase<config>
+                                            , public Gravity::Event<UpstreamNodeCacheLineGrantedEvent<config>> {
+    public:
+        UpstreamNodeCacheLineGrantedEvent(UpstreamNode<config>&                             upstream,
+                                          const typename UpstreamNode<config>::CacheLine&   cacheLine,
+                                          std::shared_ptr<Xact::Xaction<config>>            xaction) noexcept;
+    };
 }
 
 
@@ -1508,6 +1624,92 @@ namespace CCHI::Taurus {
 }
 
 
+// Implementation of: class UpstreamNodeCacheLineLoadEventBase
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeCacheLineLoadEventBase<config>::UpstreamNodeCacheLineLoadEventBase(
+        UpstreamNode<config>&                           upstream,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        LoadType                                        loadType,
+        size_t                                          loadOffset) noexcept
+        : UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
+        , loadType  (loadType)
+        , loadOffset(loadOffset)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline typename UpstreamNodeCacheLineLoadEventBase<config>::LoadType
+    UpstreamNodeCacheLineLoadEventBase<config>::GetLoadType() const noexcept
+    {
+        return loadType;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline size_t UpstreamNodeCacheLineLoadEventBase<config>::GetLoadOffset() const noexcept
+    {
+        return loadOffset;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeCacheLineStoreEventBase
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeCacheLineStoreEventBase<config>::UpstreamNodeCacheLineStoreEventBase(
+        UpstreamNode<config>&                           upstream,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        StoreType                                       storeType,
+        size_t                                          storeOffset) noexcept
+        : UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
+        , storeType  (storeType)
+        , storeOffset(storeOffset)
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline typename UpstreamNodeCacheLineStoreEventBase<config>::StoreType
+    UpstreamNodeCacheLineStoreEventBase<config>::GetStoreType() const noexcept
+    {
+        return storeType;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline size_t UpstreamNodeCacheLineStoreEventBase<config>::GetStoreOffset() const noexcept
+    {
+        return storeOffset;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeXactionEventBase
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeXactionEventBase<config>::UpstreamNodeXactionEventBase(
+        UpstreamNode<config>&                           upstream,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        std::shared_ptr<Xact::Xaction<config>>          xaction) noexcept
+        : UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
+        , xaction (std::move(xaction))
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xact::Xaction<config>>
+    UpstreamNodeXactionEventBase<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xact::Xaction<config>>
+    UpstreamNodeXactionEventBase<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+}
+
+
 // Implementation of: class UpstreamNodeXactDeniedEventBase
 namespace CCHI::Taurus {
 
@@ -1517,29 +1719,14 @@ namespace CCHI::Taurus {
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         XactDenialEnum                                  denial,
         std::shared_ptr<Xact::Xaction<config>>          xaction) noexcept
-        : UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
+        : UpstreamNodeXactionEventBase<config>(upstream, cacheLine, xaction)
         , denial  (denial)
-        , xaction (std::move(xaction))
     { }
 
     template<FlitConfigurationConcept config>
     inline XactDenialEnum UpstreamNodeXactDeniedEventBase<config>::GetDenial() const noexcept
     {
         return denial;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline std::shared_ptr<Xact::Xaction<config>>
-    UpstreamNodeXactDeniedEventBase<config>::GetXaction() noexcept
-    {
-        return xaction;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline std::shared_ptr<const Xact::Xaction<config>>
-    UpstreamNodeXactDeniedEventBase<config>::GetXaction() const noexcept
-    {
-        return xaction;
     }
 }
 
@@ -1552,23 +1739,8 @@ namespace CCHI::Taurus {
         UpstreamNode<config>&                           upstream,
         const typename UpstreamNode<config>::CacheLine& cacheLine,
         std::shared_ptr<Xact::Xaction<config>>          xaction) noexcept
-        : UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
-        , xaction (std::move(xaction))
+        : UpstreamNodeXactionEventBase<config>(upstream, cacheLine, xaction)
     { }
-
-    template<FlitConfigurationConcept config>
-    inline std::shared_ptr<Xact::Xaction<config>>
-    UpstreamNodeXactAcceptedEventBase<config>::GetXaction() noexcept
-    {
-        return xaction;
-    }
-
-    template<FlitConfigurationConcept config>
-    inline std::shared_ptr<const Xact::Xaction<config>>
-    UpstreamNodeXactAcceptedEventBase<config>::GetXaction() const noexcept
-    {
-        return xaction;
-    }
 }
 
 
@@ -3093,6 +3265,75 @@ namespace CCHI::Taurus {
         Flits::UpRSP<config>&                           uprspFlit) noexcept
         : UpRSPFlitEventBase<config>            (uprspFlit)
         , UpstreamNodeCacheLineEventBase<config>(upstream, cacheLine)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeCacheLinePreLoadEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeCacheLinePreLoadEvent<config>::UpstreamNodeCacheLinePreLoadEvent(
+        UpstreamNode<config>&                           upstream,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        LoadType                                        loadType,
+        size_t                                          loadOffset) noexcept
+        : UpstreamNodeCacheLineLoadEventBase<config>(upstream, cacheLine, loadType, loadOffset)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeCacheLinePostLoadEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeCacheLinePostLoadEvent<config>::UpstreamNodeCacheLinePostLoadEvent(
+        UpstreamNode<config>&                           upstream,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        LoadType                                        loadType,
+        size_t                                          loadOffset) noexcept
+        : UpstreamNodeCacheLineLoadEventBase<config>(upstream, cacheLine, loadType, loadOffset)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeCacheLinePreStoreEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeCacheLinePreStoreEvent<config>::UpstreamNodeCacheLinePreStoreEvent(
+        UpstreamNode<config>&                           upstream,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        StoreType                                       storeType,
+        size_t                                          storeOffset) noexcept
+        : UpstreamNodeCacheLineStoreEventBase<config>(upstream, cacheLine, storeType, storeOffset)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeCacheLinePostStoreEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeCacheLinePostStoreEvent<config>::UpstreamNodeCacheLinePostStoreEvent(
+        UpstreamNode<config>&                           upstream,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        StoreType                                       storeType,
+        size_t                                          storeOffset) noexcept
+        : UpstreamNodeCacheLineStoreEventBase<config>(upstream, cacheLine, storeType, storeOffset)
+    { }
+}
+
+
+// Implementation of: class UpstreamNodeCacheLineGrantedEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeCacheLineGrantedEvent<config>::UpstreamNodeCacheLineGrantedEvent(
+        UpstreamNode<config>&                           upstream,
+        const typename UpstreamNode<config>::CacheLine& cacheLine,
+        std::shared_ptr<Xact::Xaction<config>>          xaction) noexcept
+        : UpstreamNodeXactionEventBase<config>(upstream, cacheLine, std::move(xaction))
     { }
 }
 
