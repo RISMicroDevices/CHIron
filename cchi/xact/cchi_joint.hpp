@@ -918,7 +918,15 @@ namespace CCHI::Xact {
         // event on TxnID allocated
         this->XactionTxnIDAllocated(xaction);
 
-        // TODO: immediate deallocation
+        // immediate deallocation: xactions already complete at their first flit
+        // (e.g. Stash with ExpCompStash=0) never receive a completing flit,
+        // so retire them here instead of inserting into upTransactions
+        if (xaction->IsComplete(glbl))
+        {
+            this->XactionTxnIDFreed(xaction);
+            this->XactionCompleted(xaction);
+            return XactDenial::ACCEPTED;
+        }
 
         upTransactions[key] = xaction;
 
