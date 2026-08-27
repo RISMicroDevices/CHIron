@@ -33,6 +33,9 @@ namespace CCHI {
 
         template<size_t DataWidth>
         concept Data                = CCHI::CheckDataWidth(DataWidth);
+
+        template<size_t TagAliasWidth>
+        concept TagAlias            = CCHI::CheckTagAliasWidth(TagAliasWidth);
     }
 
 
@@ -41,11 +44,12 @@ namespace CCHI {
     */
     template<ComponentTypeEnum ComponentType    = ComponentType::TYPE_1,
              size_t TxnIDWidth                  = 7,
-             size_t DBIDWidth                   = 7,
+             size_t DBIDWidth                   = 8,
              size_t UpstreamNodeIDWidth         = 5,
              size_t DownstreamNodeIDWidth       = 5,
              size_t WayIndexWidth               = 4,
              size_t DataWidth                   = 256,
+             size_t TagAliasWidth               = 8,
              bool   UWPersistEnable             = true,
              bool   UWPredictEnable             = true>
     requires FlitConfigurationConstraints::TxnID<TxnIDWidth>
@@ -54,6 +58,7 @@ namespace CCHI {
           && FlitConfigurationConstraints::DownstreamNodeID<DownstreamNodeIDWidth>
           && FlitConfigurationConstraints::WayIndex<WayIndexWidth>
           && FlitConfigurationConstraints::Data<DataWidth>
+          && FlitConfigurationConstraints::TagAlias<TagAliasWidth>
     struct FlitConfiguration {
         static constexpr ComponentTypeEnum componentType        = ComponentType;
         //
@@ -79,6 +84,7 @@ namespace CCHI {
         static constexpr size_t     wayIndexWidth               = WayIndexWidth;
         static constexpr size_t     dataIdWidth                 = std::bit_width(512 / DataWidth - 1);
         static constexpr size_t     dataWidth                   = DataWidth;
+        static constexpr size_t     tagAliasWidth               = TagAliasWidth;
         static constexpr bool       upstreamWayPersistEnable    = UWPersistEnable;
         static constexpr bool       upstreamWayPredictEnable    = UWPredictEnable;
     };
@@ -110,6 +116,7 @@ namespace CCHI {
         { T::downstreamNodeIdWidth      }   -> std::convertible_to<size_t>;
         { T::wayIndexWidth              }   -> std::convertible_to<size_t>;
         { T::dataWidth                  }   -> std::convertible_to<size_t>;
+        { T::tagAliasWidth              }   -> std::convertible_to<size_t>;
         { T::upstreamWayPersistEnable   }   -> std::convertible_to<bool>;
         { T::upstreamWayPredictEnable   }   -> std::convertible_to<bool>;
     };
@@ -141,6 +148,7 @@ namespace CCHI {
         { T::upstreamNodeIdWidth        }   -> std::convertible_to<size_t>;
         { T::downstreamNodeIdWidth      }   -> std::convertible_to<size_t>;
         { T::wayIndexWidth              }   -> std::convertible_to<size_t>;
+        { T::tagAliasWidth              }   -> std::convertible_to<size_t>;
         { T::upstreamWayPersistEnable   }   -> std::convertible_to<bool>;
         { T::upstreamWayPredictEnable   }   -> std::convertible_to<bool>;
     };
@@ -480,6 +488,15 @@ namespace CCHI {
             using addr_t = uint_fit_t<ADDR_WIDTH>;
 
             /*
+            TagAlias: <TagAlias_Width> bits
+            Tag Alias. The alias of the virtual address tag associated with the transaction.
+            */
+            static constexpr size_t TAGALIAS_WIDTH = config::tagAliasWidth;
+
+            static constexpr bool hasTagAlias = TAGALIAS_WIDTH > 0;
+            using tagalias_t = uint_fit_t<TAGALIAS_WIDTH, std::monostate>;
+
+            /*
             NS: 1 bit
             Non-secure. Indicates whether the transaction is Non-secure or Secure.
             */
@@ -546,9 +563,9 @@ namespace CCHI {
 
         public:
             static constexpr size_t WIDTH = TXNID_WIDTH         + SRCID_WIDTH       + TGTID_WIDTH           + OPCODE_WIDTH  
-                                          + SSIZE_WIDTH         + ADDR_WIDTH        + NS_WIDTH              + ORDER_WIDTH
-                                          + MEMATTR_WIDTH       + EXCL_WIDTH        + EXPCOMPDATA_WIDTH   /*+ EXPCOMPSTASH_WIDTH*/
-                                          + WAYVALID_WIDTH      + WAY_WIDTH         + TRACETAG_WIDTH;
+                                          + SSIZE_WIDTH         + ADDR_WIDTH        + TAGALIAS_WIDTH        + NS_WIDTH              
+                                          + ORDER_WIDTH         + MEMATTR_WIDTH     + EXCL_WIDTH            + EXPCOMPDATA_WIDTH
+                                        /*+ EXPCOMPSTASH_WIDTH*/+ WAYVALID_WIDTH    + WAY_WIDTH             + TRACETAG_WIDTH;
 
         // Flit fields
         // *NOTICE: Some fields are overlapped.
@@ -559,6 +576,7 @@ namespace CCHI {
             opcode_t                Opcode;
             ssize_t                 Size;
             addr_t                  Addr;
+            tagalias_t              TagAlias;
             ns_t                    NS;
             order_t                 Order;
             memattr_t               MemAttr;
@@ -583,6 +601,7 @@ namespace CCHI {
             dstFlit.Opcode = static_cast<typename REQ<configDst>::opcode_t>(srcFlit.Opcode);
             dstFlit.Size = static_cast<typename REQ<configDst>::ssize_t>(srcFlit.Size);
             dstFlit.Addr = static_cast<typename REQ<configDst>::addr_t>(srcFlit.Addr);
+            dstFlit.TagAlias = static_cast<typename REQ<configDst>::tagalias_t>(srcFlit.TagAlias);
             dstFlit.NS = static_cast<typename REQ<configDst>::ns_t>(srcFlit.NS);
             dstFlit.Order = static_cast<typename REQ<configDst>::order_t>(srcFlit.Order);
             dstFlit.MemAttr = static_cast<typename REQ<configDst>::memattr_t>(srcFlit.MemAttr);
@@ -609,7 +628,8 @@ namespace CCHI {
                 && (REQ<configDst>::TGTID_WIDTH      >= REQ<configSrc>::TGTID_WIDTH)
                 && (REQ<configDst>::OPCODE_WIDTH     >= REQ<configSrc>::OPCODE_WIDTH)
                 && (REQ<configDst>::ADDR_WIDTH       >= REQ<configSrc>::ADDR_WIDTH)
-                && (REQ<configDst>::WAY_WIDTH        >= REQ<configSrc>::WAY_WIDTH);
+                && (REQ<configDst>::WAY_WIDTH        >= REQ<configSrc>::WAY_WIDTH)
+                && (REQ<configDst>::TAGALIAS_WIDTH   >= REQ<configSrc>::TAGALIAS_WIDTH);
         }
 
         template<FlitConfigurationConcept configDst, FlitConfigurationConcept configSrc>
@@ -651,6 +671,10 @@ namespace CCHI {
             // Addr
             typename T::addr_t;
             { T::ADDR_WIDTH                     } -> std::convertible_to<size_t>;
+
+            // TagAlias
+            typename T::tagalias_t;
+            { T::TAGALIAS_WIDTH                 } -> std::convertible_to<size_t>;
 
             // NS
             typename T::ns_t;
