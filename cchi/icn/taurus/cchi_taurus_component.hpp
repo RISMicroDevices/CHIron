@@ -1732,12 +1732,14 @@ namespace CCHI::Taurus {
             }
             else if (cacheLine.activeEVT)
             {
+                bool completed = cacheLine.activeEVT->IsComplete(glbl);
+
                 if (cacheLine.activeEVT->GetType() == Xact::XactionType::Evict)
                 {
                     Xact::XactionEvict<config>& xactionEvict 
                         = static_cast<Xact::XactionEvict<config>&>(*cacheLine.activeEVT);
                     
-                    if (xactionEvict.IsComplete(glbl) && cacheLine.activeEVTFuture && !cacheLine.activeEVTFuture->Fired())
+                    if (completed && cacheLine.activeEVTFuture && !cacheLine.activeEVTFuture->Fired())
                     {
                         // TODO: event: EvictCompleteEvent
 
@@ -1909,22 +1911,22 @@ namespace CCHI::Taurus {
                         }
                     }
 
-                    if (xactionWriteBack.IsComplete(glbl) && cacheLine.activeEVTFuture && !cacheLine.activeEVTFuture->Fired())
+                    if (completed && cacheLine.activeEVTFuture && !cacheLine.activeEVTFuture->Fired())
                     {
                         // TODO: event: EvictCompleteEvent
 
                         cacheLine.activeEVTFuture->Fire(EvictedEvent(it->second));
                     }
                 }
-            }
 
-            // release the TxnID of a fully completed EVT transaction
-            if (cacheLine.activeEVT && cacheLine.activeEVT->IsComplete(glbl))
-            {
-                FreeTxnID(cacheLine.activeEVT->GetFirst().flit.evt.TxnID);
-                cacheLine.activeEVT.reset();
+                // release the TxnID of a fully completed EVT transaction
+                if (completed)
+                {
+                    FreeTxnID(cacheLine.activeEVT->GetFirst().flit.evt.TxnID);
+                    cacheLine.activeEVT.reset();
 
-                // TODO: event: EVTDeallocationEvent
+                    // TODO: event: EVTDeallocationEvent
+                }
             }
         }
     }
@@ -2334,15 +2336,14 @@ namespace CCHI::Taurus {
                             events->OnREQCompAckPostChannelPending(*this, cacheLine, rspFlit);
                     }
                 }
-            }
 
-            // release the TxnID of a fully completed REQ transaction
-            if (cacheLine.activeREQ && cacheLine.activeREQ->IsComplete(glbl))
-            {
-                FreeTxnID(cacheLine.activeREQ->GetFirst().flit.req.TxnID);
-                cacheLine.activeREQ.reset();
-
-                // TODO: event: REQDeallocationEvent
+                // release the TxnID of a fully completed REQ transaction
+                if (cacheLine.activeREQ->IsComplete(glbl))
+                {
+                    FreeTxnID(cacheLine.activeREQ->GetFirst().flit.req.TxnID);
+                    cacheLine.activeREQ.reset();
+                    // TODO: event: REQDeallocationEvent
+                }
             }
         }
     }
@@ -3299,7 +3300,14 @@ namespace CCHI::Taurus {
                             {
                                 case Opcodes::REQ::MakeUnique:
                                 {
-                                    state = CacheState::UniqueClean;
+                                    // MakeUnique delivers no data: a line acquired from
+                                    // Invalid has no current copy, so its residual content
+                                    // is architecturally undefined and divergent from memory
+                                    // until the requester's full-line overwrite lands. Mark
+                                    // it UniqueDirty (not UniqueClean) so snoops and
+                                    // evictions carry that residual data (*_PD) instead of
+                                    // claiming the line equals memory.
+                                    state = CacheState::UniqueDirty;
                                     break;
                                 }
 
@@ -4322,7 +4330,7 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline bool UpstreamNode<config>::CacheLine::IsEVTInFlight(const Xact::Global<config>& glbl) const noexcept
+    inline bool UpstreamNode<config>::CacheLine::IsEVTInFlight(const Xact::Global<config>&) const noexcept
     {
         if (this->pendingEVTHazardTXEVT)
             return true;
@@ -4345,7 +4353,10 @@ namespace CCHI::Taurus {
         if (!this->activeEVT)
             return false;
 
-        return !this->activeEVT->IsComplete(glbl);
+        // See IsREQInFlight: a held activeEVT keeps the line busy until
+        // release, otherwise the completing EVT's fire can steal the next
+        // DoEvict's future (activeEVTFuture).
+        return true;
     }
 
     template<FlitConfigurationConcept config>
@@ -4370,7 +4381,7 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline bool UpstreamNode<config>::CacheLine::IsREQInFlight(const Xact::Global<config>& glbl) const noexcept
+    inline bool UpstreamNode<config>::CacheLine::IsREQInFlight(const Xact::Global<config>&) const noexcept
     {
         if (this->pendingREQHazardTXREQ)
             return true;
@@ -4381,10 +4392,12 @@ namespace CCHI::Taurus {
         if (this->pendingREQChannelTXRSP)
             return true;
 
-        if (!this->activeREQ)
-            return false;
-
-        return !this->activeREQ->IsComplete(glbl);
+        // A held activeREQ keeps the line busy until it is released in TickREQ,
+        // not merely until it completes: a follow-up request accepted in the
+        // complete-but-unreleased window would overwrite activeREQFuture, and
+        // the completing transaction's grant would then fire (steal) the new
+        // future instead of its own (grant events / future completions lost).
+        return this->activeREQ != nullptr;
     }
 
     template<FlitConfigurationConcept config>
