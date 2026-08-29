@@ -203,6 +203,10 @@ namespace CCHI::Xact {
         void                                            SetLastDenial(XactDenialEnum) noexcept;
 
     public:
+        // *NOTICE: All methods that return a pointer to a flit (const FiredResponseFlit<config>*) may return nullptr if the flit is not present.
+        //          And the pointer is valid until the next call to a method that modifies the subsequence (e.g., Next(), NextDnRSP(), NextUpRSP(), NextDnDAT(), NextUpDAT()).
+        //          A copy of flit is required if the flit needs to be stored for later use.
+
         bool                                            HasDnRSP() const noexcept;
         bool                                            HasUpRSP() const noexcept;
         bool                                            HasDnDAT() const noexcept;
@@ -212,6 +216,9 @@ namespace CCHI::Xact {
         bool                                            HasUpRSP(std::initializer_list<typename Flits::UpRSP<config>::opcode_t>) const noexcept;
         bool                                            HasDnDAT(std::initializer_list<typename Flits::DnDAT<config>::opcode_t>) const noexcept;
         bool                                            HasUpDAT(std::initializer_list<typename Flits::UpDAT<config>::opcode_t>) const noexcept;
+
+        bool                                            HasDnDAT(std::initializer_list<typename Flits::DnDAT<config>::opcode_t>, size_t dataID) const noexcept;
+        bool                                            HasUpDAT(std::initializer_list<typename Flits::UpDAT<config>::opcode_t>, size_t dataID) const noexcept;
 
         const FiredResponseFlit<config>*                GetFirstDnRSP() const noexcept;
         const FiredResponseFlit<config>*                GetFirstUpRSP() const noexcept;
@@ -833,6 +840,56 @@ namespace CCHI::Xact {
             for (auto opcode : opcodes)
                 if (iter->opcode.updat == opcode)
                     return true;
+        }
+
+        return false;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::HasDnDAT(std::initializer_list<typename Flits::DnDAT<config>::opcode_t> opcodes, size_t dataID) const noexcept
+    {
+        if (opcodes.size() == 0)
+            return false;
+
+        for (auto keyIt = subsequenceKeys.begin(), flitIt = subsequence.begin();
+             keyIt != subsequenceKeys.end(); ++keyIt, ++flitIt)
+        {
+            if (keyIt->IsDenied())
+                continue;
+
+            if (!keyIt->IsDnDAT())
+                continue;
+
+            if (std::find(opcodes.begin(), opcodes.end(), keyIt->opcode.dndat) == opcodes.end())
+                continue;
+
+            if (flitIt->flit.dndat.DataID == dataID)
+                return true;
+        }
+
+        return false;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool Xaction<config>::HasUpDAT(std::initializer_list<typename Flits::UpDAT<config>::opcode_t> opcodes, size_t dataID) const noexcept
+    {
+        if (opcodes.size() == 0)
+            return false;
+
+        for (auto keyIt = subsequenceKeys.begin(), flitIt = subsequence.begin();
+             keyIt != subsequenceKeys.end(); ++keyIt, ++flitIt)
+        {
+            if (keyIt->IsDenied())
+                continue;
+
+            if (!keyIt->IsUpDAT())
+                continue;
+
+            if (std::find(opcodes.begin(), opcodes.end(), keyIt->opcode.updat) == opcodes.end())
+                continue;
+
+            if (flitIt->flit.updat.DataID == dataID)
+                return true;
         }
 
         return false;
