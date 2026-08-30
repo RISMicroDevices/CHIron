@@ -289,6 +289,16 @@ namespace CCHI::Xact {
     public:
         Joint(JointTypeEnum type = JointType::Type1) noexcept;
 
+        Joint(const Joint<config>& obj) noexcept;
+        Joint<config>& operator=(const Joint<config>& obj) noexcept;
+
+        // *NOTICE: Fork() deep-clones all in-flight xactions (deduplicated by
+        //          source pointer across all transaction maps), making a copied
+        //          Joint fully independent of the original - mirrors
+        //          chi/xact/chi_joint.hpp RNFJoint::Fork(), whose copy-semantics
+        //          the fork/leaf test frameworks rely on.
+        void            Fork() noexcept;
+
         JointTypeEnum   GetType() const noexcept;
         void            Clear() noexcept;
 
@@ -690,6 +700,65 @@ namespace CCHI::Xact {
         SET_SNP_XACTION(SnpToClean      , Snoop                     );  // 0x03
 
         #undef SET_SNP_XACTION
+    }
+
+    template<FlitConfigurationConcept config>
+    inline Joint<config>::Joint(const Joint<config>& obj) noexcept
+        : Joint(obj.type)
+    {
+        upTransactions      = obj.upTransactions;
+        dnTransactions      = obj.dnTransactions;
+        upDBIDTransactions  = obj.upDBIDTransactions;
+
+        Fork();
+    }
+
+    template<FlitConfigurationConcept config>
+    inline Joint<config>& Joint<config>::operator=(const Joint<config>& obj) noexcept
+    {
+        this->type      = obj.type;
+        this->events    = std::make_shared<EventHub>();
+
+        upTransactions      = obj.upTransactions;
+        dnTransactions      = obj.dnTransactions;
+        upDBIDTransactions  = obj.upDBIDTransactions;
+
+        Fork();
+
+        return *this;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void Joint<config>::Fork() noexcept
+    {
+        std::unordered_map<const Xaction<config>*, std::shared_ptr<Xaction<config>>> forkedXactions;
+        auto forkXaction =
+            [&forkedXactions](const std::shared_ptr<Xaction<config>>& xaction)
+                -> std::shared_ptr<Xaction<config>>
+            {
+                if (!xaction)
+                    return nullptr;
+
+                auto iter = forkedXactions.find(xaction.get());
+                if (iter != forkedXactions.end())
+                    return iter->second;
+
+                std::shared_ptr<Xaction<config>> forked = xaction->Clone();
+                if (forked)
+                    forked->events = std::make_shared<typename Xaction<config>::EventHub>();
+
+                forkedXactions.emplace(xaction.get(), forked);
+                return forked;
+            };
+
+        for (auto& p : upTransactions)
+            p.second = forkXaction(p.second);
+
+        for (auto& p : dnTransactions)
+            p.second = forkXaction(p.second);
+
+        for (auto& p : upDBIDTransactions)
+            p.second = forkXaction(p.second);
     }
 
     template<FlitConfigurationConcept config>
