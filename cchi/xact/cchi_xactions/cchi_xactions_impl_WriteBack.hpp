@@ -25,6 +25,7 @@ namespace CCHI::Xact {
         bool                GotComp() const noexcept;
         bool                GotAnyCopyBackWrData() const noexcept;
         bool                GotAllCopyBackWrData() const noexcept;
+        bool                GotCopyBackWrData(size_t dataID) const noexcept;
 
     public:
         bool                IsResponseComplete(const Global<config>& glbl) const noexcept;
@@ -109,12 +110,18 @@ namespace CCHI::Xact {
             details::GetDataIDCompleteMask<config>(Sizes::B64);
 
         std::bitset<8> collectedDataID =
-            details::CollectUpDataID<config>(this->first.flit.req.Size, this->subsequence,
+            details::CollectUpDataID<config>(Sizes::B64, this->subsequence,
                 [this](size_t i, const FiredResponseFlit<config>& flit) noexcept -> bool {
                     return this->subsequenceKeys[i].IsAccepted() && flit.flit.updat.Opcode == Opcodes::UpDAT::CopyBackWrData;
             });
 
         return (completeDataIDMask & ~collectedDataID).none();
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool XactionWriteBack<config>::GotCopyBackWrData(size_t dataID) const noexcept
+    {
+        return this->HasUpDAT({ Opcodes::UpDAT::CopyBackWrData }, dataID);
     }
 
     template<FlitConfigurationConcept config>
