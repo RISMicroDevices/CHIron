@@ -83,6 +83,17 @@ namespace CCHI {
         inline constexpr XactDenialEnumBack DENIED_SNP_OPCODE_NOT_DECODED           ("XACT_DENIED_SNP_OPCODE_NOT_DECODED",          0x00010000 | 11);
         inline constexpr XactDenialEnumBack DENIED_REQ_OPCODE_NOT_DECODED           ("XACT_DENIED_REQ_OPCODE_NOT_DECODED",          0x00010000 | 12);
 
+        inline constexpr XactDenialEnumBack DENIED_STATE_INITIAL                    ("XACT_DENIED_STATE_INITIAL",                   0x00020000 |  0);
+        inline constexpr XactDenialEnumBack DENIED_STATE_COMP                       ("XACT_DENIED_STATE_COMP",                      0x00020000 |  1);
+        inline constexpr XactDenialEnumBack DENIED_STATE_COMPDATA                   ("XACT_DENIED_STATE_COMPDATA",                  0x00020000 |  2);
+        inline constexpr XactDenialEnumBack DENIED_STATE_COMPCMO                    ("XACT_DENIED_STATE_COMPCMO",                   0x00020000 |  3);
+        inline constexpr XactDenialEnumBack DENIED_STATE_COPYBACKWRDATA             ("XACT_DENIED_STATE_COPYBACKWRDATA",            0x00020000 |  4);
+        inline constexpr XactDenialEnumBack DENIED_STATE_NONCOPYBACKWRDATA          ("XACT_DENIED_STATE_NONCOPYBACKWRDATA",         0x00020000 |  5);
+        inline constexpr XactDenialEnumBack DENIED_STATE_RESP_SNPRESP               ("XACT_DENIED_STATE_RESP_SNPRESP",              0x00020000 |  6);
+        inline constexpr XactDenialEnumBack DENIED_STATE_RESP_SNPRESPDATA           ("XACT_DENIED_STATE_RESP_SNPRESPDATA",          0x00020000 |  7);
+        inline constexpr XactDenialEnumBack DENIED_STATE_NESTED_TRANSFER            ("XACT_DENIED_STATE_NESTED_TRANSFER",           0x00020000 |  8);
+        inline constexpr XactDenialEnumBack DENIED_STATE_MISMATCH_REPEAT            ("XACT_DENIED_STATE_MISMATCH_REPEAT",           0x00020000 |  9);
+
         inline constexpr XactDenialEnumBack DENIED_UPRSP_TXNID_MISMATCHING_DBID     ("XACT_DENIED_UPRSP_TXNID_MISMATCHING_DBID",    0x00040000 |  0);
         inline constexpr XactDenialEnumBack DENIED_UPRSP_TXNID_MISMATCHING_DNRSP    ("XACT_DENIED_UPRSP_TXNID_MISMATCHING_DNRSP",   0x00040000 |  1);
         inline constexpr XactDenialEnumBack DENIED_UPRSP_TXNID_MISMATCHING_DNDAT    ("XACT_DENIED_UPRSP_TXNID_MISMATCHING_DNDAT",   0x00040000 |  2);
