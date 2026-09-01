@@ -13,6 +13,7 @@
 #include <span>
 
 #include "../../xact/cchi_joint.hpp"
+#include "../../xact/cchi_xact_state.hpp"
 
 #include "cchi_taurus_component_afx.hpp"
 #include "cchi_taurus_component_events.hpp"
@@ -157,6 +158,9 @@ namespace CCHI::Taurus {
             Gravity::EventBus<UpstreamNodeXactDeniedPrefetchEvent<config>>              OnDeniedPrefetch;
             Gravity::EventBus<UpstreamNodeXactDeniedCMOEvent<config>>                   OnDeniedCMO;
             Gravity::EventBus<UpstreamNodeXactDeniedCompCMOEvent<config>>               OnDeniedCompCMO;
+
+            Gravity::EventBus<UpstreamNodeCacheStateMapDeniedRequestEvent<config>>      OnCacheStateMapDeniedRequest;
+            Gravity::EventBus<UpstreamNodeCacheStateMapDeniedResponseEvent<config>>     OnCacheStateMapDeniedResponse;
 
             Gravity::EventBus<UpstreamNodeCacheLineGrantedEvent<config>>                OnCacheLineGranted;
             Gravity::EventBus<UpstreamNodeCacheLinePreLoadEvent<config>>                OnCacheLinePreLoad;
@@ -418,6 +422,8 @@ namespace CCHI::Taurus {
     protected:
         Xact::Joint<config>                     joint;
 
+        Xact::CacheStateMap<config>              cacheStateMap;
+
         std::unordered_map<uint64_t, std::shared_ptr<CacheLine>>
                                                 cacheable;
 
@@ -448,6 +454,12 @@ namespace CCHI::Taurus {
         bool                                    enableSilentEviction;
         bool                                    enableStrictInitialState;
 
+        // observer-only shadow cache-state checker: feeds every accepted wire
+        // flit to 'cacheStateMap' and fires OnCacheStateMapDenied* on a state
+        // denial; intended for construction-time or quiescent toggling - an
+        // off->on flip mid-run leaves the shadow stale for lines already touched
+        bool                                    enableCacheStateMap;
+
     public:
         UpstreamNode(
             Flits::up_nodeid_t<config>      nodeID = 0,
@@ -459,7 +471,8 @@ namespace CCHI::Taurus {
             size_t                          prefetchQueueLimit = 4,
             size_t                          cmoQueueLimit = 4,
             bool                            enableSilentEviction = false,
-            bool                            enableStrictInitialState = true
+            bool                            enableStrictInitialState = true,
+            bool                            enableCacheStateMap = true
         ) noexcept;
 
     protected:
@@ -496,6 +509,9 @@ namespace CCHI::Taurus {
     public:
         Xact::Joint<config>&                    GetJoint() noexcept;
         const Xact::Joint<config>&              GetJoint() const noexcept;
+
+        Xact::CacheStateMap<config>&             GetCacheStateMap() noexcept;
+        const Xact::CacheStateMap<config>&       GetCacheStateMap() const noexcept;
         
     public:
         bool                                    IsValid(uint64_t PA) const noexcept;
@@ -508,9 +524,9 @@ namespace CCHI::Taurus {
         void                                    SetCacheLine(std::shared_ptr<CacheLine> cacheLine) noexcept;
 
     public:
-        std::shared_ptr<FutureNow<GrantedEvent>>        DoLoad(uint64_t PA) noexcept;
-        std::shared_ptr<FutureNow<GrantedEvent>>        DoStore(uint64_t PA) noexcept;
-        std::shared_ptr<FutureNow<GrantedEvent>>        DoStoreLine(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<GrantedEvent>>        DoLoad(uint64_t PA, uint64_t tagAlias = 0) noexcept;
+        std::shared_ptr<FutureNow<GrantedEvent>>        DoStore(uint64_t PA, uint64_t tagAlias = 0) noexcept;
+        std::shared_ptr<FutureNow<GrantedEvent>>        DoStoreLine(uint64_t PA, uint64_t tagAlias = 0) noexcept;
 
         std::shared_ptr<FutureNow<EvictedEvent>>        DoEvict(uint64_t PA) noexcept;
 
@@ -583,6 +599,17 @@ namespace CCHI::Taurus {
         void                                    PendEVTChannelTXDAT0(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept;
         void                                    PendEVTChannelTXDAT1(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept;
 
+        // cache-state-map feed helpers: every wire flit accepted by the joint is
+        // also fed to the shadow checker ('cacheStateMap'); a non-ACCEPTED result
+        // fires the node's OnCacheStateMapDenied* events (never alters control flow)
+        void                                    CheckCacheStateTXEVT(uint64_t PA, const Flits::EVT<config>& flit) noexcept;
+        void                                    CheckCacheStateTXREQ(uint64_t PA, const Flits::REQ<config>& flit) noexcept;
+        void                                    CheckCacheStateRXSNP(uint64_t PA, const Flits::SNP<config>& flit) noexcept;
+        void                                    CheckCacheStateRXDnRSP(uint64_t PA, std::shared_ptr<Xact::Xaction<config>> xaction, const Flits::DnRSP<config>& flit) noexcept;
+        void                                    CheckCacheStateTXUpRSP(uint64_t PA, std::shared_ptr<Xact::Xaction<config>> xaction, const Flits::UpRSP<config>& flit) noexcept;
+        void                                    CheckCacheStateRXDnDAT(uint64_t PA, std::shared_ptr<Xact::Xaction<config>> xaction, const Flits::DnDAT<config>& flit) noexcept;
+        void                                    CheckCacheStateTXUpDAT(uint64_t PA, std::shared_ptr<Xact::Xaction<config>> xaction, const Flits::UpDAT<config>& flit) noexcept;
+
     public:
         // *NOTE: emission-order contract - per channel, pending flits are offered
         //        in action-start order: the emission order extracted from the
@@ -635,7 +662,8 @@ namespace CCHI::Taurus {
         size_t                          prefetchQueueLimit,
         size_t                          cmoQueueLimit,
         bool                            enableSilentEviction,
-        bool                            enableStrictInitialState
+        bool                            enableStrictInitialState,
+        bool                            enableCacheStateMap
     ) noexcept
         : events                    (std::make_shared<EventHub>())
         , xactionLimitEVT           (xactionLimitEVT)
@@ -648,6 +676,7 @@ namespace CCHI::Taurus {
         , prefetchQueueLimit        (prefetchQueueLimit)
         , cmoQueueLimit             (cmoQueueLimit)
         , joint                     ()
+        , cacheStateMap             ()
         , cacheable                 ()
         , noncacheable              ()
         , usedTxnID                 (xactionLimitTotal < (size_t{1} << config::txnIdWidth)
@@ -658,6 +687,7 @@ namespace CCHI::Taurus {
         , sam                       (sam ? std::move(sam) : std::make_shared<NoSAM<config>>())
         , enableSilentEviction      (enableSilentEviction)
         , enableStrictInitialState  (enableStrictInitialState)
+        , enableCacheStateMap       (enableCacheStateMap)
     { }
 
     template<FlitConfigurationConcept config>
@@ -754,6 +784,18 @@ namespace CCHI::Taurus {
     inline const Xact::Joint<config>& UpstreamNode<config>::GetJoint() const noexcept
     {
         return joint;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline Xact::CacheStateMap<config>& UpstreamNode<config>::GetCacheStateMap() noexcept
+    {
+        return cacheStateMap;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Xact::CacheStateMap<config>& UpstreamNode<config>::GetCacheStateMap() const noexcept
+    {
+        return cacheStateMap;
     }
 
     template<FlitConfigurationConcept config>
@@ -889,7 +931,110 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::GrantedEvent>> UpstreamNode<config>::DoLoad(uint64_t PA) noexcept
+    inline void UpstreamNode<config>::CheckCacheStateTXEVT(uint64_t PA, const Flits::EVT<config>& flit) noexcept
+    {
+        if (!enableCacheStateMap)
+            return;
+
+        XactDenialEnum denial = cacheStateMap.NextTXEVT(PA, time, flit);
+
+        if (denial != XactDenial::ACCEPTED && events)
+            events->OnCacheStateMapDeniedRequest(*this, PA, denial, nullptr,
+                Xact::FiredRequestFlit<config>(Xact::XactScope::Upstream, true, time, flit));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::CheckCacheStateTXREQ(uint64_t PA, const Flits::REQ<config>& flit) noexcept
+    {
+        if (!enableCacheStateMap)
+            return;
+
+        XactDenialEnum denial = cacheStateMap.NextTXREQ(PA, time, flit);
+
+        if (denial != XactDenial::ACCEPTED && events)
+            events->OnCacheStateMapDeniedRequest(*this, PA, denial, nullptr,
+                Xact::FiredRequestFlit<config>(Xact::XactScope::Upstream, true, time, flit));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::CheckCacheStateRXSNP(uint64_t PA, const Flits::SNP<config>& flit) noexcept
+    {
+        if (!enableCacheStateMap)
+            return;
+
+        XactDenialEnum denial = cacheStateMap.NextRXSNP(PA, time, flit);
+
+        if (denial != XactDenial::ACCEPTED && events)
+            events->OnCacheStateMapDeniedRequest(*this, PA, denial, nullptr,
+                Xact::FiredRequestFlit<config>(Xact::XactScope::Upstream, false, time, flit));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::CheckCacheStateRXDnRSP(uint64_t PA, std::shared_ptr<Xact::Xaction<config>> xaction, const Flits::DnRSP<config>& flit) noexcept
+    {
+        if (!enableCacheStateMap)
+            return;
+
+        if (!xaction)
+            return;
+
+        XactDenialEnum denial = cacheStateMap.NextRXDnRSP(PA, time, *xaction, flit);
+
+        if (denial != XactDenial::ACCEPTED && events)
+            events->OnCacheStateMapDeniedResponse(*this, PA, denial, xaction,
+                Xact::FiredResponseFlit<config>(Xact::XactScope::Upstream, false, time, flit));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::CheckCacheStateTXUpRSP(uint64_t PA, std::shared_ptr<Xact::Xaction<config>> xaction, const Flits::UpRSP<config>& flit) noexcept
+    {
+        if (!enableCacheStateMap)
+            return;
+
+        if (!xaction)
+            return;
+
+        XactDenialEnum denial = cacheStateMap.NextTXUpRSP(PA, time, *xaction, flit);
+
+        if (denial != XactDenial::ACCEPTED && events)
+            events->OnCacheStateMapDeniedResponse(*this, PA, denial, xaction,
+                Xact::FiredResponseFlit<config>(Xact::XactScope::Upstream, true, time, flit));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::CheckCacheStateRXDnDAT(uint64_t PA, std::shared_ptr<Xact::Xaction<config>> xaction, const Flits::DnDAT<config>& flit) noexcept
+    {
+        if (!enableCacheStateMap)
+            return;
+
+        if (!xaction)
+            return;
+
+        XactDenialEnum denial = cacheStateMap.NextRXDnDAT(PA, time, *xaction, flit);
+
+        if (denial != XactDenial::ACCEPTED && events)
+            events->OnCacheStateMapDeniedResponse(*this, PA, denial, xaction,
+                Xact::FiredResponseFlit<config>(Xact::XactScope::Upstream, false, time, flit));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::CheckCacheStateTXUpDAT(uint64_t PA, std::shared_ptr<Xact::Xaction<config>> xaction, const Flits::UpDAT<config>& flit) noexcept
+    {
+        if (!enableCacheStateMap)
+            return;
+
+        if (!xaction)
+            return;
+
+        XactDenialEnum denial = cacheStateMap.NextTXUpDAT(PA, time, *xaction, flit);
+
+        if (denial != XactDenial::ACCEPTED && events)
+            events->OnCacheStateMapDeniedResponse(*this, PA, denial, xaction,
+                Xact::FiredResponseFlit<config>(Xact::XactScope::Upstream, true, time, flit));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::GrantedEvent>> UpstreamNode<config>::DoLoad(uint64_t PA, uint64_t tagAlias) noexcept
     {
         PA = LineBase(PA);
 
@@ -949,6 +1094,8 @@ namespace CCHI::Taurus {
         reqFlit.Opcode = Opcodes::REQ::ReadShared;
         reqFlit.Size = Sizes::B64;
         reqFlit.Addr = PA;
+        if constexpr (Flits::REQ<config>::hasTagAlias)
+            reqFlit.TagAlias = static_cast<typename Flits::REQ<config>::tagalias_t>(tagAlias);
         reqFlit.NS = 0;
         reqFlit.Order = 0; // TODO: Order
         reqFlit.MemAttr = 0; // TODO: MemAttr
@@ -1018,7 +1165,7 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::GrantedEvent>> UpstreamNode<config>::DoStore(uint64_t PA) noexcept
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::GrantedEvent>> UpstreamNode<config>::DoStore(uint64_t PA, uint64_t tagAlias) noexcept
     {
         PA = LineBase(PA);
 
@@ -1073,6 +1220,8 @@ namespace CCHI::Taurus {
         reqFlit.Opcode = Opcodes::REQ::ReadUnique;
         reqFlit.Size = Sizes::B64;
         reqFlit.Addr = PA;
+        if constexpr (Flits::REQ<config>::hasTagAlias)
+            reqFlit.TagAlias = static_cast<typename Flits::REQ<config>::tagalias_t>(tagAlias);
         reqFlit.NS = 0;
         reqFlit.Order = 0; // TODO: Order
         reqFlit.MemAttr = 0; // TODO: MemAttr
@@ -1145,7 +1294,7 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::GrantedEvent>> UpstreamNode<config>::DoStoreLine(uint64_t PA) noexcept
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::GrantedEvent>> UpstreamNode<config>::DoStoreLine(uint64_t PA, uint64_t tagAlias) noexcept
     {
         PA = LineBase(PA);
 
@@ -1200,6 +1349,8 @@ namespace CCHI::Taurus {
         reqFlit.Opcode = Opcodes::REQ::MakeUnique;
         reqFlit.Size = Sizes::B64;
         reqFlit.Addr = PA;
+        if constexpr (Flits::REQ<config>::hasTagAlias)
+            reqFlit.TagAlias = static_cast<typename Flits::REQ<config>::tagalias_t>(tagAlias);
         reqFlit.NS = 0;
         reqFlit.Order = 0; // TODO: Order
         reqFlit.MemAttr = 0; // TODO: MemAttr
@@ -1423,6 +1574,8 @@ namespace CCHI::Taurus {
         flit.Opcode = Opcodes::REQ::StashShared;
         flit.Size = Sizes::B64;
         flit.Addr = PA;
+        if constexpr (Flits::REQ<config>::hasTagAlias)
+            flit.TagAlias = static_cast<typename Flits::REQ<config>::tagalias_t>(0);
         flit.NS = 0;
         flit.Order = 0;
         flit.MemAttr = 0;
@@ -1470,6 +1623,8 @@ namespace CCHI::Taurus {
         flit.Opcode = Opcodes::REQ::StashUnique;
         flit.Size = Sizes::B64;
         flit.Addr = PA;
+        if constexpr (Flits::REQ<config>::hasTagAlias)
+            flit.TagAlias = static_cast<typename Flits::REQ<config>::tagalias_t>(0);
         flit.NS = 0;
         flit.Order = 0;
         flit.MemAttr = 0;
@@ -1549,6 +1704,8 @@ namespace CCHI::Taurus {
         flit.Opcode = Opcodes::REQ::CleanShared;
         flit.Size = Sizes::B64;
         flit.Addr = PA;
+        if constexpr (Flits::REQ<config>::hasTagAlias)
+            flit.TagAlias = static_cast<typename Flits::REQ<config>::tagalias_t>(0);
         flit.NS = 0;
         flit.Order = 0;
         flit.MemAttr = 0;
@@ -1596,6 +1753,8 @@ namespace CCHI::Taurus {
         flit.Opcode = Opcodes::REQ::CleanInvalid;
         flit.Size = Sizes::B64;
         flit.Addr = PA;
+        if constexpr (Flits::REQ<config>::hasTagAlias)
+            flit.TagAlias = static_cast<typename Flits::REQ<config>::tagalias_t>(0);
         flit.NS = 0;
         flit.Order = 0;
         flit.MemAttr = 0;
@@ -1643,6 +1802,8 @@ namespace CCHI::Taurus {
         flit.Opcode = Opcodes::REQ::MakeInvalid;
         flit.Size = Sizes::B64;
         flit.Addr = PA;
+        if constexpr (Flits::REQ<config>::hasTagAlias)
+            flit.TagAlias = static_cast<typename Flits::REQ<config>::tagalias_t>(0);
         flit.NS = 0;
         flit.Order = 0;
         flit.MemAttr = 0;
@@ -1958,6 +2119,8 @@ namespace CCHI::Taurus {
 
                 if (denial == XactDenial::ACCEPTED)
                 {
+                    CheckCacheStateRXSNP(cacheLine.GetPA(), flit);
+
                     if (events)
                         events->OnAcceptedSNP(*this, cacheLine, xaction, flit);
                 }
@@ -2423,6 +2586,8 @@ namespace CCHI::Taurus {
 
             if (denial == XactDenial::ACCEPTED)
             {
+                CheckCacheStateTXEVT(cacheLine.GetPA(), flit);
+
                 if (events)
                     events->OnAcceptedEVT(*this, cacheLine, xaction, flit);
             }
@@ -2588,6 +2753,8 @@ namespace CCHI::Taurus {
 
             if (denial == XactDenial::ACCEPTED)
             {
+                CheckCacheStateTXREQ(cacheLine.GetPA(), flit);
+
                 if (events)
                     events->OnAcceptedREQ(*this, cacheLine, xaction, flit);
             }
@@ -2637,6 +2804,8 @@ namespace CCHI::Taurus {
 
                 if (denial == XactDenial::ACCEPTED)
                 {
+                    CheckCacheStateTXREQ(flit.Addr, flit);
+
                     if (events)
                         events->OnAcceptedPrefetch(*this, xaction, flit);
                 }
@@ -2672,6 +2841,8 @@ namespace CCHI::Taurus {
 
                 if (denial == XactDenial::ACCEPTED)
                 {
+                    CheckCacheStateTXREQ(cmo.GetCMOFlit().Addr, cmo.GetCMOFlit());
+
                     if (events)
                         events->OnAcceptedCMO(*this, xaction, cmo.GetCMOFlit());
 
@@ -2765,6 +2936,8 @@ namespace CCHI::Taurus {
 
             if (denial == XactDenial::ACCEPTED)
             {
+                CheckCacheStateRXSNP(cacheLine->GetPA(), flit);
+
                 if (events)
                     events->OnAcceptedSNP(*this, *cacheLine, xaction, flit);
             }
@@ -2907,6 +3080,8 @@ namespace CCHI::Taurus {
 
                 if (denial == XactDenial::ACCEPTED)
                 {
+                    CheckCacheStateTXUpRSP(cacheLine.GetPA(), xaction, flit);
+
                     if (events)
                         events->OnAcceptedUpRSP(*this, cacheLine, xaction, flit);
                 }
@@ -2943,6 +3118,8 @@ namespace CCHI::Taurus {
 
                 if (denial == XactDenial::ACCEPTED)
                 {
+                    CheckCacheStateTXUpRSP(cacheLine.GetPA(), xaction, flit);
+
                     if (events)
                         events->OnAcceptedUpRSP(*this, cacheLine, xaction, flit);
                 }
@@ -3125,6 +3302,8 @@ namespace CCHI::Taurus {
 
                 if (denial == XactDenial::ACCEPTED)
                 {
+                    CheckCacheStateTXUpDAT(cacheLine.GetPA(), xaction, flit);
+
                     if (events)
                         events->OnAcceptedUpDAT(*this, cacheLine, xaction, flit);
                 }
@@ -3163,6 +3342,8 @@ namespace CCHI::Taurus {
 
                 if (denial == XactDenial::ACCEPTED)
                 {
+                    CheckCacheStateTXUpDAT(cacheLine.GetPA(), xaction, flit);
+
                     if (events)
                         events->OnAcceptedUpDAT(*this, cacheLine, xaction, flit);
                 }
@@ -3197,6 +3378,8 @@ namespace CCHI::Taurus {
 
                 if (denial == XactDenial::ACCEPTED)
                 {
+                    CheckCacheStateTXUpDAT(cacheLine.GetPA(), xaction, flit);
+
                     if (events)
                         events->OnAcceptedUpDAT(*this, cacheLine, xaction, flit);
                 }
@@ -3231,6 +3414,8 @@ namespace CCHI::Taurus {
 
                 if (denial == XactDenial::ACCEPTED)
                 {
+                    CheckCacheStateTXUpDAT(cacheLine.GetPA(), xaction, flit);
+
                     if (events)
                         events->OnAcceptedUpDAT(*this, cacheLine, xaction, flit);
                 }
@@ -3286,6 +3471,8 @@ namespace CCHI::Taurus {
 
                     if (denial == XactDenial::ACCEPTED)
                     {
+                        CheckCacheStateRXDnRSP(cacheLine.GetPA(), xaction, dnrspFlit);
+
                         if (events)
                             events->OnAcceptedDnRSP(*this, cacheLine, xaction, dnrspFlit);
 
@@ -3364,6 +3551,8 @@ namespace CCHI::Taurus {
 
                     if (denial == XactDenial::ACCEPTED)
                     {
+                        CheckCacheStateRXDnRSP(cacheLine.GetPA(), xaction, dnrspFlit);
+
                         if (events)
                             events->OnAcceptedDnRSP(*this, cacheLine, xaction, dnrspFlit);
                     }
@@ -3404,6 +3593,8 @@ namespace CCHI::Taurus {
 
                     if (denial == XactDenial::ACCEPTED)
                     {
+                        CheckCacheStateRXDnRSP(cacheLine.GetPA(), xaction, dnrspFlit);
+
                         if (events)
                             events->OnAcceptedDnRSP(*this, cacheLine, xaction, dnrspFlit);
                     }
@@ -3444,6 +3635,8 @@ namespace CCHI::Taurus {
 
                     if (denial == XactDenial::ACCEPTED)
                     {
+                        CheckCacheStateRXDnRSP(cacheLine.GetPA(), xaction, dnrspFlit);
+
                         if (events)
                             events->OnAcceptedDnRSP(*this, cacheLine, xaction, dnrspFlit);
                     }
@@ -3476,6 +3669,8 @@ namespace CCHI::Taurus {
 
                     if (denial == XactDenial::ACCEPTED)
                     {
+                        CheckCacheStateRXDnRSP(it->GetCMOFlit().Addr, xaction, dnrspFlit);
+
                         if (events)
                             events->OnAcceptedCompCMO(*this, xaction, dnrspFlit);
 
@@ -3538,6 +3733,8 @@ namespace CCHI::Taurus {
 
                     if (denial == XactDenial::ACCEPTED)
                     {
+                        CheckCacheStateRXDnDAT(cacheLine.GetPA(), xaction, dndatFlit);
+
                         if (events)
                             events->OnAcceptedDnDAT(*this, cacheLine, xaction, dndatFlit);
 
@@ -3852,6 +4049,9 @@ namespace CCHI::Taurus {
         OnDeniedPrefetch.UnregisterAll();
         OnDeniedCMO.UnregisterAll();
         OnDeniedCompCMO.UnregisterAll();
+
+        OnCacheStateMapDeniedRequest.UnregisterAll();
+        OnCacheStateMapDeniedResponse.UnregisterAll();
 
         OnCacheLineGranted.UnregisterAll();
         OnCacheLinePreLoad.UnregisterAll();

@@ -632,6 +632,57 @@ namespace CCHI::Taurus {
 
 
     template<FlitConfigurationConcept config>
+    class UpstreamNodeCacheStateMapDeniedRequestEvent : public UpstreamNodeEventBase<config>
+                                                      , public Gravity::Event<UpstreamNodeCacheStateMapDeniedRequestEvent<config>> {
+    protected:
+        uint64_t                                PA;
+        XactDenialEnum                          denial;
+        std::shared_ptr<Xact::Xaction<config>>  xaction;    // nullable
+        Xact::FiredRequestFlit<config>          flit;
+
+    public:
+        UpstreamNodeCacheStateMapDeniedRequestEvent(UpstreamNode<config>&                   upstream,
+                                                    uint64_t                                PA,
+                                                    XactDenialEnum                          denial,
+                                                    std::shared_ptr<Xact::Xaction<config>>  xaction,
+                                                    Xact::FiredRequestFlit<config>          flit) noexcept;
+
+    public:
+        uint64_t                                GetPA() const noexcept;
+        XactDenialEnum                          GetDenial() const noexcept;
+        std::shared_ptr<Xact::Xaction<config>>  GetXaction() noexcept;
+        std::shared_ptr<const Xact::Xaction<config>>
+                                                GetXaction() const noexcept;
+        const Xact::FiredRequestFlit<config>&   GetFlit() const noexcept;
+    };
+
+    template<FlitConfigurationConcept config>
+    class UpstreamNodeCacheStateMapDeniedResponseEvent : public UpstreamNodeEventBase<config>
+                                                       , public Gravity::Event<UpstreamNodeCacheStateMapDeniedResponseEvent<config>> {
+    protected:
+        uint64_t                                PA;
+        XactDenialEnum                          denial;
+        std::shared_ptr<Xact::Xaction<config>>  xaction;    // nullable
+        Xact::FiredResponseFlit<config>         flit;
+
+    public:
+        UpstreamNodeCacheStateMapDeniedResponseEvent(UpstreamNode<config>&                   upstream,
+                                                     uint64_t                                PA,
+                                                     XactDenialEnum                          denial,
+                                                     std::shared_ptr<Xact::Xaction<config>>  xaction,
+                                                     Xact::FiredResponseFlit<config>         flit) noexcept;
+
+    public:
+        uint64_t                                GetPA() const noexcept;
+        XactDenialEnum                          GetDenial() const noexcept;
+        std::shared_ptr<Xact::Xaction<config>>  GetXaction() noexcept;
+        std::shared_ptr<const Xact::Xaction<config>>
+                                                GetXaction() const noexcept;
+        const Xact::FiredResponseFlit<config>&  GetFlit() const noexcept;
+    };
+
+
+    template<FlitConfigurationConcept config>
     class UpstreamNodeEVTPreHazardDetectionEvent : public EVTFlitEventBase<config>
                                                  , public UpstreamNodeCacheLineEventBase<config>
                                                  , public Gravity::Event<UpstreamNodeEVTPreHazardDetectionEvent<config>> {
@@ -2275,6 +2326,108 @@ namespace CCHI::Taurus {
     inline const Flits::UpDAT<config>& UpstreamNodeXactAcceptedUpDATEvent<config>::GetUpDATFlit() const noexcept
     {
         return updatFlit;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeCacheStateMapDeniedRequestEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeCacheStateMapDeniedRequestEvent<config>::UpstreamNodeCacheStateMapDeniedRequestEvent(
+        UpstreamNode<config>&                   upstream,
+        uint64_t                                PA,
+        XactDenialEnum                          denial,
+        std::shared_ptr<Xact::Xaction<config>>  xaction,
+        Xact::FiredRequestFlit<config>          flit) noexcept
+        : UpstreamNodeEventBase<config>(upstream)
+        , PA        (PA)
+        , denial    (denial)
+        , xaction   (std::move(xaction))
+        , flit      (std::move(flit))
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNodeCacheStateMapDeniedRequestEvent<config>::GetPA() const noexcept
+    {
+        return PA;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum UpstreamNodeCacheStateMapDeniedRequestEvent<config>::GetDenial() const noexcept
+    {
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xact::Xaction<config>>
+    UpstreamNodeCacheStateMapDeniedRequestEvent<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xact::Xaction<config>>
+    UpstreamNodeCacheStateMapDeniedRequestEvent<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Xact::FiredRequestFlit<config>& UpstreamNodeCacheStateMapDeniedRequestEvent<config>::GetFlit() const noexcept
+    {
+        return flit;
+    }
+}
+
+
+// Implementation of: class UpstreamNodeCacheStateMapDeniedResponseEvent
+namespace CCHI::Taurus {
+
+    template<FlitConfigurationConcept config>
+    inline UpstreamNodeCacheStateMapDeniedResponseEvent<config>::UpstreamNodeCacheStateMapDeniedResponseEvent(
+        UpstreamNode<config>&                   upstream,
+        uint64_t                                PA,
+        XactDenialEnum                          denial,
+        std::shared_ptr<Xact::Xaction<config>>  xaction,
+        Xact::FiredResponseFlit<config>         flit) noexcept
+        : UpstreamNodeEventBase<config>(upstream)
+        , PA        (PA)
+        , denial    (denial)
+        , xaction   (std::move(xaction))
+        , flit      (std::move(flit))
+    { }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNodeCacheStateMapDeniedResponseEvent<config>::GetPA() const noexcept
+    {
+        return PA;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum UpstreamNodeCacheStateMapDeniedResponseEvent<config>::GetDenial() const noexcept
+    {
+        return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<Xact::Xaction<config>>
+    UpstreamNodeCacheStateMapDeniedResponseEvent<config>::GetXaction() noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<const Xact::Xaction<config>>
+    UpstreamNodeCacheStateMapDeniedResponseEvent<config>::GetXaction() const noexcept
+    {
+        return xaction;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const Xact::FiredResponseFlit<config>& UpstreamNodeCacheStateMapDeniedResponseEvent<config>::GetFlit() const noexcept
+    {
+        return flit;
     }
 }
 
