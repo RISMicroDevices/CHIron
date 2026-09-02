@@ -65,6 +65,15 @@ namespace CCHI {
     {
         return dataWidth == 64 || dataWidth == 128 || dataWidth == 256 || dataWidth == 512;
     }
+
+    /*
+    * Constraint checker for CCHI parameter <TagAlias_Width>
+    *   -> Legal values of <TagAlias_Width> are 0 to 8
+    */
+    inline static constexpr bool CheckTagAliasWidth(size_t tagAliasWidth) noexcept
+    {
+        return tagAliasWidth <= 8;
+    }
 }
 
 
