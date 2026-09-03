@@ -101,7 +101,7 @@ namespace Gravity {
     public:
         CancellableEvent() noexcept;
 
-        void                        SetCancelled(bool cancalled = true) noexcept;
+        void                        SetCancelled(bool cancelled = true) noexcept;
         bool                        IsCancelled() const noexcept;
     };
 
