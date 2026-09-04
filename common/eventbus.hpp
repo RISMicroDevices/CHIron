@@ -157,7 +157,7 @@ namespace Gravity {
         typename std::vector<std::shared_ptr<_TEventListener>>::const_iterator _NextPos(int priority) noexcept;
 
     public:
-        EventBus(const _TEventBusId& id) noexcept;
+        EventBus(const _TEventBusId& id = {}) noexcept;
         ~EventBus() noexcept;
 
         const _TEventBusId&         GetId() const noexcept;
@@ -180,6 +180,9 @@ namespace Gravity {
 
         _TEvent&                    operator()(_TEvent& event);
         void                        operator()(_TEvent&& event);
+
+        template<typename... Args>
+        _TEvent                     operator()(Args&&... args);
     };
 
 
@@ -612,7 +615,7 @@ namespace Gravity {
     inline bool 
     EventBus<_TEvent, _TEventListener, _TEventBusId>::UnregisterOnce(const std::string& name) noexcept
     {
-        bool found;
+        bool found = false;
 
         auto epos = list.begin();
         for (; epos != list.end(); epos++)
@@ -720,6 +723,17 @@ namespace Gravity {
     EventBus<_TEvent, _TEventListener, _TEventBusId>::operator()(_TEvent&& event)
     {
         Fire(event);
+    }
+
+    template<class _TEvent,
+             class _TEventListener,
+             class _TEventBusId>
+    template<typename... Args>
+    inline _TEvent
+    EventBus<_TEvent, _TEventListener, _TEventBusId>::operator()(Args&&... args)
+    {
+        _TEvent event(std::forward<Args>(args)...);
+        return Fire(event);
     }
 }
 
