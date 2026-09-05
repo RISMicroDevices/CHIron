@@ -64,7 +64,7 @@ namespace CCHI {
         
         namespace AtomicStore {
 
-#           define SubAtomicStore(code) 0b100##code
+#           define SubAtomicStore(code) 0b101##code
             constexpr type  ADD                     = SubAtomicStore(000);
             constexpr type  CLR                     = SubAtomicStore(001);
             constexpr type  EOR                     = SubAtomicStore(010);
@@ -75,12 +75,12 @@ namespace CCHI {
             constexpr type  UMIN                    = SubAtomicStore(111);
 #           undef SubAtomicStore
 
-            inline constexpr bool Is(type val) { return (val & 0b111000) == 0b100000; }
+            inline constexpr bool Is(type val) { return (val & 0b111000) == 0b101000; }
         }
 
         namespace AtomicLoad {
 
-#           define SubAtomicLoad(code) 0b101##code
+#           define SubAtomicLoad(code) 0b100##code
             constexpr type  ADD                     = SubAtomicLoad(000);
             constexpr type  CLR                     = SubAtomicLoad(001);
             constexpr type  EOR                     = SubAtomicLoad(010);
@@ -91,7 +91,7 @@ namespace CCHI {
             constexpr type  UMIN                    = SubAtomicLoad(111);
 #           undef SubAtomicLoad
 
-            inline constexpr bool Is(type val) { return (val & 0b111000) == 0b101000; }
+            inline constexpr bool Is(type val) { return (val & 0b111000) == 0b100000; }
         }
 
         /*
