@@ -484,16 +484,35 @@ namespace CHI {
 
                 inline void Append32(uint32_t value, size_t width) noexcept
                 {
-                    flitBits[index] |= (value & (0xFFFFFFFFU >> (32 - width))) << offset;
+                    if (width == 0)
+                        return;
 
-                    if (offset + width >= 32)
+                    uint32_t mask = (width >= 32)
+                        ? 0xFFFFFFFFU
+                        : (0xFFFFFFFFU >> (32 - width));
+
+                    flitBits[index] |= (value & mask) << offset;
+
+                    if (offset + width > 32)
                     {
                         size_t rem = offset + width - 32;
+                        uint32_t nextMask = (rem >= 32)
+                            ? 0xFFFFFFFFU
+                            : (0xFFFFFFFFU >> (32 - rem));
 
-                        flitBits[++index] = (value >> (32 - offset)) & (0xFFFFFFFFU >> (32 - rem));
-
+                        flitBits[index + 1] = (value >> (32 - offset)) & nextMask;
                         ++index;
                         offset = rem;
+                    }
+                    else if (offset + width == 32)
+                    {
+                        flitBits[index + 1] = 0;
+                        ++index;
+                        offset = 0;
+                    }
+                    else
+                    {
+                        offset += width;
                     }
                 }
 
