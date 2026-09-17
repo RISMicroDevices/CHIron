@@ -1,0 +1,6 @@
+[submodule "cchi/cohestra/simpleini"]
+	path = cchi/cohestra/simpleini
+	url = https://github.com/brofield/simpleini
+[submodule "cchi/cohestra/spdlog"]
+	path = cchi/cohestra/spdlog
+	url = https://github.com/gabime/spdlog
