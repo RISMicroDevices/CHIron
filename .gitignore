@@ -1,4 +1,6 @@
 build
+build.*
+CMakeFiles
 out
 *.user
 *.run
@@ -8,3 +10,7 @@ out
 .vs*
 *.slnx*
 *.vcxproj*
+
+!cchi/build/
+!cchi/build/Makefile
+!cchi/build/.gitignore
