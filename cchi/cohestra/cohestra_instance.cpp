@@ -232,6 +232,24 @@ namespace Cohestra {
                 stimulator->Tick(time);
         }
 
+        TickCommon(time);
+
+        return true;
+    }
+
+    bool Instance::TickBoot(uint64_t time) noexcept
+    {
+        // Boot-stage tick: stimulators stay frozen, everything else runs.
+        if (state != InstanceState::ALIVE)
+            return false;
+
+        TickCommon(time);
+
+        return true;
+    }
+
+    void Instance::TickCommon(uint64_t time) noexcept
+    {
         for (auto* upstream : type1Upstreams)
         {
             if (upstream)
@@ -290,8 +308,6 @@ namespace Cohestra {
                     downstreams->PopType1DnDAT(index);
             }
         }
-
-        return true;
     }
 
     void Instance::TickPostHandshake(uint64_t time) noexcept

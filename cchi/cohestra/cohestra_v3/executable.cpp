@@ -19,8 +19,11 @@
 #include "../cohestra_opcount.hpp"
 #include "../cohestra_cchi_flit_logger.hpp"
 #include "../cohestra_simperf.hpp"
+#include "../cohestra_boot.hpp"
+#include "../cohestra_bootings/boot_delay.hpp"
 #include "../cohestra_stimulators/fuzz_ari.hpp"
 #include "../cohestra_stimulators/core2core.hpp"
+#include "boot_host.hpp"
 #include "../../icn/taurus/cchi_taurus_sam.hpp"
 #include "spdlog/spdlog.h"
 
@@ -49,6 +52,9 @@ const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_RESET_REPEAT
 
 const Cohestra::ConfigurationEntryBack<bool> CONFIG_LOG_VERBOSE
     ("LOG_VERBOSE", "verbose", "log", false, Cohestra::DeserializeBool, Cohestra::SerializeBool);
+
+const Cohestra::ConfigurationEntryBack<std::string> CONFIG_BOOT_SEQUENCER
+    ("BOOT_SEQUENCER", "sequencer", "boot", "", Cohestra::DeserializeString, Cohestra::SerializeString);
 
 
 void OnUpstreamInitialized(Cohestra::InstanceUpstreamInitializedEvent& event);
@@ -525,6 +531,62 @@ int main(const int argc, const char* argv[])
         }
     }
 
+    // Boot sequencer (harness-level): owns the Boot Stage between the reset
+    // stage and the test stimulation stage, and is free to sequence through
+    // any driver the harness exposes (CCHI master side, AXI models, CHI
+    // interfaces, ...). Selected by [boot] sequencer; when empty, no boot
+    // sequencer is registered and the Boot Stage is skipped.
+    Cohestra::V3BootHost<VerilatedTop> bootHost {
+        .instance            = &instance,
+        .cchiInterface       = v3interface,
+        .axiSlaveInterface   = axiSlaveInterface,
+        .axiMasterInterface  = axiMasterInterface,
+        .axiMonitorInterface = axiMonitorInterface,
+        .chiFromRNInterface  = chiFromRNInterface,
+        .chiToRNInterface    = chiToRNInterface,
+        .chiFromSNInterface  = chiFromSNInterface,
+        .chiToSNInterface    = chiToSNInterface,
+        .chiMonitorInterface = chiMonitorInterface,
+        .axiMemories         = &axiMemories,
+        .axiMasters          = &axiMasters
+    };
+
+    Cohestra::BootSequencerRegistry<Cohestra::V3BootHost<VerilatedTop>> bootSequencerRegistry;
+
+    bootSequencerRegistry.Register(
+        std::make_shared<Cohestra::DelayBootSequencerFactory<Cohestra::V3BootHost<VerilatedTop>>>());
+
+    spdlog::info("{} boot sequencer(s) registered.", bootSequencerRegistry.Size());
+
+    std::unique_ptr<Cohestra::BootSequencer> bootSequencer;
+
+    if (configurationLoader)
+    {
+        std::optional<std::string> bootNameRaw = configurationLoader->GetRawString(&CONFIG_BOOT_SEQUENCER);
+
+        if (bootNameRaw && !bootNameRaw->empty())
+        {
+            auto bootFactory = bootSequencerRegistry.Get(*bootNameRaw);
+
+            if (!bootFactory)
+            {
+                spdlog::error("Boot sequencer \"{}\" is not found in the registry.", *bootNameRaw);
+                return 1;
+            }
+
+            bootSequencer = bootFactory->Create(bootHost);
+
+            if (!bootSequencer->Initialize(*configurationLoader))
+            {
+                spdlog::error("Failed to initialize boot sequencer \"{}\".", *bootNameRaw);
+                return 1;
+            }
+
+            spdlog::info("Boot sequencer \"{}\" ({}) selected.",
+                bootSequencer->GetName(), bootSequencer->GetDescription());
+        }
+    }
+
     // Reset (high-active), optionally repeated: each pulse is reset_cycles
     // cycles of reset active followed by reset_cycles cycles of reset inactive.
     // Both keys are executable-local: they are read straight from the INI
@@ -596,19 +658,19 @@ int main(const int argc, const char* argv[])
         runResetCycles(resetCycles);
     }
 
-    if (arguments.maximumCycles > 0)
-        spdlog::info("Reset released. Simulation started, maximum {} cycle(s).", arguments.maximumCycles);
-    else
-        spdlog::info("Reset released. Simulation started, no maximum cycle limit.");
+    spdlog::info("Reset released.");
 
     // arm the throughput meter after reset, so reset cycles are not measured
     simPerfMeter.Start(time);
 
-    while (instance.IsAlive())
+    // One simulation cycle, shared by the boot stage and the test stimulation
+    // stage below; only the instance tick differs between the stages. Returns
+    // false when the run must stop (instance left ALIVE, or maximum cycles).
+    auto runCycle = [&] (auto&& tickInstance) -> bool
     {
         Cohestra::SetCurrentLogTime(time);
 
-        if (!instance.Tick(time))
+        if (!tickInstance())
         {
             // Tick rejects only when the instance has left ALIVE (FAILED, e.g.
             // via the cache-line data monitor, or FINISHED): stop ticking and
@@ -616,7 +678,7 @@ int main(const int argc, const char* argv[])
             spdlog::error("CCHI instance stopped ticking at time {}: state is {}.", time,
                 instance.GetState() == Cohestra::InstanceState::FINISHED ? "FINISHED" :
                 instance.GetState() == Cohestra::InstanceState::FAILED ? "FAILED" : "UNKNOWN");
-            break;
+            return false;
         }
 
         watchdog.Tick(time);
@@ -669,8 +731,51 @@ int main(const int argc, const char* argv[])
         if (arguments.maximumCycles > 0 && time >= arguments.maximumCycles)
         {
             instance.SetFinished({"Simulation reached maximum cycle count."});
-            break;
+            return false;
         }
+
+        return true;
+    };
+
+    // Boot stage: skipped when no boot sequencer is registered; otherwise runs
+    // until the boot sequencer itself signals completion via IsBootComplete().
+    // Stimulators stay frozen (Instance::TickBoot); the boot sequencer ticks
+    // in their place.
+    if (!bootSequencer)
+        spdlog::info("No boot sequencer registered; boot stage skipped.");
+    else
+    {
+        spdlog::info("Boot stage started: sequencer \"{}\" ({}) at time {}.",
+            bootSequencer->GetName(), bootSequencer->GetDescription(), time);
+
+        while (instance.IsAlive() && !bootSequencer->IsBootComplete())
+        {
+            if (!runCycle([&] () {
+                bootSequencer->Tick(time);
+                return instance.TickBoot(time);
+            }))
+                break;
+        }
+
+        if (bootSequencer->IsBootComplete())
+            spdlog::info("Boot stage completed at time {}.", time);
+        else
+            spdlog::error("Boot stage did not complete: instance left ALIVE (see above).");
+    }
+
+    // Test stimulation stage
+    if (instance.IsAlive())
+    {
+        if (arguments.maximumCycles > 0)
+            spdlog::info("Simulation started, maximum {} cycle(s).", arguments.maximumCycles);
+        else
+            spdlog::info("Simulation started, no maximum cycle limit.");
+    }
+
+    while (instance.IsAlive())
+    {
+        if (!runCycle([&] () { return instance.Tick(time); }))
+            break;
     }
 
     // Per-port AXI master summary: transactions completed during the run

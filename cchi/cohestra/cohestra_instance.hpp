@@ -127,6 +127,17 @@ namespace Cohestra {
     public:
         bool                    Tick(uint64_t time) noexcept;
 
+        // Boot-stage tick: identical to Tick but with stimulators frozen, so
+        // no test stimulus runs while a boot sequencer owns the bus.
+        bool                    TickBoot(uint64_t time) noexcept;
+
+    private:
+        // Shared tail of Tick/TickBoot: upstream-node ticks, downstream
+        // pre-handshake and per-upstream flit shuffling.
+        void                    TickCommon(uint64_t time) noexcept;
+
+    public:
+
         // Mid-cycle retire phase for the downstream interface: forwards to
         // CCHIInterface::TickPostHandshake. Call after the clock=0 eval and
         // before the posedge eval.
