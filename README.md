@@ -40,3 +40,10 @@ But we are going to work on this part in near future!
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/RISMicroDevices/CHIron) for project preview.  
 
+## License
+
+Copyright 2024-2026 Ding Haonan (Kumonda221) <kumonda@kucro3.org>
+
+CHIron is licensed under the [Apache License, Version 2.0](LICENSE).  
+See [NOTICE](NOTICE) for attribution information.  
+
