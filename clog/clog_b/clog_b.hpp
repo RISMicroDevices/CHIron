@@ -11,6 +11,7 @@
 #include <functional>
 
 #include "clog_b_tag.hpp"
+#include "clog_b_tag_cchi.hpp"
 
 namespace CLog::CLogB {
 
@@ -26,6 +27,10 @@ namespace CLog::CLogB {
         virtual bool    OnTagCHIParameters(std::shared_ptr<TagCHIParameters> tag, std::string& errorMessage) noexcept;
         virtual bool    OnTagCHITopologies(std::shared_ptr<TagCHITopologies> tag, std::string& errorMessage) noexcept;
         virtual bool    OnTagCHIRecords(std::shared_ptr<TagCHIRecords> tag, std::string& errorMessage) noexcept;
+
+        virtual bool    OnTagCCHIParameters(std::shared_ptr<TagCCHIParameters> tag, std::string& errorMessage) noexcept;
+        virtual bool    OnTagCCHITopologies(std::shared_ptr<TagCCHITopologies> tag, std::string& errorMessage) noexcept;
+        virtual bool    OnTagCCHIRecords(std::shared_ptr<TagCCHIRecords> tag, std::string& errorMessage) noexcept;
     };
 
     /* CLog.B Tag Reader with Callbacks */
@@ -44,15 +49,32 @@ namespace CLog::CLogB {
         using CallbackOnTagCHIRecords =
             std::function<bool(std::shared_ptr<TagCHIRecords>, std::string&)>;
 
+        using CallbackOnTagCCHIParameters =
+            std::function<bool(std::shared_ptr<TagCCHIParameters>, std::string&)>;
+
+        using CallbackOnTagCCHITopologies =
+            std::function<bool(std::shared_ptr<TagCCHITopologies>, std::string&)>;
+
+        using CallbackOnTagCCHIRecords =
+            std::function<bool(std::shared_ptr<TagCCHIRecords>, std::string&)>;
+
     public:
         CallbackOnTagCHIParameters  callbackOnTagCHIParameters;
         CallbackOnTagCHITopologies  callbackOnTagCHITopologies;
         CallbackOnTagCHIRecords     callbackOnTagCHIRecords;
 
+        CallbackOnTagCCHIParameters callbackOnTagCCHIParameters;
+        CallbackOnTagCCHITopologies callbackOnTagCCHITopologies;
+        CallbackOnTagCCHIRecords    callbackOnTagCCHIRecords;
+
     public:
         virtual bool    OnTagCHIParameters(std::shared_ptr<TagCHIParameters> tag, std::string& errorMessage) noexcept override;
         virtual bool    OnTagCHITopologies(std::shared_ptr<TagCHITopologies> tag, std::string& errorMessage) noexcept override;
         virtual bool    OnTagCHIRecords(std::shared_ptr<TagCHIRecords> tag, std::string& errorMessage) noexcept override;
+
+        virtual bool    OnTagCCHIParameters(std::shared_ptr<TagCCHIParameters> tag, std::string& errorMessage) noexcept override;
+        virtual bool    OnTagCCHITopologies(std::shared_ptr<TagCCHITopologies> tag, std::string& errorMessage) noexcept override;
+        virtual bool    OnTagCCHIRecords(std::shared_ptr<TagCCHIRecords> tag, std::string& errorMessage) noexcept override;
     };
 
     /* CLog.B Tag Writer */
@@ -82,6 +104,21 @@ namespace CLog::CLogB {
     }
 
     inline bool Reader::OnTagCHIRecords(std::shared_ptr<TagCHIRecords> tag, std::string& errorMessage) noexcept
+    {
+        return true;
+    }
+
+    inline bool Reader::OnTagCCHIParameters(std::shared_ptr<TagCCHIParameters> tag, std::string& errorMessage) noexcept
+    {
+        return true;
+    }
+
+    inline bool Reader::OnTagCCHITopologies(std::shared_ptr<TagCCHITopologies> tag, std::string& errorMessage) noexcept
+    {
+        return true;
+    }
+
+    inline bool Reader::OnTagCCHIRecords(std::shared_ptr<TagCCHIRecords> tag, std::string& errorMessage) noexcept
     {
         return true;
     }
@@ -142,6 +179,42 @@ namespace CLog::CLogB {
 
             return tag;
         }
+        else if (type == Encodings::CCHI_PARAMETERS)
+        {
+            std::shared_ptr<TagCCHIParameters> tag(new TagCCHIParameters);
+
+            if (!tag->Deserialize(is, errorMessage))
+                return nullptr;
+
+            if (!OnTagCCHIParameters(tag, errorMessage))
+                return nullptr;
+
+            return tag;
+        }
+        else if (type == Encodings::CCHI_TOPOS)
+        {
+            std::shared_ptr<TagCCHITopologies> tag(new TagCCHITopologies);
+
+            if (!tag->Deserialize(is, errorMessage))
+                return nullptr;
+
+            if (!OnTagCCHITopologies(tag, errorMessage))
+                return nullptr;
+
+            return tag;
+        }
+        else if (type == Encodings::CCHI_RECORDS)
+        {
+            std::shared_ptr<TagCCHIRecords> tag(new TagCCHIRecords);
+
+            if (!tag->Deserialize(is, errorMessage))
+                return nullptr;
+
+            if (!OnTagCCHIRecords(tag, errorMessage))
+                return nullptr;
+
+            return tag;
+        }
         else
         {
             errorMessage = StringAppender("Reader: ")
@@ -159,12 +232,18 @@ namespace CLog::CLogB {
     CallbackOnTagCHIParameters  callbackOnTagCHIParameters;
     CallbackOnTagCHITopologies  callbackOnTagCHITopologies;
     CallbackOnTagCHIRecords     callbackOnTagCHIRecords;
+    CallbackOnTagCCHIParameters callbackOnTagCCHIParameters;
+    CallbackOnTagCCHITopologies callbackOnTagCCHITopologies;
+    CallbackOnTagCCHIRecords    callbackOnTagCCHIRecords;
     */
 
     inline ReaderWithCallback::ReaderWithCallback() noexcept
         : callbackOnTagCHIParameters    ([](auto, auto) { return true; })
         , callbackOnTagCHITopologies    ([](auto, auto) { return true; })
         , callbackOnTagCHIRecords       ([](auto, auto) { return true; })
+        , callbackOnTagCCHIParameters   ([](auto, auto) { return true; })
+        , callbackOnTagCCHITopologies   ([](auto, auto) { return true; })
+        , callbackOnTagCCHIRecords      ([](auto, auto) { return true; })
     { }
 
     inline ReaderWithCallback::~ReaderWithCallback() noexcept
@@ -183,6 +262,21 @@ namespace CLog::CLogB {
     inline bool ReaderWithCallback::OnTagCHIRecords(std::shared_ptr<TagCHIRecords> tag, std::string& errorMessage) noexcept
     {
         return callbackOnTagCHIRecords(tag, errorMessage);
+    }
+
+    inline bool ReaderWithCallback::OnTagCCHIParameters(std::shared_ptr<TagCCHIParameters> tag, std::string& errorMessage) noexcept
+    {
+        return callbackOnTagCCHIParameters(tag, errorMessage);
+    }
+
+    inline bool ReaderWithCallback::OnTagCCHITopologies(std::shared_ptr<TagCCHITopologies> tag, std::string& errorMessage) noexcept
+    {
+        return callbackOnTagCCHITopologies(tag, errorMessage);
+    }
+
+    inline bool ReaderWithCallback::OnTagCCHIRecords(std::shared_ptr<TagCCHIRecords> tag, std::string& errorMessage) noexcept
+    {
+        return callbackOnTagCCHIRecords(tag, errorMessage);
     }
 }
 
