@@ -251,6 +251,19 @@ void MainWindow::buildUi()
     topologyButton->setFixedHeight(22);
     summaryRowLayout->addWidget(topologyButton);
 
+    nodeTypesAction_ = new QAction(QStringLiteral("Node Types"), this);
+    nodeTypesAction_->setToolTip(QStringLiteral("Guess or assign CHI node types for observed node IDs."));
+    nodeTypesAction_->setStatusTip(nodeTypesAction_->toolTip());
+    nodeTypesAction_->setEnabled(false);
+    connect(nodeTypesAction_, &QAction::triggered, this, &MainWindow::showNodeTypeAssignmentDialog);
+
+    QToolButton* nodeTypesButton = new QToolButton(traceToolbar);
+    nodeTypesButton->setDefaultAction(nodeTypesAction_);
+    nodeTypesButton->setObjectName(QStringLiteral("actionButton"));
+    nodeTypesButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    nodeTypesButton->setFixedHeight(22);
+    summaryRowLayout->addWidget(nodeTypesButton);
+
     xactionIndexAction_ = new QAction(QStringLiteral("Build Xaction Index"), this);
     xactionIndexAction_->setToolTip(QStringLiteral("Build Xaction indexing for transactional highlighting."));
     xactionIndexAction_->setStatusTip(xactionIndexAction_->toolTip());
@@ -790,7 +803,32 @@ void MainWindow::buildUi()
         QStringLiteral("Type Value"),
         QStringLiteral("Annotation"),
     });
-    topologyTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    topologyTable_->setEditTriggers(QAbstractItemView::DoubleClicked
+                                    | QAbstractItemView::EditKeyPressed
+                                    | QAbstractItemView::AnyKeyPressed);
+    topologyTable_->setItemDelegateForColumn(1, new NodeTypeComboDelegate(topologyTable_));
+    connect(topologyTable_, &QTableWidget::itemChanged, this, [this](QTableWidgetItem* item) {
+        if (updatingTopologyTable_ || !item || item->column() != 1 || !topologyTable_) {
+            return;
+        }
+        const QTableWidgetItem* idItem = topologyTable_->item(item->row(), 0);
+        if (!idItem) {
+            return;
+        }
+        const auto nodeId = static_cast<quint16>(idItem->data(Qt::UserRole).toUInt());
+        const std::optional<CLog::NodeType> type = NodeTypeFromString(item->text());
+        if (type.has_value()) {
+            pendingTopologyAssignments_[nodeId] = *type;
+        } else {
+            pendingTopologyAssignments_[nodeId] = std::nullopt;
+        }
+        if (topologyApplyButton_) {
+            topologyApplyButton_->setEnabled(true);
+        }
+        if (topologyRevertButton_) {
+            topologyRevertButton_->setEnabled(true);
+        }
+    });
     topologyTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
     topologyTable_->setSelectionMode(QAbstractItemView::SingleSelection);
     topologyTable_->setAlternatingRowColors(true);
@@ -801,6 +839,38 @@ void MainWindow::buildUi()
     topologyTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     topologyTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
     topologyPanelLayout->addWidget(topologyTable_, 1);
+
+    QHBoxLayout* topologyButtonLayout = new QHBoxLayout();
+    topologyButtonLayout->setContentsMargins(0, 0, 0, 0);
+    topologyButtonLayout->setSpacing(8);
+
+    topologyGuessButton_ = new QPushButton(QStringLiteral("Guess Node Types..."), topologyPanel);
+    topologyGuessButton_->setObjectName(QStringLiteral("actionButton"));
+    topologyGuessButton_->setFixedHeight(22);
+    topologyGuessButton_->setToolTip(
+        QStringLiteral("Open the node type assignment dialog and guess types from trace traffic."));
+    connect(topologyGuessButton_, &QPushButton::clicked, this, &MainWindow::showNodeTypeAssignmentDialog);
+    topologyButtonLayout->addWidget(topologyGuessButton_);
+
+    topologyButtonLayout->addStretch(1);
+
+    topologyRevertButton_ = new QPushButton(QStringLiteral("Revert"), topologyPanel);
+    topologyRevertButton_->setObjectName(QStringLiteral("actionButton"));
+    topologyRevertButton_->setFixedHeight(22);
+    topologyRevertButton_->setEnabled(false);
+    topologyRevertButton_->setToolTip(QStringLiteral("Discard unapplied node type edits."));
+    connect(topologyRevertButton_, &QPushButton::clicked, this, &MainWindow::revertTopologyPendingAssignments);
+    topologyButtonLayout->addWidget(topologyRevertButton_);
+
+    topologyApplyButton_ = new QPushButton(QStringLiteral("Apply"), topologyPanel);
+    topologyApplyButton_->setObjectName(QStringLiteral("actionButton"));
+    topologyApplyButton_->setFixedHeight(22);
+    topologyApplyButton_->setEnabled(false);
+    topologyApplyButton_->setToolTip(QStringLiteral("Apply the edited node types to this trace."));
+    connect(topologyApplyButton_, &QPushButton::clicked, this, &MainWindow::applyTopologyPendingAssignments);
+    topologyButtonLayout->addWidget(topologyApplyButton_);
+
+    topologyPanelLayout->addLayout(topologyButtonLayout);
 
     QWidget* timelineHost = new QWidget(dockManager_);
     timelineStack_ = new QStackedLayout(timelineHost);

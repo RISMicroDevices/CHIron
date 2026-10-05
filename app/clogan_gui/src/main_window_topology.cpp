@@ -21,25 +21,29 @@ void MainWindow::refreshTopologyView()
         return;
     }
 
+    updatingTopologyTable_ = true;
     topologyTable_->setUpdatesEnabled(false);
     topologyTable_->clearContents();
     topologyTable_->setRowCount(0);
 
     if (!currentTraceSession_) {
         topologySummaryLabel_->setText(QStringLiteral("No trace file is currently open."));
+        if (topologyApplyButton_) {
+            topologyApplyButton_->setEnabled(false);
+        }
+        if (topologyRevertButton_) {
+            topologyRevertButton_->setEnabled(false);
+        }
+        updatingTopologyTable_ = false;
         topologyTable_->setUpdatesEnabled(true);
         return;
     }
 
     const CLogBTraceMetadata& metadata = currentTraceSession_->metadata();
-    if (metadata.nodeTypes.empty()) {
-        topologySummaryLabel_->setText(QStringLiteral("The current CLog.B file does not contain CHI topology information."));
-        topologyTable_->setUpdatesEnabled(true);
-        return;
-    }
 
     struct TopologyNodeRow {
         quint16 nodeId = 0;
+        bool mapped = true;
         CLog::NodeType type = CLog::NodeType::RN_F;
         QString annotation;
     };
@@ -54,34 +58,108 @@ void MainWindow::refreshTopologyView()
         }
         rows.push_back(TopologyNodeRow{
             .nodeId = nodeId,
+            .mapped = true,
             .type = nodeType,
             .annotation = std::move(annotation),
         });
     }
+
+    const TraceViewSession* guessSession = activeTraceViewSession();
+    if (guessSession) {
+        for (const NodeTypeGuess& guess : guessSession->nodeTypeGuessResults) {
+            if (metadata.nodeTypes.find(guess.nodeId) != metadata.nodeTypes.cend()) {
+                continue;
+            }
+            const QString annotation = guess.type.has_value()
+                ? QStringLiteral("Guessed %1 (%2 confidence): %3")
+                      .arg(QString::fromStdString(CLog::NodeTypeToString(*guess.type)),
+                           NodeTypeGuessConfidenceToString(guess.confidence),
+                           guess.reasons.join(QStringLiteral(" ")))
+                : QStringLiteral("Observed in traffic; not stored in the trace topology.");
+            rows.push_back(TopologyNodeRow{
+                .nodeId = guess.nodeId,
+                .mapped = false,
+                .type = guess.type.value_or(CLog::NodeType::RN_F),
+                .annotation = annotation,
+            });
+        }
+    }
+
     std::sort(rows.begin(), rows.end(), [](const TopologyNodeRow& lhs, const TopologyNodeRow& rhs) {
         return lhs.nodeId < rhs.nodeId;
     });
 
-    topologySummaryLabel_->setText(
-        QStringLiteral("%1 node%2 stored in %3")
-            .arg(rows.size())
-            .arg(rows.size() == 1 ? QString() : QStringLiteral("s"))
-            .arg(currentTraceLabel_.isEmpty() ? QStringLiteral("the current trace") : currentTraceLabel_));
+    std::size_t unmappedCount = 0;
+    for (const TopologyNodeRow& row : rows) {
+        if (!row.mapped) {
+            ++unmappedCount;
+        }
+    }
+
+    if (rows.empty()) {
+        topologySummaryLabel_->setText(
+            QStringLiteral("No topology information is stored in %1. Run a node type guess to "
+                           "populate observed node IDs.")
+                .arg(currentTraceLabel_.isEmpty() ? QStringLiteral("the current trace")
+                                                  : currentTraceLabel_));
+    } else if (unmappedCount == 0) {
+        topologySummaryLabel_->setText(
+            QStringLiteral("%1 node%2 in %3. Double-click a Type cell to edit it.")
+                .arg(rows.size())
+                .arg(rows.size() == 1 ? QString() : QStringLiteral("s"))
+                .arg(currentTraceLabel_.isEmpty() ? QStringLiteral("the current trace")
+                                                  : currentTraceLabel_));
+    } else {
+        topologySummaryLabel_->setText(
+            QStringLiteral("%1 node%2 in %3, %4 unmapped. Double-click a Type cell to edit it.")
+                .arg(rows.size())
+                .arg(rows.size() == 1 ? QString() : QStringLiteral("s"))
+                .arg(currentTraceLabel_.isEmpty() ? QStringLiteral("the current trace")
+                                                  : currentTraceLabel_)
+                .arg(unmappedCount));
+    }
 
     topologyTable_->setRowCount(static_cast<int>(rows.size()));
     for (int row = 0; row < static_cast<int>(rows.size()); ++row) {
         const TopologyNodeRow& topologyRow = rows[static_cast<std::size_t>(row)];
-        const QString typeName = QString::fromStdString(CLog::NodeTypeToString(topologyRow.type));
-        const QString typeValue = QString::number(static_cast<unsigned int>(topologyRow.type));
+
+        QStringList allowedTypes;
+        if (!topologyRow.mapped) {
+            allowedTypes.append(QStringLiteral("Unmapped"));
+        }
+        for (const CLog::NodeType type : AllNodeTypes()) {
+            allowedTypes.append(QString::fromStdString(CLog::NodeTypeToString(type)));
+        }
+
+        QString displayType = topologyRow.mapped
+            ? QString::fromStdString(CLog::NodeTypeToString(topologyRow.type))
+            : QStringLiteral("Unmapped");
+        if (const auto pendingIt = pendingTopologyAssignments_.find(topologyRow.nodeId);
+            pendingIt != pendingTopologyAssignments_.cend()) {
+            displayType = pendingIt->second.has_value()
+                ? QString::fromStdString(CLog::NodeTypeToString(*pendingIt->second))
+                : QStringLiteral("Unmapped");
+        }
 
         auto* nodeItem = new QTableWidgetItem(QString::number(topologyRow.nodeId));
         nodeItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        nodeItem->setFlags(nodeItem->flags() & ~Qt::ItemIsEditable);
+        nodeItem->setData(Qt::UserRole, static_cast<uint>(topologyRow.nodeId));
 
-        auto* typeItem = new QTableWidgetItem(typeName.isEmpty() ? QStringLiteral("Unknown") : typeName);
-        auto* valueItem = new QTableWidgetItem(typeValue);
+        auto* typeItem = new QTableWidgetItem(displayType);
+        typeItem->setFlags(typeItem->flags() | Qt::ItemIsEditable);
+        typeItem->setData(Qt::UserRole, allowedTypes);
+
+        const std::optional<CLog::NodeType> displayTypeValue = NodeTypeFromString(displayType);
+        auto* valueItem = new QTableWidgetItem(
+            displayTypeValue.has_value()
+                ? QString::number(static_cast<unsigned int>(*displayTypeValue))
+                : QStringLiteral("-"));
         valueItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        valueItem->setFlags(valueItem->flags() & ~Qt::ItemIsEditable);
         auto* annotationItem = new QTableWidgetItem(
             topologyRow.annotation.isEmpty() ? QStringLiteral("-") : topologyRow.annotation);
+        annotationItem->setFlags(annotationItem->flags() & ~Qt::ItemIsEditable);
 
         topologyTable_->setItem(row, 0, nodeItem);
         topologyTable_->setItem(row, 1, typeItem);
@@ -106,6 +184,14 @@ void MainWindow::refreshTopologyView()
         }
     }
 
+    if (topologyApplyButton_) {
+        topologyApplyButton_->setEnabled(!pendingTopologyAssignments_.empty());
+    }
+    if (topologyRevertButton_) {
+        topologyRevertButton_->setEnabled(!pendingTopologyAssignments_.empty());
+    }
+
+    updatingTopologyTable_ = false;
     topologyTable_->setUpdatesEnabled(true);
 }
 
@@ -115,25 +201,25 @@ void MainWindow::updateTopologyAction()
         return;
     }
 
-    const bool hasTopology = currentTraceSession_
-        && !currentTraceSession_->metadata().nodeTypes.empty();
-    topologyAction_->setEnabled(hasTopology);
+    const bool hasSession = currentTraceSession_ != nullptr;
+    topologyAction_->setEnabled(hasSession);
     topologyAction_->setToolTip(
-        hasTopology
-            ? QStringLiteral("Display CHI topology information stored in the current CLog.B file.")
-            : QStringLiteral("No CLog.B topology information is available for the current trace."));
+        hasSession
+            ? QStringLiteral("Display and edit CHI topology information for the current CLog.B file.")
+            : QStringLiteral("Open a CLog.B trace to view CHI topology information."));
     topologyAction_->setStatusTip(topologyAction_->toolTip());
 
     if (topologyDock_) {
         QAction* toggleAction = topologyDock_->toggleViewAction();
-        toggleAction->setEnabled(hasTopology);
+        toggleAction->setEnabled(hasSession);
         toggleAction->setToolTip(topologyAction_->toolTip());
         toggleAction->setStatusTip(topologyAction_->statusTip());
-        if (!hasTopology && !topologyDock_->isClosed()) {
+        if (!hasSession && !topologyDock_->isClosed()) {
             topologyDock_->closeDockWidget();
         }
     }
 
+    updateNodeTypesAction();
     refreshTopologyView();
 }
 

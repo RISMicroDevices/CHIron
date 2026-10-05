@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -47,6 +48,7 @@ class TraceStatisticsAccumulator final {
 public:
     void reset();
     void setParameters(const CLog::Parameters& parameters);
+    void setCCHIParameters(const CLog::CCHI::Parameters& parameters);
     void setTimestampRange(qint64 firstTimestamp, qint64 lastTimestamp);
     void addRow(const FlitRecord& row);
     void addFastRecord(CLog::Channel channel, const CLogBTraceFastRecordInfo& record);
@@ -74,6 +76,7 @@ private:
 
 private:
     CLog::Parameters parameters_{};
+    std::optional<CLog::CCHI::Parameters> cchiParameters_{};
     bool hasParameters_ = false;
     bool hasTimestampRange_ = false;
     std::uint64_t totalFlits_ = 0;

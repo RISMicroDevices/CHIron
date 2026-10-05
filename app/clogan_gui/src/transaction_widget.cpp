@@ -4,6 +4,7 @@
 #include "clog_b_trace_loader.hpp"
 #include "flit_transaction_keys.hpp"
 #include "gui_format.hpp"
+#include "node_type_guess.hpp"
 
 #include <QHash>
 #include <QApplication>
@@ -297,7 +298,7 @@ QString transportNodeTypeLabel(const std::shared_ptr<TraceSession>& session, con
     if (found == session->metadata().nodeTypes.cend()) {
         return QStringLiteral("Node");
     }
-    const QString label = QString::fromStdString(CLog::NodeTypeToString(found->second)).trimmed();
+    const QString label = NodeTypeBaseName(found->second).trimmed();
     return label.isEmpty() ? QStringLiteral("Node") : label;
 }
 
@@ -861,7 +862,7 @@ BuildRowSummary summaryFromFastRecord(const std::shared_ptr<TraceSession>& sessi
     if (opcodeFound == opcodeCache.end()) {
         opcodeFound = opcodeCache.emplace(
             opcodeKey,
-            CLogBTraceLoader::opcodeDisplayValue(session->metadata().parameters, fastRecord)).first;
+            CLogBTraceLoader::opcodeDisplayValue(session->metadata(), fastRecord)).first;
     }
 
     BuildRowSummary summary;

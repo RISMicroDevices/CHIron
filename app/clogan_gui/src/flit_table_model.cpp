@@ -5,6 +5,7 @@
 #include "flit_transaction_keys.hpp"
 #include "gui_colors.hpp"
 #include "gui_format.hpp"
+#include "node_type_guess.hpp"
 
 #include <QElapsedTimer>
 #include <QFont>
@@ -1861,6 +1862,23 @@ void FlitTableModel::setNodeLabelsVisible(const bool visible)
                         ChannelTagRole});
 }
 
+void FlitTableModel::refreshNodeLabels()
+{
+    const int rows = rowCount();
+    const int columns = columnCount();
+    if (rows <= 0 || columns <= 0) {
+        return;
+    }
+
+    Q_EMIT dataChanged(index(0, 0),
+                       index(rows - 1, columns - 1),
+                       {Qt::DisplayRole,
+                        Qt::SizeHintRole,
+                        NodeLabelTextRole,
+                        NodeLabelColorRole,
+                        ChannelTagRole});
+}
+
 int FlitTableModel::totalCount() const noexcept
 {
     return sourceRowCount();
@@ -2929,7 +2947,7 @@ bool FlitTableModel::nodeLabelForIndex(const FlitRecord& record,
     if (metadata) {
         const auto found = metadata->nodeTypes.find(static_cast<quint16>(nodeId));
         if (found != metadata->nodeTypes.cend()) {
-            label = QString::fromStdString(CLog::NodeTypeToString(found->second));
+            label = NodeTypeBaseName(found->second);
         }
     }
     if (label.isEmpty()) {

@@ -137,6 +137,33 @@ bool ParametersEqual(const CLog::Parameters& lhs, const CLog::Parameters& rhs)
         && lhs.IsMPAMPresent() == rhs.IsMPAMPresent();
 }
 
+bool CCHIParametersEqual(const CLog::CCHI::Parameters& lhs, const CLog::CCHI::Parameters& rhs)
+{
+    return lhs.GetComponentType() == rhs.GetComponentType()
+        && lhs.GetTxnIdWidth() == rhs.GetTxnIdWidth()
+        && lhs.GetDBIdWidth() == rhs.GetDBIdWidth()
+        && lhs.GetUpstreamNodeIdWidth() == rhs.GetUpstreamNodeIdWidth()
+        && lhs.GetDownstreamNodeIdWidth() == rhs.GetDownstreamNodeIdWidth()
+        && lhs.GetWayIndexWidth() == rhs.GetWayIndexWidth()
+        && lhs.GetDataWidth() == rhs.GetDataWidth()
+        && lhs.GetTagAliasWidth() == rhs.GetTagAliasWidth()
+        && lhs.IsUWPersistEnabled() == rhs.IsUWPersistEnabled()
+        && lhs.IsUWPredictEnabled() == rhs.IsUWPredictEnabled();
+}
+
+// Clipboard rows can only merge into one CLog.B save when their sessions share
+// the same protocol and the same protocol parameters.
+bool TraceParametersEqual(const CLogBTraceMetadata& lhs, const CLogBTraceMetadata& rhs)
+{
+    if (lhs.isCCHI() != rhs.isCCHI()) {
+        return false;
+    }
+    if (lhs.isCCHI()) {
+        return CCHIParametersEqual(*lhs.cchiParameters, *rhs.cchiParameters);
+    }
+    return ParametersEqual(lhs.parameters, rhs.parameters);
+}
+
 void OrderClipboardEntriesForInsertion(std::vector<ClipboardEntry>& entries,
                                        quint64 sourceSessionId,
                                        int ordering,
@@ -179,7 +206,7 @@ std::optional<CLogBTraceMetadata> ClipboardMetadataForCLogBSave(
             merged->lastTimestamp = entries.back().record.timestamp;
             merged->channelCounts = {};
         } else {
-            if (!ParametersEqual(merged->parameters, metadata.parameters)) {
+            if (!TraceParametersEqual(*merged, metadata)) {
                 return std::nullopt;
             }
             for (const auto& [nodeId, nodeType] : metadata.nodeTypes) {
@@ -188,6 +215,13 @@ std::optional<CLogBTraceMetadata> ClipboardMetadataForCLogBSave(
                     return std::nullopt;
                 }
                 merged->nodeTypes.insert_or_assign(nodeId, nodeType);
+            }
+            for (const auto& [nodeId, nodeType] : metadata.cchiNodeTypes) {
+                const auto found = merged->cchiNodeTypes.find(nodeId);
+                if (found != merged->cchiNodeTypes.end() && found->second != nodeType) {
+                    return std::nullopt;
+                }
+                merged->cchiNodeTypes.insert_or_assign(nodeId, nodeType);
             }
             for (const auto& [nodeId, annotation] : metadata.nodeAnnotations) {
                 merged->nodeAnnotations.emplace(nodeId, annotation);
@@ -1195,7 +1229,7 @@ FlitRecord ClipboardRecordFromFastRecord(const CLogBTraceMetadata& metadata,
     record.timestamp = fast.timestamp;
     record.channel = ClipboardFlitChannelFromTransport(transportChannel);
     record.direction = ClipboardFlitDirectionFromTransport(transportChannel);
-    record.opcode = InternDisplayString(CLogBTraceLoader::opcodeDisplayValue(metadata.parameters, fast));
+    record.opcode = InternDisplayString(CLogBTraceLoader::opcodeDisplayValue(metadata, fast));
     record.opcodeRaw = QStringLiteral("0x%1").arg(QString::number(fast.opcode, 16).toUpper());
     record.source = ClipboardOptionalIdText(fast.sourceId);
     record.target = ClipboardOptionalIdText(fast.targetId);
@@ -2969,6 +3003,7 @@ void MainWindow::bindActiveSessionUi()
     currentTraceLabel_ = session ? session->label : QString();
     currentTraceParameterOverride_ = session ? session->parameterOverride : std::nullopt;
     pendingTraceLoadPath_ = session ? session->pendingLoadPath : QString();
+    pendingTopologyAssignments_.clear();
     fieldIndexingFields_ = session ? session->optionalFieldIndexingFields : QSet<QString>();
     statisticsActive_ = session ? session->statisticsActive : false;
     statisticsComputed_ = session ? session->statisticsComputed : false;
@@ -5753,6 +5788,7 @@ void MainWindow::closeAllTraceSessions()
         cancelClipboardXactionAddressInsertForSession(session->id);
         cancelXactionIndexingForSession(*session, true);
         cancelStatisticsComputationForSession(*session);
+        cancelNodeTypeGuessForSession(*session);
         cancelTraceIssueBuildForSession(*session);
         if (session->flitModel) {
             session->flitModel->cancelPendingFilterBuild();
@@ -5805,6 +5841,7 @@ bool MainWindow::loadTraceFile(const QString& filePath,
         session->pendingLoadPath = filePath;
         cancelXactionIndexingForSession(*session, true);
         cancelStatisticsComputationForSession(*session);
+        cancelNodeTypeGuessForSession(*session);
     }
     refreshDiagnosticsSnapshot();
 

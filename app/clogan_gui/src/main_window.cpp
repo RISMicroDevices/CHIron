@@ -42,6 +42,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
         cancelClipboardXactionAddressInsertForSession(session->id);
         cancelXactionIndexingForSession(*session, true);
         cancelStatisticsComputationForSession(*session);
+        cancelNodeTypeGuessForSession(*session);
         cancelTraceIssueBuildForSession(*session);
     }
     if (dockManager_) {

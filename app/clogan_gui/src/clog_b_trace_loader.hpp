@@ -47,6 +47,39 @@ inline constexpr CLogBTraceChannelMask CLogBAllChannelMask() noexcept
          | CLogBChannelBit(CLog::Channel::RXREQ_BeforeSAM);
 }
 
+// Maps a raw CCHI channel onto the transport-mask bit of the equivalent GUI
+// channel group (Req/Rsp/Dat/Snp x Tx/Rx), reusing the CHI CLog::Channel bit
+// positions so the existing 4-channel filter model also covers CCHI traces.
+inline constexpr CLogBTraceChannelMask CLogBCCHIChannelBit(const CLog::CCHI::Channel channel) noexcept
+{
+    switch (channel) {
+    case CLog::CCHI::Channel::TXEVT:
+    case CLog::CCHI::Channel::TXREQ:
+        return CLogBChannelBit(CLog::Channel::TXREQ);
+    case CLog::CCHI::Channel::TXSNP:
+        return CLogBChannelBit(CLog::Channel::TXSNP);
+    case CLog::CCHI::Channel::TXDNRSP:
+    case CLog::CCHI::Channel::TXUPRSP:
+        return CLogBChannelBit(CLog::Channel::TXRSP);
+    case CLog::CCHI::Channel::TXDNDAT:
+    case CLog::CCHI::Channel::TXUPDAT:
+        return CLogBChannelBit(CLog::Channel::TXDAT);
+    case CLog::CCHI::Channel::RXEVT:
+    case CLog::CCHI::Channel::RXREQ:
+        return CLogBChannelBit(CLog::Channel::RXREQ);
+    case CLog::CCHI::Channel::RXSNP:
+        return CLogBChannelBit(CLog::Channel::RXSNP);
+    case CLog::CCHI::Channel::RXDNRSP:
+    case CLog::CCHI::Channel::RXUPRSP:
+        return CLogBChannelBit(CLog::Channel::RXRSP);
+    case CLog::CCHI::Channel::RXDNDAT:
+    case CLog::CCHI::Channel::RXUPDAT:
+        return CLogBChannelBit(CLog::Channel::RXDAT);
+    }
+
+    return 0;
+}
+
 struct CLogBTraceLoadError {
     enum class Type {
         Generic,
@@ -120,14 +153,24 @@ struct CLogBTraceBlockSummary {
 struct CLogBTraceMetadata {
     QString filePath;
     CLog::Parameters parameters;
+    std::optional<CLog::CCHI::Parameters> cchiParameters;
     std::unordered_map<quint16, QString> nodeAnnotations;
     std::unordered_map<quint16, CLog::NodeType> nodeTypes;
+    std::unordered_map<quint16, CLog::CCHI::NodeType> cchiNodeTypes;
     std::vector<CLogBTraceBlockSummary> blocks;
     std::uint64_t totalRecords = 0;
     qint64 firstTimestamp = 0;
     qint64 lastTimestamp = 0;
     std::array<std::uint64_t, 4> channelCounts{};
     CLogBTraceFlitLengthMasks flitLengthMasks{};
+
+    // A CLog.B file is either a CHI trace (parameters) or a CCHI trace
+    // (cchiParameters), never both. CHI-only members keep their default
+    // values for CCHI traces so CHI/E.b-only feature gates stay inert.
+    bool isCCHI() const noexcept
+    {
+        return cchiParameters.has_value();
+    }
 };
 
 struct CLogBTraceConfigurationGuess {
@@ -152,7 +195,8 @@ struct CLogBTraceFastFilter {
     QString txnIdFilter;
     QString dbidFilter;
     QString addressFilter;
-    std::array<std::vector<std::uint32_t>, 10> opcodeValuesByChannel;
+    // Indexed by raw transport channel value; CCHI channels reach 13.
+    std::array<std::vector<std::uint32_t>, 16> opcodeValuesByChannel;
 };
 
 struct CLogBTraceFastRecordInfo {
@@ -314,6 +358,8 @@ public:
 
     static void prepareFastFilter(CLogBTraceFastFilter& filter);
     static QString opcodeDisplayValue(const CLog::Parameters& params,
+                                      const CLogBTraceFastRecordInfo& info);
+    static QString opcodeDisplayValue(const CLogBTraceMetadata& metadata,
                                       const CLogBTraceFastRecordInfo& info);
 
     static bool buildBlockFastRecords(const CLogBTraceMetadata& metadata,

@@ -1,4 +1,5 @@
 #include "trace_session.hpp"
+#include "node_type_guess.hpp"
 #include "trace_session_fast_index_utils.hpp"
 
 #include <QDateTime>
@@ -8,6 +9,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QLoggingCategory>
+#include <QTextStream>
 #include <QThread>
 
 #include <algorithm>
@@ -159,6 +161,11 @@ QString fastIndexPathForTrace(const QString& tracePath)
 QString xactionIndexPathForTrace(const QString& tracePath)
 {
     return tracePath.isEmpty() ? QString() : (tracePath + QStringLiteral(".xactidx"));
+}
+
+QString nodeTypeOverridePathForTrace(const QString& tracePath)
+{
+    return tracePath.isEmpty() ? QString() : (tracePath + QStringLiteral(".nodetypes"));
 }
 
 QString optionalFieldIndexPathForTrace(const QString& tracePath, const QString& fieldName)
@@ -2617,6 +2624,8 @@ TraceSession::TraceSession(QString filePath,
     , maxCachedBlocks_(std::max<std::size_t>(1, options.maxCachedBlocks))
     , fastIndexEnabled_(options.enableFastIndex && !options.parameterOverride.has_value())
 {
+    fileNodeTypes_ = metadata_.nodeTypes;
+    loadNodeTypeOverrides();
     initializeFastIndexState();
     initializeXactionIndexState(callbacks, stopToken);
     publishSnapshot();
@@ -2630,6 +2639,158 @@ const QString& TraceSession::filePath() const noexcept
 const CLogBTraceMetadata& TraceSession::metadata() const noexcept
 {
     return metadata_;
+}
+
+QString TraceSession::nodeTypeOverridePath() const
+{
+    return nodeTypeOverridePathForTrace(filePath_);
+}
+
+bool TraceSession::hasNodeTypeOverrides() const noexcept
+{
+    return !nodeTypeOverrides_.empty();
+}
+
+const std::unordered_map<quint16, CLog::NodeType>& TraceSession::nodeTypeOverrides() const noexcept
+{
+    return nodeTypeOverrides_;
+}
+
+const std::unordered_map<quint16, CLog::NodeType>& TraceSession::fileNodeTypes() const noexcept
+{
+    return fileNodeTypes_;
+}
+
+bool TraceSession::setNodeType(const quint16 nodeId, const CLog::NodeType type)
+{
+    nodeTypeOverrides_[nodeId] = type;
+    metadata_.nodeTypes[nodeId] = type;
+    if (metadata_.nodeAnnotations.find(nodeId) == metadata_.nodeAnnotations.cend()) {
+        metadata_.nodeAnnotations.emplace(nodeId, QStringLiteral("User-assigned node type."));
+    }
+    publishSnapshotNoThrow();
+    return true;
+}
+
+bool TraceSession::clearNodeType(const quint16 nodeId)
+{
+    const bool hadOverride = nodeTypeOverrides_.erase(nodeId) > 0;
+    const auto fileIt = fileNodeTypes_.find(nodeId);
+    if (fileIt != fileNodeTypes_.cend()) {
+        metadata_.nodeTypes[nodeId] = fileIt->second;
+    } else {
+        metadata_.nodeTypes.erase(nodeId);
+    }
+    publishSnapshotNoThrow();
+    return hadOverride;
+}
+
+std::size_t TraceSession::applyNodeTypeAssignments(
+    const std::unordered_map<quint16, CLog::NodeType>& assignments)
+{
+    nodeTypeOverrides_ = assignments;
+    metadata_.nodeTypes = fileNodeTypes_;
+    for (const auto& [nodeId, type] : nodeTypeOverrides_) {
+        metadata_.nodeTypes[nodeId] = type;
+        if (metadata_.nodeAnnotations.find(nodeId) == metadata_.nodeAnnotations.cend()) {
+            metadata_.nodeAnnotations.emplace(nodeId, QStringLiteral("User-assigned node type."));
+        }
+    }
+    publishSnapshotNoThrow();
+    return nodeTypeOverrides_.size();
+}
+
+bool TraceSession::saveNodeTypeOverrides(QString* errorMessage) const
+{
+    const QString path = nodeTypeOverridePath();
+    if (path.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("The trace has no file path for node type overrides.");
+        }
+        return false;
+    }
+
+    if (nodeTypeOverrides_.empty()) {
+        if (QFileInfo::exists(path) && !QFile::remove(path)) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral("Could not remove %1.").arg(path);
+            }
+            return false;
+        }
+        return true;
+    }
+
+    std::vector<quint16> nodeIds;
+    nodeIds.reserve(nodeTypeOverrides_.size());
+    for (const auto& [nodeId, unused] : nodeTypeOverrides_) {
+        (void) unused;
+        nodeIds.push_back(nodeId);
+    }
+    std::sort(nodeIds.begin(), nodeIds.end());
+
+    QString content;
+    content += QStringLiteral("# CloganGUI node type assignments\n");
+    content += QStringLiteral("# format-version: 1\n");
+    for (const quint16 nodeId : nodeIds) {
+        content += QString::number(nodeId);
+        content += QLatin1Char(' ');
+        content += QString::fromStdString(CLog::NodeTypeToString(nodeTypeOverrides_.at(nodeId)));
+        content += QLatin1Char('\n');
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Could not write %1: %2").arg(path, file.errorString());
+        }
+        return false;
+    }
+    file.write(content.toUtf8());
+    return true;
+}
+
+void TraceSession::loadNodeTypeOverrides() noexcept
+{
+    try {
+        const QString path = nodeTypeOverridePath();
+        if (path.isEmpty() || !QFileInfo::exists(path)) {
+            return;
+        }
+
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            return;
+        }
+
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            const QString line = in.readLine().trimmed();
+            if (line.isEmpty() || line.startsWith(QLatin1Char('#'))) {
+                continue;
+            }
+            const QStringList parts = line.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+            if (parts.size() < 2) {
+                continue;
+            }
+            bool ok = false;
+            const ushort nodeId = parts[0].toUShort(&ok);
+            if (!ok) {
+                continue;
+            }
+            const std::optional<CLog::NodeType> type = NodeTypeFromString(parts[1]);
+            if (!type.has_value()) {
+                continue;
+            }
+            nodeTypeOverrides_[nodeId] = *type;
+            metadata_.nodeTypes[nodeId] = *type;
+        }
+    } catch (const std::exception& exception) {
+        qCWarning(traceSessionLog).noquote()
+            << QStringLiteral("Could not load node type overrides: %1")
+                   .arg(QString::fromUtf8(exception.what()));
+    } catch (...) {
+        qCWarning(traceSessionLog) << "Could not load node type overrides.";
+    }
 }
 
 std::uint64_t TraceSession::totalRows() const noexcept
@@ -3073,7 +3234,12 @@ bool TraceSession::collectRowsForTransportMask(const std::size_t blockIndex,
     logicalRows.reserve(logicalRows.size() + block->records.size());
     for (std::size_t localIndex = 0; localIndex < block->records.size(); ++localIndex) {
         const auto channelIndex = static_cast<unsigned int>(block->records[localIndex].channel);
-        if ((enabledMask & (CLogBTraceChannelMask{1} << channelIndex)) == 0) {
+        // CCHI raw channels are folded onto the mask bits of their GUI
+        // channel group (Req/Rsp/Dat/Snp x Tx/Rx).
+        const CLogBTraceChannelMask channelBit = metadata_.isCCHI()
+            ? CLogBCCHIChannelBit(static_cast<CLog::CCHI::Channel>(channelIndex))
+            : static_cast<CLogBTraceChannelMask>(CLogBTraceChannelMask{1} << channelIndex);
+        if ((enabledMask & channelBit) == 0) {
             continue;
         }
 

@@ -1,9 +1,11 @@
 #include "clog_b_trace_loader.hpp"
 
 #include "chiron_b_adapter.hpp"
+#include "chiron_cchi_adapter.hpp"
 #include "chiron_eb_adapter.hpp"
 #include "filter_parallel_utils.hpp"
 #include "flit_transaction_keys.hpp"
+#include "node_type_guess.hpp"
 
 #include "chi_b/util/chi_b_util_flit.hpp"
 #include "chi_eb/xact/chi_eb_joint.hpp"
@@ -72,6 +74,16 @@ struct BMeasures {
     CHI::B::Flits::SNPMeasure snp;
 };
 
+struct CCHIMeasures {
+    ::CCHI::Flits::EVTMeasure evt;
+    ::CCHI::Flits::REQMeasure req;
+    ::CCHI::Flits::SNPMeasure snp;
+    ::CCHI::Flits::DnRSPMeasure dnRsp;
+    ::CCHI::Flits::UpRSPMeasure upRsp;
+    ::CCHI::Flits::DnDATMeasure dnDat;
+    ::CCHI::Flits::UpDATMeasure upDat;
+};
+
 using DecodeProgressCallback =
     std::function<void(std::size_t completedRecords, std::size_t totalRecords)>;
 
@@ -91,6 +103,20 @@ struct DecodedBRecord {
     FlitDirection direction = FlitDirection::Tx;
     quint16 nodeId = 0;
     std::variant<std::monostate, FlexibleBReqFlit, FlexibleBRspFlit, FlexibleBDatFlit, FlexibleBSnpFlit> flit;
+};
+
+struct DecodedCCHIRecord {
+    qint64 timestamp = 0;
+    FlitDirection direction = FlitDirection::Tx;
+    quint16 nodeId = 0;
+    std::variant<std::monostate,
+                 FlexibleCCHIEvtFlit,
+                 FlexibleCCHIReqFlit,
+                 FlexibleCCHISnpFlit,
+                 FlexibleCCHIDnRspFlit,
+                 FlexibleCCHIUpRspFlit,
+                 FlexibleCCHIDnDatFlit,
+                 FlexibleCCHIUpDatFlit> flit;
 };
 
 QString issueName(const CLog::Issue issue)
@@ -136,7 +162,7 @@ void setCancelledLoadError(CLogBTraceLoadError& error)
 
 CHI::Eb::Xact::NodeTypeEnum toEbXactNodeType(const CLog::NodeType type) noexcept
 {
-    switch (type) {
+    switch (BaseNodeType(type)) {
     case CLog::NodeType::RN_F:
         return CHI::Eb::Xact::NodeType::RN_F;
     case CLog::NodeType::RN_D:
@@ -153,17 +179,40 @@ CHI::Eb::Xact::NodeTypeEnum toEbXactNodeType(const CLog::NodeType type) noexcept
         return CHI::Eb::Xact::NodeType::SN_I;
     case CLog::NodeType::MN:
         return CHI::Eb::Xact::NodeType::MN;
+    default:
+        return CHI::Eb::Xact::NodeType::RN_F;
     }
-    return CHI::Eb::Xact::NodeType::RN_F;
+}
+
+CHI::Eb::Xact::SAMScopeEnum ebSamScopeForNodeType(const CLog::NodeType type) noexcept
+{
+    switch (type) {
+    case CLog::NodeType::RN_F_BeforeSAM:
+    case CLog::NodeType::RN_D_BeforeSAM:
+    case CLog::NodeType::RN_I_BeforeSAM:
+    case CLog::NodeType::HN_F_BeforeSAM:
+    case CLog::NodeType::HN_I_BeforeSAM:
+    case CLog::NodeType::SN_F_BeforeSAM:
+    case CLog::NodeType::SN_I_BeforeSAM:
+    case CLog::NodeType::MN_BeforeSAM:
+        return static_cast<CHI::Eb::Xact::SAMScopeEnum>(CHI::Eb::Xact::SAMScope::BeforeSAM);
+    default:
+        return static_cast<CHI::Eb::Xact::SAMScopeEnum>(CHI::Eb::Xact::SAMScope::AfterSAM);
+    }
 }
 
 void populateEbXactTopology(CHI::Eb::Xact::Topology& topology,
+                            CHI::Eb::Xact::GlobalSAMScope& samScope,
                             const std::unordered_map<quint16, CLog::NodeType>& nodeTypes)
 {
     for (const auto& [nodeId, nodeType] : nodeTypes) {
         topology.SetNode(nodeId,
                          toEbXactNodeType(nodeType),
                          CLog::NodeTypeToString(nodeType));
+        if (ebSamScopeForNodeType(nodeType)
+            == static_cast<CHI::Eb::Xact::SAMScopeEnum>(CHI::Eb::Xact::SAMScope::BeforeSAM)) {
+            samScope.Set(nodeId, CHI::Eb::Xact::SAMScope::BeforeSAM);
+        }
     }
 }
 
@@ -1200,12 +1249,20 @@ bool ebXactionUseRnfJoint(const CLog::NodeType type) noexcept
     case CLog::NodeType::RN_F:
     case CLog::NodeType::RN_D:
     case CLog::NodeType::RN_I:
+    case CLog::NodeType::RN_F_BeforeSAM:
+    case CLog::NodeType::RN_D_BeforeSAM:
+    case CLog::NodeType::RN_I_BeforeSAM:
         return true;
     case CLog::NodeType::HN_F:
     case CLog::NodeType::HN_I:
     case CLog::NodeType::SN_F:
     case CLog::NodeType::SN_I:
     case CLog::NodeType::MN:
+    case CLog::NodeType::HN_F_BeforeSAM:
+    case CLog::NodeType::HN_I_BeforeSAM:
+    case CLog::NodeType::SN_F_BeforeSAM:
+    case CLog::NodeType::SN_I_BeforeSAM:
+    case CLog::NodeType::MN_BeforeSAM:
         return false;
     }
 
@@ -1220,10 +1277,18 @@ bool ebXactionUseSnfJoint(const CLog::NodeType type) noexcept
     case CLog::NodeType::SN_F:
     case CLog::NodeType::SN_I:
     case CLog::NodeType::MN:
+    case CLog::NodeType::HN_F_BeforeSAM:
+    case CLog::NodeType::HN_I_BeforeSAM:
+    case CLog::NodeType::SN_F_BeforeSAM:
+    case CLog::NodeType::SN_I_BeforeSAM:
+    case CLog::NodeType::MN_BeforeSAM:
         return true;
     case CLog::NodeType::RN_F:
     case CLog::NodeType::RN_D:
     case CLog::NodeType::RN_I:
+    case CLog::NodeType::RN_F_BeforeSAM:
+    case CLog::NodeType::RN_D_BeforeSAM:
+    case CLog::NodeType::RN_I_BeforeSAM:
         return false;
     }
 
@@ -1725,6 +1790,69 @@ std::size_t flitChannelIndex(const CLog::Channel channel)
     return 0;
 }
 
+// Reinterprets the raw channel byte of a converted CCHI record block record.
+CLog::CCHI::Channel cchiRecordChannel(const CLog::Channel channel) noexcept
+{
+    return static_cast<CLog::CCHI::Channel>(static_cast<std::uint8_t>(channel));
+}
+
+bool isValidCCHIChannel(const CLog::CCHI::Channel channel) noexcept
+{
+    switch (channel) {
+    case CLog::CCHI::Channel::TXEVT:
+    case CLog::CCHI::Channel::TXREQ:
+    case CLog::CCHI::Channel::TXSNP:
+    case CLog::CCHI::Channel::TXDNRSP:
+    case CLog::CCHI::Channel::TXUPRSP:
+    case CLog::CCHI::Channel::TXDNDAT:
+    case CLog::CCHI::Channel::TXUPDAT:
+    case CLog::CCHI::Channel::RXEVT:
+    case CLog::CCHI::Channel::RXREQ:
+    case CLog::CCHI::Channel::RXSNP:
+    case CLog::CCHI::Channel::RXDNRSP:
+    case CLog::CCHI::Channel::RXUPRSP:
+    case CLog::CCHI::Channel::RXDNDAT:
+    case CLog::CCHI::Channel::RXUPDAT:
+        return true;
+    }
+
+    return false;
+}
+
+bool isCCHITxChannel(const CLog::CCHI::Channel channel) noexcept
+{
+    return static_cast<std::uint8_t>(channel)
+        <= static_cast<std::uint8_t>(CLog::CCHI::Channel::TXUPDAT);
+}
+
+// Buckets a CCHI channel into the 4-slot GUI channel model
+// (0 = EVT/REQ, 1 = DnRSP/UpRSP, 2 = DnDAT/UpDAT, 3 = SNP).
+std::size_t cchiFlitChannelIndex(const CLog::CCHI::Channel channel) noexcept
+{
+    switch (channel) {
+    case CLog::CCHI::Channel::TXEVT:
+    case CLog::CCHI::Channel::RXEVT:
+    case CLog::CCHI::Channel::TXREQ:
+    case CLog::CCHI::Channel::RXREQ:
+        return 0;
+    case CLog::CCHI::Channel::TXDNRSP:
+    case CLog::CCHI::Channel::RXDNRSP:
+    case CLog::CCHI::Channel::TXUPRSP:
+    case CLog::CCHI::Channel::RXUPRSP:
+        return 1;
+    case CLog::CCHI::Channel::TXDNDAT:
+    case CLog::CCHI::Channel::RXDNDAT:
+    case CLog::CCHI::Channel::TXUPDAT:
+    case CLog::CCHI::Channel::RXUPDAT:
+        return 2;
+    case CLog::CCHI::Channel::TXSNP:
+    case CLog::CCHI::Channel::RXSNP:
+        return 3;
+    }
+
+    return 0;
+}
+
 void setFlitLengthMask(CLogBTraceFlitLengthMask& mask, const std::uint8_t byteLength) noexcept
 {
     const std::size_t wordIndex = static_cast<std::size_t>(byteLength / 64U);
@@ -1807,10 +1935,12 @@ struct RawTagHeader {
 class RecordBlockScanner final {
 public:
     RecordBlockScanner(const std::uint32_t expectedRecordCount,
-                       const std::uint64_t timeBase) noexcept
+                       const std::uint64_t timeBase,
+                       const bool cchi = false) noexcept
         : expectedRecordCount_(expectedRecordCount)
         , timeBase_(timeBase)
         , currentTimestamp_(static_cast<qulonglong>(timeBase))
+        , cchi_(cchi)
     {
     }
 
@@ -1844,7 +1974,9 @@ public:
                     continue;
                 }
                 currentChannel_ = fieldBuffer_[0];
-                if (!isValidChannel(static_cast<CLog::Channel>(currentChannel_))) {
+                if (cchi_
+                        ? !isValidCCHIChannel(static_cast<CLog::CCHI::Channel>(currentChannel_))
+                        : !isValidChannel(static_cast<CLog::Channel>(currentChannel_))) {
                     errorMessage = "CLog.B metadata scan: record block contains an invalid channel value.";
                     return false;
                 }
@@ -1962,6 +2094,15 @@ private:
             firstTimestamp_ = static_cast<qint64>(currentTimestamp_);
         }
         lastTimestamp_ = static_cast<qint64>(currentTimestamp_);
+        if (cchi_) {
+            const auto cchiChannel = static_cast<CLog::CCHI::Channel>(currentChannel_);
+            channelMask_ = static_cast<CLogBTraceChannelMask>(
+                channelMask_ | CLogBCCHIChannelBit(cchiChannel));
+            const std::size_t channelIndex = cchiFlitChannelIndex(cchiChannel);
+            ++channelCounts_[channelIndex];
+            setFlitLengthMask(flitLengthMasks_[channelIndex], currentFlitLength_);
+            return true;
+        }
         channelMask_ = static_cast<CLogBTraceChannelMask>(
             channelMask_ | (CLogBTraceChannelMask{1} << currentChannel_));
         const std::size_t channelIndex = flitChannelIndex(static_cast<CLog::Channel>(currentChannel_));
@@ -1981,6 +2122,7 @@ private:
     std::uint32_t parsedRecordCount_ = 0;
     std::uint64_t timeBase_ = 0;
     qulonglong currentTimestamp_ = 0;
+    bool cchi_ = false;
     State state_ = State::TimeShift;
     std::array<unsigned char, 4> fieldBuffer_{};
     std::size_t fieldBytes_ = 0;
@@ -2112,7 +2254,8 @@ bool scanRecordBlock(std::istream& input,
                      std::string& errorMessage,
                      const CLogBTraceLoadCallbacks& callbacks,
                      const std::uint64_t totalBytes,
-                     std::stop_token stopToken = {})
+                     std::stop_token stopToken = {},
+                     const bool cchi = false)
 {
     std::uint32_t rawRecordCount = 0;
     if (!input.read(reinterpret_cast<char*>(&rawRecordCount), sizeof(rawRecordCount))) {
@@ -2153,7 +2296,7 @@ bool scanRecordBlock(std::istream& input,
         return false;
     }
 
-    RecordBlockScanner scanner(block.recordCount, timeBase);
+    RecordBlockScanner scanner(block.recordCount, timeBase, cchi);
     std::array<unsigned char, kMetadataScanChunkBytes> inputChunk{};
 
     if (block.compressedBytes == 0) {
@@ -2513,6 +2656,39 @@ QString describeParametersBlock(const CLog::Parameters& params)
         .arg(boolName(params.IsMPAMPresent()));
 }
 
+QString describeCCHIParametersBlock(const CLog::CCHI::Parameters& params)
+{
+    return QStringLiteral(
+               "ComponentType:         %1\n"
+               "TxnIdWidth:            %2\n"
+               "DBIdWidth:             %3\n"
+               "UpstreamNodeIdWidth:   %4\n"
+               "DownstreamNodeIdWidth: %5\n"
+               "WayIndexWidth:         %6\n"
+               "DataWidth:             %7\n"
+               "TagAliasWidth:         %8\n"
+               "UWPersist:             %9\n"
+               "UWPredict:             %10")
+        .arg(QString::fromStdString(CLog::CCHI::NodeTypeToString(params.GetComponentType())))
+        .arg(static_cast<qulonglong>(params.GetTxnIdWidth()))
+        .arg(static_cast<qulonglong>(params.GetDBIdWidth()))
+        .arg(static_cast<qulonglong>(params.GetUpstreamNodeIdWidth()))
+        .arg(static_cast<qulonglong>(params.GetDownstreamNodeIdWidth()))
+        .arg(static_cast<qulonglong>(params.GetWayIndexWidth()))
+        .arg(static_cast<qulonglong>(params.GetDataWidth()))
+        .arg(static_cast<qulonglong>(params.GetTagAliasWidth()))
+        .arg(boolName(params.IsUWPersistEnabled()))
+        .arg(boolName(params.IsUWPredictEnabled()));
+}
+
+QString cchiChannelName(const CLog::CCHI::Channel channel)
+{
+    const std::string name = CLog::CCHI::ChannelToString(channel);
+    return name.empty()
+        ? QStringLiteral("Unknown(%1)").arg(static_cast<int>(channel))
+        : QString::fromStdString(name);
+}
+
 QString channelName(const CLog::Channel channel)
 {
     switch (channel) {
@@ -2782,6 +2958,129 @@ QString formatWidthBreakdown(const CHI::B::Flits::SNPMeasure& measure)
     return lines.join(QLatin1Char('\n'));
 }
 
+QString formatWidthBreakdown(const ::CCHI::Flits::EVTMeasure& measure)
+{
+    QStringList lines{QStringLiteral("Loader width breakdown (bits):")};
+    appendWidthField(lines, QStringLiteral("TxnID"), measure.width.TxnID);
+    appendWidthField(lines, QStringLiteral("SrcID"), measure.width.SrcID);
+    appendWidthField(lines, QStringLiteral("TgtID"), measure.width.TgtID);
+    appendWidthField(lines, QStringLiteral("Opcode"), measure.width.Opcode);
+    appendWidthField(lines, QStringLiteral("Addr"), measure.width.Addr);
+    appendWidthField(lines, QStringLiteral("NS"), measure.width.NS);
+    appendWidthField(lines, QStringLiteral("MemAttr"), measure.width.MemAttr);
+    appendWidthField(lines, QStringLiteral("WayValid"), measure.width.WayValid);
+    appendWidthField(lines, QStringLiteral("Way"), measure.width.Way);
+    appendWidthField(lines, QStringLiteral("TraceTag"), measure.width.TraceTag);
+    appendWidthField(lines, QStringLiteral("TOTAL"), measure.width._);
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString formatWidthBreakdown(const ::CCHI::Flits::REQMeasure& measure)
+{
+    QStringList lines{QStringLiteral("Loader width breakdown (bits):")};
+    appendWidthField(lines, QStringLiteral("TxnID"), measure.width.TxnID);
+    appendWidthField(lines, QStringLiteral("SrcID"), measure.width.SrcID);
+    appendWidthField(lines, QStringLiteral("TgtID"), measure.width.TgtID);
+    appendWidthField(lines, QStringLiteral("Opcode"), measure.width.Opcode);
+    appendWidthField(lines, QStringLiteral("Size"), measure.width.Size);
+    appendWidthField(lines, QStringLiteral("Addr"), measure.width.Addr);
+    appendWidthField(lines, QStringLiteral("TagAlias"), measure.width.TagAlias);
+    appendWidthField(lines, QStringLiteral("NS"), measure.width.NS);
+    appendWidthField(lines, QStringLiteral("Order"), measure.width.Order);
+    appendWidthField(lines, QStringLiteral("MemAttr"), measure.width.MemAttr);
+    appendWidthField(lines, QStringLiteral("Excl"), measure.width.Excl);
+    appendWidthField(lines, QStringLiteral("ExpCompData"), measure.width.ExpCompData);
+    appendWidthField(lines, QStringLiteral("WayValid"), measure.width.WayValid);
+    appendWidthField(lines, QStringLiteral("Way"), measure.width.Way);
+    appendWidthField(lines, QStringLiteral("TraceTag"), measure.width.TraceTag);
+    appendWidthField(lines, QStringLiteral("TOTAL"), measure.width._);
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString formatWidthBreakdown(const ::CCHI::Flits::SNPMeasure& measure)
+{
+    QStringList lines{QStringLiteral("Loader width breakdown (bits):")};
+    appendWidthField(lines, QStringLiteral("TxnID"), measure.width.TxnID);
+    appendWidthField(lines, QStringLiteral("SrcID"), measure.width.SrcID);
+    appendWidthField(lines, QStringLiteral("TgtID"), measure.width.TgtID);
+    appendWidthField(lines, QStringLiteral("Opcode"), measure.width.Opcode);
+    appendWidthField(lines, QStringLiteral("Addr"), measure.width.Addr);
+    appendWidthField(lines, QStringLiteral("NS"), measure.width.NS);
+    appendWidthField(lines, QStringLiteral("TraceTag"), measure.width.TraceTag);
+    appendWidthField(lines, QStringLiteral("TOTAL"), measure.width._);
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString formatWidthBreakdown(const ::CCHI::Flits::DnRSPMeasure& measure)
+{
+    QStringList lines{QStringLiteral("Loader width breakdown (bits):")};
+    appendWidthField(lines, QStringLiteral("TxnID"), measure.width.TxnID);
+    appendWidthField(lines, QStringLiteral("SrcID"), measure.width.SrcID);
+    appendWidthField(lines, QStringLiteral("TgtID"), measure.width.TgtID);
+    appendWidthField(lines, QStringLiteral("DBID"), measure.width.DBID);
+    appendWidthField(lines, QStringLiteral("Opcode"), measure.width.Opcode);
+    appendWidthField(lines, QStringLiteral("RespErr"), measure.width.RespErr);
+    appendWidthField(lines, QStringLiteral("Resp"), measure.width.Resp);
+    appendWidthField(lines, QStringLiteral("CBusy"), measure.width.CBusy);
+    appendWidthField(lines, QStringLiteral("WayValid"), measure.width.WayValid);
+    appendWidthField(lines, QStringLiteral("Way"), measure.width.Way);
+    appendWidthField(lines, QStringLiteral("TraceTag"), measure.width.TraceTag);
+    appendWidthField(lines, QStringLiteral("TOTAL"), measure.width._);
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString formatWidthBreakdown(const ::CCHI::Flits::UpRSPMeasure& measure)
+{
+    QStringList lines{QStringLiteral("Loader width breakdown (bits):")};
+    appendWidthField(lines, QStringLiteral("TxnID"), measure.width.TxnID);
+    appendWidthField(lines, QStringLiteral("SrcID"), measure.width.SrcID);
+    appendWidthField(lines, QStringLiteral("TgtID"), measure.width.TgtID);
+    appendWidthField(lines, QStringLiteral("Opcode"), measure.width.Opcode);
+    appendWidthField(lines, QStringLiteral("RespErr"), measure.width.RespErr);
+    appendWidthField(lines, QStringLiteral("Resp"), measure.width.Resp);
+    appendWidthField(lines, QStringLiteral("TraceTag"), measure.width.TraceTag);
+    appendWidthField(lines, QStringLiteral("TOTAL"), measure.width._);
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString formatWidthBreakdown(const ::CCHI::Flits::DnDATMeasure& measure)
+{
+    QStringList lines{QStringLiteral("Loader width breakdown (bits):")};
+    appendWidthField(lines, QStringLiteral("TxnID"), measure.width.TxnID);
+    appendWidthField(lines, QStringLiteral("SrcID"), measure.width.SrcID);
+    appendWidthField(lines, QStringLiteral("TgtID"), measure.width.TgtID);
+    appendWidthField(lines, QStringLiteral("DBID"), measure.width.DBID);
+    appendWidthField(lines, QStringLiteral("Opcode"), measure.width.Opcode);
+    appendWidthField(lines, QStringLiteral("RespErr"), measure.width.RespErr);
+    appendWidthField(lines, QStringLiteral("Resp"), measure.width.Resp);
+    appendWidthField(lines, QStringLiteral("DataSource"), measure.width.DataSource);
+    appendWidthField(lines, QStringLiteral("CBusy"), measure.width.CBusy);
+    appendWidthField(lines, QStringLiteral("WayValid"), measure.width.WayValid);
+    appendWidthField(lines, QStringLiteral("Way"), measure.width.Way);
+    appendWidthField(lines, QStringLiteral("DataID"), measure.width.DataID);
+    appendWidthField(lines, QStringLiteral("Data"), measure.width.Data);
+    appendWidthField(lines, QStringLiteral("TraceTag"), measure.width.TraceTag);
+    appendWidthField(lines, QStringLiteral("TOTAL"), measure.width._);
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString formatWidthBreakdown(const ::CCHI::Flits::UpDATMeasure& measure)
+{
+    QStringList lines{QStringLiteral("Loader width breakdown (bits):")};
+    appendWidthField(lines, QStringLiteral("TxnID"), measure.width.TxnID);
+    appendWidthField(lines, QStringLiteral("SrcID"), measure.width.SrcID);
+    appendWidthField(lines, QStringLiteral("TgtID"), measure.width.TgtID);
+    appendWidthField(lines, QStringLiteral("Opcode"), measure.width.Opcode);
+    appendWidthField(lines, QStringLiteral("RespErr"), measure.width.RespErr);
+    appendWidthField(lines, QStringLiteral("Resp"), measure.width.Resp);
+    appendWidthField(lines, QStringLiteral("DataID"), measure.width.DataID);
+    appendWidthField(lines, QStringLiteral("Data"), measure.width.Data);
+    appendWidthField(lines, QStringLiteral("BE"), measure.width.BE);
+    appendWidthField(lines, QStringLiteral("TraceTag"), measure.width.TraceTag);
+    appendWidthField(lines, QStringLiteral("TOTAL"), measure.width._);
+    return lines.join(QLatin1Char('\n'));
+}
+
 template<typename MeasureT>
 QString formatFlitReportSection(const QString& name, const MeasureT& measure)
 {
@@ -2825,6 +3124,23 @@ QString buildFlitReport(const CLog::Parameters& params, const BMeasures& measure
         formatFlitReportSection(QStringLiteral("RSP"), measures.rsp),
         formatFlitReportSection(QStringLiteral("DAT"), measures.dat),
         formatFlitReportSection(QStringLiteral("SNP"), measures.snp),
+    };
+
+    return sections.join(QStringLiteral("\n\n"));
+}
+
+QString buildCCHIFlitReport(const CLog::CCHI::Parameters& params, const CCHIMeasures& measures)
+{
+    QStringList sections{
+        QStringLiteral("Current CCHI Flit Report"),
+        QStringLiteral("CCHI parameters:\n%1").arg(describeCCHIParametersBlock(params)),
+        formatFlitReportSection(QStringLiteral("EVT"), measures.evt),
+        formatFlitReportSection(QStringLiteral("REQ"), measures.req),
+        formatFlitReportSection(QStringLiteral("SNP"), measures.snp),
+        formatFlitReportSection(QStringLiteral("DNRSP"), measures.dnRsp),
+        formatFlitReportSection(QStringLiteral("UPRSP"), measures.upRsp),
+        formatFlitReportSection(QStringLiteral("DNDAT"), measures.dnDat),
+        formatFlitReportSection(QStringLiteral("UPDAT"), measures.upDat),
     };
 
     return sections.join(QStringLiteral("\n\n"));
@@ -2936,6 +3252,113 @@ void setDeserializationLoadError(CLogBTraceLoadError& error,
                                        recordIndex,
                                        timestamp,
                                        flexibleWidth));
+}
+
+template<typename MeasureT>
+QString buildCCHIDeserializeFailureDetails(const CLog::CCHI::Parameters& params,
+                                           const MeasureT& measure,
+                                           const CLog::CLogB::TagCHIRecords& tag,
+                                           const CLog::CLogB::TagCHIRecords::Record& source,
+                                           const std::size_t recordIndex,
+                                           const qulonglong timestamp,
+                                           const size_t flexibleWidth)
+{
+    const size_t recordedByteLength = source.flitLength;
+    const size_t recordedBitLength = recordedByteLength * 8U;
+    const size_t expectedWidth = measure.width._;
+    const size_t expectedStoredBitLength = byteAlignedBitLength(expectedWidth);
+    const size_t expectedByteLength = expectedStoredBitLength / 8U;
+    const qlonglong widthDelta = static_cast<qlonglong>(recordedBitLength)
+                               - static_cast<qlonglong>(expectedStoredBitLength);
+
+    QStringList reasonLines{QStringLiteral("Failure checks:")};
+    if (recordedBitLength != expectedStoredBitLength) {
+        reasonLines.append(QStringLiteral("  Recorded flit length does not match the byte-aligned decoder width."));
+    } else {
+        reasonLines.append(QStringLiteral("  Recorded flit length matches the byte-aligned decoder width."));
+    }
+    if (recordedBitLength > flexibleWidth) {
+        reasonLines.append(
+            QStringLiteral("  Recorded flit length exceeds the compiled flexible-flit capacity."));
+    }
+    if (recordedByteLength == expectedByteLength && recordedBitLength != expectedWidth) {
+        reasonLines.append(
+            QStringLiteral("  Recorded byte length matches the rounded-on-disk size for the expected width."));
+        reasonLines.append(
+            QStringLiteral("  CLog.B stores flitLength in bytes, so non-byte-aligned flits appear padded to the next byte."));
+    }
+
+    QStringList metadataLines{
+        QStringLiteral("Record metadata:"),
+        QStringLiteral("  Record index      : %1").arg(static_cast<qulonglong>(recordIndex + 1)),
+        QStringLiteral("  Protocol          : CCHI"),
+        QStringLiteral("  Channel           : %1").arg(cchiChannelName(cchiRecordChannel(source.channel))),
+        QStringLiteral("  Node ID           : %1").arg(source.nodeId),
+        QStringLiteral("  Time base         : %1").arg(static_cast<qulonglong>(tag.head.timeBase)),
+        QStringLiteral("  Time shift        : %1").arg(static_cast<qulonglong>(source.timeShift)),
+        QStringLiteral("  Decoded timestamp : %1").arg(timestamp),
+        QStringLiteral("  Recorded length   : %1 bytes (%2 bits)")
+            .arg(static_cast<qulonglong>(recordedByteLength))
+            .arg(static_cast<qulonglong>(recordedBitLength)),
+        QStringLiteral("  Logical width     : %1 bits").arg(static_cast<qulonglong>(expectedWidth)),
+        QStringLiteral("  Expected stored   : %1 bytes (%2 bits)")
+            .arg(static_cast<qulonglong>(expectedByteLength))
+            .arg(static_cast<qulonglong>(expectedStoredBitLength)),
+        QStringLiteral("  Width delta       : %1 bits").arg(widthDelta),
+        QStringLiteral("  Flexible max      : %1 bits").arg(static_cast<qulonglong>(flexibleWidth)),
+    };
+
+    QStringList sections;
+    sections.append(reasonLines.join(QLatin1Char('\n')));
+    sections.append(metadataLines.join(QLatin1Char('\n')));
+    sections.append(QStringLiteral("CCHI parameters:\n%1").arg(describeCCHIParametersBlock(params)));
+    sections.append(formatWidthBreakdown(measure));
+    sections.append(
+        QStringLiteral("Raw flit bytes (little-endian CLog.B payload):\n%1")
+            .arg(formatRawFlitBytes(source.flit.get(), recordedByteLength)));
+    return sections.join(QStringLiteral("\n\n"));
+}
+
+template<typename MeasureT>
+void setCCHIDeserializationLoadError(CLogBTraceLoadError& error,
+                                     const CLog::CCHI::Parameters& params,
+                                     const QString& flitKind,
+                                     const CLog::CLogB::TagCHIRecords& tag,
+                                     const CLog::CLogB::TagCHIRecords::Record& source,
+                                     const std::size_t recordIndex,
+                                     const qulonglong timestamp,
+                                     const MeasureT& measure,
+                                     const size_t flexibleWidth)
+{
+    const size_t bitLength = static_cast<size_t>(source.flitLength) * 8U;
+    const CLogBTraceLoadError::Type errorType =
+        bitLength == byteAlignedBitLength(measure.width._)
+            ? CLogBTraceLoadError::Type::Generic
+            : CLogBTraceLoadError::Type::FlitWidthMismatch;
+
+    setLoadError(
+        error,
+        errorType,
+        QStringLiteral("Unable to decode record %1 as a CCHI %2 flit.")
+            .arg(static_cast<qulonglong>(recordIndex + 1))
+            .arg(flitKind),
+        QStringLiteral(
+            "The file parameters were accepted, but this flit could not be deserialized.\n"
+            "Channel: %1\n"
+            "Node: %2\n"
+            "Stored length: %3 bytes (%4 bits)\n"
+            "Open the debug details to inspect the width breakdown and raw flit bytes.")
+            .arg(cchiChannelName(cchiRecordChannel(source.channel)))
+            .arg(source.nodeId)
+            .arg(static_cast<qulonglong>(source.flitLength))
+            .arg(static_cast<qulonglong>(bitLength)),
+        buildCCHIDeserializeFailureDetails(params,
+                                           measure,
+                                           tag,
+                                           source,
+                                           recordIndex,
+                                           timestamp,
+                                           flexibleWidth));
 }
 
 QString captureAnnotationForNode(const quint16 nodeId,
@@ -3740,6 +4163,99 @@ bool buildBMeasures(const CLog::Parameters& params,
     return true;
 }
 
+bool buildCCHIMeasures(const CLog::CCHI::Parameters& params,
+                       CCHIMeasures& measures,
+                       CLogBTraceLoadError& error)
+{
+    // The per-channel opcode widths come from the component type descriptor.
+    const ::CCHI::ComponentTypeEnumBack* component =
+        ::CCHI::Flits::details::ComponentTypeOf(params.GetComponentType());
+    if (component == ::CCHI::ComponentType::Unknown) {
+        setLoadError(error,
+                     CLogBTraceLoadError::Type::Generic,
+                     QStringLiteral("Unable to evaluate CCHI flit measurements for this CLog.B file."),
+                     QStringLiteral("The file declares an unknown CCHI component type."),
+                     describeCCHIParametersBlock(params));
+        return false;
+    }
+
+    ::CCHI::Flits::EVTMeasure::Parameters evtParams;
+    evtParams.opcodeWidth = component->opcodeWidthEVT;
+    evtParams.txnIdWidth = params.GetTxnIdWidth();
+    evtParams.upstreamNodeIdWidth = params.GetUpstreamNodeIdWidth();
+    evtParams.downstreamNodeIdWidth = params.GetDownstreamNodeIdWidth();
+    evtParams.wayIndexWidth = params.GetWayIndexWidth();
+    evtParams.uwPersistEnable = params.IsUWPersistEnabled();
+    evtParams.uwPredictEnable = params.IsUWPredictEnabled();
+
+    ::CCHI::Flits::REQMeasure::Parameters reqParams;
+    reqParams.opcodeWidth = component->opcodeWidthREQ;
+    reqParams.txnIdWidth = params.GetTxnIdWidth();
+    reqParams.upstreamNodeIdWidth = params.GetUpstreamNodeIdWidth();
+    reqParams.downstreamNodeIdWidth = params.GetDownstreamNodeIdWidth();
+    reqParams.wayIndexWidth = params.GetWayIndexWidth();
+    reqParams.tagAliasWidth = params.GetTagAliasWidth();
+    reqParams.uwPersistEnable = params.IsUWPersistEnabled();
+    reqParams.uwPredictEnable = params.IsUWPredictEnabled();
+
+    ::CCHI::Flits::SNPMeasure::Parameters snpParams;
+    snpParams.opcodeWidth = component->opcodeWidthSNP;
+    snpParams.dbIdWidth = params.GetDBIdWidth();
+    snpParams.upstreamNodeIdWidth = params.GetUpstreamNodeIdWidth();
+    snpParams.downstreamNodeIdWidth = params.GetDownstreamNodeIdWidth();
+
+    ::CCHI::Flits::DnRSPMeasure::Parameters dnRspParams;
+    dnRspParams.opcodeWidth = component->opcodeWidthDnRSP;
+    dnRspParams.txnIdWidth = params.GetTxnIdWidth();
+    dnRspParams.dbIdWidth = params.GetDBIdWidth();
+    dnRspParams.upstreamNodeIdWidth = params.GetUpstreamNodeIdWidth();
+    dnRspParams.downstreamNodeIdWidth = params.GetDownstreamNodeIdWidth();
+    dnRspParams.wayIndexWidth = params.GetWayIndexWidth();
+    dnRspParams.uwPersistEnable = params.IsUWPersistEnabled();
+    dnRspParams.uwPredictEnable = params.IsUWPredictEnabled();
+
+    ::CCHI::Flits::UpRSPMeasure::Parameters upRspParams;
+    upRspParams.opcodeWidth = component->opcodeWidthUpRSP;
+    upRspParams.dbIdWidth = params.GetDBIdWidth();
+    upRspParams.upstreamNodeIdWidth = params.GetUpstreamNodeIdWidth();
+    upRspParams.downstreamNodeIdWidth = params.GetDownstreamNodeIdWidth();
+
+    ::CCHI::Flits::DnDATMeasure::Parameters dnDatParams;
+    dnDatParams.opcodeWidth = component->opcodeWidthDnDAT;
+    dnDatParams.txnIdWidth = params.GetTxnIdWidth();
+    dnDatParams.dbIdWidth = params.GetDBIdWidth();
+    dnDatParams.upstreamNodeIdWidth = params.GetUpstreamNodeIdWidth();
+    dnDatParams.downstreamNodeIdWidth = params.GetDownstreamNodeIdWidth();
+    dnDatParams.wayIndexWidth = params.GetWayIndexWidth();
+    dnDatParams.dataWidth = params.GetDataWidth();
+    dnDatParams.uwPersistEnable = params.IsUWPersistEnabled();
+    dnDatParams.uwPredictEnable = params.IsUWPredictEnabled();
+
+    ::CCHI::Flits::UpDATMeasure::Parameters upDatParams;
+    upDatParams.opcodeWidth = component->opcodeWidthUpDAT;
+    upDatParams.dbIdWidth = params.GetDBIdWidth();
+    upDatParams.upstreamNodeIdWidth = params.GetUpstreamNodeIdWidth();
+    upDatParams.downstreamNodeIdWidth = params.GetDownstreamNodeIdWidth();
+    upDatParams.dataWidth = params.GetDataWidth();
+
+    if (!measures.evt.Eval(evtParams)
+        || !measures.req.Eval(reqParams)
+        || !measures.snp.Eval(snpParams)
+        || !measures.dnRsp.Eval(dnRspParams)
+        || !measures.upRsp.Eval(upRspParams)
+        || !measures.dnDat.Eval(dnDatParams)
+        || !measures.upDat.Eval(upDatParams)) {
+        setLoadError(error,
+                     CLogBTraceLoadError::Type::Generic,
+                     QStringLiteral("Unable to evaluate CCHI flit measurements for this CLog.B file."),
+                     QStringLiteral("The file declares unsupported or inconsistent CCHI parameters."),
+                     describeCCHIParametersBlock(params));
+        return false;
+    }
+
+    return true;
+}
+
 bool deserializeReq(const CHI::Eb::Flits::REQMeasure& measure,
                     FlexibleReqFlit& flit,
                     uint32_t* flitBits,
@@ -4083,6 +4599,285 @@ bool deserializeBSnp(const CHI::B::Flits::SNPMeasure& measure,
     return true;
 }
 
+// Runtime-width CCHI deserializers: walk the raw bits with the per-field
+// widths of the evaluated channel measures into the widest-config flits.
+// Width-0 fields (component-type-gated Opcode, feature-gated WayValid/Way,
+// zero TagAlias, zero DataID) are skipped, mirroring the compile-time
+// deserializers in cchi/util/cchi_util_flit.hpp.
+
+bool deserializeCCHIEvt(const ::CCHI::Flits::EVTMeasure& measure,
+                        FlexibleCCHIEvtFlit& flit,
+                        const uint32_t* flitBits,
+                        const size_t bitLength)
+{
+    const size_t expectedBitLength = measure.width._;
+    if (bitLength != byteAlignedBitLength(expectedBitLength)
+        || expectedBitLength > FlexibleCCHIEvtFlit::WIDTH) {
+        return false;
+    }
+
+    flit = FlexibleCCHIEvtFlit();
+    ::CCHI::Flits::details::FlitWalker walker(flitBits);
+
+    flit.TxnID = walker.Walk32(measure.width.TxnID);
+    flit.SrcID = walker.Walk32(measure.width.SrcID);
+    flit.TgtID = walker.Walk32(measure.width.TgtID);
+    if (measure.width.Opcode > 0) {
+        flit.Opcode = walker.Walk32(measure.width.Opcode);
+    }
+    flit.Addr = walker.Walk64(measure.width.Addr);
+    flit.NS = walker.Walk32(measure.width.NS);
+    flit.MemAttr = walker.Walk32(measure.width.MemAttr);
+    if (measure.width.WayValid > 0) {
+        flit.WayValid = walker.Walk32(measure.width.WayValid);
+    }
+    if (measure.width.Way > 0) {
+        flit.Way = walker.Walk32(measure.width.Way);
+    }
+    flit.TraceTag = walker.Walk32(measure.width.TraceTag);
+
+    walker.Finish(expectedBitLength);
+    return true;
+}
+
+bool deserializeCCHIReq(const ::CCHI::Flits::REQMeasure& measure,
+                        FlexibleCCHIReqFlit& flit,
+                        const uint32_t* flitBits,
+                        const size_t bitLength)
+{
+    const size_t expectedBitLength = measure.width._;
+    if (bitLength != byteAlignedBitLength(expectedBitLength)
+        || expectedBitLength > FlexibleCCHIReqFlit::WIDTH) {
+        return false;
+    }
+
+    flit = FlexibleCCHIReqFlit();
+    ::CCHI::Flits::details::FlitWalker walker(flitBits);
+
+    flit.TxnID = walker.Walk32(measure.width.TxnID);
+    flit.SrcID = walker.Walk32(measure.width.SrcID);
+    flit.TgtID = walker.Walk32(measure.width.TgtID);
+    if (measure.width.Opcode > 0) {
+        flit.Opcode = walker.Walk32(measure.width.Opcode);
+    }
+    flit.Size = walker.Walk32(measure.width.Size);
+    flit.Addr = walker.Walk64(measure.width.Addr);
+    if (measure.width.TagAlias > 0) {
+        flit.TagAlias = walker.Walk32(measure.width.TagAlias);
+    }
+    flit.NS = walker.Walk32(measure.width.NS);
+    flit.Order = walker.Walk32(measure.width.Order);
+    flit.MemAttr = walker.Walk32(measure.width.MemAttr);
+    flit.Excl = walker.Walk32(measure.width.Excl);
+    flit.ExpCompData = walker.Walk32(measure.width.ExpCompData);
+    flit.ExpCompStash = flit.ExpCompData;
+    if (measure.width.WayValid > 0) {
+        flit.WayValid = walker.Walk32(measure.width.WayValid);
+    }
+    if (measure.width.Way > 0) {
+        flit.Way = walker.Walk32(measure.width.Way);
+    }
+    flit.TraceTag = walker.Walk32(measure.width.TraceTag);
+
+    walker.Finish(expectedBitLength);
+    return true;
+}
+
+bool deserializeCCHISnp(const ::CCHI::Flits::SNPMeasure& measure,
+                        FlexibleCCHISnpFlit& flit,
+                        const uint32_t* flitBits,
+                        const size_t bitLength)
+{
+    const size_t expectedBitLength = measure.width._;
+    if (bitLength != byteAlignedBitLength(expectedBitLength)
+        || expectedBitLength > FlexibleCCHISnpFlit::WIDTH) {
+        return false;
+    }
+
+    flit = FlexibleCCHISnpFlit();
+    ::CCHI::Flits::details::FlitWalker walker(flitBits);
+
+    flit.TxnID = walker.Walk32(measure.width.TxnID);
+    flit.SrcID = walker.Walk32(measure.width.SrcID);
+    flit.TgtID = walker.Walk32(measure.width.TgtID);
+    if (measure.width.Opcode > 0) {
+        flit.Opcode = walker.Walk32(measure.width.Opcode);
+    }
+    flit.Addr = walker.Walk64(measure.width.Addr);
+    flit.NS = walker.Walk32(measure.width.NS);
+    flit.TraceTag = walker.Walk32(measure.width.TraceTag);
+
+    walker.Finish(expectedBitLength);
+    return true;
+}
+
+bool deserializeCCHIDnRsp(const ::CCHI::Flits::DnRSPMeasure& measure,
+                          FlexibleCCHIDnRspFlit& flit,
+                          const uint32_t* flitBits,
+                          const size_t bitLength)
+{
+    const size_t expectedBitLength = measure.width._;
+    if (bitLength != byteAlignedBitLength(expectedBitLength)
+        || expectedBitLength > FlexibleCCHIDnRspFlit::WIDTH) {
+        return false;
+    }
+
+    flit = FlexibleCCHIDnRspFlit();
+    ::CCHI::Flits::details::FlitWalker walker(flitBits);
+
+    flit.TxnID = walker.Walk32(measure.width.TxnID);
+    flit.SrcID = walker.Walk32(measure.width.SrcID);
+    flit.TgtID = walker.Walk32(measure.width.TgtID);
+    flit.DBID = walker.Walk32(measure.width.DBID);
+    if (measure.width.Opcode > 0) {
+        flit.Opcode = walker.Walk32(measure.width.Opcode);
+    }
+    flit.RespErr = walker.Walk32(measure.width.RespErr);
+    flit.Resp = walker.Walk32(measure.width.Resp);
+    flit.CBusy = walker.Walk32(measure.width.CBusy);
+    if (measure.width.WayValid > 0) {
+        flit.WayValid = walker.Walk32(measure.width.WayValid);
+    }
+    if (measure.width.Way > 0) {
+        flit.Way = walker.Walk32(measure.width.Way);
+    }
+    flit.TraceTag = walker.Walk32(measure.width.TraceTag);
+
+    walker.Finish(expectedBitLength);
+    return true;
+}
+
+bool deserializeCCHIUpRsp(const ::CCHI::Flits::UpRSPMeasure& measure,
+                          FlexibleCCHIUpRspFlit& flit,
+                          const uint32_t* flitBits,
+                          const size_t bitLength)
+{
+    const size_t expectedBitLength = measure.width._;
+    if (bitLength != byteAlignedBitLength(expectedBitLength)
+        || expectedBitLength > FlexibleCCHIUpRspFlitWidth) {
+        return false;
+    }
+
+    flit = FlexibleCCHIUpRspFlit();
+    ::CCHI::Flits::details::FlitWalker walker(flitBits);
+
+    flit.TxnID = walker.Walk32(measure.width.TxnID);
+    flit.SrcID = walker.Walk32(measure.width.SrcID);
+    flit.TgtID = walker.Walk32(measure.width.TgtID);
+    if (measure.width.Opcode > 0) {
+        flit.Opcode = walker.Walk32(measure.width.Opcode);
+    }
+    flit.RespErr = walker.Walk32(measure.width.RespErr);
+    flit.Resp = walker.Walk32(measure.width.Resp);
+    flit.TraceTag = walker.Walk32(measure.width.TraceTag);
+
+    walker.Finish(expectedBitLength);
+    return true;
+}
+
+bool deserializeCCHIDnDat(const ::CCHI::Flits::DnDATMeasure& measure,
+                          FlexibleCCHIDnDatFlit& flit,
+                          const uint32_t* flitBits,
+                          const size_t bitLength)
+{
+    const size_t expectedBitLength = measure.width._;
+    if (bitLength != byteAlignedBitLength(expectedBitLength)
+        || expectedBitLength > FlexibleCCHIDnDatFlit::WIDTH) {
+        return false;
+    }
+
+    flit = FlexibleCCHIDnDatFlit();
+    ::CCHI::Flits::details::FlitWalker walker(flitBits);
+
+    flit.TxnID = walker.Walk32(measure.width.TxnID);
+    flit.SrcID = walker.Walk32(measure.width.SrcID);
+    flit.TgtID = walker.Walk32(measure.width.TgtID);
+    flit.DBID = walker.Walk32(measure.width.DBID);
+    if (measure.width.Opcode > 0) {
+        flit.Opcode = walker.Walk32(measure.width.Opcode);
+    }
+    flit.RespErr = walker.Walk32(measure.width.RespErr);
+    flit.Resp = walker.Walk32(measure.width.Resp);
+    flit.DataSource = walker.Walk32(measure.width.DataSource);
+    flit.CBusy = walker.Walk32(measure.width.CBusy);
+    if (measure.width.WayValid > 0) {
+        flit.WayValid = walker.Walk32(measure.width.WayValid);
+    }
+    if (measure.width.Way > 0) {
+        flit.Way = walker.Walk32(measure.width.Way);
+    }
+    if (measure.width.DataID > 0) {
+        flit.DataID = walker.Walk32(measure.width.DataID);
+    }
+    const size_t dataWords = measure.width.Data / 64;
+    for (size_t index = 0; index < dataWords; ++index) {
+        flit.Data[index] = walker.Walk64(64);
+    }
+    flit.TraceTag = walker.Walk32(measure.width.TraceTag);
+
+    walker.Finish(expectedBitLength);
+    return true;
+}
+
+bool deserializeCCHIUpDat(const ::CCHI::Flits::UpDATMeasure& measure,
+                          FlexibleCCHIUpDatFlit& flit,
+                          const uint32_t* flitBits,
+                          const size_t bitLength)
+{
+    const size_t expectedBitLength = measure.width._;
+    if (bitLength != byteAlignedBitLength(expectedBitLength)
+        || expectedBitLength > FlexibleCCHIUpDatFlitWidth) {
+        return false;
+    }
+
+    flit = FlexibleCCHIUpDatFlit();
+    ::CCHI::Flits::details::FlitWalker walker(flitBits);
+
+    flit.TxnID = walker.Walk32(measure.width.TxnID);
+    flit.SrcID = walker.Walk32(measure.width.SrcID);
+    flit.TgtID = walker.Walk32(measure.width.TgtID);
+    if (measure.width.Opcode > 0) {
+        flit.Opcode = walker.Walk32(measure.width.Opcode);
+    }
+    flit.RespErr = walker.Walk32(measure.width.RespErr);
+    flit.Resp = walker.Walk32(measure.width.Resp);
+    if (measure.width.DataID > 0) {
+        flit.DataID = walker.Walk32(measure.width.DataID);
+    }
+    const size_t dataWords = measure.width.Data / 64;
+    for (size_t index = 0; index < dataWords; ++index) {
+        flit.Data[index] = walker.Walk64(64);
+    }
+    flit.BE = walker.Walk32(measure.width.BE);
+    flit.TraceTag = walker.Walk32(measure.width.TraceTag);
+
+    walker.Finish(expectedBitLength);
+    return true;
+}
+
+// Converts a freshly-read CCHI record block into the CHI-shaped record block
+// used by the block cache and the decode-slice pipeline. The CCHI channel
+// value survives as the raw channel byte; all CCHI-aware consumers recover it
+// with cchiRecordChannel().
+void convertCCHIRecordsTag(const CLog::CLogB::TagCCHIRecords& source,
+                           CLog::CLogB::TagCHIRecords& target)
+{
+    target.head.length = source.head.length;
+    target.head.compressed = source.head.compressed;
+    target.head.timeBase = source.head.timeBase;
+    target.records.clear();
+    target.records.reserve(source.records.size());
+    for (const auto& record : source.records) {
+        CLog::CLogB::TagCHIRecords::Record converted;
+        converted.timeShift = record.timeShift;
+        converted.nodeId = record.nodeId;
+        converted.channel = static_cast<CLog::Channel>(static_cast<std::uint8_t>(record.channel));
+        converted.flitLength = record.flitLength;
+        converted.flit = record.flit;
+        target.records.push_back(std::move(converted));
+    }
+}
+
 bool appendDecodedTag(const CLog::Parameters& params,
                       const EbMeasures& measures,
                       const CLog::CLogB::TagCHIRecords& tag,
@@ -4297,7 +5092,7 @@ bool appendDecodedTag(const CLog::Parameters& params,
     auto formatDecodedRecords = [&]<typename XactionConfig>() -> bool {
         EbFlitAdapter adapter;
         CHI::Eb::Xact::Global<XactionConfig> xactGlobal;
-        populateEbXactTopology(xactGlobal.TOPOLOGY, nodeTypes);
+        populateEbXactTopology(xactGlobal.TOPOLOGY, xactGlobal.SAM_SCOPE, nodeTypes);
         CHI::Eb::Xact::RNFJoint<XactionConfig> rnJoint;
         CHI::Eb::Xact::SNFJoint<XactionConfig> snJoint;
         std::uint64_t nextXactionOrdinal = 1;
@@ -4729,6 +5524,321 @@ bool appendDecodedBTag(const CLog::Parameters& params,
     return true;
 }
 
+bool appendDecodedCCHITag(const CLog::CCHI::Parameters& params,
+                          const CCHIMeasures& measures,
+                          const CLog::CLogB::TagCHIRecords& tag,
+                          const std::unordered_map<quint16, QString>& nodeAnnotations,
+                          std::vector<FlitRecord>& rows,
+                          CLogBTraceLoadError& error,
+                          const CLogBTraceLoadCallbacks& callbacks,
+                          const std::uint64_t progressStartBytes,
+                          const std::uint64_t progressEndBytes,
+                          const std::uint64_t totalBytes,
+                          std::stop_token stopToken = {},
+                          const bool allowParallelDecode = true)
+{
+    const QString flitReport = buildCCHIFlitReport(params, measures);
+    const std::size_t rowBase = rows.size();
+    rows.resize(rowBase + tag.records.size());
+    std::vector<DecodedCCHIRecord> decodedRecords(tag.records.size());
+    std::vector<qulonglong> recordTimestamps;
+    std::size_t failedRecordIndex = 0;
+    if (!buildRecordTimestamps(tag, recordTimestamps, failedRecordIndex)) {
+        setLoadError(error,
+                     CLogBTraceLoadError::Type::Generic,
+                     QStringLiteral("Record %1 timestamp exceeds the GUI timestamp range.")
+                         .arg(static_cast<qulonglong>(failedRecordIndex + 1)));
+        rows.resize(rowBase);
+        return false;
+    }
+    const std::size_t workerCount = suggestedDecodeWorkerCount(tag.records.size(), allowParallelDecode);
+    const std::size_t recordsPerWorker = workerCount == 0
+        ? 0
+        : (tag.records.size() + workerCount - 1) / workerCount;
+    std::vector<std::size_t> recordBytePrefix(tag.records.size() + 1, 0);
+    for (std::size_t index = 0; index < tag.records.size(); ++index) {
+        recordBytePrefix[index + 1] = recordBytePrefix[index] + recordStorageBytes(tag.records[index]);
+    }
+    std::vector<std::atomic<std::size_t>> workerReportedBytes(workerCount);
+    for (std::size_t index = 0; index < workerReportedBytes.size(); ++index) {
+        workerReportedBytes[index].store(0, std::memory_order_relaxed);
+    }
+    std::atomic<std::size_t> completedTagBytes = 0;
+    DecodeProgressCallback decodeProgressCallback;
+    if (callbacks.stageProgress) {
+        decodeProgressCallback =
+            [&](const std::size_t completedRecords, const std::size_t totalRecords) {
+                callbacks.stageProgress(completedRecords, totalRecords);
+            };
+    }
+
+    const CLogBTraceLoadWorkerProgressCallback decodeWorkerProgressCallback =
+        [&](const CLogBTraceLoadWorkerProgress& workerProgress) {
+            if (callbacks.workerProgress) {
+                callbacks.workerProgress(workerProgress);
+            }
+
+            if (workerProgress.workerIndex >= workerCount) {
+                return;
+            }
+
+            const std::size_t begin = workerProgress.workerIndex * recordsPerWorker;
+            const std::size_t end = std::min(tag.records.size(), begin + recordsPerWorker);
+            const std::size_t clampedCompletedRecords = std::min<std::size_t>(
+                workerProgress.completedRecords,
+                end >= begin ? (end - begin) : 0);
+            const std::size_t completedWorkerBytes =
+                recordBytePrefix[begin + clampedCompletedRecords] - recordBytePrefix[begin];
+            const std::size_t previousWorkerBytes =
+                workerReportedBytes[workerProgress.workerIndex].exchange(completedWorkerBytes, std::memory_order_relaxed);
+
+            if (callbacks.progress && completedWorkerBytes >= previousWorkerBytes) {
+                const std::size_t totalCompletedBytes = completedTagBytes.fetch_add(
+                    completedWorkerBytes - previousWorkerBytes,
+                    std::memory_order_relaxed)
+                    + (completedWorkerBytes - previousWorkerBytes);
+                reportTagDecodeProgress(callbacks.progress,
+                                        progressStartBytes,
+                                        progressEndBytes,
+                                        totalBytes,
+                                        totalCompletedBytes,
+                                        tag.head.length);
+            }
+        };
+
+    reportStage(callbacks.stage,
+                CLogBTraceLoadStage::Decoding,
+                workerCount,
+                tag.records.size());
+
+    const auto decodeRecord = [&](const std::size_t recordIndex, CLogBTraceLoadError& workerError) -> bool {
+        const auto& source = tag.records[recordIndex];
+        const qulonglong timestamp = recordTimestamps[recordIndex];
+        const qint64 decodedTimestamp = static_cast<qint64>(timestamp);
+        const size_t bitLength = static_cast<size_t>(source.flitLength) * 8U;
+        const CLog::CCHI::Channel channel = cchiRecordChannel(source.channel);
+        DecodedCCHIRecord decodedRecord;
+        decodedRecord.timestamp = decodedTimestamp;
+        decodedRecord.direction = isCCHITxChannel(channel) ? FlitDirection::Tx
+                                                           : FlitDirection::Rx;
+        decodedRecord.nodeId = source.nodeId;
+
+        switch (channel) {
+        case CLog::CCHI::Channel::TXEVT:
+        case CLog::CCHI::Channel::RXEVT: {
+            FlexibleCCHIEvtFlit flit;
+            if (!deserializeCCHIEvt(measures.evt, flit, source.flit.get(), bitLength)) {
+                setCCHIDeserializationLoadError(workerError,
+                                                params,
+                                                QStringLiteral("EVT"),
+                                                tag,
+                                                source,
+                                                recordIndex,
+                                                timestamp,
+                                                measures.evt,
+                                                FlexibleCCHIEvtFlit::WIDTH);
+                workerError.flitReportText = flitReport;
+                return false;
+            }
+
+            decodedRecord.flit = std::move(flit);
+            break;
+        }
+        case CLog::CCHI::Channel::TXREQ:
+        case CLog::CCHI::Channel::RXREQ: {
+            FlexibleCCHIReqFlit flit;
+            if (!deserializeCCHIReq(measures.req, flit, source.flit.get(), bitLength)) {
+                setCCHIDeserializationLoadError(workerError,
+                                                params,
+                                                QStringLiteral("REQ"),
+                                                tag,
+                                                source,
+                                                recordIndex,
+                                                timestamp,
+                                                measures.req,
+                                                FlexibleCCHIReqFlit::WIDTH);
+                workerError.flitReportText = flitReport;
+                return false;
+            }
+
+            decodedRecord.flit = std::move(flit);
+            break;
+        }
+        case CLog::CCHI::Channel::TXSNP:
+        case CLog::CCHI::Channel::RXSNP: {
+            FlexibleCCHISnpFlit flit;
+            if (!deserializeCCHISnp(measures.snp, flit, source.flit.get(), bitLength)) {
+                setCCHIDeserializationLoadError(workerError,
+                                                params,
+                                                QStringLiteral("SNP"),
+                                                tag,
+                                                source,
+                                                recordIndex,
+                                                timestamp,
+                                                measures.snp,
+                                                FlexibleCCHISnpFlit::WIDTH);
+                workerError.flitReportText = flitReport;
+                return false;
+            }
+
+            decodedRecord.flit = std::move(flit);
+            break;
+        }
+        case CLog::CCHI::Channel::TXDNRSP:
+        case CLog::CCHI::Channel::RXDNRSP: {
+            FlexibleCCHIDnRspFlit flit;
+            if (!deserializeCCHIDnRsp(measures.dnRsp, flit, source.flit.get(), bitLength)) {
+                setCCHIDeserializationLoadError(workerError,
+                                                params,
+                                                QStringLiteral("DNRSP"),
+                                                tag,
+                                                source,
+                                                recordIndex,
+                                                timestamp,
+                                                measures.dnRsp,
+                                                FlexibleCCHIDnRspFlit::WIDTH);
+                workerError.flitReportText = flitReport;
+                return false;
+            }
+
+            decodedRecord.flit = std::move(flit);
+            break;
+        }
+        case CLog::CCHI::Channel::TXUPRSP:
+        case CLog::CCHI::Channel::RXUPRSP: {
+            FlexibleCCHIUpRspFlit flit;
+            if (!deserializeCCHIUpRsp(measures.upRsp, flit, source.flit.get(), bitLength)) {
+                setCCHIDeserializationLoadError(workerError,
+                                                params,
+                                                QStringLiteral("UPRSP"),
+                                                tag,
+                                                source,
+                                                recordIndex,
+                                                timestamp,
+                                                measures.upRsp,
+                                                FlexibleCCHIUpRspFlitWidth);
+                workerError.flitReportText = flitReport;
+                return false;
+            }
+
+            decodedRecord.flit = std::move(flit);
+            break;
+        }
+        case CLog::CCHI::Channel::TXDNDAT:
+        case CLog::CCHI::Channel::RXDNDAT: {
+            FlexibleCCHIDnDatFlit flit;
+            if (!deserializeCCHIDnDat(measures.dnDat, flit, source.flit.get(), bitLength)) {
+                setCCHIDeserializationLoadError(workerError,
+                                                params,
+                                                QStringLiteral("DNDAT"),
+                                                tag,
+                                                source,
+                                                recordIndex,
+                                                timestamp,
+                                                measures.dnDat,
+                                                FlexibleCCHIDnDatFlit::WIDTH);
+                workerError.flitReportText = flitReport;
+                return false;
+            }
+
+            decodedRecord.flit = std::move(flit);
+            break;
+        }
+        case CLog::CCHI::Channel::TXUPDAT:
+        case CLog::CCHI::Channel::RXUPDAT: {
+            FlexibleCCHIUpDatFlit flit;
+            if (!deserializeCCHIUpDat(measures.upDat, flit, source.flit.get(), bitLength)) {
+                setCCHIDeserializationLoadError(workerError,
+                                                params,
+                                                QStringLiteral("UPDAT"),
+                                                tag,
+                                                source,
+                                                recordIndex,
+                                                timestamp,
+                                                measures.upDat,
+                                                FlexibleCCHIUpDatFlitWidth);
+                workerError.flitReportText = flitReport;
+                return false;
+            }
+
+            decodedRecord.flit = std::move(flit);
+            break;
+        }
+        }
+
+        decodedRecords[recordIndex] = std::move(decodedRecord);
+        return true;
+    };
+
+    if (!decodeRecords(tag.records.size(),
+                       decodeRecord,
+                       error,
+                       decodeProgressCallback,
+                       decodeWorkerProgressCallback,
+                       stopToken,
+                       allowParallelDecode)) {
+        rows.resize(rowBase);
+        return false;
+    }
+
+    reportStage(callbacks.stage,
+                CLogBTraceLoadStage::Formatting,
+                0,
+                decodedRecords.size());
+
+    CCHIFlitAdapter adapter;
+    constexpr std::size_t kFormattingProgressBatchSize = 2048;
+    for (std::size_t recordIndex = 0; recordIndex < decodedRecords.size(); ++recordIndex) {
+        if (stopToken.stop_requested()) {
+            setCancelledLoadError(error);
+            rows.resize(rowBase);
+            return false;
+        }
+
+        const DecodedCCHIRecord& decodedRecord = decodedRecords[recordIndex];
+        FlitRecord row;
+
+        std::visit([&](const auto& flit) {
+            using T = std::decay_t<decltype(flit)>;
+            if constexpr (std::is_same_v<T, FlexibleCCHIEvtFlit>) {
+                row = adapter.fromEVT(decodedRecord.timestamp, decodedRecord.direction, flit, measures.evt);
+            } else if constexpr (std::is_same_v<T, FlexibleCCHIReqFlit>) {
+                row = adapter.fromREQ(decodedRecord.timestamp, decodedRecord.direction, flit, measures.req);
+            } else if constexpr (std::is_same_v<T, FlexibleCCHISnpFlit>) {
+                row = adapter.fromSNP(decodedRecord.timestamp, decodedRecord.direction, flit, measures.snp);
+            } else if constexpr (std::is_same_v<T, FlexibleCCHIDnRspFlit>) {
+                row = adapter.fromDnRSP(decodedRecord.timestamp, decodedRecord.direction, flit, measures.dnRsp);
+            } else if constexpr (std::is_same_v<T, FlexibleCCHIUpRspFlit>) {
+                row = adapter.fromUpRSP(decodedRecord.timestamp, decodedRecord.direction, flit, measures.upRsp);
+            } else if constexpr (std::is_same_v<T, FlexibleCCHIDnDatFlit>) {
+                row = adapter.fromDnDAT(decodedRecord.timestamp, decodedRecord.direction, flit, measures.dnDat);
+            } else if constexpr (std::is_same_v<T, FlexibleCCHIUpDatFlit>) {
+                row = adapter.fromUpDAT(decodedRecord.timestamp, decodedRecord.direction, flit, measures.upDat);
+            }
+        }, decodedRecord.flit);
+
+        row.annotation = captureAnnotationForNode(decodedRecord.nodeId, nodeAnnotations);
+        row.channelNodeId = decodedRecord.nodeId;
+        attachRawRecordPayload(row, tag.records[recordIndex]);
+        AppendFallbackTransactionGroupKeys(row);
+        rows[rowBase + recordIndex] = std::move(row);
+        if (callbacks.stageProgress
+            && (((recordIndex + 1) % kFormattingProgressBatchSize) == 0
+                || (recordIndex + 1) == decodedRecords.size())) {
+            callbacks.stageProgress(recordIndex + 1, decodedRecords.size());
+        }
+    }
+
+    reportTagDecodeProgress(callbacks.progress,
+                            progressStartBytes,
+                            progressEndBytes,
+                            totalBytes,
+                            tag.records.size(),
+                            tag.records.size());
+
+    return true;
+}
+
 bool prepareEbTraceDecoding(const CLog::Parameters& params,
                             EbMeasures& measures,
                             CLogBTraceLoadError& error)
@@ -4741,6 +5851,13 @@ bool prepareBTraceDecoding(const CLog::Parameters& params,
                            CLogBTraceLoadError& error)
 {
     return buildBMeasures(params, measures, error);
+}
+
+bool prepareCCHITraceDecoding(const CLog::CCHI::Parameters& params,
+                              CCHIMeasures& measures,
+                              CLogBTraceLoadError& error)
+{
+    return buildCCHIMeasures(params, measures, error);
 }
 
 std::uint8_t storedByteLengthForWidth(const std::size_t bitWidth) noexcept
@@ -5066,12 +6183,63 @@ QString fastOpcodeDisplayValue(const CLog::Parameters& params, const CLogBTraceF
     return QStringLiteral("Unknown");
 }
 
-bool fastRecordMatchesFilter(const CLog::Parameters& params,
+QString fastCCHIOpcodeDisplayValue(const CLogBTraceFastRecordInfo& info)
+{
+    switch (static_cast<CLog::CCHI::Channel>(info.channel)) {
+    case CLog::CCHI::Channel::TXEVT:
+    case CLog::CCHI::Channel::RXEVT:
+        return opcodeNameValue(
+            ::CCHI::Opcodes::EVT::Decoder<FlexibleCCHIEvtFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIEvtFlit::opcode_t>(info.opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXREQ:
+    case CLog::CCHI::Channel::RXREQ:
+        return opcodeNameValue(
+            ::CCHI::Opcodes::REQ::Decoder<FlexibleCCHIReqFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIReqFlit::opcode_t>(info.opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXSNP:
+    case CLog::CCHI::Channel::RXSNP:
+        return opcodeNameValue(
+            ::CCHI::Opcodes::SNP::Decoder<FlexibleCCHISnpFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHISnpFlit::opcode_t>(info.opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXDNRSP:
+    case CLog::CCHI::Channel::RXDNRSP:
+        return opcodeNameValue(
+            ::CCHI::Opcodes::DnRSP::Decoder<FlexibleCCHIDnRspFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIDnRspFlit::opcode_t>(info.opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXUPRSP:
+    case CLog::CCHI::Channel::RXUPRSP:
+        return opcodeNameValue(
+            ::CCHI::Opcodes::UpRSP::Decoder<FlexibleCCHIUpRspFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIUpRspFlit::opcode_t>(info.opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXDNDAT:
+    case CLog::CCHI::Channel::RXDNDAT:
+        return opcodeNameValue(
+            ::CCHI::Opcodes::DnDAT::Decoder<FlexibleCCHIDnDatFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIDnDatFlit::opcode_t>(info.opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXUPDAT:
+    case CLog::CCHI::Channel::RXUPDAT:
+        return opcodeNameValue(
+            ::CCHI::Opcodes::UpDAT::Decoder<FlexibleCCHIUpDatFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIUpDatFlit::opcode_t>(info.opcode))
+                .GetName("Unknown"));
+    }
+
+    return QStringLiteral("Unknown");
+}
+
+bool fastRecordMatchesFilter(const CLogBTraceMetadata& metadata,
                              const CLogBTraceFastFilter& filter,
                              const CLogBTraceFastRecordInfo& info)
 {
-    const CLogBTraceChannelMask channelBit =
-        static_cast<CLogBTraceChannelMask>(CLogBTraceChannelMask{1} << info.channel);
+    const CLogBTraceChannelMask channelBit = metadata.isCCHI()
+        ? CLogBCCHIChannelBit(static_cast<CLog::CCHI::Channel>(info.channel))
+        : static_cast<CLogBTraceChannelMask>(CLogBTraceChannelMask{1} << info.channel);
     if ((filter.transportMask & channelBit) == 0) {
         return false;
     }
@@ -5086,8 +6254,10 @@ bool fastRecordMatchesFilter(const CLog::Parameters& params,
                                                opcodeValues.end(),
                                                info.opcode);
         } else {
-            opcodeMatched =
-                fastOpcodeDisplayValue(params, info).contains(filter.opcodeFilter, Qt::CaseInsensitive);
+            const QString opcodeDisplay = metadata.isCCHI()
+                ? fastCCHIOpcodeDisplayValue(info)
+                : fastOpcodeDisplayValue(metadata.parameters, info);
+            opcodeMatched = opcodeDisplay.contains(filter.opcodeFilter, Qt::CaseInsensitive);
         }
 
         if (!opcodeMatched) {
@@ -5095,11 +6265,14 @@ bool fastRecordMatchesFilter(const CLog::Parameters& params,
         }
     }
 
+    const size_t addressWidth = metadata.isCCHI()
+        ? 48
+        : metadata.parameters.GetReqAddrWidth();
     return matchesFilterFast(optionalDecimalValue(info.sourceId), filter.sourceIdFilter)
         && matchesFilterFast(optionalDecimalValue(info.targetId), filter.targetIdFilter)
         && matchesFilterFast(optionalDecimalValue(info.txnId), filter.txnIdFilter)
         && matchesFilterFast(optionalDecimalValue(info.dbid), filter.dbidFilter)
-        && matchesFilterFast(optionalAddressValue(info.address, params.GetReqAddrWidth()),
+        && matchesFilterFast(optionalAddressValue(info.address, addressWidth),
                              filter.addressFilter);
 }
 
@@ -5252,23 +6425,142 @@ bool extractFastRecordInfo(const CLog::Parameters& params,
 }
 
 bool recordMatchesRawFastFilter(const CLogBTraceFastFilter& filter,
-                                const CLog::Parameters& params,
+                                const CLogBTraceMetadata& metadata,
                                 const EbMeasures& measures,
                                 const CLog::CLogB::TagCHIRecords::Record& source)
 {
     CLogBTraceFastRecordInfo info;
-    return extractFastRecordInfo(params, measures, source, info)
-        && fastRecordMatchesFilter(params, filter, info);
+    return extractFastRecordInfo(metadata.parameters, measures, source, info)
+        && fastRecordMatchesFilter(metadata, filter, info);
 }
 
 bool recordMatchesRawFastFilter(const CLogBTraceFastFilter& filter,
-                                const CLog::Parameters& params,
+                                const CLogBTraceMetadata& metadata,
                                 const BMeasures& measures,
                                 const CLog::CLogB::TagCHIRecords::Record& source)
 {
     CLogBTraceFastRecordInfo info;
-    return extractFastRecordInfo(params, measures, source, info)
-        && fastRecordMatchesFilter(params, filter, info);
+    return extractFastRecordInfo(metadata.parameters, measures, source, info)
+        && fastRecordMatchesFilter(metadata, filter, info);
+}
+
+bool extractCCHIFastRecordInfo(const CCHIMeasures& measures,
+                               const CLog::CLogB::TagCHIRecords::Record& source,
+                               CLogBTraceFastRecordInfo& info)
+{
+    info = {};
+    info.channel = static_cast<std::uint8_t>(source.channel);
+    info.nodeId = static_cast<std::uint32_t>(source.nodeId);
+    info.sourceId = std::numeric_limits<std::uint32_t>::max();
+    info.targetId = std::numeric_limits<std::uint32_t>::max();
+    info.txnId = std::numeric_limits<std::uint32_t>::max();
+    info.dbid = std::numeric_limits<std::uint32_t>::max();
+    info.address = std::numeric_limits<std::uint64_t>::max();
+
+    const size_t bitLength = static_cast<size_t>(source.flitLength) * 8U;
+    switch (cchiRecordChannel(source.channel)) {
+    case CLog::CCHI::Channel::TXEVT:
+    case CLog::CCHI::Channel::RXEVT: {
+        FlexibleCCHIEvtFlit flit;
+        if (!deserializeCCHIEvt(measures.evt, flit, source.flit.get(), bitLength)) {
+            return false;
+        }
+        info.opcode = static_cast<std::uint32_t>(flit.Opcode);
+        info.sourceId = static_cast<std::uint32_t>(flit.SrcID);
+        info.targetId = static_cast<std::uint32_t>(flit.TgtID);
+        info.txnId = static_cast<std::uint32_t>(flit.TxnID);
+        info.address = static_cast<std::uint64_t>(flit.Addr);
+        return true;
+    }
+    case CLog::CCHI::Channel::TXREQ:
+    case CLog::CCHI::Channel::RXREQ: {
+        FlexibleCCHIReqFlit flit;
+        if (!deserializeCCHIReq(measures.req, flit, source.flit.get(), bitLength)) {
+            return false;
+        }
+        info.opcode = static_cast<std::uint32_t>(flit.Opcode);
+        info.sourceId = static_cast<std::uint32_t>(flit.SrcID);
+        info.targetId = static_cast<std::uint32_t>(flit.TgtID);
+        info.txnId = static_cast<std::uint32_t>(flit.TxnID);
+        info.address = static_cast<std::uint64_t>(flit.Addr);
+        return true;
+    }
+    case CLog::CCHI::Channel::TXSNP:
+    case CLog::CCHI::Channel::RXSNP: {
+        FlexibleCCHISnpFlit flit;
+        if (!deserializeCCHISnp(measures.snp, flit, source.flit.get(), bitLength)) {
+            return false;
+        }
+        info.opcode = static_cast<std::uint32_t>(flit.Opcode);
+        info.sourceId = static_cast<std::uint32_t>(flit.SrcID);
+        info.targetId = static_cast<std::uint32_t>(flit.TgtID);
+        info.txnId = static_cast<std::uint32_t>(flit.TxnID);
+        info.address = static_cast<std::uint64_t>(flit.Addr) << 3;
+        return true;
+    }
+    case CLog::CCHI::Channel::TXDNRSP:
+    case CLog::CCHI::Channel::RXDNRSP: {
+        FlexibleCCHIDnRspFlit flit;
+        if (!deserializeCCHIDnRsp(measures.dnRsp, flit, source.flit.get(), bitLength)) {
+            return false;
+        }
+        info.opcode = static_cast<std::uint32_t>(flit.Opcode);
+        info.sourceId = static_cast<std::uint32_t>(flit.SrcID);
+        info.targetId = static_cast<std::uint32_t>(flit.TgtID);
+        info.txnId = static_cast<std::uint32_t>(flit.TxnID);
+        info.dbid = static_cast<std::uint32_t>(flit.DBID);
+        return true;
+    }
+    case CLog::CCHI::Channel::TXUPRSP:
+    case CLog::CCHI::Channel::RXUPRSP: {
+        FlexibleCCHIUpRspFlit flit;
+        if (!deserializeCCHIUpRsp(measures.upRsp, flit, source.flit.get(), bitLength)) {
+            return false;
+        }
+        info.opcode = static_cast<std::uint32_t>(flit.Opcode);
+        info.sourceId = static_cast<std::uint32_t>(flit.SrcID);
+        info.targetId = static_cast<std::uint32_t>(flit.TgtID);
+        info.txnId = static_cast<std::uint32_t>(flit.TxnID);
+        return true;
+    }
+    case CLog::CCHI::Channel::TXDNDAT:
+    case CLog::CCHI::Channel::RXDNDAT: {
+        FlexibleCCHIDnDatFlit flit;
+        if (!deserializeCCHIDnDat(measures.dnDat, flit, source.flit.get(), bitLength)) {
+            return false;
+        }
+        info.opcode = static_cast<std::uint32_t>(flit.Opcode);
+        info.sourceId = static_cast<std::uint32_t>(flit.SrcID);
+        info.targetId = static_cast<std::uint32_t>(flit.TgtID);
+        info.txnId = static_cast<std::uint32_t>(flit.TxnID);
+        info.dbid = static_cast<std::uint32_t>(flit.DBID);
+        return true;
+    }
+    case CLog::CCHI::Channel::TXUPDAT:
+    case CLog::CCHI::Channel::RXUPDAT: {
+        FlexibleCCHIUpDatFlit flit;
+        if (!deserializeCCHIUpDat(measures.upDat, flit, source.flit.get(), bitLength)) {
+            return false;
+        }
+        info.opcode = static_cast<std::uint32_t>(flit.Opcode);
+        info.sourceId = static_cast<std::uint32_t>(flit.SrcID);
+        info.targetId = static_cast<std::uint32_t>(flit.TgtID);
+        info.txnId = static_cast<std::uint32_t>(flit.TxnID);
+        return true;
+    }
+    }
+
+    return false;
+}
+
+bool recordMatchesCCHIRawFastFilter(const CLogBTraceFastFilter& filter,
+                                    const CLogBTraceMetadata& metadata,
+                                    const CCHIMeasures& measures,
+                                    const CLog::CLogB::TagCHIRecords::Record& source)
+{
+    CLogBTraceFastRecordInfo info;
+    return extractCCHIFastRecordInfo(measures, source, info)
+        && fastRecordMatchesFilter(metadata, filter, info);
 }
 
 bool bReqFieldCanAppear(const OptionalFieldId fieldId) noexcept
@@ -5794,7 +7086,7 @@ void initializeEbXactionIndexState(
     EbXactionIndexThreadState<Config>& state,
     const std::unordered_map<quint16, CLog::NodeType>& nodeTypes)
 {
-    populateEbXactTopology(state.xactGlobal.TOPOLOGY, nodeTypes);
+    populateEbXactTopology(state.xactGlobal.TOPOLOGY, state.xactGlobal.SAM_SCOPE, nodeTypes);
     state.nextXactionOrdinal = 1;
 }
 
@@ -7763,27 +9055,35 @@ bool decodeTagSlice(const CLogBTraceMetadata& metadata,
         return false;
     }
 
+    CCHIMeasures cchiMeasures;
+    if (metadata.isCCHI()
+        && !prepareCCHITraceDecoding(*metadata.cchiParameters, cchiMeasures, error)) {
+        return false;
+    }
+
     EbMeasures ebMeasures;
     BMeasures bMeasures;
-    switch (metadata.parameters.GetIssue()) {
-    case CLog::Issue::Eb:
-        if (!prepareEbTraceDecoding(metadata.parameters, ebMeasures, error)) {
+    if (!metadata.isCCHI()) {
+        switch (metadata.parameters.GetIssue()) {
+        case CLog::Issue::Eb:
+            if (!prepareEbTraceDecoding(metadata.parameters, ebMeasures, error)) {
+                return false;
+            }
+            break;
+        case CLog::Issue::B:
+            if (!prepareBTraceDecoding(metadata.parameters, bMeasures, error)) {
+                return false;
+            }
+            break;
+        default:
+            setLoadError(error,
+                         CLogBTraceLoadError::Type::Generic,
+                         QStringLiteral("This CLog.B file uses unsupported CHI Issue %1.")
+                             .arg(issueName(metadata.parameters.GetIssue())),
+                         QStringLiteral("CloganGUI currently decodes CHI Issue B, CHI Issue E.b, and CCHI traces."),
+                         describeParametersBlock(metadata.parameters));
             return false;
         }
-        break;
-    case CLog::Issue::B:
-        if (!prepareBTraceDecoding(metadata.parameters, bMeasures, error)) {
-            return false;
-        }
-        break;
-    default:
-        setLoadError(error,
-                     CLogBTraceLoadError::Type::Generic,
-                     QStringLiteral("This CLog.B file uses unsupported CHI Issue %1.")
-                         .arg(issueName(metadata.parameters.GetIssue())),
-                     QStringLiteral("CloganGUI currently decodes CHI Issue B and CHI Issue E.b traces."),
-                     describeParametersBlock(metadata.parameters));
-        return false;
     }
 
     CLog::CLogB::TagCHIRecords selectedTag;
@@ -7802,6 +9102,21 @@ bool decodeTagSlice(const CLogBTraceMetadata& metadata,
                                fullTag.records.begin() + static_cast<std::ptrdiff_t>(localBegin + rowCount));
 
     const CLogBTraceBlockSummary& block = metadata.blocks[blockIndex];
+    if (metadata.isCCHI()) {
+        return appendDecodedCCHITag(*metadata.cchiParameters,
+                                    cchiMeasures,
+                                    selectedTag,
+                                    metadata.nodeAnnotations,
+                                    records,
+                                    error,
+                                    callbacks,
+                                    0,
+                                    block.serializedSize,
+                                    block.serializedSize,
+                                    stopToken,
+                                    allowParallelDecode);
+    }
+
     switch (metadata.parameters.GetIssue()) {
     case CLog::Issue::Eb:
         return appendDecodedTag(metadata.parameters,
@@ -7971,8 +9286,121 @@ bool CLogBTraceLoader::scanFile(const QString& filePath,
                 return false;
             }
 
+            if (metadata.isCCHI()) {
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B file mixes CCHI and CHI parameter blocks."));
+                return false;
+            }
+
             metadata.parameters = tag.parameters;
             hasParameters = true;
+            break;
+        }
+
+        case CLog::CLogB::Encodings::CCHI_PARAMETERS: {
+            CLog::CLogB::TagCCHIParameters tag;
+            if (!tag.Deserialize(input, readError) || !advanceToTagEnd(input, header, readError)) {
+                if (stopToken.stop_requested()) {
+                    setCancelledLoadError(error);
+                    return false;
+                }
+
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B metadata scan failed."),
+                             QStringLiteral("The CCHI parameter block could not be parsed."),
+                             QString::fromStdString(readError));
+                return false;
+            }
+
+            if (hasParameters && !metadata.isCCHI()) {
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B file mixes CHI and CCHI parameter blocks."));
+                return false;
+            }
+
+            metadata.cchiParameters = tag.parameters;
+            hasParameters = true;
+            break;
+        }
+
+        case CLog::CLogB::Encodings::CCHI_TOPOS: {
+            CLog::CLogB::TagCCHITopologies tag;
+            if (!tag.Deserialize(input, readError) || !advanceToTagEnd(input, header, readError)) {
+                if (stopToken.stop_requested()) {
+                    setCancelledLoadError(error);
+                    return false;
+                }
+
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B metadata scan failed."),
+                             QStringLiteral("The CCHI topology block could not be parsed."),
+                             QString::fromStdString(readError));
+                return false;
+            }
+
+            for (const auto& node : tag.nodes) {
+                metadata.nodeAnnotations.insert_or_assign(
+                    node.id,
+                    InternDisplayString(
+                        QStringLiteral("Captured at node %1 (%2).")
+                            .arg(node.id)
+                            .arg(QString::fromStdString(CLog::CCHI::NodeTypeToString(node.type)))));
+                metadata.cchiNodeTypes.insert_or_assign(node.id, node.type);
+            }
+            break;
+        }
+
+        case CLog::CLogB::Encodings::CCHI_RECORDS: {
+            if (!metadata.isCCHI()) {
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B file is missing CCHI parameters."),
+                             QStringLiteral("The first CCHI record block appeared before the file declared its CCHI configuration."));
+                return false;
+            }
+
+            CLogBTraceBlockSummary block;
+            block.fileOffset = header.fileOffset;
+            block.serializedSize = kCLogBTagHeaderBytes + header.payloadLength;
+            block.rowStart = metadata.totalRecords;
+            if (!scanRecordBlock(input,
+                                 header,
+                                 block,
+                                 readError,
+                                 callbacks,
+                                 fileSizeError ? 0U : totalBytes,
+                                 stopToken,
+                                 true)) {
+                if (stopToken.stop_requested()) {
+                    setCancelledLoadError(error);
+                    return false;
+                }
+
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B metadata scan failed."),
+                             QStringLiteral("A CCHI record block could not be scanned."),
+                             QString::fromStdString(readError));
+                return false;
+            }
+
+            metadata.totalRecords += block.recordCount;
+            if (block.recordCount > 0) {
+                if (metadata.blocks.empty() || metadata.totalRecords == block.recordCount) {
+                    metadata.firstTimestamp = block.firstTimestamp;
+                }
+                metadata.lastTimestamp = block.lastTimestamp;
+            }
+            for (std::size_t channelIndex = 0; channelIndex < metadata.channelCounts.size(); ++channelIndex) {
+                metadata.channelCounts[channelIndex] += block.channelCounts[channelIndex];
+                mergeFlitLengthMask(metadata.flitLengthMasks[channelIndex],
+                                    block.flitLengthMasks[channelIndex]);
+            }
+            metadata.blocks.push_back(block);
             break;
         }
 
@@ -8070,7 +9498,7 @@ bool CLogBTraceLoader::scanFile(const QString& filePath,
     if (!hasParameters) {
         setLoadError(error,
                      CLogBTraceLoadError::Type::Generic,
-                     QStringLiteral("CLog.B file does not contain a CHI parameters tag."));
+                     QStringLiteral("CLog.B file does not contain a CHI or CCHI parameters tag."));
         return false;
     }
 
@@ -8150,6 +9578,31 @@ bool CLogBTraceLoader::loadBlockRecords(const QString& filePath,
                      QStringLiteral("The requested record block could not be decoded."),
                      QString::fromStdString(ioError));
         return false;
+    }
+
+    if (metadata.isCCHI()) {
+        if (tag->type != CLog::CLogB::Encodings::CCHI_RECORDS) {
+            setLoadError(error,
+                         CLogBTraceLoadError::Type::Generic,
+                         QStringLiteral("Expected a CCHI records block at file offset %1.")
+                             .arg(blockSummary.fileOffset));
+            return false;
+        }
+
+        const auto cchiTag = std::static_pointer_cast<CLog::CLogB::TagCCHIRecords>(tag);
+        if (cchiTag->records.size() != blockSummary.recordCount) {
+            setLoadError(error,
+                         CLogBTraceLoadError::Type::Generic,
+                         QStringLiteral("The trace file changed after its metadata was scanned."));
+            return false;
+        }
+
+        block = std::make_shared<CLog::CLogB::TagCHIRecords>();
+        convertCCHIRecordsTag(*cchiTag, *block);
+
+        reportProgress(callbacks.progress, blockSummary.serializedSize, blockSummary.serializedSize);
+        reportStage(callbacks.stage, CLogBTraceLoadStage::Completed, 0, 0);
+        return true;
     }
 
     if (tag->type != CLog::CLogB::Encodings::CHI_RECORDS) {
@@ -8252,27 +9705,35 @@ bool CLogBTraceLoader::collectBlockRowsMatchingFilter(const CLogBTraceMetadata& 
         return false;
     }
 
+    CCHIMeasures cchiMeasures;
+    if (metadata.isCCHI()
+        && !prepareCCHITraceDecoding(*metadata.cchiParameters, cchiMeasures, error)) {
+        return false;
+    }
+
     EbMeasures ebMeasures;
     BMeasures bMeasures;
-    switch (metadata.parameters.GetIssue()) {
-    case CLog::Issue::Eb:
-        if (!prepareEbTraceDecoding(metadata.parameters, ebMeasures, error)) {
+    if (!metadata.isCCHI()) {
+        switch (metadata.parameters.GetIssue()) {
+        case CLog::Issue::Eb:
+            if (!prepareEbTraceDecoding(metadata.parameters, ebMeasures, error)) {
+                return false;
+            }
+            break;
+        case CLog::Issue::B:
+            if (!prepareBTraceDecoding(metadata.parameters, bMeasures, error)) {
+                return false;
+            }
+            break;
+        default:
+            setLoadError(error,
+                         CLogBTraceLoadError::Type::Generic,
+                         QStringLiteral("This CLog.B file uses unsupported CHI Issue %1.")
+                             .arg(issueName(metadata.parameters.GetIssue())),
+                         QStringLiteral("CloganGUI currently decodes CHI Issue B, CHI Issue E.b, and CCHI traces."),
+                         describeParametersBlock(metadata.parameters));
             return false;
         }
-        break;
-    case CLog::Issue::B:
-        if (!prepareBTraceDecoding(metadata.parameters, bMeasures, error)) {
-            return false;
-        }
-        break;
-    default:
-        setLoadError(error,
-                     CLogBTraceLoadError::Type::Generic,
-                     QStringLiteral("This CLog.B file uses unsupported CHI Issue %1.")
-                         .arg(issueName(metadata.parameters.GetIssue())),
-                     QStringLiteral("CloganGUI currently decodes CHI Issue B and CHI Issue E.b traces."),
-                     describeParametersBlock(metadata.parameters));
-        return false;
     }
 
     localRows.reserve(block.records.size());
@@ -8283,21 +9744,28 @@ bool CLogBTraceLoader::collectBlockRowsMatchingFilter(const CLogBTraceMetadata& 
         }
 
         bool matched = false;
-        switch (metadata.parameters.GetIssue()) {
-        case CLog::Issue::Eb:
-            matched = recordMatchesRawFastFilter(filter,
-                                                 metadata.parameters,
-                                                 ebMeasures,
-                                                 block.records[localIndex]);
-            break;
-        case CLog::Issue::B:
-            matched = recordMatchesRawFastFilter(filter,
-                                                 metadata.parameters,
-                                                 bMeasures,
-                                                 block.records[localIndex]);
-            break;
-        default:
-            return false;
+        if (metadata.isCCHI()) {
+            matched = recordMatchesCCHIRawFastFilter(filter,
+                                                     metadata,
+                                                     cchiMeasures,
+                                                     block.records[localIndex]);
+        } else {
+            switch (metadata.parameters.GetIssue()) {
+            case CLog::Issue::Eb:
+                matched = recordMatchesRawFastFilter(filter,
+                                                     metadata,
+                                                     ebMeasures,
+                                                     block.records[localIndex]);
+                break;
+            case CLog::Issue::B:
+                matched = recordMatchesRawFastFilter(filter,
+                                                     metadata,
+                                                     bMeasures,
+                                                     block.records[localIndex]);
+                break;
+            default:
+                return false;
+            }
         }
 
         if (matched) {
@@ -8329,27 +9797,35 @@ bool CLogBTraceLoader::collectBlockRowsMatchingFilterAndBuildRecords(const CLogB
         return false;
     }
 
+    CCHIMeasures cchiMeasures;
+    if (metadata.isCCHI()
+        && !prepareCCHITraceDecoding(*metadata.cchiParameters, cchiMeasures, error)) {
+        return false;
+    }
+
     EbMeasures ebMeasures;
     BMeasures bMeasures;
-    switch (metadata.parameters.GetIssue()) {
-    case CLog::Issue::Eb:
-        if (!prepareEbTraceDecoding(metadata.parameters, ebMeasures, error)) {
+    if (!metadata.isCCHI()) {
+        switch (metadata.parameters.GetIssue()) {
+        case CLog::Issue::Eb:
+            if (!prepareEbTraceDecoding(metadata.parameters, ebMeasures, error)) {
+                return false;
+            }
+            break;
+        case CLog::Issue::B:
+            if (!prepareBTraceDecoding(metadata.parameters, bMeasures, error)) {
+                return false;
+            }
+            break;
+        default:
+            setLoadError(error,
+                         CLogBTraceLoadError::Type::Generic,
+                         QStringLiteral("This CLog.B file uses unsupported CHI Issue %1.")
+                             .arg(issueName(metadata.parameters.GetIssue())),
+                         QStringLiteral("CloganGUI currently decodes CHI Issue B, CHI Issue E.b, and CCHI traces."),
+                         describeParametersBlock(metadata.parameters));
             return false;
         }
-        break;
-    case CLog::Issue::B:
-        if (!prepareBTraceDecoding(metadata.parameters, bMeasures, error)) {
-            return false;
-        }
-        break;
-    default:
-        setLoadError(error,
-                     CLogBTraceLoadError::Type::Generic,
-                     QStringLiteral("This CLog.B file uses unsupported CHI Issue %1.")
-                         .arg(issueName(metadata.parameters.GetIssue())),
-                     QStringLiteral("CloganGUI currently decodes CHI Issue B and CHI Issue E.b traces."),
-                     describeParametersBlock(metadata.parameters));
-        return false;
     }
 
     localRows.reserve(block.records.size());
@@ -8371,15 +9847,19 @@ bool CLogBTraceLoader::collectBlockRowsMatchingFilterAndBuildRecords(const CLogB
 
         CLogBTraceFastRecordInfo info;
         bool ok = false;
-        switch (metadata.parameters.GetIssue()) {
-        case CLog::Issue::Eb:
-            ok = extractFastRecordInfo(metadata.parameters, ebMeasures, block.records[localIndex], info);
-            break;
-        case CLog::Issue::B:
-            ok = extractFastRecordInfo(metadata.parameters, bMeasures, block.records[localIndex], info);
-            break;
-        default:
-            return false;
+        if (metadata.isCCHI()) {
+            ok = extractCCHIFastRecordInfo(cchiMeasures, block.records[localIndex], info);
+        } else {
+            switch (metadata.parameters.GetIssue()) {
+            case CLog::Issue::Eb:
+                ok = extractFastRecordInfo(metadata.parameters, ebMeasures, block.records[localIndex], info);
+                break;
+            case CLog::Issue::B:
+                ok = extractFastRecordInfo(metadata.parameters, bMeasures, block.records[localIndex], info);
+                break;
+            default:
+                return false;
+            }
         }
 
         if (!ok) {
@@ -8394,7 +9874,7 @@ bool CLogBTraceLoader::collectBlockRowsMatchingFilterAndBuildRecords(const CLogB
         }
 
         info.timestamp = static_cast<qint64>(recordTimestamps[localIndex]);
-        if (fastRecordMatchesFilter(metadata.parameters, filter, info)) {
+        if (fastRecordMatchesFilter(metadata, filter, info)) {
             localRows.push_back(localIndex);
         }
         fastRecords.push_back(std::move(info));
@@ -8407,6 +9887,16 @@ QString CLogBTraceLoader::opcodeDisplayValue(const CLog::Parameters& params,
                                              const CLogBTraceFastRecordInfo& info)
 {
     return fastOpcodeDisplayValue(params, info);
+}
+
+QString CLogBTraceLoader::opcodeDisplayValue(const CLogBTraceMetadata& metadata,
+                                             const CLogBTraceFastRecordInfo& info)
+{
+    if (metadata.isCCHI()) {
+        return fastCCHIOpcodeDisplayValue(info);
+    }
+
+    return fastOpcodeDisplayValue(metadata.parameters, info);
 }
 
 bool CLogBTraceLoader::buildBlockFastRecords(const CLogBTraceMetadata& metadata,
@@ -8427,27 +9917,35 @@ bool CLogBTraceLoader::buildBlockFastRecords(const CLogBTraceMetadata& metadata,
         return false;
     }
 
+    CCHIMeasures cchiMeasures;
+    if (metadata.isCCHI()
+        && !prepareCCHITraceDecoding(*metadata.cchiParameters, cchiMeasures, error)) {
+        return false;
+    }
+
     EbMeasures ebMeasures;
     BMeasures bMeasures;
-    switch (metadata.parameters.GetIssue()) {
-    case CLog::Issue::Eb:
-        if (!prepareEbTraceDecoding(metadata.parameters, ebMeasures, error)) {
+    if (!metadata.isCCHI()) {
+        switch (metadata.parameters.GetIssue()) {
+        case CLog::Issue::Eb:
+            if (!prepareEbTraceDecoding(metadata.parameters, ebMeasures, error)) {
+                return false;
+            }
+            break;
+        case CLog::Issue::B:
+            if (!prepareBTraceDecoding(metadata.parameters, bMeasures, error)) {
+                return false;
+            }
+            break;
+        default:
+            setLoadError(error,
+                         CLogBTraceLoadError::Type::Generic,
+                         QStringLiteral("This CLog.B file uses unsupported CHI Issue %1.")
+                             .arg(issueName(metadata.parameters.GetIssue())),
+                         QStringLiteral("CloganGUI currently decodes CHI Issue B, CHI Issue E.b, and CCHI traces."),
+                         describeParametersBlock(metadata.parameters));
             return false;
         }
-        break;
-    case CLog::Issue::B:
-        if (!prepareBTraceDecoding(metadata.parameters, bMeasures, error)) {
-            return false;
-        }
-        break;
-    default:
-        setLoadError(error,
-                     CLogBTraceLoadError::Type::Generic,
-                     QStringLiteral("This CLog.B file uses unsupported CHI Issue %1.")
-                         .arg(issueName(metadata.parameters.GetIssue())),
-                     QStringLiteral("CloganGUI currently decodes CHI Issue B and CHI Issue E.b traces."),
-                     describeParametersBlock(metadata.parameters));
-        return false;
     }
 
     records.reserve(block.records.size());
@@ -8468,15 +9966,19 @@ bool CLogBTraceLoader::buildBlockFastRecords(const CLogBTraceMetadata& metadata,
 
         CLogBTraceFastRecordInfo info;
         bool ok = false;
-        switch (metadata.parameters.GetIssue()) {
-        case CLog::Issue::Eb:
-            ok = extractFastRecordInfo(metadata.parameters, ebMeasures, block.records[localIndex], info);
-            break;
-        case CLog::Issue::B:
-            ok = extractFastRecordInfo(metadata.parameters, bMeasures, block.records[localIndex], info);
-            break;
-        default:
-            return false;
+        if (metadata.isCCHI()) {
+            ok = extractCCHIFastRecordInfo(cchiMeasures, block.records[localIndex], info);
+        } else {
+            switch (metadata.parameters.GetIssue()) {
+            case CLog::Issue::Eb:
+                ok = extractFastRecordInfo(metadata.parameters, ebMeasures, block.records[localIndex], info);
+                break;
+            case CLog::Issue::B:
+                ok = extractFastRecordInfo(metadata.parameters, bMeasures, block.records[localIndex], info);
+                break;
+            default:
+                return false;
+            }
         }
 
         if (!ok) {
@@ -8531,6 +10033,12 @@ bool CLogBTraceLoader::buildBlockOptionalFieldRecords(
     }
 
     const std::size_t clampedWorkerCount = std::clamp<std::size_t>(maxWorkerCount, 1, 8);
+    if (metadata.isCCHI()) {
+        setLoadError(error,
+                     CLogBTraceLoadError::Type::Generic,
+                     QStringLiteral("Optional field indexes are not supported for CCHI traces."));
+        return false;
+    }
     switch (metadata.parameters.GetIssue()) {
     case CLog::Issue::Eb: {
         EbMeasures measures;
@@ -8961,7 +10469,7 @@ bool CLogBTraceLoader::collectFastRecordRowsMatchingFilter(const CLogBTraceMetad
     collectMatchingLocalRows(0,
                              records.size(),
                              [&](const std::size_t localIndex) {
-                                 return fastRecordMatchesFilter(metadata.parameters,
+                                 return fastRecordMatchesFilter(metadata,
                                                                 filter,
                                                                 records[localIndex]);
                              },
@@ -8990,7 +10498,7 @@ bool CLogBTraceLoader::collectFastRecordRowsMatchingFilterRange(
     collectMatchingLocalRows(localBegin,
                              localEnd,
                              [&](const std::size_t localIndex) {
-                                 return fastRecordMatchesFilter(metadata.parameters,
+                                 return fastRecordMatchesFilter(metadata,
                                                                 filter,
                                                                 records[localIndex]);
                              },
@@ -9129,8 +10637,11 @@ bool CLogBTraceLoader::loadFile(const QString& filePath,
 
     CLog::CLogB::Reader reader;
     CLog::Parameters params;
+    CLog::CCHI::Parameters cchiParams;
     EbMeasures ebMeasures;
     BMeasures bMeasures;
+    CCHIMeasures cchiMeasures;
+    bool cchiMode = false;
     bool hasParameters = false;
     bool decodingPrepared = false;
     std::unordered_map<quint16, QString> nodeAnnotations;
@@ -9170,12 +10681,86 @@ bool CLogBTraceLoader::loadFile(const QString& filePath,
 
         switch (tag->type) {
         case CLog::CLogB::Encodings::CHI_PARAMETERS:
+            if (cchiMode) {
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B file mixes CCHI and CHI parameter blocks."));
+                return false;
+            }
             params = std::static_pointer_cast<CLog::CLogB::TagCHIParameters>(tag)->parameters;
             hasParameters = true;
             decodingPrepared = false;
             processedBytes = tagEndBytes;
             reportProgress(callbacks.progress, processedBytes, fileSizeError ? 0U : totalBytes);
             break;
+
+        case CLog::CLogB::Encodings::CCHI_PARAMETERS:
+            if (hasParameters && !cchiMode) {
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B file mixes CHI and CCHI parameter blocks."));
+                return false;
+            }
+            cchiParams = std::static_pointer_cast<CLog::CLogB::TagCCHIParameters>(tag)->parameters;
+            cchiMode = true;
+            hasParameters = true;
+            decodingPrepared = false;
+            processedBytes = tagEndBytes;
+            reportProgress(callbacks.progress, processedBytes, fileSizeError ? 0U : totalBytes);
+            break;
+
+        case CLog::CLogB::Encodings::CCHI_TOPOS: {
+            const auto topologies = std::static_pointer_cast<CLog::CLogB::TagCCHITopologies>(tag);
+            for (const auto& node : topologies->nodes) {
+                nodeAnnotations.insert_or_assign(
+                    node.id,
+                    InternDisplayString(
+                        QStringLiteral("Captured at node %1 (%2).")
+                            .arg(node.id)
+                            .arg(QString::fromStdString(CLog::CCHI::NodeTypeToString(node.type)))));
+            }
+            processedBytes = tagEndBytes;
+            reportProgress(callbacks.progress, processedBytes, fileSizeError ? 0U : totalBytes);
+            break;
+        }
+
+        case CLog::CLogB::Encodings::CCHI_RECORDS: {
+            if (!cchiMode) {
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B file is missing CCHI parameters."),
+                             QStringLiteral("The first CCHI record block appeared before the file declared its CCHI configuration."));
+                return false;
+            }
+
+            if (!decodingPrepared) {
+                if (!prepareCCHITraceDecoding(cchiParams, cchiMeasures, error)) {
+                    return false;
+                }
+                decodingPrepared = true;
+            }
+
+            CLog::CLogB::TagCHIRecords convertedTag;
+            convertCCHIRecordsTag(*std::static_pointer_cast<CLog::CLogB::TagCCHIRecords>(tag),
+                                  convertedTag);
+            if (!appendDecodedCCHITag(cchiParams,
+                                      cchiMeasures,
+                                      convertedTag,
+                                      nodeAnnotations,
+                                      parsedRows,
+                                      error,
+                                      callbacks,
+                                      tagStartBytes,
+                                      tagEndBytes,
+                                      fileSizeError ? 0U : totalBytes,
+                                      stopToken)) {
+                return false;
+            }
+            processedBytes = tagEndBytes;
+            reportProgress(callbacks.progress, processedBytes, fileSizeError ? 0U : totalBytes);
+            reportStage(callbacks.stage, CLogBTraceLoadStage::Parsing, 0, 0);
+            break;
+        }
 
         case CLog::CLogB::Encodings::CHI_TOPOS: {
             const auto topologies = std::static_pointer_cast<CLog::CLogB::TagCHITopologies>(tag);
@@ -9194,6 +10779,12 @@ bool CLogBTraceLoader::loadFile(const QString& filePath,
         }
 
         case CLog::CLogB::Encodings::CHI_RECORDS:
+            if (cchiMode) {
+                setLoadError(error,
+                             CLogBTraceLoadError::Type::Generic,
+                             QStringLiteral("CLog.B file mixes CCHI parameters with CHI record blocks."));
+                return false;
+            }
             if (!hasParameters) {
                 setLoadError(error,
                              CLogBTraceLoadError::Type::Generic,
@@ -9280,7 +10871,7 @@ bool CLogBTraceLoader::loadFile(const QString& filePath,
     if (!hasParameters) {
         setLoadError(error,
                      CLogBTraceLoadError::Type::Generic,
-                     QStringLiteral("CLog.B file does not contain a CHI parameters tag."));
+                     QStringLiteral("CLog.B file does not contain a CHI or CCHI parameters tag."));
         return false;
     }
 
@@ -9338,25 +10929,49 @@ bool CLogBTraceLoader::saveRowsAsCLogB(
 
     CLog::CLogB::Writer writer;
 
-    CLog::CLogB::TagCHIParameters parameterTag;
-    parameterTag.parameters = metadata.parameters;
-    writer.Next(output, &parameterTag);
+    const bool cchi = metadata.isCCHI();
+    if (cchi) {
+        CLog::CLogB::TagCCHIParameters parameterTag;
+        parameterTag.parameters = *metadata.cchiParameters;
+        writer.Next(output, &parameterTag);
 
-    if (!metadata.nodeTypes.empty()) {
-        CLog::CLogB::TagCHITopologies topologyTag;
-        topologyTag.nodes.reserve(metadata.nodeTypes.size());
-        for (const auto& [nodeId, nodeType] : metadata.nodeTypes) {
-            topologyTag.nodes.push_back(CLog::CLogB::TagCHITopologies::Node{
-                .type = nodeType,
-                .id = nodeId,
-            });
+        if (!metadata.cchiNodeTypes.empty()) {
+            CLog::CLogB::TagCCHITopologies topologyTag;
+            topologyTag.nodes.reserve(metadata.cchiNodeTypes.size());
+            for (const auto& [nodeId, nodeType] : metadata.cchiNodeTypes) {
+                topologyTag.nodes.push_back(CLog::CLogB::TagCCHITopologies::Node{
+                    .type = nodeType,
+                    .id = nodeId,
+                });
+            }
+            std::sort(topologyTag.nodes.begin(),
+                      topologyTag.nodes.end(),
+                      [](const auto& lhs, const auto& rhs) {
+                          return lhs.id < rhs.id;
+                      });
+            writer.Next(output, &topologyTag);
         }
-        std::sort(topologyTag.nodes.begin(),
-                  topologyTag.nodes.end(),
-                  [](const auto& lhs, const auto& rhs) {
-                      return lhs.id < rhs.id;
-                  });
-        writer.Next(output, &topologyTag);
+    } else {
+        CLog::CLogB::TagCHIParameters parameterTag;
+        parameterTag.parameters = metadata.parameters;
+        writer.Next(output, &parameterTag);
+
+        if (!metadata.nodeTypes.empty()) {
+            CLog::CLogB::TagCHITopologies topologyTag;
+            topologyTag.nodes.reserve(metadata.nodeTypes.size());
+            for (const auto& [nodeId, nodeType] : metadata.nodeTypes) {
+                topologyTag.nodes.push_back(CLog::CLogB::TagCHITopologies::Node{
+                    .type = nodeType,
+                    .id = nodeId,
+                });
+            }
+            std::sort(topologyTag.nodes.begin(),
+                      topologyTag.nodes.end(),
+                      [](const auto& lhs, const auto& rhs) {
+                          return lhs.id < rhs.id;
+                      });
+            writer.Next(output, &topologyTag);
+        }
     }
 
     constexpr std::size_t kRecordsPerBlock = 4096;
@@ -9384,9 +10999,16 @@ bool CLogBTraceLoader::saveRowsAsCLogB(
         }
 
         CLog::CLogB::TagCHIRecords recordTag;
-        recordTag.head.timeBase = static_cast<std::uint64_t>(row.timestamp);
-        recordTag.head.compressed = 1;
-        recordTag.records.reserve(static_cast<std::size_t>(blockEnd - blockBegin));
+        CLog::CLogB::TagCCHIRecords cchiRecordTag;
+        if (cchi) {
+            cchiRecordTag.head.timeBase = static_cast<std::uint64_t>(row.timestamp);
+            cchiRecordTag.head.compressed = 1;
+            cchiRecordTag.records.reserve(static_cast<std::size_t>(blockEnd - blockBegin));
+        } else {
+            recordTag.head.timeBase = static_cast<std::uint64_t>(row.timestamp);
+            recordTag.head.compressed = 1;
+            recordTag.records.reserve(static_cast<std::size_t>(blockEnd - blockBegin));
+        }
 
         qint64 previousTimestamp = row.timestamp;
         for (; rowIndex < blockEnd; ++rowIndex) {
@@ -9436,18 +11058,33 @@ bool CLogBTraceLoader::saveRowsAsCLogB(
                 return false;
             }
 
-            CLog::CLogB::TagCHIRecords::Record record;
-            record.timeShift = static_cast<std::uint32_t>(delta);
-            record.nodeId = row.rawNodeId;
-            record.channel = static_cast<CLog::Channel>(row.rawChannel);
-            record.flitLength = row.rawFlitLength;
-            record.flit = std::shared_ptr<std::uint32_t[]>(new std::uint32_t[wordCount]());
-            std::copy_n(row.rawFlitWords.data(), wordCount, record.flit.get());
-            recordTag.records.push_back(std::move(record));
+            if (cchi) {
+                CLog::CLogB::TagCCHIRecords::Record record;
+                record.timeShift = static_cast<std::uint32_t>(delta);
+                record.nodeId = row.rawNodeId;
+                record.channel = static_cast<CLog::CCHI::Channel>(row.rawChannel);
+                record.flitLength = row.rawFlitLength;
+                record.flit = std::shared_ptr<std::uint32_t[]>(new std::uint32_t[wordCount]());
+                std::copy_n(row.rawFlitWords.data(), wordCount, record.flit.get());
+                cchiRecordTag.records.push_back(std::move(record));
+            } else {
+                CLog::CLogB::TagCHIRecords::Record record;
+                record.timeShift = static_cast<std::uint32_t>(delta);
+                record.nodeId = row.rawNodeId;
+                record.channel = static_cast<CLog::Channel>(row.rawChannel);
+                record.flitLength = row.rawFlitLength;
+                record.flit = std::shared_ptr<std::uint32_t[]>(new std::uint32_t[wordCount]());
+                std::copy_n(row.rawFlitWords.data(), wordCount, record.flit.get());
+                recordTag.records.push_back(std::move(record));
+            }
             previousTimestamp = row.timestamp;
         }
 
-        writer.Next(output, &recordTag);
+        if (cchi) {
+            writer.Next(output, &cchiRecordTag);
+        } else {
+            writer.Next(output, &recordTag);
+        }
     }
 
     CLog::CLogB::TagEOF eofTag;
@@ -9517,6 +11154,34 @@ void CLogBTraceLoader::prepareFastFilter(CLogBTraceFastFilter& filter)
         opcodeFilter,
         filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::Channel::TXSNP)],
         filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::Channel::RXSNP)]);
+    appendOpcodeMatchesForChannels<::CCHI::Opcodes::EVT::Decoder<FlexibleCCHIEvtFlit>>(
+        opcodeFilter,
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::TXEVT)],
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::RXEVT)]);
+    appendOpcodeMatchesForChannels<::CCHI::Opcodes::REQ::Decoder<FlexibleCCHIReqFlit>>(
+        opcodeFilter,
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::TXREQ)],
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::RXREQ)]);
+    appendOpcodeMatchesForChannels<::CCHI::Opcodes::SNP::Decoder<FlexibleCCHISnpFlit>>(
+        opcodeFilter,
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::TXSNP)],
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::RXSNP)]);
+    appendOpcodeMatchesForChannels<::CCHI::Opcodes::DnRSP::Decoder<FlexibleCCHIDnRspFlit>>(
+        opcodeFilter,
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::TXDNRSP)],
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::RXDNRSP)]);
+    appendOpcodeMatchesForChannels<::CCHI::Opcodes::UpRSP::Decoder<FlexibleCCHIUpRspFlit>>(
+        opcodeFilter,
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::TXUPRSP)],
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::RXUPRSP)]);
+    appendOpcodeMatchesForChannels<::CCHI::Opcodes::DnDAT::Decoder<FlexibleCCHIDnDatFlit>>(
+        opcodeFilter,
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::TXDNDAT)],
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::RXDNDAT)]);
+    appendOpcodeMatchesForChannels<::CCHI::Opcodes::UpDAT::Decoder<FlexibleCCHIUpDatFlit>>(
+        opcodeFilter,
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::TXUPDAT)],
+        filter.opcodeValuesByChannel[static_cast<unsigned int>(CLog::CCHI::Channel::RXUPDAT)]);
 
     for (auto& values : filter.opcodeValuesByChannel) {
         std::sort(values.begin(), values.end());
@@ -9543,6 +11208,12 @@ bool CLogBTraceLoader::guessFlitConfigurations(const QString& filePath,
     for (std::size_t channelIndex = 0; channelIndex < metadata.flitLengthMasks.size(); ++channelIndex) {
         result.observedByteLengths[channelIndex] =
             flitLengthMaskValues(metadata.flitLengthMasks[channelIndex]);
+    }
+
+    // CCHI traces self-describe through CCHI_PARAMETERS, so there is no CHI
+    // configuration to guess.
+    if (metadata.isCCHI()) {
+        return true;
     }
 
     const bool hasObservedFlitLength =

@@ -72,7 +72,11 @@ void MainWindow::startStatisticsComputation()
 
     if (targetSession->traceSession) {
         targetSession->statisticsTraceSessionSource = targetSession->traceSession;
-        targetSession->statisticsAccumulator.setParameters(targetSession->traceSession->metadata().parameters);
+        if (targetSession->traceSession->metadata().isCCHI()) {
+            targetSession->statisticsAccumulator.setCCHIParameters(*targetSession->traceSession->metadata().cchiParameters);
+        } else {
+            targetSession->statisticsAccumulator.setParameters(targetSession->traceSession->metadata().parameters);
+        }
         targetSession->statisticsAccumulator.setTimestampRange(targetSession->traceSession->metadata().firstTimestamp,
                                                               targetSession->traceSession->metadata().lastTimestamp);
         targetSession->statisticsChunkRecords = 65536;

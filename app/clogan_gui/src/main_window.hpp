@@ -5,6 +5,7 @@
 #include "flit_details_model.hpp"
 #include "flit_table_model.hpp"
 #include "marker_store.hpp"
+#include "node_type_guess.hpp"
 #include "trace_issue_store.hpp"
 #include "trace_statistics.hpp"
 

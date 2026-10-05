@@ -226,9 +226,16 @@ inline bool XactionNodeLabelForRecord(const FlitRecord& record,
     }
 
     if (metadata) {
-        const auto found = metadata->nodeTypes.find(static_cast<quint16>(nodeId));
-        if (found != metadata->nodeTypes.cend()) {
-            label = QString::fromStdString(CLog::NodeTypeToString(found->second));
+        if (metadata->isCCHI()) {
+            const auto found = metadata->cchiNodeTypes.find(static_cast<quint16>(nodeId));
+            if (found != metadata->cchiNodeTypes.cend()) {
+                label = QString::fromStdString(CLog::CCHI::NodeTypeToString(found->second));
+            }
+        } else {
+            const auto found = metadata->nodeTypes.find(static_cast<quint16>(nodeId));
+            if (found != metadata->nodeTypes.cend()) {
+                label = NodeTypeBaseName(found->second);
+            }
         }
     }
     if (label.isEmpty()) {
@@ -368,6 +375,14 @@ inline QString IssueText(const CLog::Issue issue)
     }
 
     return QStringLiteral("Unknown");
+}
+
+// Protocol/issue label for a trace session; CCHI is routed via the metadata
+// protocol marker, not via CLog::Issue (which stays at its default for CCHI).
+inline QString IssueText(const CLogBTraceMetadata& metadata)
+{
+    return metadata.isCCHI() ? QStringLiteral("CCHI")
+                             : IssueText(metadata.parameters.GetIssue());
 }
 
 inline QString DisplayModeText(const FlitTableModel::DisplayMode mode)
@@ -549,6 +564,12 @@ inline QString GuiIssueName(const CLog::Issue issue)
     }
 
     return QStringLiteral("Unknown");
+}
+
+inline QString GuiIssueName(const CLogBTraceMetadata& metadata)
+{
+    return metadata.isCCHI() ? QStringLiteral("CCHI")
+                             : GuiIssueName(metadata.parameters.GetIssue());
 }
 
 inline QString GuiBoolText(const bool value)
@@ -1719,6 +1740,44 @@ public:
         }
 
         painter->restore();
+    }
+};
+
+// Combo-box editor delegate for editable node type cells (topology dock). The
+// allowed values are supplied per cell as a QStringList in Qt::UserRole.
+class NodeTypeComboDelegate final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    QWidget* createEditor(QWidget* parent,
+                          const QStyleOptionViewItem& option,
+                          const QModelIndex& index) const override
+    {
+        auto* combo = new QComboBox(parent);
+        combo->addItems(index.data(Qt::UserRole).toStringList());
+        combo->setFrame(false);
+        return combo;
+    }
+
+    void setEditorData(QWidget* editor, const QModelIndex& index) const override
+    {
+        auto* combo = qobject_cast<QComboBox*>(editor);
+        if (!combo) {
+            return;
+        }
+        const int found = combo->findText(index.data(Qt::EditRole).toString());
+        combo->setCurrentIndex(found >= 0 ? found : 0);
+    }
+
+    void setModelData(QWidget* editor,
+                      QAbstractItemModel* model,
+                      const QModelIndex& index) const override
+    {
+        auto* combo = qobject_cast<QComboBox*>(editor);
+        if (!combo) {
+            return;
+        }
+        model->setData(index, combo->currentText(), Qt::EditRole);
     }
 };
 

@@ -141,6 +141,7 @@ public:
     void setDisplayMode(int column, DisplayMode mode);
     bool nodeLabelsVisible() const noexcept;
     void setNodeLabelsVisible(bool visible);
+    void refreshNodeLabels();
 
     int totalCount() const noexcept;
     int visibleCount() const noexcept;

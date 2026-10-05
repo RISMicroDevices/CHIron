@@ -13,6 +13,7 @@
 #include "latency_widget.hpp"
 #include "main_window.hpp"
 #include "marker_widget.hpp"
+#include "node_type_guess.hpp"
 #include "timeline_widget.hpp"
 #include "transaction_widget.hpp"
 #include "trace_issue_store.hpp"
@@ -61,6 +62,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -138,6 +140,16 @@ void expectEqual(const std::size_t actual, const std::size_t expected, const QSt
                  .arg(message)
                  .arg(static_cast<qulonglong>(actual))
                  .arg(static_cast<qulonglong>(expected)));
+    }
+}
+
+void expectEqual(const qulonglong actual, const qulonglong expected, const QString& message)
+{
+    if (actual != expected) {
+        fail(QStringLiteral("%1 (actual=%2, expected=%3)")
+                 .arg(message)
+                 .arg(actual)
+                 .arg(expected));
     }
 }
 
@@ -15043,6 +15055,368 @@ void testTraceSessionConcurrentTimelineAddressReadsKeepCacheStable()
            QStringLiteral("Concurrent session readers should keep the page cache within capacity."));
 }
 
+constexpr std::uint32_t kGuessInvalidId = std::numeric_limits<std::uint32_t>::max();
+
+CHIron::Gui::CLogBTraceFastRecordInfo makeGuessFastRecord(const CLog::Channel channel,
+                                                          const std::uint32_t nodeId,
+                                                          const std::uint32_t opcode,
+                                                          const std::uint32_t srcId,
+                                                          const std::uint32_t tgtId)
+{
+    CHIron::Gui::CLogBTraceFastRecordInfo info;
+    info.channel = static_cast<std::uint8_t>(channel);
+    info.nodeId = nodeId;
+    info.opcode = opcode;
+    info.sourceId = srcId;
+    info.targetId = tgtId;
+    return info;
+}
+
+void testNodeTypeGuessRules()
+{
+    using CHIron::Gui::NodeTypeGuess;
+    using CHIron::Gui::NodeTypeGuessConfidence;
+    using CHIron::Gui::NodeTypeGuesser;
+
+    CHIron::Gui::CLogBTraceMetadata metadata;
+
+    NodeTypeGuesser guesser;
+    // Node 1: receives snoops and sources snoop data => RN-F (high).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::RXSNP, 1,
+                                        CHI::Eb::Opcodes::SNP::SnpShared,
+                                        kGuessInvalidId, kGuessInvalidId));
+    guesser.observe(makeGuessFastRecord(CLog::Channel::TXDAT, 1,
+                                        CHI::Eb::Opcodes::DAT::SnpRespData, 1, 16));
+    // Node 2: receives snoops but never sources cached data => RN-D (medium).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::RXSNP, 2,
+                                        CHI::Eb::Opcodes::SNP::SnpShared,
+                                        kGuessInvalidId, kGuessInvalidId));
+    guesser.observe(makeGuessFastRecord(CLog::Channel::TXRSP, 2,
+                                        CHI::Eb::Opcodes::RSP::SnpResp, 2, 16));
+    // Node 3: issues requests and is never snooped => RN-I (medium).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::TXREQ, 3,
+                                        CHI::Eb::Opcodes::REQ::ReadNoSnp, 3, 16));
+    // Node 16: issues snoops => HN-F (high).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::TXSNP, 16,
+                                        CHI::Eb::Opcodes::SNP::SnpShared,
+                                        16, kGuessInvalidId));
+    // Node 32: receives requests from home-like node 16 and returns data => SN-F (medium).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::RXREQ, 32,
+                                        CHI::Eb::Opcodes::REQ::ReadNoSnp, 16, 32));
+    guesser.observe(makeGuessFastRecord(CLog::Channel::TXDAT, 32,
+                                        CHI::Eb::Opcodes::DAT::CompData, 32, 16));
+    // Node 48: receives requests only from requester node 3 => HN-I (low).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::RXREQ, 48,
+                                        CHI::Eb::Opcodes::REQ::WriteNoSnpFull, 3, 48));
+    // Node 5: only inbound responses => RN-I (low).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::RXRSP, 5,
+                                        CHI::Eb::Opcodes::RSP::Comp, 16, 5));
+    // Node 64: observed only as the source of a snoop received by node 1 => HN-F (high).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::RXSNP, 1,
+                                        CHI::Eb::Opcodes::SNP::SnpShared,
+                                        64, kGuessInvalidId));
+    // Node 6: issues requests only on BeforeSAM channels => RN-I_BeforeSAM (medium).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::TXREQ_BeforeSAM, 6,
+                                        CHI::Eb::Opcodes::REQ::ReadNoSnp, 6, 16));
+    // Node 7: snooped, sources snoop data, requests only BeforeSAM => RN-F_BeforeSAM (high).
+    guesser.observe(makeGuessFastRecord(CLog::Channel::TXREQ_BeforeSAM, 7,
+                                        CHI::Eb::Opcodes::REQ::ReadNoSnp, 7, 16));
+    guesser.observe(makeGuessFastRecord(CLog::Channel::RXSNP, 7,
+                                        CHI::Eb::Opcodes::SNP::SnpShared,
+                                        16, kGuessInvalidId));
+    guesser.observe(makeGuessFastRecord(CLog::Channel::TXDAT, 7,
+                                        CHI::Eb::Opcodes::DAT::SnpRespData, 7, 16));
+
+    const std::vector<NodeTypeGuess> results = guesser.results(metadata);
+    std::unordered_map<quint16, NodeTypeGuess> byNode;
+    for (const NodeTypeGuess& guess : results) {
+        byNode.emplace(guess.nodeId, guess);
+    }
+
+    const auto expectType = [&byNode](const quint16 nodeId,
+                                      const CLog::NodeType expectedType,
+                                      const NodeTypeGuessConfidence expectedConfidence) {
+        const auto found = byNode.find(nodeId);
+        expect(found != byNode.cend(),
+               QStringLiteral("Node %1 should have a node type guess.").arg(nodeId));
+        expect(found->second.type.has_value() && *found->second.type == expectedType,
+               QStringLiteral("Node %1 should be guessed as %2.")
+                   .arg(nodeId)
+                   .arg(QString::fromStdString(CLog::NodeTypeToString(expectedType))));
+        expect(found->second.confidence == expectedConfidence,
+               QStringLiteral("Node %1 should have confidence %2.")
+                   .arg(nodeId)
+                   .arg(CHIron::Gui::NodeTypeGuessConfidenceToString(expectedConfidence)));
+        expect(!found->second.reasons.isEmpty(),
+               QStringLiteral("Node %1 should list guess reasons.").arg(nodeId));
+    };
+
+    expectType(1, CLog::NodeType::RN_F, NodeTypeGuessConfidence::High);
+    expectType(2, CLog::NodeType::RN_D, NodeTypeGuessConfidence::Medium);
+    expectType(3, CLog::NodeType::RN_I, NodeTypeGuessConfidence::Medium);
+    expectType(16, CLog::NodeType::HN_F, NodeTypeGuessConfidence::High);
+    expectType(32, CLog::NodeType::SN_F, NodeTypeGuessConfidence::Medium);
+    expectType(48, CLog::NodeType::HN_I, NodeTypeGuessConfidence::Low);
+    expectType(5, CLog::NodeType::RN_I, NodeTypeGuessConfidence::Low);
+    expectType(64, CLog::NodeType::HN_F, NodeTypeGuessConfidence::High);
+    expectType(6, CLog::NodeType::RN_I_BeforeSAM, NodeTypeGuessConfidence::Medium);
+    expectType(7, CLog::NodeType::RN_F_BeforeSAM, NodeTypeGuessConfidence::High);
+}
+
+void testNodeTypeGuessUnmappedDiscovery()
+{
+    using CHIron::Gui::NodeTypeGuess;
+    using CHIron::Gui::NodeTypeGuesser;
+
+    CHIron::Gui::CLogBTraceMetadata metadata;
+    metadata.nodeTypes.emplace(1, CLog::NodeType::RN_F);
+
+    NodeTypeGuesser guesser;
+    guesser.observe(makeGuessFastRecord(CLog::Channel::TXREQ, 1,
+                                        CHI::Eb::Opcodes::REQ::ReadNoSnp, 1, 16));
+    guesser.observe(makeGuessFastRecord(CLog::Channel::RXSNP, 2,
+                                        CHI::Eb::Opcodes::SNP::SnpShared,
+                                        kGuessInvalidId, kGuessInvalidId));
+
+    const std::vector<NodeTypeGuess> results = guesser.results(metadata);
+    std::unordered_map<quint16, NodeTypeGuess> byNode;
+    for (const NodeTypeGuess& guess : results) {
+        byNode.emplace(guess.nodeId, guess);
+    }
+
+    const auto mappedIt = byNode.find(1);
+    expect(mappedIt != byNode.cend(), QStringLiteral("File-mapped node 1 should appear in guesses."));
+    expect(mappedIt->second.mappedInFile,
+           QStringLiteral("Node 1 should be marked as mapped in the file topology."));
+    expect(mappedIt->second.fileType.has_value() && *mappedIt->second.fileType == CLog::NodeType::RN_F,
+           QStringLiteral("Node 1 should report its file type."));
+
+    const auto snoopedIt = byNode.find(2);
+    expect(snoopedIt != byNode.cend(),
+           QStringLiteral("Unmapped node 2 should be discovered from traffic."));
+    expect(!snoopedIt->second.mappedInFile,
+           QStringLiteral("Node 2 should be marked as unmapped."));
+    expect(!snoopedIt->second.fileType.has_value(),
+           QStringLiteral("Node 2 should not report a file type."));
+
+    const auto targetIt = byNode.find(16);
+    expect(targetIt != byNode.cend(),
+           QStringLiteral("Unmapped REQ target 16 should be discovered from traffic."));
+    expect(!targetIt->second.mappedInFile,
+           QStringLiteral("Node 16 should be marked as unmapped."));
+
+    // NodeTypeFromString round-trip.
+    for (const CLog::NodeType type : CHIron::Gui::AllNodeTypes()) {
+        const QString name = QString::fromStdString(CLog::NodeTypeToString(type));
+        const std::optional<CLog::NodeType> parsed = CHIron::Gui::NodeTypeFromString(name);
+        expect(parsed.has_value() && *parsed == type,
+               QStringLiteral("NodeTypeFromString should round-trip %1.").arg(name));
+    }
+    expect(!CHIron::Gui::NodeTypeFromString(QStringLiteral("Unmapped")).has_value(),
+           QStringLiteral("NodeTypeFromString should reject unknown names."));
+}
+
+void testNodeTypeOverrideSidecarRoundTrip()
+{
+    QTemporaryDir tempDir;
+    expect(tempDir.isValid(), QStringLiteral("Temporary directory creation failed."));
+    const QString tracePath = tempDir.filePath(QStringLiteral("node_types.clogb"));
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set test NodeIDWidth."));
+    expect(params.SetReqAddrWidth(48), QStringLiteral("Failed to set test ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(0), QStringLiteral("Failed to set test ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(0), QStringLiteral("Failed to set test DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set test DataWidth."));
+
+    writeTraceWithTopology(tracePath,
+                           params,
+                           {
+                               {CLog::NodeType::RN_F, 1},
+                               {CLog::NodeType::HN_F, 16},
+                           },
+                           {});
+
+    CHIron::Gui::CLogBTraceLoadError error;
+    std::shared_ptr<CHIron::Gui::TraceSession> session;
+    expect(CHIron::Gui::TraceSession::open(tracePath, session, error),
+           error.summary.isEmpty() ? QStringLiteral("Trace session should open for sidecar test.")
+                                   : error.summary);
+    expect(session != nullptr, QStringLiteral("Sidecar test session should be created."));
+    expect(session->metadata().nodeTypes.size() == 2,
+           QStringLiteral("File topology should contain the two stored nodes."));
+    expect(!session->hasNodeTypeOverrides(),
+           QStringLiteral("A fresh trace should have no node type overrides."));
+
+    session->setNodeType(32, CLog::NodeType::SN_F);
+    expect(session->metadata().nodeTypes.count(32) == 1
+               && session->metadata().nodeTypes.at(32) == CLog::NodeType::SN_F,
+           QStringLiteral("setNodeType should update the effective topology."));
+    expect(session->hasNodeTypeOverrides(),
+           QStringLiteral("setNodeType should record an override."));
+
+    QString saveError;
+    expect(session->saveNodeTypeOverrides(&saveError),
+           saveError.isEmpty() ? QStringLiteral("Saving node type overrides should succeed.")
+                               : saveError);
+    expect(QFileInfo::exists(tracePath + QStringLiteral(".nodetypes")),
+           QStringLiteral("The .nodetypes sidecar should be written next to the trace."));
+
+    std::shared_ptr<CHIron::Gui::TraceSession> reopened;
+    expect(CHIron::Gui::TraceSession::open(tracePath, reopened, error),
+           error.summary.isEmpty() ? QStringLiteral("Trace session should reopen for sidecar test.")
+                                   : error.summary);
+    expect(reopened != nullptr, QStringLiteral("Reopened session should be created."));
+    expect(reopened->metadata().nodeTypes.count(32) == 1
+               && reopened->metadata().nodeTypes.at(32) == CLog::NodeType::SN_F,
+           QStringLiteral("The sidecar assignment should be visible after reopening."));
+    expect(reopened->hasNodeTypeOverrides(),
+           QStringLiteral("The reopened session should report node type overrides."));
+    expect(reopened->nodeTypeOverrides().count(32) == 1
+               && reopened->nodeTypeOverrides().at(32) == CLog::NodeType::SN_F,
+           QStringLiteral("The reopened session should expose the stored override."));
+    expect(reopened->fileNodeTypes().count(32) == 0,
+           QStringLiteral("The file topology should not include the assigned node."));
+
+    expect(reopened->clearNodeType(32),
+           QStringLiteral("clearNodeType should report a removed override."));
+    expect(reopened->metadata().nodeTypes.count(32) == 0,
+           QStringLiteral("clearNodeType should drop the unmapped node from the topology."));
+    expect(reopened->saveNodeTypeOverrides(&saveError),
+           saveError.isEmpty() ? QStringLiteral("Re-saving node type overrides should succeed.")
+                               : saveError);
+    expect(!QFileInfo::exists(tracePath + QStringLiteral(".nodetypes")),
+           QStringLiteral("The sidecar should be removed when no overrides remain."));
+}
+
+void testNodeTypeBaseNamesAndBadge()
+{
+    expect(CHIron::Gui::BaseNodeType(CLog::NodeType::RN_F) == CLog::NodeType::RN_F,
+           QStringLiteral("Base types should map to themselves."));
+    expect(CHIron::Gui::BaseNodeType(CLog::NodeType::MN) == CLog::NodeType::MN,
+           QStringLiteral("MN should map to itself."));
+    expect(CHIron::Gui::BaseNodeType(CLog::NodeType::RN_F_BeforeSAM) == CLog::NodeType::RN_F,
+           QStringLiteral("RN-F_BeforeSAM should map to RN-F."));
+    expect(CHIron::Gui::BaseNodeType(CLog::NodeType::HN_F_BeforeSAM) == CLog::NodeType::HN_F,
+           QStringLiteral("HN-F_BeforeSAM should map to HN-F."));
+    expect(CHIron::Gui::BaseNodeType(CLog::NodeType::SN_I_BeforeSAM) == CLog::NodeType::SN_I,
+           QStringLiteral("SN-I_BeforeSAM should map to SN-I."));
+    for (const CLog::NodeType type : CHIron::Gui::AllNodeTypes()) {
+        expect(!CHIron::Gui::NodeTypeBaseName(type).contains(QStringLiteral("BeforeSAM")),
+               QStringLiteral("NodeTypeBaseName should never expose the BeforeSAM variant."));
+    }
+    expectEqual(CHIron::Gui::NodeTypeBaseName(CLog::NodeType::RN_F_BeforeSAM),
+                QStringLiteral("RN-F"),
+                QStringLiteral("RN-F_BeforeSAM should display as RN-F."));
+
+    CHIron::Gui::CLogBTraceMetadata metadata;
+    metadata.nodeTypes.emplace(1, CLog::NodeType::RN_F_BeforeSAM);
+
+    CHIron::Gui::FlitRecord row;
+    row.timestamp = 0;
+    row.channel = CHIron::Gui::FlitChannel::Req;
+    row.direction = CHIron::Gui::FlitDirection::Tx;
+    row.opcode = QStringLiteral("ReadNoSnp");
+    row.source = QStringLiteral("1");
+    row.target = QStringLiteral("16");
+
+    CHIron::Gui::FlitTableModel model;
+    model.setRows({row});
+    model.setTraceMetadataOverride(metadata);
+    model.setNodeLabelsVisible(true);
+
+    const QModelIndex sourceIndex = model.index(0, CHIron::Gui::FlitTableModel::SourceColumn);
+    expectEqual(model.data(sourceIndex, CHIron::Gui::FlitTableModel::NodeLabelTextRole).toString(),
+                QStringLiteral("RN-F"),
+                QStringLiteral("An RN-F_BeforeSAM node badge should display the base RN-F tag."));
+}
+
+void testNodeTypeBeforeSamXactionIndexing()
+{
+    using XactTestConfig = CHI::Eb::FlitConfiguration<11, 52, 32, 32, 256, true, true, true>;
+    using ReqFlit = CHI::Eb::Flits::REQ<XactTestConfig>;
+    using DatFlit = CHI::Eb::Flits::DAT<XactTestConfig>;
+
+    CLog::Parameters params;
+    params.SetIssue(CLog::Issue::Eb);
+    expect(params.SetNodeIdWidth(11), QStringLiteral("Failed to set test NodeIDWidth."));
+    expect(params.SetReqAddrWidth(52), QStringLiteral("Failed to set test ReqAddrWidth."));
+    expect(params.SetReqRSVDCWidth(32), QStringLiteral("Failed to set test ReqRSVDCWidth."));
+    expect(params.SetDatRSVDCWidth(32), QStringLiteral("Failed to set test DatRSVDCWidth."));
+    expect(params.SetDataWidth(256), QStringLiteral("Failed to set test DataWidth."));
+    params.SetDataCheckPresent(true);
+    params.SetPoisonPresent(true);
+    params.SetMPAMPresent(true);
+
+    ReqFlit req{};
+    req.TgtID() = 16;
+    req.SrcID() = 1;
+    req.TxnID() = 1;
+    req.Opcode() = CHI::Eb::Opcodes::REQ::ReadNoSnp;
+    req.Size() = CHI::Eb::Sizes::B64;
+    req.Addr() = 0x4000;
+    req.AllowRetry() = 1;
+
+    DatFlit data0{};
+    data0.TgtID() = 1;
+    data0.SrcID() = 16;
+    data0.TxnID() = 1;
+    data0.HomeNID() = 16;
+    data0.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+    data0.RespErr() = CHI::Eb::RespErrs::OK;
+    data0.Resp() = CHI::Eb::Resps::CompData_UC;
+    data0.DBID() = 1;
+    data0.DataID() = 0;
+    data0.BE() = 0xFFFFFFFFU;
+
+    DatFlit data2 = data0;
+    data2.DataID() = 2;
+
+    const auto serializeReq = [](const ReqFlit& flit, TestFlitBitWriter& writer) {
+        appendEbReqFlitForTest(flit, writer);
+    };
+    const auto serializeDat = [](const DatFlit& flit, TestFlitBitWriter& writer) {
+        appendEbDatFlitForTest(flit, writer);
+    };
+
+    QTemporaryDir tempDir;
+    expect(tempDir.isValid(), QStringLiteral("Temporary directory creation failed."));
+    const QString tracePath = tempDir.filePath(QStringLiteral("before_sam_rn.clogb"));
+    writeTraceWithTopology(tracePath,
+                           params,
+                           {
+                               {CLog::NodeType::RN_F_BeforeSAM, 1},
+                               {CLog::NodeType::HN_F, 16},
+                           },
+                           {
+                               makeSerializedRecord(CLog::Channel::TXREQ_BeforeSAM,
+                                                    1, 1, req, serializeReq),
+                               makeSerializedRecord(CLog::Channel::RXDAT,
+                                                    1, 2, data0, serializeDat),
+                               makeSerializedRecord(CLog::Channel::RXDAT,
+                                                    1, 3, data2, serializeDat),
+                           });
+
+    CHIron::Gui::CLogBTraceLoadError error;
+    std::shared_ptr<CHIron::Gui::TraceSession> session;
+    expect(CHIron::Gui::TraceSession::open(tracePath, session, error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Trace session should open the BeforeSAM RN trace.")
+               : error.summary);
+    expect(session != nullptr, QStringLiteral("Trace session should be created."));
+    expect(session->buildXactionIndex(error),
+           error.summary.isEmpty()
+               ? QStringLiteral("Xaction index should build for the BeforeSAM RN trace.")
+               : error.summary);
+    const std::vector<std::uint64_t> ordinals = session->xactionOrdinals();
+    expectEqual(ordinals.size(),
+                static_cast<std::size_t>(1),
+                QStringLiteral("An RN-F_BeforeSAM node should get its transaction indexed "
+                               "instead of being dropped.\nRow 0:\n%1\nRow 1:\n%2")
+                    .arg(session->xactionDebugInfo(0), session->xactionDebugInfo(1)));
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -15059,6 +15433,11 @@ int main(int argc, char* argv[])
 
     const std::vector<std::pair<QString, TestFunction>> tests = {
         {QStringLiteral("AddressHexPrefixIsIgnored"), testAddressHexPrefixIsIgnored},
+        {QStringLiteral("NodeTypeGuessRules"), testNodeTypeGuessRules},
+        {QStringLiteral("NodeTypeGuessUnmappedDiscovery"), testNodeTypeGuessUnmappedDiscovery},
+        {QStringLiteral("NodeTypeOverrideSidecarRoundTrip"), testNodeTypeOverrideSidecarRoundTrip},
+        {QStringLiteral("NodeTypeBaseNamesAndBadge"), testNodeTypeBaseNamesAndBadge},
+        {QStringLiteral("NodeTypeBeforeSamXactionIndexing"), testNodeTypeBeforeSamXactionIndexing},
         {QStringLiteral("NumericAddressAndDbidFiltersMatchExpectedRows"), testNumericAddressAndDbidFiltersMatchExpectedRows},
         {QStringLiteral("SearchHighlightModeKeepsRowsAndMarksMatches"), testSearchHighlightModeKeepsRowsAndMarksMatches},
         {QStringLiteral("TraceTableTimestampDisplayUsesThousandsSeparators"), testTraceTableTimestampDisplayUsesThousandsSeparators},

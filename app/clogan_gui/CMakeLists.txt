@@ -40,7 +40,7 @@ function(chiron_gui_stage_target target_name)
     endforeach()
 endfunction()
 
-find_package(Qt6 6.5 COMPONENTS Core Gui Widgets REQUIRED)
+find_package(Qt6 6.4 COMPONENTS Core Gui Widgets REQUIRED)
 
 qt_standard_project_setup()
 
@@ -69,6 +69,7 @@ add_executable(CloganGUI
     src/main_window_members.hpp
     src/main_window_methods.hpp
     src/main_window_markers.cpp
+    src/main_window_node_types.cpp
     src/main_window_optional_fields.cpp
     src/main_window_statistics.cpp
     src/main_window_topology.cpp
@@ -77,6 +78,8 @@ add_executable(CloganGUI
     src/main_window_view.cpp
     src/main_window_xaction_index.cpp
     src/flit_record.hpp
+    src/node_type_guess.cpp
+    src/node_type_guess.hpp
     src/clipboard_widget.cpp
     src/clipboard_widget.hpp
     src/channel_badge_painter.hpp
@@ -118,6 +121,7 @@ add_executable(CloganGUI
     src/transaction_widget.cpp
     src/transaction_widget.hpp
     src/chiron_b_adapter.hpp
+    src/chiron_cchi_adapter.hpp
     src/chiron_eb_expresso.hpp
     src/chiron_eb_adapter.hpp
     src/clog_b_trace_loader.cpp
@@ -157,6 +161,8 @@ if(CHIRON_GUI_BUILD_BENCHMARKS)
         src/bug_reporter.cpp
         src/bug_reporter.hpp
         src/flit_record.hpp
+        src/node_type_guess.cpp
+        src/node_type_guess.hpp
         src/flit_transaction_keys.hpp
         src/flit_edit_adapter.cpp
         src/flit_edit_adapter.hpp
@@ -177,6 +183,7 @@ if(CHIRON_GUI_BUILD_BENCHMARKS)
         src/transaction_widget.cpp
         src/transaction_widget.hpp
         src/chiron_b_adapter.hpp
+        src/chiron_cchi_adapter.hpp
         src/chiron_eb_expresso.hpp
         src/chiron_eb_adapter.hpp
         src/clog_b_trace_loader.cpp
@@ -206,6 +213,7 @@ if(CHIRON_GUI_BUILD_TESTS)
         src/main_window_members.hpp
         src/main_window_methods.hpp
         src/main_window_markers.cpp
+        src/main_window_node_types.cpp
         src/main_window_optional_fields.cpp
         src/main_window_statistics.cpp
         src/main_window_topology.cpp
@@ -214,6 +222,8 @@ if(CHIRON_GUI_BUILD_TESTS)
         src/main_window_view.cpp
         src/main_window_xaction_index.cpp
         src/flit_record.hpp
+        src/node_type_guess.cpp
+        src/node_type_guess.hpp
         src/clipboard_widget.cpp
         src/clipboard_widget.hpp
         src/channel_badge_painter.hpp
@@ -256,6 +266,7 @@ if(CHIRON_GUI_BUILD_TESTS)
         src/transaction_widget.hpp
         src/filter_parallel_utils.hpp
         src/chiron_b_adapter.hpp
+        src/chiron_cchi_adapter.hpp
         src/chiron_eb_expresso.hpp
         src/chiron_eb_adapter.hpp
         src/clog_b_trace_loader.cpp

@@ -1,6 +1,7 @@
 #include "trace_cache_line_minimap.hpp"
 
 #include "gui_format.hpp"
+#include "node_type_guess.hpp"
 
 #include <QAbstractItemModel>
 #include <QApplication>
@@ -107,7 +108,7 @@ bool segmentsCanMerge(const CLogBTraceCacheLineStateSpan& lhs,
 
 bool isRequesterNodeType(const CLog::NodeType type) noexcept
 {
-    switch (type) {
+    switch (BaseNodeType(type)) {
     case CLog::NodeType::RN_F:
     case CLog::NodeType::RN_D:
     case CLog::NodeType::RN_I:
@@ -119,7 +120,7 @@ bool isRequesterNodeType(const CLog::NodeType type) noexcept
 
 QString nodeTypeText(const CLog::NodeType type)
 {
-    return QString::fromStdString(CLog::NodeTypeToString(type));
+    return NodeTypeBaseName(type);
 }
 
 int cacheStateBitCount(std::uint8_t value) noexcept

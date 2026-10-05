@@ -183,6 +183,20 @@ public:
     bool clearOptionalFieldFastIndex(const QString& fieldName,
                                      CLogBTraceLoadError& error);
 
+    // Node type assignment overrides (.nodetypes sidecar). Assignments made
+    // through these APIs are merged into metadata().nodeTypes so every
+    // consumer (table badges, topology view, widgets, xaction indexing) sees
+    // the effective topology.
+    QString nodeTypeOverridePath() const;
+    bool hasNodeTypeOverrides() const noexcept;
+    const std::unordered_map<quint16, CLog::NodeType>& nodeTypeOverrides() const noexcept;
+    const std::unordered_map<quint16, CLog::NodeType>& fileNodeTypes() const noexcept;
+    bool setNodeType(quint16 nodeId, CLog::NodeType type);
+    bool clearNodeType(quint16 nodeId);
+    std::size_t applyNodeTypeAssignments(
+        const std::unordered_map<quint16, CLog::NodeType>& assignments);
+    bool saveNodeTypeOverrides(QString* errorMessage = nullptr) const;
+
     void clearCache();
     void refreshCachedXactionIndexRows();
     bool ensureRows(std::uint64_t beginRow,
@@ -435,10 +449,13 @@ private:
                                  std::vector<FlitRecord>& rows) const;
     void publishSnapshot() const;
     void publishSnapshotNoThrow() const noexcept;
+    void loadNodeTypeOverrides() noexcept;
 
 private:
     QString filePath_;
     CLogBTraceMetadata metadata_;
+    std::unordered_map<quint16, CLog::NodeType> fileNodeTypes_;
+    std::unordered_map<quint16, CLog::NodeType> nodeTypeOverrides_;
     std::size_t pageSize_ = 1024;
     std::size_t maxCachedPages_ = 8;
     std::size_t maxCachedBlocks_ = 2;

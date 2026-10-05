@@ -1,5 +1,6 @@
 #include "trace_statistics.hpp"
 
+#include "chiron_cchi_adapter.hpp"
 #include "config.hpp"
 
 #include "chi_b/util/chi_b_util_decoding.hpp"
@@ -78,6 +79,41 @@ FlitChannel logicalChannelFromRawChannel(const CLog::Channel channel)
     return FlitChannel::Req;
 }
 
+// CCHI raw channels: 0..6 are TX, 7..13 are RX.
+FlitDirection directionFromCCHIRawChannel(const CLog::Channel channel)
+{
+    return static_cast<std::uint8_t>(channel)
+                <= static_cast<std::uint8_t>(CLog::CCHI::Channel::TXUPDAT)
+        ? FlitDirection::Tx
+        : FlitDirection::Rx;
+}
+
+FlitChannel logicalChannelFromCCHIRawChannel(const CLog::Channel channel)
+{
+    switch (static_cast<CLog::CCHI::Channel>(static_cast<std::uint8_t>(channel))) {
+    case CLog::CCHI::Channel::TXEVT:
+    case CLog::CCHI::Channel::RXEVT:
+    case CLog::CCHI::Channel::TXREQ:
+    case CLog::CCHI::Channel::RXREQ:
+        return FlitChannel::Req;
+    case CLog::CCHI::Channel::TXDNRSP:
+    case CLog::CCHI::Channel::RXDNRSP:
+    case CLog::CCHI::Channel::TXUPRSP:
+    case CLog::CCHI::Channel::RXUPRSP:
+        return FlitChannel::Rsp;
+    case CLog::CCHI::Channel::TXDNDAT:
+    case CLog::CCHI::Channel::RXDNDAT:
+    case CLog::CCHI::Channel::TXUPDAT:
+    case CLog::CCHI::Channel::RXUPDAT:
+        return FlitChannel::Dat;
+    case CLog::CCHI::Channel::TXSNP:
+    case CLog::CCHI::Channel::RXSNP:
+        return FlitChannel::Snp;
+    }
+
+    return FlitChannel::Req;
+}
+
 CLog::Channel normalizedRawChannel(const CLog::Channel channel)
 {
     switch (channel) {
@@ -125,6 +161,56 @@ TraceStatisticsOpcodeCount decodeRowOpcodeCount(const QString& key, const std::u
     result.opcode = parts.value(2);
     result.count = count;
     return result;
+}
+
+QString decodeCCHIFastOpcode(const CLog::Channel channel, const std::uint32_t opcode)
+{
+    switch (static_cast<CLog::CCHI::Channel>(static_cast<std::uint8_t>(channel))) {
+    case CLog::CCHI::Channel::TXEVT:
+    case CLog::CCHI::Channel::RXEVT:
+        return QString::fromLatin1(
+            ::CCHI::Opcodes::EVT::Decoder<FlexibleCCHIEvtFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIEvtFlit::opcode_t>(opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXREQ:
+    case CLog::CCHI::Channel::RXREQ:
+        return QString::fromLatin1(
+            ::CCHI::Opcodes::REQ::Decoder<FlexibleCCHIReqFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIReqFlit::opcode_t>(opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXSNP:
+    case CLog::CCHI::Channel::RXSNP:
+        return QString::fromLatin1(
+            ::CCHI::Opcodes::SNP::Decoder<FlexibleCCHISnpFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHISnpFlit::opcode_t>(opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXDNRSP:
+    case CLog::CCHI::Channel::RXDNRSP:
+        return QString::fromLatin1(
+            ::CCHI::Opcodes::DnRSP::Decoder<FlexibleCCHIDnRspFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIDnRspFlit::opcode_t>(opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXUPRSP:
+    case CLog::CCHI::Channel::RXUPRSP:
+        return QString::fromLatin1(
+            ::CCHI::Opcodes::UpRSP::Decoder<FlexibleCCHIUpRspFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIUpRspFlit::opcode_t>(opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXDNDAT:
+    case CLog::CCHI::Channel::RXDNDAT:
+        return QString::fromLatin1(
+            ::CCHI::Opcodes::DnDAT::Decoder<FlexibleCCHIDnDatFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIDnDatFlit::opcode_t>(opcode))
+                .GetName("Unknown"));
+    case CLog::CCHI::Channel::TXUPDAT:
+    case CLog::CCHI::Channel::RXUPDAT:
+        return QString::fromLatin1(
+            ::CCHI::Opcodes::UpDAT::Decoder<FlexibleCCHIUpDatFlit>::INSTANCE
+                .Decode(static_cast<FlexibleCCHIUpDatFlit::opcode_t>(opcode))
+                .GetName("Unknown"));
+    }
+
+    return QStringLiteral("Unknown");
 }
 
 QString decodeFastOpcode(const CLog::Parameters& parameters,
@@ -232,6 +318,7 @@ QString issueText(const CLog::Issue issue)
 void TraceStatisticsAccumulator::reset()
 {
     parameters_ = {};
+    cchiParameters_ = {};
     hasParameters_ = false;
     hasTimestampRange_ = false;
     totalFlits_ = 0;
@@ -251,6 +338,14 @@ void TraceStatisticsAccumulator::reset()
 void TraceStatisticsAccumulator::setParameters(const CLog::Parameters& parameters)
 {
     parameters_ = parameters;
+    cchiParameters_.reset();
+    hasParameters_ = true;
+}
+
+void TraceStatisticsAccumulator::setCCHIParameters(const CLog::CCHI::Parameters& parameters)
+{
+    parameters_ = {};
+    cchiParameters_ = parameters;
     hasParameters_ = true;
 }
 
@@ -306,8 +401,13 @@ void TraceStatisticsAccumulator::addFastRecord(const CLog::Channel channel,
 {
     ++totalFlits_;
 
-    const FlitDirection direction = directionFromRawChannel(channel);
-    const FlitChannel logicalChannel = logicalChannelFromRawChannel(channel);
+    const bool cchi = cchiParameters_.has_value();
+    const FlitDirection direction = cchi
+        ? directionFromCCHIRawChannel(channel)
+        : directionFromRawChannel(channel);
+    const FlitChannel logicalChannel = cchi
+        ? logicalChannelFromCCHIRawChannel(channel)
+        : logicalChannelFromRawChannel(channel);
     if (direction == FlitDirection::Tx) {
         ++txFlits_;
     } else {
@@ -329,7 +429,7 @@ void TraceStatisticsAccumulator::addFastRecord(const CLog::Channel channel,
     }
 
     const FastOpcodeKey key{
-        .channel = static_cast<std::uint8_t>(normalizedRawChannel(channel)),
+        .channel = static_cast<std::uint8_t>(cchi ? channel : normalizedRawChannel(channel)),
         .opcode = record.opcode,
     };
     auto found = fastOpcodeCounts_.find(key);
@@ -355,13 +455,22 @@ TraceStatisticsResult TraceStatisticsAccumulator::finalize() const
     result.lastTimestamp = lastTimestamp_;
 
     if (hasParameters_) {
-        result.issue = issueText(parameters_.GetIssue());
-        result.nodeIdWidth = parameters_.GetNodeIdWidth();
-        result.reqAddrWidth = parameters_.GetReqAddrWidth();
-        result.dataWidth = parameters_.GetDataWidth();
-        result.dataCheckPresent = parameters_.IsDataCheckPresent();
-        result.poisonPresent = parameters_.IsPoisonPresent();
-        result.mpamPresent = parameters_.IsMPAMPresent();
+        if (cchiParameters_.has_value()) {
+            const CLog::CCHI::Parameters& cchi = *cchiParameters_;
+            result.issue = QStringLiteral("CCHI");
+            result.nodeIdWidth = std::max(cchi.GetUpstreamNodeIdWidth(),
+                                          cchi.GetDownstreamNodeIdWidth());
+            result.reqAddrWidth = 48;
+            result.dataWidth = cchi.GetDataWidth();
+        } else {
+            result.issue = issueText(parameters_.GetIssue());
+            result.nodeIdWidth = parameters_.GetNodeIdWidth();
+            result.reqAddrWidth = parameters_.GetReqAddrWidth();
+            result.dataWidth = parameters_.GetDataWidth();
+            result.dataCheckPresent = parameters_.IsDataCheckPresent();
+            result.poisonPresent = parameters_.IsPoisonPresent();
+            result.mpamPresent = parameters_.IsMPAMPresent();
+        }
     }
 
     result.opcodeCounts.reserve(rowOpcodeCounts_.size() + fastOpcodeCounts_.size());
@@ -371,10 +480,16 @@ TraceStatisticsResult TraceStatisticsAccumulator::finalize() const
 
     for (const auto& [key, count] : fastOpcodeCounts_) {
         const CLog::Channel rawChannel = static_cast<CLog::Channel>(key.channel);
+        const bool cchi = cchiParameters_.has_value();
         result.opcodeCounts.push_back(TraceStatisticsOpcodeCount{
-            .direction = directionText(directionFromRawChannel(rawChannel)),
-            .channel = channelText(logicalChannelFromRawChannel(rawChannel)),
-            .opcode = decodeFastOpcode(parameters_, rawChannel, key.opcode),
+            .direction = directionText(cchi
+                                           ? directionFromCCHIRawChannel(rawChannel)
+                                           : directionFromRawChannel(rawChannel)),
+            .channel = channelText(cchi
+                                       ? logicalChannelFromCCHIRawChannel(rawChannel)
+                                       : logicalChannelFromRawChannel(rawChannel)),
+            .opcode = cchi ? decodeCCHIFastOpcode(rawChannel, key.opcode)
+                           : decodeFastOpcode(parameters_, rawChannel, key.opcode),
             .count = count,
         });
     }

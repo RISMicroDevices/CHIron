@@ -2,6 +2,7 @@
 
 #include "flit_table_model.hpp"
 
+#include "cchi/util/cchi_util_flit.hpp"
 #include "chi_b/spec/chi_b_protocol_encoding.hpp"
 #include "chi_b/util/chi_b_util_decoding.hpp"
 #include "chi_b/util/chi_b_util_flit.hpp"
@@ -170,7 +171,31 @@ CLog::Channel rawChannelFor(const FlitRecord& row)
     return CLog::Channel::TXREQ;
 }
 
-std::size_t expectedByteLength(const CLog::Parameters& params,
+// Maps the GUI 4-channel model onto a CCHI raw channel value for template
+// rows. Rsp/Dat map to the upstream-originated UpRSP/UpDAT channels; EVT has
+// no 4-channel counterpart and cannot be template-created.
+std::uint8_t cchiRawChannelFor(const FlitChannel channel, const FlitDirection direction)
+{
+    const bool tx = direction == FlitDirection::Tx;
+    switch (channel) {
+    case FlitChannel::Req:
+        return static_cast<std::uint8_t>(tx ? CLog::CCHI::Channel::TXREQ
+                                            : CLog::CCHI::Channel::RXREQ);
+    case FlitChannel::Rsp:
+        return static_cast<std::uint8_t>(tx ? CLog::CCHI::Channel::TXUPRSP
+                                            : CLog::CCHI::Channel::RXUPRSP);
+    case FlitChannel::Dat:
+        return static_cast<std::uint8_t>(tx ? CLog::CCHI::Channel::TXUPDAT
+                                            : CLog::CCHI::Channel::RXUPDAT);
+    case FlitChannel::Snp:
+        return static_cast<std::uint8_t>(tx ? CLog::CCHI::Channel::TXSNP
+                                            : CLog::CCHI::Channel::RXSNP);
+    }
+
+    return static_cast<std::uint8_t>(CLog::CCHI::Channel::TXREQ);
+}
+
+std::size_t expectedByteLength(const CLogBTraceMetadata& metadata,
                                const Measures& measures,
                                const FlitChannel channel)
 {
@@ -178,7 +203,22 @@ std::size_t expectedByteLength(const CLog::Parameters& params,
         return (bits + 7U) / 8U;
     };
 
-    switch (params.GetIssue()) {
+    if (metadata.isCCHI()) {
+        const CLog::CCHI::Parameters& params = *metadata.cchiParameters;
+        switch (channel) {
+        case FlitChannel::Req:
+            return ::CCHI::Flits::REQMeasure::EvalByteLength(params);
+        case FlitChannel::Rsp:
+            return ::CCHI::Flits::UpRSPMeasure::EvalByteLength(params);
+        case FlitChannel::Dat:
+            return ::CCHI::Flits::UpDATMeasure::EvalByteLength(params);
+        case FlitChannel::Snp:
+            return ::CCHI::Flits::SNPMeasure::EvalByteLength(params);
+        }
+        return 0;
+    }
+
+    switch (metadata.parameters.GetIssue()) {
     case CLog::Issue::Eb:
         switch (channel) {
         case FlitChannel::Req:
@@ -1019,6 +1059,10 @@ FlitEditCellState FlitEditAdapter::cellState(const FlitRecord& row,
         return {.reason = QStringLiteral("This row has no raw CLog.B payload.")};
     }
 
+    if (metadata->isCCHI()) {
+        return {.reason = QStringLiteral("Field-level editing of CCHI flits is not supported.")};
+    }
+
     Measures measures;
     if (!evaluateMeasures(metadata->parameters, measures)) {
         return {.reason = QStringLiteral("The trace CHI parameters cannot be evaluated.")};
@@ -1199,6 +1243,53 @@ bool FlitEditAdapter::makeTemplate(const CLogBTraceMetadata* metadata,
         return false;
     }
 
+    if (metadata->isCCHI()) {
+        const std::size_t byteLength = expectedByteLength(*metadata, Measures{}, channel);
+        if (byteLength == 0 || byteLength > std::numeric_limits<std::uint8_t>::max()) {
+            if (errorText) {
+                *errorText = QStringLiteral("The selected flit template has an unsupported width.");
+            }
+            return false;
+        }
+
+        row = {};
+        row.timestamp = timestamp;
+        row.channel = channel;
+        row.direction = direction;
+        row.rawRecordAvailable = true;
+        row.rawNodeId = 0;
+        row.rawChannel = cchiRawChannelFor(channel, direction);
+        row.rawFlitLength = static_cast<std::uint8_t>(byteLength);
+        row.rawFlitWords.assign((byteLength + 3U) / 4U, 0U);
+
+        CLogBTraceLoadError decodeError;
+        FlitRecord decoded;
+        if (!CLogBTraceLoader::decodeRawRecord(*metadata,
+                                               row.timestamp,
+                                               static_cast<CLog::Channel>(row.rawChannel),
+                                               row.rawNodeId,
+                                               row.rawFlitLength,
+                                               row.rawFlitWords,
+                                               decoded,
+                                               decodeError)) {
+            if (errorText) {
+                *errorText = decodeError.summary.isEmpty()
+                    ? QStringLiteral("The template row could not be decoded.")
+                    : decodeError.summary;
+            }
+            return false;
+        }
+
+        decoded.rawRecordAvailable = true;
+        decoded.rawNodeId = row.rawNodeId;
+        decoded.rawChannel = row.rawChannel;
+        decoded.rawFlitLength = row.rawFlitLength;
+        decoded.rawFlitWords = row.rawFlitWords;
+        clearDerivedState(decoded);
+        row = std::move(decoded);
+        return true;
+    }
+
     Measures measures;
     if (!evaluateMeasures(metadata->parameters, measures)) {
         if (errorText) {
@@ -1207,7 +1298,7 @@ bool FlitEditAdapter::makeTemplate(const CLogBTraceMetadata* metadata,
         return false;
     }
 
-    const std::size_t byteLength = expectedByteLength(metadata->parameters, measures, channel);
+    const std::size_t byteLength = expectedByteLength(*metadata, measures, channel);
     if (byteLength == 0 || byteLength > std::numeric_limits<std::uint8_t>::max()) {
         if (errorText) {
             *errorText = QStringLiteral("The selected flit template has an unsupported width.");

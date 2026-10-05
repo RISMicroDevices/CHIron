@@ -1143,7 +1143,7 @@ void AddressWidget::startSessionBuild(std::shared_ptr<TraceSession> session)
                             }
                         } else {
                             opcode = CLogBTraceLoader::opcodeDisplayValue(
-                                session->metadata().parameters,
+                                session->metadata(),
                                 record);
                             opcodeLabelIndex = ensureOpcodeLabel(result->opcodeLabels,
                                                                  opcodeLabelIndexes,

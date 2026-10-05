@@ -3,6 +3,7 @@
 #include "channel_badge_painter.hpp"
 #include "gui_colors.hpp"
 #include "gui_format.hpp"
+#include "node_type_guess.hpp"
 
 #include <QCursor>
 #include <QFontMetrics>
@@ -159,7 +160,7 @@ QString transportNodeType(const std::shared_ptr<TraceSession>& session, const st
     if (found == session->metadata().nodeTypes.cend()) {
         return QString();
     }
-    return QString::fromStdString(CLog::NodeTypeToString(found->second));
+    return NodeTypeBaseName(found->second);
 }
 
 FlitChannel channelFromTransport(const CLog::Channel channel) noexcept
@@ -1505,7 +1506,7 @@ void TimelineWidget::startSessionBuild(std::shared_ptr<TraceSession> session)
                                 ensureOpcodeLabel(result->opcodeLabels,
                                                   opcodeLabelIndexes,
                                                   CLogBTraceLoader::opcodeDisplayValue(
-                                                      session->metadata().parameters,
+                                                      session->metadata(),
                                                       record));
                             opcodeFastLabelIndexes.insert(fastOpcodeKey, opcodeLabelIndex);
                         }

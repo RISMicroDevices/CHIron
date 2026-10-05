@@ -171,6 +171,18 @@
     void updateTraceEmptyState();
     void refreshTopologyView();
     void updateTopologyAction();
+    void showNodeTypeAssignmentDialog();
+    void rebuildNodeTypeAssignmentTable();
+    void startNodeTypeGuess();
+    void cancelNodeTypeGuess();
+    void cancelNodeTypeGuessForSession(TraceViewSession& session);
+    void processNodeTypeGuessChunk(quint64 sessionId, quint64 generation);
+    void applyNodeTypeAssignments(
+        const std::unordered_map<quint16, CLog::NodeType>& assignments);
+    void updateNodeTypesAction();
+    void updateNodeTypeGuessProgressWidgets(const TraceViewSession& session);
+    void applyTopologyPendingAssignments();
+    void revertTopologyPendingAssignments();
     void updateXactionIndexAction();
     void refreshNodeLabelDelegates();
     void updateFilterProgress(bool active, const QString& text, int value, int maximum);

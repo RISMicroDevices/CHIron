@@ -400,15 +400,29 @@ QString MainWindow::diagnosticsStateSnapshot() const
         stream << '\n';
         stream << "Trace Parameters" << '\n';
         stream << "----------------" << '\n';
-        stream << "Issue=" << IssueText(metadata.parameters.GetIssue()) << '\n';
-        stream << "NodeIDWidth=" << static_cast<qulonglong>(metadata.parameters.GetNodeIdWidth()) << '\n';
-        stream << "ReqAddrWidth=" << static_cast<qulonglong>(metadata.parameters.GetReqAddrWidth()) << '\n';
-        stream << "ReqRSVDCWidth=" << static_cast<qulonglong>(metadata.parameters.GetReqRSVDCWidth()) << '\n';
-        stream << "DatRSVDCWidth=" << static_cast<qulonglong>(metadata.parameters.GetDatRSVDCWidth()) << '\n';
-        stream << "DataWidth=" << static_cast<qulonglong>(metadata.parameters.GetDataWidth()) << '\n';
-        stream << "DataCheckPresent=" << BoolText(metadata.parameters.IsDataCheckPresent()) << '\n';
-        stream << "PoisonPresent=" << BoolText(metadata.parameters.IsPoisonPresent()) << '\n';
-        stream << "MPAMPresent=" << BoolText(metadata.parameters.IsMPAMPresent()) << '\n';
+        stream << "Issue=" << IssueText(metadata) << '\n';
+        if (metadata.isCCHI()) {
+            const CLog::CCHI::Parameters& cchi = *metadata.cchiParameters;
+            stream << "ComponentType=" << QString::fromStdString(CLog::CCHI::NodeTypeToString(cchi.GetComponentType())) << '\n';
+            stream << "TxnIdWidth=" << static_cast<qulonglong>(cchi.GetTxnIdWidth()) << '\n';
+            stream << "DBIdWidth=" << static_cast<qulonglong>(cchi.GetDBIdWidth()) << '\n';
+            stream << "UpstreamNodeIdWidth=" << static_cast<qulonglong>(cchi.GetUpstreamNodeIdWidth()) << '\n';
+            stream << "DownstreamNodeIdWidth=" << static_cast<qulonglong>(cchi.GetDownstreamNodeIdWidth()) << '\n';
+            stream << "WayIndexWidth=" << static_cast<qulonglong>(cchi.GetWayIndexWidth()) << '\n';
+            stream << "DataWidth=" << static_cast<qulonglong>(cchi.GetDataWidth()) << '\n';
+            stream << "TagAliasWidth=" << static_cast<qulonglong>(cchi.GetTagAliasWidth()) << '\n';
+            stream << "UWPersistEnable=" << BoolText(cchi.IsUWPersistEnabled()) << '\n';
+            stream << "UWPredictEnable=" << BoolText(cchi.IsUWPredictEnabled()) << '\n';
+        } else {
+            stream << "NodeIDWidth=" << static_cast<qulonglong>(metadata.parameters.GetNodeIdWidth()) << '\n';
+            stream << "ReqAddrWidth=" << static_cast<qulonglong>(metadata.parameters.GetReqAddrWidth()) << '\n';
+            stream << "ReqRSVDCWidth=" << static_cast<qulonglong>(metadata.parameters.GetReqRSVDCWidth()) << '\n';
+            stream << "DatRSVDCWidth=" << static_cast<qulonglong>(metadata.parameters.GetDatRSVDCWidth()) << '\n';
+            stream << "DataWidth=" << static_cast<qulonglong>(metadata.parameters.GetDataWidth()) << '\n';
+            stream << "DataCheckPresent=" << BoolText(metadata.parameters.IsDataCheckPresent()) << '\n';
+            stream << "PoisonPresent=" << BoolText(metadata.parameters.IsPoisonPresent()) << '\n';
+            stream << "MPAMPresent=" << BoolText(metadata.parameters.IsMPAMPresent()) << '\n';
+        }
     }
 
     if (dockManager_) {

@@ -470,7 +470,7 @@ bool appendLatencyEventsFromFastRecords(const std::shared_ptr<TraceSession>& ses
         if (opcodeFound == opcodeCache.end()) {
             opcodeFound = opcodeCache.emplace(
                 opcodeKey,
-                CLogBTraceLoader::opcodeDisplayValue(session->metadata().parameters, fastRecord)).first;
+                CLogBTraceLoader::opcodeDisplayValue(session->metadata(), fastRecord)).first;
         }
         QString opcode = opcodeFound->second;
         QString opcodeRaw = QStringLiteral("0x%1")
