@@ -21,9 +21,45 @@
 
 namespace Cohestra::CHI {
 
-    // Default AMBA CHI Issue E.b flit configuration used by the Cohestra
-    // interface layer. The widths match the common reference DUT geometry.
-    using CommonFlitConfiguration = ::CHI::Eb::FlitConfiguration<>;
+    // AMBA CHI Issue E.b flit configuration used by the Cohestra interface
+    // layer. Defaults match the reference DUT geometry; override per-DUT from
+    // the build system (-DCOHESTRA_CHI_*), e.g. for the XSCache Oceanus L2:
+    // nodeIdWidth=11 with DataCheck/Poison/MPAM present.
+#ifndef COHESTRA_CHI_NODEID_WIDTH
+#define COHESTRA_CHI_NODEID_WIDTH           7
+#endif
+#ifndef COHESTRA_CHI_REQ_ADDR_WIDTH
+#define COHESTRA_CHI_REQ_ADDR_WIDTH         48
+#endif
+#ifndef COHESTRA_CHI_REQ_RSVDC_WIDTH
+#define COHESTRA_CHI_REQ_RSVDC_WIDTH        4
+#endif
+#ifndef COHESTRA_CHI_DAT_RSVDC_WIDTH
+#define COHESTRA_CHI_DAT_RSVDC_WIDTH        4
+#endif
+#ifndef COHESTRA_CHI_DATA_WIDTH
+#define COHESTRA_CHI_DATA_WIDTH             256
+#endif
+#ifndef COHESTRA_CHI_DATACHECK_PRESENT
+#define COHESTRA_CHI_DATACHECK_PRESENT      0
+#endif
+#ifndef COHESTRA_CHI_POISON_PRESENT
+#define COHESTRA_CHI_POISON_PRESENT         0
+#endif
+#ifndef COHESTRA_CHI_MPAM_PRESENT
+#define COHESTRA_CHI_MPAM_PRESENT           0
+#endif
+
+    using CommonFlitConfiguration = ::CHI::Eb::FlitConfiguration<
+            COHESTRA_CHI_NODEID_WIDTH,
+            COHESTRA_CHI_REQ_ADDR_WIDTH,
+            COHESTRA_CHI_REQ_RSVDC_WIDTH,
+            COHESTRA_CHI_DAT_RSVDC_WIDTH,
+            COHESTRA_CHI_DATA_WIDTH,
+            COHESTRA_CHI_DATACHECK_PRESENT != 0,
+            COHESTRA_CHI_POISON_PRESENT != 0,
+            COHESTRA_CHI_MPAM_PRESENT != 0
+        >;
 
     using REQFlit = ::CHI::Eb::Flits::REQ<CommonFlitConfiguration>;
     using RSPFlit = ::CHI::Eb::Flits::RSP<CommonFlitConfiguration>;
