@@ -55,6 +55,16 @@ namespace Cohestra {
         static const ConfigurationEntryBack<bool>       CONFIG_FUZZ_ARI_EVICT_ENABLE;
         static const ConfigurationEntryBack<uint64_t>   CONFIG_FUZZ_ARI_EVICT_RATIO;
 
+        // Prefetch (Stash) stimulus: with probability 1/prefetch.ratio per tick
+        // the fuzzer emits a fire-and-forget StashShared (DoPrefetchLoad) or
+        // StashUnique (DoPrefetchStore) on a random line of the current range.
+        // Disabled by default: when off, no RNG draws are added and the legacy
+        // sequence/behavior is preserved bit-identically.
+        static const ConfigurationEntryBack<bool>       CONFIG_FUZZ_ARI_PREFETCH_ENABLE;
+        static const ConfigurationEntryBack<uint64_t>   CONFIG_FUZZ_ARI_PREFETCH_RATIO;
+        static const ConfigurationEntryBack<bool>       CONFIG_FUZZ_ARI_PREFETCH_LOAD_ENABLE;
+        static const ConfigurationEntryBack<bool>       CONFIG_FUZZ_ARI_PREFETCH_STORE_ENABLE;
+
         // Per-source enables: each driven source can be switched off
         // individually. All default true (legacy behavior, legacy RNG draw
         // sequence). A class is available iff its class switch is on AND at
@@ -96,6 +106,11 @@ namespace Cohestra {
         bool                                evictEnable;
         uint64_t                            evictRatio;
 
+        bool                                prefetchEnable;
+        uint64_t                            prefetchRatio;
+        bool                                prefetchLoadEnable;
+        bool                                prefetchStoreEnable;
+
         bool                                loadEnable;
         bool                                storeEnable;
         bool                                storeLineEnable;
@@ -135,6 +150,11 @@ namespace Cohestra {
 
         uint64_t                            countIssuedEVT;
         uint64_t                            countDeniedEVT;
+
+        uint64_t                            countIssuedPF;
+        uint64_t                            countDeniedPF;
+        uint64_t                            countIssuedPFLoad;
+        uint64_t                            countIssuedPFStore;
 
         uint64_t                            countStoreCommitted;
         uint64_t                            countStoreDropped;
@@ -189,6 +209,8 @@ namespace Cohestra {
         void                TrackEvictableLine(uint32_t upstreamIndex, uint64_t addr) noexcept;
 
         bool                TryDoEvict(uint32_t upstreamIndex) noexcept;
+
+        bool                TryDoPrefetch(uint32_t upstreamIndex) noexcept;
 
         template<class TEvent>
         void                CountResult(const std::shared_ptr<CCHI::Taurus::FutureNow<TEvent>>& result) noexcept;

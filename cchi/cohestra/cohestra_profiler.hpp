@@ -124,6 +124,7 @@ namespace Cohestra {
         void                        OnAcceptedEVT(CCHI::Taurus::UpstreamNodeXactAcceptedEVTEvent<CommonFlitConfigurationType1>& event) noexcept;
         void                        OnAcceptedSNP(CCHI::Taurus::UpstreamNodeXactAcceptedSNPEvent<CommonFlitConfigurationType1>& event) noexcept;
         void                        OnAcceptedREQ(CCHI::Taurus::UpstreamNodeXactAcceptedREQEvent<CommonFlitConfigurationType1>& event) noexcept;
+        void                        OnAcceptedPrefetch(CCHI::Taurus::UpstreamNodeXactAcceptedPrefetchEvent<CommonFlitConfigurationType1>& event) noexcept;
         void                        OnAcceptedDnRSP(CCHI::Taurus::UpstreamNodeXactAcceptedDnRSPEvent<CommonFlitConfigurationType1>& event) noexcept;
         void                        OnAcceptedUpRSP(CCHI::Taurus::UpstreamNodeXactAcceptedUpRSPEvent<CommonFlitConfigurationType1>& event) noexcept;
         void                        OnAcceptedDnDAT(CCHI::Taurus::UpstreamNodeXactAcceptedDnDATEvent<CommonFlitConfigurationType1>& event) noexcept;

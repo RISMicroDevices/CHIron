@@ -370,7 +370,11 @@ namespace CCHI::Prof {
         uint64_t t0   = xaction.GetFirst().time;
         uint64_t tEnd = LastFlitTime(xaction);
 
-        const std::string typeName = XactionTypeName(xaction.GetType());
+        // Stash xactions are split by their REQ opcode: StashShared/StashUnique.
+        const std::string typeName = xaction.GetType() == Xact::XactionType::Stash
+            ? (xaction.GetFirst().flit.req.Opcode == Opcodes::REQ::StashUnique
+               ? "StashUnique" : "StashShared")
+            : XactionTypeName(xaction.GetType());
 
         // Totals.
         metrics.H("xact.total").Record(tEnd - t0);
@@ -442,7 +446,7 @@ namespace CCHI::Prof {
                 auto* comp = xaction.GetFirstDnRSP({ Opcodes::DnRSP::Comp, Opcodes::DnRSP::CompStash });
 
                 if (comp)
-                    metrics.H("xact.stash.comp").Record(comp->time - t0);
+                    metrics.H("xact." + typeName + ".comp").Record(comp->time - t0);
                 break;
             }
 

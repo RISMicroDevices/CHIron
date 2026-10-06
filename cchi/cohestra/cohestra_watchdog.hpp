@@ -41,7 +41,9 @@ namespace Cohestra {
     // DUT-outstanding (birth: OnAcceptedREQ / OnAcceptedEVT / OnAcceptedCMO /
     // OnAcceptedPrefetch) until their first response (death:
     // OnCacheLineGranted / OnAcceptedCompCMO / OnAcceptedDnRSP /
-    // OnAcceptedDnDAT). The outstanding registry is keyed by the xaction
+    // OnAcceptedDnDAT). Fire-and-forget prefetch (Stash with ExpCompStash=0)
+    // completes at its request flit and is never registered: no response
+    // will ever follow it. The outstanding registry is keyed by the xaction
     // shared_ptr identity; the entry holds the shared_ptr, so the object
     // cannot be recycled while registered (no pointer-reuse ABA). The first
     // matching death event retires the entry: supervision is birth -> first

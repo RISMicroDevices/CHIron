@@ -121,6 +121,7 @@ namespace Cohestra {
             hub->OnAcceptedEVT  .Register(Gravity::MakeListener(LISTENER_NAME, 0, &OpCount::OnAcceptedEVT, this));
             hub->OnAcceptedSNP  .Register(Gravity::MakeListener(LISTENER_NAME, 0, &OpCount::OnAcceptedSNP, this));
             hub->OnAcceptedREQ  .Register(Gravity::MakeListener(LISTENER_NAME, 0, &OpCount::OnAcceptedREQ, this));
+            hub->OnAcceptedPrefetch.Register(Gravity::MakeListener(LISTENER_NAME, 0, &OpCount::OnAcceptedPrefetch, this));
             hub->OnAcceptedDnRSP.Register(Gravity::MakeListener(LISTENER_NAME, 0, &OpCount::OnAcceptedDnRSP, this));
             hub->OnAcceptedUpRSP.Register(Gravity::MakeListener(LISTENER_NAME, 0, &OpCount::OnAcceptedUpRSP, this));
             hub->OnAcceptedDnDAT.Register(Gravity::MakeListener(LISTENER_NAME, 0, &OpCount::OnAcceptedDnDAT, this));
@@ -139,6 +140,7 @@ namespace Cohestra {
             hub->OnAcceptedEVT  .Unregister(LISTENER_NAME);
             hub->OnAcceptedSNP  .Unregister(LISTENER_NAME);
             hub->OnAcceptedREQ  .Unregister(LISTENER_NAME);
+            hub->OnAcceptedPrefetch.Unregister(LISTENER_NAME);
             hub->OnAcceptedDnRSP.Unregister(LISTENER_NAME);
             hub->OnAcceptedUpRSP.Unregister(LISTENER_NAME);
             hub->OnAcceptedDnDAT.Unregister(LISTENER_NAME);
@@ -205,6 +207,14 @@ namespace Cohestra {
     }
 
     void OpCount::OnAcceptedREQ(CCHI::Taurus::UpstreamNodeXactAcceptedREQEvent<CommonFlitConfigurationType1>& event) noexcept
+    {
+        nodeCounts[&event.GetUpstream()].txREQ[event.GetREQFlit().Opcode]++;
+    }
+
+    // Prefetch (StashShared/StashUnique) rides a dedicated emission queue and
+    // does not fire OnAcceptedREQ; count its flit's opcode in the same TXREQ
+    // bucket so the report separates the two stash opcodes like any other.
+    void OpCount::OnAcceptedPrefetch(CCHI::Taurus::UpstreamNodeXactAcceptedPrefetchEvent<CommonFlitConfigurationType1>& event) noexcept
     {
         nodeCounts[&event.GetUpstream()].txREQ[event.GetREQFlit().Opcode]++;
     }

@@ -46,6 +46,18 @@ namespace Cohestra {
     const ConfigurationEntryBack<uint64_t> FuzzARI::CONFIG_FUZZ_ARI_EVICT_RATIO
         ("FUZZ_ARI_EVICT_RATIO", "fuzz.ari.evict.ratio", nullptr, 16, DeserializeUInt64, SerializeUInt64);
 
+    const ConfigurationEntryBack<bool> FuzzARI::CONFIG_FUZZ_ARI_PREFETCH_ENABLE
+        ("FUZZ_ARI_PREFETCH_ENABLE", "fuzz.ari.prefetch.enable", nullptr, false, DeserializeBool, SerializeBool);
+
+    const ConfigurationEntryBack<uint64_t> FuzzARI::CONFIG_FUZZ_ARI_PREFETCH_RATIO
+        ("FUZZ_ARI_PREFETCH_RATIO", "fuzz.ari.prefetch.ratio", nullptr, 8, DeserializeUInt64, SerializeUInt64);
+
+    const ConfigurationEntryBack<bool> FuzzARI::CONFIG_FUZZ_ARI_PREFETCH_LOAD_ENABLE
+        ("FUZZ_ARI_PREFETCH_LOAD_ENABLE", "fuzz.ari.prefetch.load.enable", nullptr, true, DeserializeBool, SerializeBool);
+
+    const ConfigurationEntryBack<bool> FuzzARI::CONFIG_FUZZ_ARI_PREFETCH_STORE_ENABLE
+        ("FUZZ_ARI_PREFETCH_STORE_ENABLE", "fuzz.ari.prefetch.store.enable", nullptr, true, DeserializeBool, SerializeBool);
+
     const ConfigurationEntryBack<bool> FuzzARI::CONFIG_FUZZ_ARI_LOAD_ENABLE
         ("FUZZ_ARI_LOAD_ENABLE", "fuzz.ari.load.enable", nullptr, true, DeserializeBool, SerializeBool);
 
@@ -100,6 +112,10 @@ namespace Cohestra {
         , cmoInvalRatio       (CONFIG_FUZZ_ARI_CMO_INVAL_RATIO.defaultValue)
         , evictEnable         (CONFIG_FUZZ_ARI_EVICT_ENABLE.defaultValue)
         , evictRatio          (CONFIG_FUZZ_ARI_EVICT_RATIO.defaultValue)
+        , prefetchEnable      (CONFIG_FUZZ_ARI_PREFETCH_ENABLE.defaultValue)
+        , prefetchRatio       (CONFIG_FUZZ_ARI_PREFETCH_RATIO.defaultValue)
+        , prefetchLoadEnable  (CONFIG_FUZZ_ARI_PREFETCH_LOAD_ENABLE.defaultValue)
+        , prefetchStoreEnable (CONFIG_FUZZ_ARI_PREFETCH_STORE_ENABLE.defaultValue)
         , loadEnable          (CONFIG_FUZZ_ARI_LOAD_ENABLE.defaultValue)
         , storeEnable         (CONFIG_FUZZ_ARI_STORE_ENABLE.defaultValue)
         , storeLineEnable     (CONFIG_FUZZ_ARI_STORELINE_ENABLE.defaultValue)
@@ -126,6 +142,10 @@ namespace Cohestra {
         , countIssuedCMOInval (0)
         , countIssuedEVT      (0)
         , countDeniedEVT      (0)
+        , countIssuedPF       (0)
+        , countDeniedPF       (0)
+        , countIssuedPFLoad   (0)
+        , countIssuedPFStore  (0)
         , countStoreCommitted (0)
         , countStoreDropped   (0)
         , pendingStores       ()
@@ -148,6 +168,10 @@ namespace Cohestra {
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_CMO_INVAL_RATIO, cmoInvalRatio) &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_EVICT_ENABLE, evictEnable) &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_EVICT_RATIO, evictRatio) &&
+                    LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_PREFETCH_ENABLE, prefetchEnable) &&
+                    LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_PREFETCH_RATIO, prefetchRatio) &&
+                    LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_PREFETCH_LOAD_ENABLE, prefetchLoadEnable) &&
+                    LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_PREFETCH_STORE_ENABLE, prefetchStoreEnable) &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_LOAD_ENABLE,   loadEnable)    &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_STORE_ENABLE,  storeEnable)   &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_STORELINE_ENABLE, storeLineEnable) &&
@@ -183,6 +207,12 @@ namespace Cohestra {
         if (evictEnable && !evictRatio)
         {
             GetOwner().GetLogger()->error("FuzzARI {}: fuzz.ari.evict.ratio must not be zero when evict is enabled.", GetIndex());
+            return false;
+        }
+
+        if (prefetchEnable && !prefetchRatio)
+        {
+            GetOwner().GetLogger()->error("FuzzARI {}: fuzz.ari.prefetch.ratio must not be zero when prefetch is enabled.", GetIndex());
             return false;
         }
 
@@ -237,10 +267,11 @@ namespace Cohestra {
         // so default-config runs stay bit-identical with legacy logs)
         if (!loadEnable || !storeEnable || !storeLineEnable
          || !cmoCleanEnable || !cmoFlushEnable || !cmoInvalEnable
-         || !evictEnable)
+         || !evictEnable
+         || (prefetchEnable && (!prefetchLoadEnable || !prefetchStoreEnable)))
         {
             GetOwner().GetLogger()->info(
-                "FuzzARI {}: sources disabled: {}{}{}{}{}{}{}",
+                "FuzzARI {}: sources disabled: {}{}{}{}{}{}{}{}{}",
                 GetIndex(),
                 loadEnable      ? "" : "DoLoad(ReadShared) ",
                 storeEnable     ? "" : "DoStore(ReadUnique) ",
@@ -248,7 +279,9 @@ namespace Cohestra {
                 cmoCleanEnable  ? "" : "DoCBOClean(CleanShared) ",
                 cmoFlushEnable  ? "" : "DoCBOFlush(CleanInvalid) ",
                 cmoInvalEnable  ? "" : "DoCBOInval(MakeInvalid) ",
-                evictEnable     ? "" : "DoEvict(Evict/WriteBackFull) ");
+                evictEnable     ? "" : "DoEvict(Evict/WriteBackFull) ",
+                (prefetchEnable && !prefetchLoadEnable)  ? "DoPrefetchLoad(StashShared) " : "",
+                (prefetchEnable && !prefetchStoreEnable) ? "DoPrefetchStore(StashUnique) " : "");
         }
 
         return true;
@@ -269,10 +302,11 @@ namespace Cohestra {
         {
             finished = true;
 
-            GetOwner().GetLogger()->info("FuzzARI {}: maximum cycle {} reached, stopping at time {}. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}), denied {} (CMO {}, EVT {}), stores committed {}, dropped {}.",
+            GetOwner().GetLogger()->info("FuzzARI {}: maximum cycle {} reached, stopping at time {}. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}), denied {} (CMO {}, EVT {}, PF {}), stores committed {}, dropped {}.",
                 GetIndex(), maximumCycle, time,
                 countIssued, countIssuedCMO, countIssuedCMOClean, countIssuedCMOFlush, countIssuedCMOInval, countIssuedEVT,
-                countDenied, countDeniedCMO, countDeniedEVT, countStoreCommitted, countStoreDropped);
+                countIssuedPF, countIssuedPFLoad, countIssuedPFStore,
+                countDenied, countDeniedCMO, countDeniedEVT, countDeniedPF, countStoreCommitted, countStoreDropped);
 
             return;
         }
@@ -305,10 +339,11 @@ namespace Cohestra {
         {
             finished = true;
 
-            GetOwner().GetLogger()->info("FuzzARI {}: ARI target {} reached at time {}, finished. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}), denied {} (CMO {}, EVT {}), stores committed {}, dropped {}.",
+            GetOwner().GetLogger()->info("FuzzARI {}: ARI target {} reached at time {}, finished. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}), denied {} (CMO {}, EVT {}, PF {}), stores committed {}, dropped {}.",
                 GetIndex(), ariTarget, time,
                 countIssued, countIssuedCMO, countIssuedCMOClean, countIssuedCMOFlush, countIssuedCMOInval, countIssuedEVT,
-                countDenied, countDeniedCMO, countDeniedEVT, countStoreCommitted, countStoreDropped);
+                countIssuedPF, countIssuedPFLoad, countIssuedPFStore,
+                countDenied, countDeniedCMO, countDeniedEVT, countDeniedPF, countStoreCommitted, countStoreDropped);
         }
     }
 
@@ -363,8 +398,10 @@ namespace Cohestra {
         const bool cmoAvail = cmoEnable
                            && (cmoCleanEnable || cmoFlushEnable || cmoInvalEnable);
         const bool evtAvail = evictEnable;
+        const bool pfAvail  = prefetchEnable
+                           && (prefetchLoadEnable || prefetchStoreEnable);
 
-        if (!memAvail && !cmoAvail && !evtAvail)
+        if (!memAvail && !cmoAvail && !evtAvail && !pfAvail)
             return;
 
         // Evict (TXEVT) class with probability 1/evictRatio: evict a line this
@@ -374,6 +411,14 @@ namespace Cohestra {
         // skipped entirely when evict is disabled, keeping the legacy RNG
         // sequence bit-identical.
         if (evtAvail && (Random64() % evictRatio) == 0 && TryDoEvict(upstreamIndex))
+            return;
+
+        // Prefetch (Stash) class with probability 1/prefetchRatio: emit a
+        // fire-and-forget StashShared/StashUnique on a random line of the
+        // current range (no upstream completion is ever expected). The draw
+        // is skipped entirely when prefetch is disabled, keeping the legacy
+        // RNG sequence bit-identical.
+        if (pfAvail && (Random64() % prefetchRatio) == 0 && TryDoPrefetch(upstreamIndex))
             return;
 
         // Evict-only configuration (memory and CMO both off) with a missed
@@ -653,6 +698,48 @@ namespace Cohestra {
         }
 
         return false;
+    }
+
+    bool FuzzARI::TryDoPrefetch(uint32_t upstreamIndex) noexcept
+    {
+        auto* upstream = GetOwner().GetType1Upstream(upstreamIndex);
+
+        if (!upstream)
+            return false;
+
+        const FuzzARIRange& range = ranges[rangeOrdinal[rangeIndex]];
+
+        // Own address draw (tag/set/alias, same shape as the memory-op draw).
+        // The Taurus prefetch API carries no TagAlias, so the alias draw is
+        // discarded; it is kept for draw-shape uniformity only.
+        uint64_t aliasDummy;
+        const uint64_t addr = GenerateAddress(range, true, aliasDummy);
+
+        // 50/50 StashShared (prefetch load) vs StashUnique (prefetch store)
+        // with per-source fallback; pfAvail guarantees at least one enabled.
+        bool wantLoad = (Random64() % 2) != 0;
+
+        if (wantLoad && !prefetchLoadEnable)
+            wantLoad = false;
+        else if (!wantLoad && !prefetchStoreEnable)
+            wantLoad = true;
+
+        auto result = wantLoad ? upstream->DoPrefetchLoad(addr)
+                               : upstream->DoPrefetchStore(addr);
+
+        if (result && !result->IsRejected())
+        {
+            countIssued++;
+            countIssuedPF++;
+            (wantLoad ? countIssuedPFLoad : countIssuedPFStore)++;
+        }
+        else
+        {
+            countDenied++;
+            countDeniedPF++;
+        }
+
+        return true;
     }
 
     size_t FuzzARI::Factorial(size_t n) noexcept

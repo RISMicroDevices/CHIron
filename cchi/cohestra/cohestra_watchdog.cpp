@@ -246,6 +246,11 @@ namespace Cohestra {
     {
         const auto& flit = event.GetREQFlit();
 
+        // Fire-and-forget prefetch (ExpCompStash=0) completes at its request
+        // flit: no response/grant ever follows, so there is nothing to watch.
+        if (!flit.ExpCompStash)
+            return;
+
         Birth(WatchdogXactClass::PREFETCH,
             event.GetXaction(),
             uint64_t(flit.TxnID),

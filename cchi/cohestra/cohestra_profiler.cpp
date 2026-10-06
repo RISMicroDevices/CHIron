@@ -131,6 +131,7 @@ namespace Cohestra {
             hub->OnAcceptedEVT  .Register(Gravity::MakeListener(LISTENER_NAME, 0, &Profiler::OnAcceptedEVT, this));
             hub->OnAcceptedSNP  .Register(Gravity::MakeListener(LISTENER_NAME, 0, &Profiler::OnAcceptedSNP, this));
             hub->OnAcceptedREQ  .Register(Gravity::MakeListener(LISTENER_NAME, 0, &Profiler::OnAcceptedREQ, this));
+            hub->OnAcceptedPrefetch.Register(Gravity::MakeListener(LISTENER_NAME, 0, &Profiler::OnAcceptedPrefetch, this));
             hub->OnAcceptedDnRSP.Register(Gravity::MakeListener(LISTENER_NAME, 0, &Profiler::OnAcceptedDnRSP, this));
             hub->OnAcceptedUpRSP.Register(Gravity::MakeListener(LISTENER_NAME, 0, &Profiler::OnAcceptedUpRSP, this));
             hub->OnAcceptedDnDAT.Register(Gravity::MakeListener(LISTENER_NAME, 0, &Profiler::OnAcceptedDnDAT, this));
@@ -174,6 +175,7 @@ namespace Cohestra {
             hub->OnAcceptedEVT  .Unregister(LISTENER_NAME);
             hub->OnAcceptedSNP  .Unregister(LISTENER_NAME);
             hub->OnAcceptedREQ  .Unregister(LISTENER_NAME);
+            hub->OnAcceptedPrefetch.Unregister(LISTENER_NAME);
             hub->OnAcceptedDnRSP.Unregister(LISTENER_NAME);
             hub->OnAcceptedUpRSP.Unregister(LISTENER_NAME);
             hub->OnAcceptedDnDAT.Unregister(LISTENER_NAME);
@@ -246,6 +248,14 @@ namespace Cohestra {
     }
 
     void Profiler::OnAcceptedREQ(CCHI::Taurus::UpstreamNodeXactAcceptedREQEvent<CommonFlitConfigurationType1>& event) noexcept
+    {
+        if (auto* ctx = ContextOf(event.GetUpstream()))
+            CountChannel(*ctx, "req", event.GetUpstream().time, false, true);
+    }
+
+    // Prefetch (StashShared/StashUnique) rides a dedicated emission queue and
+    // does not fire OnAcceptedREQ; it is still a REQ-channel flit on the wire.
+    void Profiler::OnAcceptedPrefetch(CCHI::Taurus::UpstreamNodeXactAcceptedPrefetchEvent<CommonFlitConfigurationType1>& event) noexcept
     {
         if (auto* ctx = ContextOf(event.GetUpstream()))
             CountChannel(*ctx, "req", event.GetUpstream().time, false, true);
