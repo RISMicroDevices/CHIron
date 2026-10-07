@@ -2892,4 +2892,45 @@ namespace Cohestra {
         details::V3CHIPackedMonitorRNChannelPolicy,
         details::V3CHIPackedMonitorSNChannelPolicy>;
 
+
+    // ----------------------------------------------------------------
+    // Monitor flit pin style detection. The port-presence concepts above
+    // see only the control pins (flitpend/flitv/lcrdv), which are common to
+    // both pin styles, so the style must be detected from the flit pins:
+    // packed-style taps carry one whole-flit vector per channel
+    // (mon_chi_<rn|sn><P>_<ch>_flit), separate-field taps carry one pin per
+    // flit field (mon_chi_<rn|sn><P>_<ch>_flit_<Field>).
+    // ----------------------------------------------------------------
+
+    namespace details {
+
+#define COHESTRA_V3_CHI_MONITOR_PACKED_PROBE(PORT)                          \
+        requires (T t) { t.mon_chi_rn ## PORT ## _txreq_flit; } ||          \
+        requires (T t) { t.mon_chi_sn ## PORT ## _rxreq_flit; } ||
+
+        template<class T>
+        concept V3CHIModuleMonitorPackedStyle =
+            COHESTRA_V3_CHI_MONITOR_PACKED_PROBE(0)
+            COHESTRA_V3_CHI_MONITOR_PACKED_PROBE(1)
+            COHESTRA_V3_CHI_MONITOR_PACKED_PROBE(2)
+            COHESTRA_V3_CHI_MONITOR_PACKED_PROBE(3)
+            COHESTRA_V3_CHI_MONITOR_PACKED_PROBE(4)
+            COHESTRA_V3_CHI_MONITOR_PACKED_PROBE(5)
+            COHESTRA_V3_CHI_MONITOR_PACKED_PROBE(6)
+            COHESTRA_V3_CHI_MONITOR_PACKED_PROBE(7)
+            false;
+
+#undef COHESTRA_V3_CHI_MONITOR_PACKED_PROBE
+    }
+
+    // V3CHIMonitorInterfaceAuto: selects the packed or separate-field
+    // monitor channel policy from the module's pin style, so both styles
+    // (and modules without monitor taps, where either policy is inert)
+    // compile under one harness source.
+    template<class VT>
+    using V3CHIMonitorInterfaceAuto = std::conditional_t<
+        details::V3CHIModuleMonitorPackedStyle<VT>,
+        V3CHIMonitorInterfacePacked<VT>,
+        V3CHIMonitorInterface<VT>>;
+
 } // namespace Cohestra

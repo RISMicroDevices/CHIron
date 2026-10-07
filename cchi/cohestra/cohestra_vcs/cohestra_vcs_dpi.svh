@@ -74,6 +74,14 @@
 `define COHESTRA_VCS_TOP_MODULE avocado_top
 `endif
 
+// CHI monitor taps: define COHESTRA_VCS_CHI_MON (VCS +define+, and
+// -DCOHESTRA_VCS_CHI_MON=1 for BOTH the VCS -CFLAGS and the CMake harness
+// archive so every translation unit agrees) when the DUT top exports the
+// passive mon_chi_rn0..3_* pins (avocado_top does; l2openllc_vcs_top does
+// NOT — its build must leave this undefined). The define extends the
+// from-DUT exchange struct below and makes the bridge connect and sample
+// the taps; without it the bridge compiles exactly as before.
+
 // Waveform type codes exchanged with CohestraVCS_OpenWaveform.
 `define COHESTRA_VCS_WAVE_NONE 0
 `define COHESTRA_VCS_WAVE_VCD  1
@@ -256,11 +264,58 @@ typedef struct packed {
 } cohestra_vcs_axi_pull_t;
 
 // -----------------------------------------------------------------------------
+// Passive CHI-E RN monitor taps of one port (DUT -> harness only; never
+// driven). Present iff COHESTRA_VCS_CHI_MON (avocado_top exports the pins;
+// l2openllc_vcs_top does not).
+// Per channel: the 1-bit flitpend/flitv/lcrdv taps plus the packed flit.
+// The flit fields follow the PIN widths rounded up to whole 32-bit words
+// (CHI-E: REQ 162b -> 6 words, RSP 73b -> 3, SNP 115b -> 4, DAT 422b -> 14)
+// — NOT the harness's configured CHI flit widths.
+// 62 words = 1984 bits per port.
+// -----------------------------------------------------------------------------
+`ifdef COHESTRA_VCS_CHI_MON
+typedef struct packed {
+    // txreq                                                  word (C++ side)
+    bit [31:0]   txreq_flitpend;                            // 61
+    bit [31:0]   txreq_flitv;                               // 60
+    bit [31:0]   txreq_lcrdv;                               // 59
+    bit [191:0]  txreq_flit;                                // 58..53 ([0]=LSW first)
+    // txrsp
+    bit [31:0]   txrsp_flitpend;                            // 52
+    bit [31:0]   txrsp_flitv;                               // 51
+    bit [31:0]   txrsp_lcrdv;                               // 50
+    bit [95:0]   txrsp_flit;                                // 49..47
+    // txdat
+    bit [31:0]   txdat_flitpend;                            // 46
+    bit [31:0]   txdat_flitv;                               // 45
+    bit [31:0]   txdat_lcrdv;                               // 44
+    bit [447:0]  txdat_flit;                                // 43..30
+    // rxsnp
+    bit [31:0]   rxsnp_flitpend;                            // 29
+    bit [31:0]   rxsnp_flitv;                               // 28
+    bit [31:0]   rxsnp_lcrdv;                               // 27
+    bit [127:0]  rxsnp_flit;                                // 26..23
+    // rxrsp
+    bit [31:0]   rxrsp_flitpend;                            // 22
+    bit [31:0]   rxrsp_flitv;                               // 21
+    bit [31:0]   rxrsp_lcrdv;                               // 20
+    bit [95:0]   rxrsp_flit;                                // 19..17
+    // rxdat
+    bit [31:0]   rxdat_flitpend;                            // 16
+    bit [31:0]   rxdat_flitv;                               // 15
+    bit [31:0]   rxdat_lcrdv;                               // 14
+    bit [447:0]  rxdat_flit;                                // 13..0
+} cohestra_vcs_chi_mon_sample_t;
+`endif
+
+// -----------------------------------------------------------------------------
 // Top-level exchange structs (avocado_top boundary):
 //   to_dut:   reset + 4x cchi_t1 drive + axi_m0/axi_m1 pull + axi_s0 push
 //             = 1 + 4*58 + 2*18 + 27 = 296 words = 9472 bits
 //   from_dut: 4x cchi_t1 sample + axi_m0/axi_m1 push + axi_s0 pull
 //             = 4*47 + 2*27 + 18 = 260 words = 8320 bits
+//             (+ 4x 62 = 248 words = 7936 bits of CHI monitor taps when
+//              COHESTRA_VCS_CHI_MON is set: 508 words = 16256 bits total)
 // clock is NOT part of the structs: the DriveLow/DriveHigh tasks own it.
 // -----------------------------------------------------------------------------
 typedef struct packed {
@@ -275,6 +330,14 @@ typedef struct packed {
 } cohestra_vcs_to_dut_t;
 
 typedef struct packed {
+`ifdef COHESTRA_VCS_CHI_MON
+    // CHI monitor taps (avocado_top only), prepended on the MSB side so every
+    // pre-existing field below keeps its word index.
+    cohestra_vcs_chi_mon_sample_t chi_mon_p0;   // words 507..446
+    cohestra_vcs_chi_mon_sample_t chi_mon_p1;   // words 445..384
+    cohestra_vcs_chi_mon_sample_t chi_mon_p2;   // words 383..322
+    cohestra_vcs_chi_mon_sample_t chi_mon_p3;   // words 321..260
+`endif
     cohestra_vcs_cchi_t1_sample_t cchi_t1p0;    // words 259..213
     cohestra_vcs_cchi_t1_sample_t cchi_t1p1;    // words 212..166
     cohestra_vcs_cchi_t1_sample_t cchi_t1p2;    // words 165..119

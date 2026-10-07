@@ -19,6 +19,7 @@
 #include "../cohestra_opcount.hpp"
 #include "../cohestra_cchi_flit_logger.hpp"
 #include "../cohestra_simperf.hpp"
+#include "../cohestra_clogb.hpp"
 #include "../cohestra_boot.hpp"
 #include "../cohestra_bootings/boot_delay.hpp"
 #include "../cohestra_bootings/boot_avocado.hpp"
@@ -171,7 +172,11 @@ int main(const int argc, const char* argv[])
     auto chiToRNInterface   = std::make_shared<Cohestra::V3CHIToRNInterface<VerilatedTop>>(&top);
     auto chiFromSNInterface = std::make_shared<Cohestra::V3CHIFromSNInterface<VerilatedTop>>(&top);
     auto chiToSNInterface   = std::make_shared<Cohestra::V3CHIToSNInterface<VerilatedTop>>(&top);
-    auto chiMonitorInterface = std::make_shared<Cohestra::V3CHIMonitorInterface<VerilatedTop>>(&top);
+
+    // The monitor policy follows the module's tap pin style: packed-flit
+    // (mon_chi_*_flit vectors) or separate-field (mon_chi_*_flit_<Field>)
+    // pins, auto-detected per top module (see interface_chi.hpp).
+    auto chiMonitorInterface = std::make_shared<Cohestra::V3CHIMonitorInterfaceAuto<VerilatedTop>>(&top);
 
     spdlog::info("CHI interface instantiated.");
 
@@ -240,6 +245,10 @@ int main(const int argc, const char* argv[])
         return 1;
     }
 
+    // CLog.B writer: drains the CHI monitor interface into a CLog.B binary
+    // log; inert unless [clogb] enable = 1 (config loaded below).
+    Cohestra::CLogBWriter clogbWriter;
+
     // Read INI for stimualtors and other components if specified
     if (configurationLoader)
     {
@@ -252,6 +261,12 @@ int main(const int argc, const char* argv[])
         if (!Cohestra::Waves::LoadConfiguration(*configurationLoader, instance.GetConfiguration()))
         {
             spdlog::error("Failed to load waveform configuration from {}.", *arguments.configurationPath);
+            return 1;
+        }
+
+        if (!clogbWriter.LoadConfiguration(*configurationLoader, *arguments.configurationPath))
+        {
+            spdlog::error("Failed to load CLog.B writer configuration from {}.", *arguments.configurationPath);
             return 1;
         }
     }
@@ -506,6 +521,13 @@ int main(const int argc, const char* argv[])
     else
         spdlog::info("Waveform dumping disabled.");
 
+    // CLog.B log open (no-op unless enabled by [clogb] configuration)
+    if (!clogbWriter.Open(chiMonitorInterface.get()))
+    {
+        spdlog::error("Failed to open the CLog.B log file.");
+        return 1;
+    }
+
     uint64_t time = 0;
 
     // [log] verbose = 1 enables debug-level logging (e.g. monitor trace);
@@ -736,6 +758,7 @@ int main(const int argc, const char* argv[])
         chiFromSNInterface->TickPostHandshake(time);
         chiToSNInterface->TickPostHandshake(time);
         chiMonitorInterface->TickPostHandshake(time);
+        clogbWriter.DrainAndWrite(chiMonitorInterface.get(), time);
 
         // monitors sample the settled combinational state of the current
         // cycle (after the clock=0 eval, so that the C++-driven 'ready'
@@ -805,6 +828,10 @@ int main(const int argc, const char* argv[])
         if (!runCycle([&] () { return instance.Tick(time); }))
             break;
     }
+
+    // CLog.B log teardown: flush the pending records and close the file
+    // (end-of-stream is the CLog.B EOF marker)
+    clogbWriter.Close();
 
     // Per-port AXI master summary: transactions completed during the run
     for (size_t k = 0; k < axiMasters.size(); ++k)

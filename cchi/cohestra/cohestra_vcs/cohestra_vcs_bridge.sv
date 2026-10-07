@@ -39,6 +39,12 @@
 // The pin names/widths at the avocado_top boundary come from
 // cohestra_packages/avocado/avocado_top.sv and the contract header
 // cohestra_packages/avocado/integration/avocado_dut_if.svh.
+//
+// CHI monitor taps (mon_chi_rn0..3_*): passive DUT outputs of avocado_top,
+// present only when the DUT top module exports them. They are compiled in
+// only under +define+COHESTRA_VCS_CHI_MON (which must also reach the C++
+// side — see cohestra_vcs_dpi.svh); the l2openllc_vcs_top build leaves the
+// define unset and this bridge then compiles exactly as without this block.
 //*****************************************************************************
 
 `timescale 1ps/1ps
@@ -210,6 +216,38 @@
     logic         axi_s``P``_rready
 
 // -----------------------------------------------------------------------------
+// Boundary signal declarations: passive CHI-E RN monitor taps of port P
+// (avocado_top only; sampled, never driven — compiled in iff
+// COHESTRA_VCS_CHI_MON). Widths are the pin widths (CHI-E: REQ 162b,
+// RSP 73b, SNP 115b, DAT 422b).
+// -----------------------------------------------------------------------------
+`define COHESTRA_VCS_CHI_MON_SIGS(P) \
+    logic         mon_chi_rn``P``_txreq_flitpend; \
+    logic         mon_chi_rn``P``_txreq_flitv; \
+    logic         mon_chi_rn``P``_txreq_lcrdv; \
+    logic [161:0] mon_chi_rn``P``_txreq_flit; \
+    logic         mon_chi_rn``P``_txrsp_flitpend; \
+    logic         mon_chi_rn``P``_txrsp_flitv; \
+    logic         mon_chi_rn``P``_txrsp_lcrdv; \
+    logic [72:0]  mon_chi_rn``P``_txrsp_flit; \
+    logic         mon_chi_rn``P``_txdat_flitpend; \
+    logic         mon_chi_rn``P``_txdat_flitv; \
+    logic         mon_chi_rn``P``_txdat_lcrdv; \
+    logic [421:0] mon_chi_rn``P``_txdat_flit; \
+    logic         mon_chi_rn``P``_rxsnp_flitpend; \
+    logic         mon_chi_rn``P``_rxsnp_flitv; \
+    logic         mon_chi_rn``P``_rxsnp_lcrdv; \
+    logic [114:0] mon_chi_rn``P``_rxsnp_flit; \
+    logic         mon_chi_rn``P``_rxrsp_flitpend; \
+    logic         mon_chi_rn``P``_rxrsp_flitv; \
+    logic         mon_chi_rn``P``_rxrsp_lcrdv; \
+    logic [72:0]  mon_chi_rn``P``_rxrsp_flit; \
+    logic         mon_chi_rn``P``_rxdat_flitpend; \
+    logic         mon_chi_rn``P``_rxdat_flitv; \
+    logic         mon_chi_rn``P``_rxdat_lcrdv; \
+    logic [421:0] mon_chi_rn``P``_rxdat_flit
+
+// -----------------------------------------------------------------------------
 // DUT connections (pin = same-named bridge signal).
 // -----------------------------------------------------------------------------
 `define COHESTRA_VCS_CCHI_T1_CONN(P) \
@@ -332,6 +370,34 @@
     .PREFIX``rresp   (PREFIX``rresp), \
     .PREFIX``rlast   (PREFIX``rlast), \
     .PREFIX``rready  (PREFIX``rready)
+
+// CHI monitor taps of port P (pin = same-named bridge signal; iff
+// COHESTRA_VCS_CHI_MON).
+`define COHESTRA_VCS_CHI_MON_CONN(P) \
+    .mon_chi_rn``P``_txreq_flitpend (mon_chi_rn``P``_txreq_flitpend), \
+    .mon_chi_rn``P``_txreq_flitv    (mon_chi_rn``P``_txreq_flitv), \
+    .mon_chi_rn``P``_txreq_lcrdv    (mon_chi_rn``P``_txreq_lcrdv), \
+    .mon_chi_rn``P``_txreq_flit     (mon_chi_rn``P``_txreq_flit), \
+    .mon_chi_rn``P``_txrsp_flitpend (mon_chi_rn``P``_txrsp_flitpend), \
+    .mon_chi_rn``P``_txrsp_flitv    (mon_chi_rn``P``_txrsp_flitv), \
+    .mon_chi_rn``P``_txrsp_lcrdv    (mon_chi_rn``P``_txrsp_lcrdv), \
+    .mon_chi_rn``P``_txrsp_flit     (mon_chi_rn``P``_txrsp_flit), \
+    .mon_chi_rn``P``_txdat_flitpend (mon_chi_rn``P``_txdat_flitpend), \
+    .mon_chi_rn``P``_txdat_flitv    (mon_chi_rn``P``_txdat_flitv), \
+    .mon_chi_rn``P``_txdat_lcrdv    (mon_chi_rn``P``_txdat_lcrdv), \
+    .mon_chi_rn``P``_txdat_flit     (mon_chi_rn``P``_txdat_flit), \
+    .mon_chi_rn``P``_rxsnp_flitpend (mon_chi_rn``P``_rxsnp_flitpend), \
+    .mon_chi_rn``P``_rxsnp_flitv    (mon_chi_rn``P``_rxsnp_flitv), \
+    .mon_chi_rn``P``_rxsnp_lcrdv    (mon_chi_rn``P``_rxsnp_lcrdv), \
+    .mon_chi_rn``P``_rxsnp_flit     (mon_chi_rn``P``_rxsnp_flit), \
+    .mon_chi_rn``P``_rxrsp_flitpend (mon_chi_rn``P``_rxrsp_flitpend), \
+    .mon_chi_rn``P``_rxrsp_flitv    (mon_chi_rn``P``_rxrsp_flitv), \
+    .mon_chi_rn``P``_rxrsp_lcrdv    (mon_chi_rn``P``_rxrsp_lcrdv), \
+    .mon_chi_rn``P``_rxrsp_flit     (mon_chi_rn``P``_rxrsp_flit), \
+    .mon_chi_rn``P``_rxdat_flitpend (mon_chi_rn``P``_rxdat_flitpend), \
+    .mon_chi_rn``P``_rxdat_flitv    (mon_chi_rn``P``_rxdat_flitv), \
+    .mon_chi_rn``P``_rxdat_lcrdv    (mon_chi_rn``P``_rxdat_lcrdv), \
+    .mon_chi_rn``P``_rxdat_flit     (mon_chi_rn``P``_rxdat_flit)
 
 // -----------------------------------------------------------------------------
 // Drive assigns (to-DUT struct -> pins), one port group per macro.
@@ -514,6 +580,35 @@
     S.P``.rresp   = 32'(P``_rresp); \
     S.P``.rlast   = 32'(P``_rlast)
 
+// CHI monitor taps (pins -> chi_mon_p<P> struct; iff COHESTRA_VCS_CHI_MON).
+// The flit pins are zero-extended into their whole-word struct fields; X/Z
+// collapse to 0 across the 2-state crossing, same as every sampled pin.
+`define COHESTRA_VCS_SAMPLE_CHI_MON(P, S) \
+    S.chi_mon_p``P``.txreq_flitpend = 32'(mon_chi_rn``P``_txreq_flitpend); \
+    S.chi_mon_p``P``.txreq_flitv    = 32'(mon_chi_rn``P``_txreq_flitv); \
+    S.chi_mon_p``P``.txreq_lcrdv    = 32'(mon_chi_rn``P``_txreq_lcrdv); \
+    S.chi_mon_p``P``.txreq_flit     = 192'(mon_chi_rn``P``_txreq_flit); \
+    S.chi_mon_p``P``.txrsp_flitpend = 32'(mon_chi_rn``P``_txrsp_flitpend); \
+    S.chi_mon_p``P``.txrsp_flitv    = 32'(mon_chi_rn``P``_txrsp_flitv); \
+    S.chi_mon_p``P``.txrsp_lcrdv    = 32'(mon_chi_rn``P``_txrsp_lcrdv); \
+    S.chi_mon_p``P``.txrsp_flit     = 96'(mon_chi_rn``P``_txrsp_flit); \
+    S.chi_mon_p``P``.txdat_flitpend = 32'(mon_chi_rn``P``_txdat_flitpend); \
+    S.chi_mon_p``P``.txdat_flitv    = 32'(mon_chi_rn``P``_txdat_flitv); \
+    S.chi_mon_p``P``.txdat_lcrdv    = 32'(mon_chi_rn``P``_txdat_lcrdv); \
+    S.chi_mon_p``P``.txdat_flit     = 448'(mon_chi_rn``P``_txdat_flit); \
+    S.chi_mon_p``P``.rxsnp_flitpend = 32'(mon_chi_rn``P``_rxsnp_flitpend); \
+    S.chi_mon_p``P``.rxsnp_flitv    = 32'(mon_chi_rn``P``_rxsnp_flitv); \
+    S.chi_mon_p``P``.rxsnp_lcrdv    = 32'(mon_chi_rn``P``_rxsnp_lcrdv); \
+    S.chi_mon_p``P``.rxsnp_flit     = 128'(mon_chi_rn``P``_rxsnp_flit); \
+    S.chi_mon_p``P``.rxrsp_flitpend = 32'(mon_chi_rn``P``_rxrsp_flitpend); \
+    S.chi_mon_p``P``.rxrsp_flitv    = 32'(mon_chi_rn``P``_rxrsp_flitv); \
+    S.chi_mon_p``P``.rxrsp_lcrdv    = 32'(mon_chi_rn``P``_rxrsp_lcrdv); \
+    S.chi_mon_p``P``.rxrsp_flit     = 96'(mon_chi_rn``P``_rxrsp_flit); \
+    S.chi_mon_p``P``.rxdat_flitpend = 32'(mon_chi_rn``P``_rxdat_flitpend); \
+    S.chi_mon_p``P``.rxdat_flitv    = 32'(mon_chi_rn``P``_rxdat_flitv); \
+    S.chi_mon_p``P``.rxdat_lcrdv    = 32'(mon_chi_rn``P``_rxdat_lcrdv); \
+    S.chi_mon_p``P``.rxdat_flit     = 448'(mon_chi_rn``P``_rxdat_flit)
+
 
 module cohestra_vcs_bridge;
 
@@ -541,6 +636,15 @@ module cohestra_vcs_bridge;
 
     `COHESTRA_VCS_AXI_S_SIGS(0);
 
+`ifdef COHESTRA_VCS_CHI_MON
+    // Passive CHI monitor taps (avocado_top only — l2openllc_vcs_top has no
+    // such pins and is built without this define)
+    `COHESTRA_VCS_CHI_MON_SIGS(0);
+    `COHESTRA_VCS_CHI_MON_SIGS(1);
+    `COHESTRA_VCS_CHI_MON_SIGS(2);
+    `COHESTRA_VCS_CHI_MON_SIGS(3);
+`endif
+
     // -------------------------------------------------------------------------
     // DUT
     // -------------------------------------------------------------------------
@@ -557,6 +661,13 @@ module cohestra_vcs_bridge;
         `COHESTRA_VCS_AXI_CONN(axi_m1_),
 
         `COHESTRA_VCS_AXI_CONN(axi_s0_)
+`ifdef COHESTRA_VCS_CHI_MON
+        ,
+        `COHESTRA_VCS_CHI_MON_CONN(0),
+        `COHESTRA_VCS_CHI_MON_CONN(1),
+        `COHESTRA_VCS_CHI_MON_CONN(2),
+        `COHESTRA_VCS_CHI_MON_CONN(3)
+`endif
     );
 
     // -------------------------------------------------------------------------
@@ -596,6 +707,12 @@ module cohestra_vcs_bridge;
         `COHESTRA_VCS_SAMPLE_AXI_PUSH(axi_m1, out_s);
 
         `COHESTRA_VCS_SAMPLE_AXI_PULL(axi_s0, out_s);
+`ifdef COHESTRA_VCS_CHI_MON
+        `COHESTRA_VCS_SAMPLE_CHI_MON(0, out_s);
+        `COHESTRA_VCS_SAMPLE_CHI_MON(1, out_s);
+        `COHESTRA_VCS_SAMPLE_CHI_MON(2, out_s);
+        `COHESTRA_VCS_SAMPLE_CHI_MON(3, out_s);
+`endif
     endfunction
 
     task CohestraVCS_DriveHigh();
@@ -722,13 +839,16 @@ endmodule
 `undef COHESTRA_VCS_CCHI_T1_SIGS
 `undef COHESTRA_VCS_AXI_M_SIGS
 `undef COHESTRA_VCS_AXI_S_SIGS
+`undef COHESTRA_VCS_CHI_MON_SIGS
 `undef COHESTRA_VCS_CCHI_T1_CONN
 `undef COHESTRA_VCS_AXI_CONN
+`undef COHESTRA_VCS_CHI_MON_CONN
 `undef COHESTRA_VCS_DRIVE_T1
 `undef COHESTRA_VCS_DRIVE_AXI_PULL
 `undef COHESTRA_VCS_DRIVE_AXI_PUSH
 `undef COHESTRA_VCS_SAMPLE_T1
 `undef COHESTRA_VCS_SAMPLE_AXI_PUSH
 `undef COHESTRA_VCS_SAMPLE_AXI_PULL
+`undef COHESTRA_VCS_SAMPLE_CHI_MON
 
 `default_nettype wire

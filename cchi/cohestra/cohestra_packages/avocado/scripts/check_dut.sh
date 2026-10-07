@@ -67,12 +67,19 @@ module avocado_dut_check (
 endmodule
 EOF
 
+# PINMISSING is waived: optional passive taps (e.g. the mon_chi_rn* CHI
+# monitor pins, emitted when the DUT is generated with --chi-mon) may be
+# present on the DUT yet unconnected in this harness; a genuinely missing
+# contract pin still fails via PINNOTFOUND. WIDTHEXPAND is waived: the
+# reference wrapper's intentional 7->8-bit zero-extension adapters fire it.
 verilator --lint-only \
     --top-module avocado_dut_check \
     +incdir+"$PKG_DIR/integration" \
     +define+AVOCADO_DUT_MODULE="$DUT_MODULE" \
     -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-PINCONNECTEMPTY \
     -Wno-DECLFILENAME -Wno-VARHIDDEN -Wno-WIDTHTRUNC \
+    -Wno-WIDTHEXPAND \
+    -Wno-PINMISSING \
     "$HARNESS" "$@"
 
 echo "check_dut: contract OK (module $DUT_MODULE; $*)"

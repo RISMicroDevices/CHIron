@@ -15,6 +15,15 @@
 //     enforced by the static_asserts below and re-checked at runtime against
 //     the SV-side $bits via CohestraVCS_CheckLayout).
 //
+// CHI MONITOR TAPS (COHESTRA_VCS_CHI_MON): when the DUT top exports the
+// passive mon_chi_rn0..3_* pins (avocado_top does; l2openllc_vcs_top does
+// not), FromDUT gains four ChiMonSample blocks. The define must reach EVERY
+// translation unit that sees these headers (the VCS -CFLAGS compiling
+// cohestra_vcs_dpi.cpp AND the CMake harness archive) as
+// -DCOHESTRA_VCS_CHI_MON=1, plus VCS +define+COHESTRA_VCS_CHI_MON — the
+// structs must stay bit-identical on both sides of DPI, and CohestraVCSTop
+// (vcs_top.hpp) must stay layout-identical across all TUs (ODR).
+//
 // The C++ prototypes of the SV-exported tasks/functions are declared here
 // rather than #include'ing the simulator-generated vc_hdrs.h, so this header
 // stays tool-independent; the signatures must match the export declarations
@@ -193,6 +202,45 @@ namespace Cohestra::VCS::wire {
     // Top-level exchange structs, mirrors of cohestra_vcs_to_dut_t /
     // cohestra_vcs_from_dut_t (avocado_top boundary).
     // -------------------------------------------------------------------------
+#ifdef COHESTRA_VCS_CHI_MON
+    // Passive CHI-E RN monitor taps of one port, DUT -> harness. Mirror of
+    // cohestra_vcs_chi_mon_sample_t (62 words). The flit arrays follow the PIN
+    // widths rounded up to whole words (CHI-E: REQ 162b -> 6 words, RSP 73b ->
+    // 3, SNP 115b -> 4, DAT 422b -> 14), NOT the harness's configured CHI flit
+    // widths — the pins are the mesh-side CHI-E flits.
+    struct ChiMonSample {
+        uint32_t rxdat_flit[14];            // 0..13 ([0] = LSW)
+        uint32_t rxdat_lcrdv;               // 14
+        uint32_t rxdat_flitv;               // 15
+        uint32_t rxdat_flitpend;            // 16
+
+        uint32_t rxrsp_flit[3];             // 17..19
+        uint32_t rxrsp_lcrdv;               // 20
+        uint32_t rxrsp_flitv;               // 21
+        uint32_t rxrsp_flitpend;            // 22
+
+        uint32_t rxsnp_flit[4];             // 23..26
+        uint32_t rxsnp_lcrdv;               // 27
+        uint32_t rxsnp_flitv;               // 28
+        uint32_t rxsnp_flitpend;            // 29
+
+        uint32_t txdat_flit[14];            // 30..43
+        uint32_t txdat_lcrdv;               // 44
+        uint32_t txdat_flitv;               // 45
+        uint32_t txdat_flitpend;            // 46
+
+        uint32_t txrsp_flit[3];             // 47..49
+        uint32_t txrsp_lcrdv;               // 50
+        uint32_t txrsp_flitv;               // 51
+        uint32_t txrsp_flitpend;            // 52
+
+        uint32_t txreq_flit[6];             // 53..58 ([0] = LSW)
+        uint32_t txreq_lcrdv;               // 59
+        uint32_t txreq_flitv;               // 60
+        uint32_t txreq_flitpend;            // 61
+    };
+#endif
+
     struct ToDUT {
         AxiPush     axi_s0;                 // words 0..26  (harness master drives AW/W/bready/AR/rready)
         AxiPull     axi_m1;                 // words 27..44 (harness memory drives awready/wready/B/arready/R)
@@ -212,6 +260,14 @@ namespace Cohestra::VCS::wire {
         CchiT1Sample cchi_t1p2;             // words 119..165
         CchiT1Sample cchi_t1p1;             // words 166..212
         CchiT1Sample cchi_t1p0;             // words 213..259
+#ifdef COHESTRA_VCS_CHI_MON
+        // CHI monitor taps (the SV side prepends them on the MSB side, so
+        // they sit above the pre-existing words, which keep their indices).
+        ChiMonSample chi_mon_p3;            // words 260..321
+        ChiMonSample chi_mon_p2;            // words 322..383
+        ChiMonSample chi_mon_p1;            // words 384..445
+        ChiMonSample chi_mon_p0;            // words 446..507
+#endif
     };
 
     static_assert(sizeof(CchiT1Drive)  == 58  * 4, "CchiT1Drive must be 58 words");
@@ -219,7 +275,12 @@ namespace Cohestra::VCS::wire {
     static_assert(sizeof(AxiPush)      == 27  * 4, "AxiPush must be 27 words");
     static_assert(sizeof(AxiPull)      == 18  * 4, "AxiPull must be 18 words");
     static_assert(sizeof(ToDUT)        == 296 * 4, "ToDUT must be 296 words");
+#ifdef COHESTRA_VCS_CHI_MON
+    static_assert(sizeof(ChiMonSample) == 62  * 4, "ChiMonSample must be 62 words");
+    static_assert(sizeof(FromDUT)      == 508 * 4, "FromDUT must be 508 words (260 + 248 monitor)");
+#else
     static_assert(sizeof(FromDUT)      == 260 * 4, "FromDUT must be 260 words");
+#endif
 
     // Waveform type codes (`COHESTRA_VCS_WAVE_*` in the .svh).
     inline constexpr uint32_t WAVE_NONE = 0;

@@ -38,7 +38,10 @@ namespace Cohestra {
         std::shared_ptr<V3CHIToRNInterface<VT>>         chiToRNInterface    = nullptr;
         std::shared_ptr<V3CHIFromSNInterface<VT>>       chiFromSNInterface  = nullptr;
         std::shared_ptr<V3CHIToSNInterface<VT>>         chiToSNInterface    = nullptr;
-        std::shared_ptr<V3CHIMonitorInterface<VT>>      chiMonitorInterface = nullptr;
+        // (base-class pointer: the concrete monitor policy — separate-field
+        // or packed — is selected per top module by V3CHIMonitorInterfaceAuto,
+        // see interface_chi.hpp)
+        std::shared_ptr<CHI::CHIMonitorInterface>       chiMonitorInterface = nullptr;
 
         // Bus models (owned by the harness; never nullptr, point to the
         // harness-side vectors in main())

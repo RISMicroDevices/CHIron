@@ -215,12 +215,16 @@ target_sources(cohestra_v3 PRIVATE
 target_include_directories(cohestra_v3 PRIVATE
     "${COHES_TRA_ROOT}"
     "${CMAKE_CURRENT_LIST_DIR}/../.."
+    "${CMAKE_CURRENT_LIST_DIR}/../../.."
     "${COHES_TRA_ROOT}/spdlog/include"
 )
 
+# zlib (z): record-block compression of the CLog.B writer
+# (cchi/cohestra/cohestra_clogb.cpp -> clog/clog_b, header-only)
 target_link_libraries(cohestra_v3 PRIVATE
     SimpleIni::SimpleIni
     spdlog::spdlog
+    z
 )
 
 # Optional user DUT module-name override (Avocado-style CUSTOM tops).

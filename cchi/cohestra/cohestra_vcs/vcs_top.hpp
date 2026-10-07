@@ -26,9 +26,18 @@
 //   clock==1: CohestraVCS_DriveHigh (the posedge phase)
 // final() is a no-op kept for Verilator-model API parity.
 //
-// The boundary has NO CHI pins (they are internal to avocado_top), so the
-// V3CHI*Interface templates detect no ports and stay inert, exactly as they
-// do for a Verilated avocado_top.
+// The boundary has NO operational CHI pins (they are internal to
+// avocado_top), so the operational V3CHI*Interface templates detect no ports
+// and stay inert, exactly as they do for a Verilated avocado_top.
+//
+// CHI MONITOR TAPS (COHESTRA_VCS_CHI_MON): when the DUT top is avocado_top
+// and the build defines COHESTRA_VCS_CHI_MON (VCS +define+ plus
+// -DCOHESTRA_VCS_CHI_MON=1 for EVERY C++ translation unit — see
+// cohestra_vcs_dpi.hpp), the passive mon_chi_rn0..3_* pins are shadowed here
+// with the exact pin names, so the cohestra_v3 CHI monitor pin-detection
+// concepts (V3CHIModuleMonitorRNPort*) bind the same way they do on the
+// Verilated top. The l2openllc build has no such pins and compiles this
+// header with the define unset.
 //*****************************************************************************
 #pragma once
 
@@ -38,6 +47,13 @@
 
 #include "interface.hpp"
 #include "interface_axi.hpp"
+
+#ifdef COHESTRA_VCS_CHI_MON
+// The CHI monitor pin-detection concepts referenced by the static_asserts at
+// the bottom of this file (on the include path of both the CMake archive and
+// the VCS -CFLAGS build of cohestra_vcs_dpi.cpp).
+#include "interface_chi.hpp"
+#endif
 
 
 // Members of one CCHI Type-1 port (harness-driven = DUT inputs first, then
@@ -206,6 +222,41 @@
     uint8_t  axi_s##P##_rlast   = 0
 
 
+// Members of the passive CHI-E RN monitor taps of one port (avocado_top only;
+// compiled in iff COHESTRA_VCS_CHI_MON). 1-bit taps are uint8_t; the packed
+// flits are uint32_t word arrays sized from the PIN widths (CHI-E: REQ 162b
+// -> 6 words, RSP 73b -> 3, SNP 115b -> 4, DAT 422b -> 14) — the same shape
+// the Verilator model presents for the same pins (VlWide), and the same word
+// counts as the DPI wire struct (Cohestra::VCS::wire::ChiMonSample, whose
+// chi_mon_p<P> blocks CohestraVCS_Sample fills at the bridge; the from-DUT
+// unpack in cohestra_vcs_dpi.cpp then copies them here).
+#define COHESTRA_VCS_CHI_MON_MEMBERS(P) \
+    uint8_t  mon_chi_rn##P##_txreq_flitpend = 0; \
+    uint8_t  mon_chi_rn##P##_txreq_flitv    = 0; \
+    uint8_t  mon_chi_rn##P##_txreq_lcrdv    = 0; \
+    uint32_t mon_chi_rn##P##_txreq_flit[6]  = {}; \
+    uint8_t  mon_chi_rn##P##_txrsp_flitpend = 0; \
+    uint8_t  mon_chi_rn##P##_txrsp_flitv    = 0; \
+    uint8_t  mon_chi_rn##P##_txrsp_lcrdv    = 0; \
+    uint32_t mon_chi_rn##P##_txrsp_flit[3]  = {}; \
+    uint8_t  mon_chi_rn##P##_txdat_flitpend = 0; \
+    uint8_t  mon_chi_rn##P##_txdat_flitv    = 0; \
+    uint8_t  mon_chi_rn##P##_txdat_lcrdv    = 0; \
+    uint32_t mon_chi_rn##P##_txdat_flit[14] = {}; \
+    uint8_t  mon_chi_rn##P##_rxsnp_flitpend = 0; \
+    uint8_t  mon_chi_rn##P##_rxsnp_flitv    = 0; \
+    uint8_t  mon_chi_rn##P##_rxsnp_lcrdv    = 0; \
+    uint32_t mon_chi_rn##P##_rxsnp_flit[4]  = {}; \
+    uint8_t  mon_chi_rn##P##_rxrsp_flitpend = 0; \
+    uint8_t  mon_chi_rn##P##_rxrsp_flitv    = 0; \
+    uint8_t  mon_chi_rn##P##_rxrsp_lcrdv    = 0; \
+    uint32_t mon_chi_rn##P##_rxrsp_flit[3]  = {}; \
+    uint8_t  mon_chi_rn##P##_rxdat_flitpend = 0; \
+    uint8_t  mon_chi_rn##P##_rxdat_flitv    = 0; \
+    uint8_t  mon_chi_rn##P##_rxdat_lcrdv    = 0; \
+    uint32_t mon_chi_rn##P##_rxdat_flit[14] = {}
+
+
 struct CohestraVCSTop {
 
     // Clock/reset: driven by the harness like any other pin. `clock` selects
@@ -228,6 +279,15 @@ struct CohestraVCSTop {
     // mesh configuration ingress)
     COHESTRA_VCS_AXI_S_MEMBERS(0);
 
+#ifdef COHESTRA_VCS_CHI_MON
+    // 4x passive CHI-E RN monitor taps (avocado_top only; sampled DUT
+    // outputs, never driven by the harness)
+    COHESTRA_VCS_CHI_MON_MEMBERS(0);
+    COHESTRA_VCS_CHI_MON_MEMBERS(1);
+    COHESTRA_VCS_CHI_MON_MEMBERS(2);
+    COHESTRA_VCS_CHI_MON_MEMBERS(3);
+#endif
+
     // Verilator-model API parity: the harness loop calls eval() after every
     // clock write; final() runs at teardown. See the header comment.
     void eval()  noexcept { Cohestra::VCS::EvalTop(*this); }
@@ -237,6 +297,7 @@ struct CohestraVCSTop {
 #undef COHESTRA_VCS_T1_MEMBERS
 #undef COHESTRA_VCS_AXI_M_MEMBERS
 #undef COHESTRA_VCS_AXI_S_MEMBERS
+#undef COHESTRA_VCS_CHI_MON_MEMBERS
 
 
 //*****************************************************************************
@@ -272,5 +333,28 @@ static_assert(Cohestra::details::V3AXIMasterModulePort0<CohestraVCSTop>);
 static_assert(!Cohestra::details::V3AXIMasterModulePort1<CohestraVCSTop>);
 static_assert(Cohestra::details::V3AXIMasterPortTraits<CohestraVCSTop, 0>::DataBits == 256);
 
-// No AXI monitor taps and no CHI pins at the avocado_top boundary.
+// No AXI monitor taps and no operational CHI pins at the avocado_top
+// boundary.
 static_assert(!Cohestra::details::V3AXIMonitorModulePort0<CohestraVCSTop>);
+
+#ifdef COHESTRA_VCS_CHI_MON
+// With COHESTRA_VCS_CHI_MON the boundary additionally exposes the 4x passive
+// CHI RN monitor taps: prove the cohestra_v3 CHI monitor pin-detection
+// concepts bind exactly ports 0..3 (the packed-flit monitor policy binds via
+// the same names plus `_flit`).
+static_assert(Cohestra::details::V3CHIModuleMonitorRNPort0<CohestraVCSTop>);
+static_assert(Cohestra::details::V3CHIModuleMonitorRNPort1<CohestraVCSTop>);
+static_assert(Cohestra::details::V3CHIModuleMonitorRNPort2<CohestraVCSTop>);
+static_assert(Cohestra::details::V3CHIModuleMonitorRNPort3<CohestraVCSTop>);
+static_assert(!Cohestra::details::V3CHIModuleMonitorRNPort4<CohestraVCSTop>);
+static_assert(!Cohestra::details::V3CHIModuleMonitorSNPort0<CohestraVCSTop>);
+
+// The packed flit members must match the DPI wire struct word counts (pin
+// widths rounded up to whole words), so the from-DUT unpack is a clean copy.
+static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_txreq_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::txreq_flit)>);
+static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_txrsp_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::txrsp_flit)>);
+static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_txdat_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::txdat_flit)>);
+static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_rxsnp_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::rxsnp_flit)>);
+static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_rxrsp_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::rxrsp_flit)>);
+static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_rxdat_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::rxdat_flit)>);
+#endif

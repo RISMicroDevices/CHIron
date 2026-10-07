@@ -225,6 +225,22 @@ namespace {
     T.PREFIX##arburst = uint8_t(W.arburst); \
     T.PREFIX##rready  = uint8_t(W.rready)
 
+#ifdef COHESTRA_VCS_CHI_MON
+#define COHESTRA_VCS_UNPACK_CHI_MON_CHAN(P, CH, WWORDS) \
+    t.mon_chi_rn##P##_##CH##_flitpend = uint8_t(w.chi_mon_p##P.CH##_flitpend); \
+    t.mon_chi_rn##P##_##CH##_flitv    = uint8_t(w.chi_mon_p##P.CH##_flitv); \
+    t.mon_chi_rn##P##_##CH##_lcrdv    = uint8_t(w.chi_mon_p##P.CH##_lcrdv); \
+    std::memcpy(t.mon_chi_rn##P##_##CH##_flit, w.chi_mon_p##P.CH##_flit, WWORDS * sizeof(uint32_t))
+
+#define COHESTRA_VCS_UNPACK_CHI_MON(P) \
+    COHESTRA_VCS_UNPACK_CHI_MON_CHAN(P, txreq, 6); \
+    COHESTRA_VCS_UNPACK_CHI_MON_CHAN(P, txrsp, 3); \
+    COHESTRA_VCS_UNPACK_CHI_MON_CHAN(P, txdat, 14); \
+    COHESTRA_VCS_UNPACK_CHI_MON_CHAN(P, rxsnp, 4); \
+    COHESTRA_VCS_UNPACK_CHI_MON_CHAN(P, rxrsp, 3); \
+    COHESTRA_VCS_UNPACK_CHI_MON_CHAN(P, rxdat, 14)
+#endif
+
     void UnpackFromDUT(const Cohestra::VCS::wire::FromDUT& w, CohestraVCSTop& t) noexcept
     {
         COHESTRA_VCS_UNPACK_T1(0);
@@ -238,6 +254,14 @@ namespace {
 
         // axi_s0: the DUT (mesh config slave) drives the pull channels.
         COHESTRA_VCS_UNPACK_AXI_PULL(t, w.axi_s0, axi_s0_);
+
+#ifdef COHESTRA_VCS_CHI_MON
+        // mon_chi_rn*: passive CHI monitor taps (all DUT outputs).
+        COHESTRA_VCS_UNPACK_CHI_MON(0);
+        COHESTRA_VCS_UNPACK_CHI_MON(1);
+        COHESTRA_VCS_UNPACK_CHI_MON(2);
+        COHESTRA_VCS_UNPACK_CHI_MON(3);
+#endif
     }
 
 #undef COHESTRA_VCS_PACK_T1
@@ -246,6 +270,10 @@ namespace {
 #undef COHESTRA_VCS_UNPACK_T1
 #undef COHESTRA_VCS_UNPACK_AXI_PULL
 #undef COHESTRA_VCS_UNPACK_AXI_PUSH
+#ifdef COHESTRA_VCS_CHI_MON
+#undef COHESTRA_VCS_UNPACK_CHI_MON
+#undef COHESTRA_VCS_UNPACK_CHI_MON_CHAN
+#endif
 }
 
 

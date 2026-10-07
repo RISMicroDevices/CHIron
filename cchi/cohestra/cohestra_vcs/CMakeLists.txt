@@ -75,6 +75,11 @@ set(COHESTRA_VCS_CHI_MPAM_PRESENT "0" CACHE STRING "CHI MPAM present (0/1)")
 # set; it must match the +define+COHESTRA_VCS_FSDB on the VCS command line.
 option(COHESTRA_VCS_FSDB "Link-time FSDB support (Verdi PLI present)" OFF)
 
+# CHI monitor taps (mon_chi_rn* shadow members in vcs_top.hpp and the
+# from_dut_t wire fields). Must match +define+COHESTRA_VCS_CHI_MON on the VCS
+# command line (build.sh keeps them in sync).
+option(COHESTRA_VCS_CHI_MON "CHI monitor pins on the VCS/DPI boundary" OFF)
+
 # Optimization level for the harness archive (same rationale as cohestra_v3).
 set(COHESTRA_VCS_OPT_LEVEL "3" CACHE STRING "Optimization level for cohestra_vcs (GCC/Clang -O<n>; empty = toolchain default)")
 
@@ -134,6 +139,7 @@ target_compile_definitions(cohestra_vcs PRIVATE
     COHESTRA_CHI_POISON_PRESENT=${COHESTRA_VCS_CHI_POISON_PRESENT}
     COHESTRA_CHI_MPAM_PRESENT=${COHESTRA_VCS_CHI_MPAM_PRESENT}
     $<$<BOOL:${COHESTRA_VCS_FSDB}>:COHESTRA_VCS_HAVE_FSDB=1>
+    $<$<BOOL:${COHESTRA_VCS_CHI_MON}>:COHESTRA_VCS_CHI_MON=1>
 )
 
 if(COHESTRA_VCS_OPT_LEVEL)

@@ -20,6 +20,13 @@
 //                        configuration ingress CFG_AXI — this is the port
 //                        the Avocado boot sequencer programs the mesh
 //                        through)
+//   mon_chi_rn0..3_*     4x passive CHI-E RN monitor taps (pure DUT outputs:
+//                        per channel flitpend/flitv/lcrdv + the packed flit
+//                        at the pin width). The names match the cohestra_v3
+//                        CHI monitor pin traits (interface_chi.hpp), so the
+//                        Verilated top auto-detects them; the cohestra_vcs
+//                        bridge samples them when built with
+//                        +define+COHESTRA_VCS_CHI_MON.
 //
 // DUT <-> mesh connection: DUT chi_rn0..3 (packed CHI-E RN ports) mate the
 // mesh RN-F ports RNF32 / RNF64 / RNF12 / RNF44 (LDID order 0..3). Link
@@ -36,6 +43,67 @@
 
 `include "avocado_dut_if.svh"
 
+// ---------------------------------------------------------------------------
+// Passive CHI-E RN monitor taps of port P (pure DUT outputs, re-exported at
+// the avocado_top boundary with the EXACT DUT pin names): per channel
+// (txreq/txrsp/txdat/rxsnp/rxrsp/rxdat) the 1-bit flitpend/flitv/lcrdv taps
+// plus the packed flit at the pin width (REQ 162b, RSP 73b, SNP 115b, DAT
+// 422b). Local to this file (the shared contract header carries only the
+// operational pins).
+// ---------------------------------------------------------------------------
+`define AVOCADO_TOP_CHI_MON_PORT_DECL(P) \
+    output logic         mon_chi_rn``P``_txreq_flitpend, \
+    output logic         mon_chi_rn``P``_txreq_flitv, \
+    output logic         mon_chi_rn``P``_txreq_lcrdv, \
+    output logic [161:0] mon_chi_rn``P``_txreq_flit, \
+    output logic         mon_chi_rn``P``_txrsp_flitpend, \
+    output logic         mon_chi_rn``P``_txrsp_flitv, \
+    output logic         mon_chi_rn``P``_txrsp_lcrdv, \
+    output logic [72:0]  mon_chi_rn``P``_txrsp_flit, \
+    output logic         mon_chi_rn``P``_txdat_flitpend, \
+    output logic         mon_chi_rn``P``_txdat_flitv, \
+    output logic         mon_chi_rn``P``_txdat_lcrdv, \
+    output logic [421:0] mon_chi_rn``P``_txdat_flit, \
+    output logic         mon_chi_rn``P``_rxsnp_flitpend, \
+    output logic         mon_chi_rn``P``_rxsnp_flitv, \
+    output logic         mon_chi_rn``P``_rxsnp_lcrdv, \
+    output logic [114:0] mon_chi_rn``P``_rxsnp_flit, \
+    output logic         mon_chi_rn``P``_rxrsp_flitpend, \
+    output logic         mon_chi_rn``P``_rxrsp_flitv, \
+    output logic         mon_chi_rn``P``_rxrsp_lcrdv, \
+    output logic [72:0]  mon_chi_rn``P``_rxrsp_flit, \
+    output logic         mon_chi_rn``P``_rxdat_flitpend, \
+    output logic         mon_chi_rn``P``_rxdat_flitv, \
+    output logic         mon_chi_rn``P``_rxdat_lcrdv, \
+    output logic [421:0] mon_chi_rn``P``_rxdat_flit
+
+// Monitor tap connections for the DUT instantiation (1:1 by name).
+`define AVOCADO_TOP_CHI_MON_PORT_CONN(P) \
+    .mon_chi_rn``P``_txreq_flitpend (mon_chi_rn``P``_txreq_flitpend), \
+    .mon_chi_rn``P``_txreq_flitv    (mon_chi_rn``P``_txreq_flitv), \
+    .mon_chi_rn``P``_txreq_lcrdv    (mon_chi_rn``P``_txreq_lcrdv), \
+    .mon_chi_rn``P``_txreq_flit     (mon_chi_rn``P``_txreq_flit), \
+    .mon_chi_rn``P``_txrsp_flitpend (mon_chi_rn``P``_txrsp_flitpend), \
+    .mon_chi_rn``P``_txrsp_flitv    (mon_chi_rn``P``_txrsp_flitv), \
+    .mon_chi_rn``P``_txrsp_lcrdv    (mon_chi_rn``P``_txrsp_lcrdv), \
+    .mon_chi_rn``P``_txrsp_flit     (mon_chi_rn``P``_txrsp_flit), \
+    .mon_chi_rn``P``_txdat_flitpend (mon_chi_rn``P``_txdat_flitpend), \
+    .mon_chi_rn``P``_txdat_flitv    (mon_chi_rn``P``_txdat_flitv), \
+    .mon_chi_rn``P``_txdat_lcrdv    (mon_chi_rn``P``_txdat_lcrdv), \
+    .mon_chi_rn``P``_txdat_flit     (mon_chi_rn``P``_txdat_flit), \
+    .mon_chi_rn``P``_rxsnp_flitpend (mon_chi_rn``P``_rxsnp_flitpend), \
+    .mon_chi_rn``P``_rxsnp_flitv    (mon_chi_rn``P``_rxsnp_flitv), \
+    .mon_chi_rn``P``_rxsnp_lcrdv    (mon_chi_rn``P``_rxsnp_lcrdv), \
+    .mon_chi_rn``P``_rxsnp_flit     (mon_chi_rn``P``_rxsnp_flit), \
+    .mon_chi_rn``P``_rxrsp_flitpend (mon_chi_rn``P``_rxrsp_flitpend), \
+    .mon_chi_rn``P``_rxrsp_flitv    (mon_chi_rn``P``_rxrsp_flitv), \
+    .mon_chi_rn``P``_rxrsp_lcrdv    (mon_chi_rn``P``_rxrsp_lcrdv), \
+    .mon_chi_rn``P``_rxrsp_flit     (mon_chi_rn``P``_rxrsp_flit), \
+    .mon_chi_rn``P``_rxdat_flitpend (mon_chi_rn``P``_rxdat_flitpend), \
+    .mon_chi_rn``P``_rxdat_flitv    (mon_chi_rn``P``_rxdat_flitv), \
+    .mon_chi_rn``P``_rxdat_lcrdv    (mon_chi_rn``P``_rxdat_lcrdv), \
+    .mon_chi_rn``P``_rxdat_flit     (mon_chi_rn``P``_rxdat_flit)
+
 module avocado_top (
     input  logic        clock,
     input  logic        reset,
@@ -51,7 +119,13 @@ module avocado_top (
     `AVOCADO_AXI_M_PORT_DECL(1),
 
     // 1x AXI4 config port (from the harness master / boot sequencer)
-    `AVOCADO_AXI_S_PORT_DECL(0)
+    `AVOCADO_AXI_S_PORT_DECL(0),
+
+    // 4x passive CHI-E RN monitor taps (DUT outputs; pass-through 1:1)
+    `AVOCADO_TOP_CHI_MON_PORT_DECL(0),
+    `AVOCADO_TOP_CHI_MON_PORT_DECL(1),
+    `AVOCADO_TOP_CHI_MON_PORT_DECL(2),
+    `AVOCADO_TOP_CHI_MON_PORT_DECL(3)
 );
 
     // ----------------------------------------------------------------------
@@ -78,7 +152,12 @@ module avocado_top (
         `AVOCADO_CHI_RN_PORT_CONN(0),
         `AVOCADO_CHI_RN_PORT_CONN(1),
         `AVOCADO_CHI_RN_PORT_CONN(2),
-        `AVOCADO_CHI_RN_PORT_CONN(3)
+        `AVOCADO_CHI_RN_PORT_CONN(3),
+
+        `AVOCADO_TOP_CHI_MON_PORT_CONN(0),
+        `AVOCADO_TOP_CHI_MON_PORT_CONN(1),
+        `AVOCADO_TOP_CHI_MON_PORT_CONN(2),
+        `AVOCADO_TOP_CHI_MON_PORT_CONN(3)
     );
 
     // ----------------------------------------------------------------------
@@ -196,5 +275,8 @@ module avocado_top (
         `AVOCADO_AXI_MEM_CONN(4, 0),
         `AVOCADO_AXI_MEM_CONN(72, 1)
     );
+
+`undef AVOCADO_TOP_CHI_MON_PORT_DECL
+`undef AVOCADO_TOP_CHI_MON_PORT_CONN
 
 endmodule
