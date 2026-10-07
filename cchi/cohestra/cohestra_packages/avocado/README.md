@@ -26,11 +26,17 @@ mesh wrapper, module `Avocado`, provided by the external render checkout).
 
 ## DUT contract (summary)
 
-Module `avocado_dut` with `clock`/`reset`, 4x `cchi_t1p<P>_*` (exactly the
-Cohestra V3 CCHI Type-1 pin contract, as in `cohestra_v3/top_dummy.sv`) and
-4x `chi_rn<P>_*` packed CHI-E RN ports (per channel `flit`/`flitpend`/
-`flitv`/`lcrdv`; REQ 162b, RSP 73b, DAT 422b, SNP 115b). The DUT never sees
-link-active/SYSCO/EVENT — the top manages them.
+Module `avocado_dut` (default name — overridable, see below) with
+`clock`/`reset`, 4x `cchi_t1p<P>_*` (exactly the Cohestra V3 CCHI Type-1 pin
+contract, as in `cohestra_v3/top_dummy.sv`) and 4x `chi_rn<P>_*` packed CHI-E
+RN ports (per channel `flit`/`flitpend`/`flitv`/`lcrdv`; REQ 162b, RSP 73b,
+DAT 422b, SNP 115b). The DUT never sees link-active/SYSCO/EVENT — the top
+manages them.
+
+The DUT module name is configurable: pass `+define+AVOCADO_DUT_MODULE=<name>`
+to Verilator (in the Cohestra V3 build: `-DCOHESTRA_V3_AVOCADO_DUT_MODULE=<name>`),
+or set the `AVOCADO_DUT_MODULE` env var when running `scripts/check_dut.sh` /
+`scripts/gen_filelist.sh`. Default is `avocado_dut`.
 
 ## Build & boot smoke
 

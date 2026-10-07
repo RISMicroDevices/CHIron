@@ -25,6 +25,15 @@
 `define AVOCADO_DUT_IF_SVH
 
 // ---------------------------------------------------------------------------
+// User DUT module name (instantiated by avocado_top and the contract checker).
+// Default is avocado_dut; override with +define+AVOCADO_DUT_MODULE=<name> (the
+// Cohestra V3 CMake build exposes this as -DCOHESTRA_V3_AVOCADO_DUT_MODULE).
+// ---------------------------------------------------------------------------
+`ifndef AVOCADO_DUT_MODULE
+`define AVOCADO_DUT_MODULE avocado_dut
+`endif
+
+// ---------------------------------------------------------------------------
 // Type-1 CCHI port P: pin declarations (directions from the DUT's point of
 // view — identical at the avocado_top boundary, the pass-through is 1:1).
 // ---------------------------------------------------------------------------

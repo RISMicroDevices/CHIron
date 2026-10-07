@@ -3,8 +3,10 @@
 //
 // Composes the Avocado mesh wrapper (module Avocado, provided by the mesh
 // render; see scripts/gen_filelist.sh) with a user-supplied CCHI DUT
-// (module avocado_dut; see integration/avocado_dut_template.sv for the
-// contract), and exports exactly the Cohestra V3-standard pin groups:
+// (module `AVOCADO_DUT_MODULE, default avocado_dut — override with
+// +define+AVOCADO_DUT_MODULE=<name>; see integration/avocado_dut_template.sv
+// for the port contract), and exports exactly the Cohestra V3-standard pin
+// groups:
 //
 //   clock / reset        global clock; reset is high-active (the wrapper's
 //                        nRESET is driven with ~reset)
@@ -62,8 +64,9 @@ module avocado_top (
 
     // ----------------------------------------------------------------------
     // User DUT: 4x Type-1 CCHI ports + 4x packed CHI-E RN ports
+    // (module name from `AVOCADO_DUT_MODULE, default avocado_dut)
     // ----------------------------------------------------------------------
-    avocado_dut u_dut (
+    `AVOCADO_DUT_MODULE u_dut (
         .clock  (clock),
         .reset  (reset),
 

@@ -1,7 +1,11 @@
 //*****************************************************************************
 // avocado_dut_template.sv — reference shell for a user-supplied Avocado DUT.
 //
-// A user DUT plugs into avocado_top as a module named `avocado_dut` exposing:
+// A user DUT plugs into avocado_top as a module exposing the contract below
+// (the default module name is avocado_dut; if your RTL uses another name,
+// pass +define+AVOCADO_DUT_MODULE=<name> — the Cohestra V3 CMake build
+// exposes this as -DCOHESTRA_V3_AVOCADO_DUT_MODULE, and scripts/check_dut.sh
+// takes it as the AVOCADO_DUT_MODULE env var):
 //
 //   clock / reset        global clock; high-active reset
 //   cchi_t1p0..3_*       4x Type-1 CCHI ports (Cohestra V3 CCHI contract;

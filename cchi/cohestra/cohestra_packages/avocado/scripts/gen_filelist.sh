@@ -62,6 +62,13 @@ echo "wrote $OUT ($(grep -c . "$OUT") lines)"
 
 # 3. Print the ready-to-run Cohestra V3 configure command.
 CHIRON_ROOT="$(cd "$PKG_DIR/../../../.." && pwd)"
+
+DUT_MODULE_ARG=""
+if [ -n "${AVOCADO_DUT_MODULE:-}" ]; then
+    DUT_MODULE_ARG=" \\
+      -DCOHESTRA_V3_AVOCADO_DUT_MODULE=$AVOCADO_DUT_MODULE"
+fi
+
 cat <<EOF
 
 Configure + build the harness with this top as:
@@ -71,7 +78,7 @@ Configure + build the harness with this top as:
       -DCOHESTRA_V3_RTL=CUSTOM \\
       -DCOHESTRA_V3_TOP_MODULE=avocado_top \\
       -DCOHESTRA_V3_RTL_SOURCES="$PKG_DIR/avocado_top.sv" \\
-      -DCOHESTRA_V3_VERILATOR_ARGS="-f;$OUT"
+      -DCOHESTRA_V3_VERILATOR_ARGS="-f;$OUT"$DUT_MODULE_ARG
   cmake --build "$CHIRON_ROOT/build/cohestra_v3_avocado" -j
 
 EOF
