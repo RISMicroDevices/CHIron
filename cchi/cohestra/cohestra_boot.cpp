@@ -19,4 +19,9 @@ namespace Cohestra {
     {
         return description;
     }
+
+    bool BootSequencer::HasBootFailed() const noexcept
+    {
+        return false;
+    }
 }

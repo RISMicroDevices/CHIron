@@ -198,11 +198,15 @@ Monitor keys (`[monitor]` section): `enable` (default 1), `fail.on.mismatch`
 mismatch). Note `[root] maximum_cycles` is not read by this executable; the
 cycle limit is CLI-only.
 
-Reset keys (`[root]` section): `reset_cycles` (default 100) and `reset_repeat`
-(default 1). The reset stage emits `reset_repeat` high-active pulses, each
-`reset_cycles` cycles reset-active followed by `reset_cycles` cycles
-reset-inactive, so the stage lasts `2 * reset_cycles * reset_repeat` cycles
-before the simulation loop starts. Both keys are honored from the INI
+Reset keys (`[root]` section): `reset_cycles` (default 100), `reset_repeat`
+(default 1), and `reset_preamble` (default 1024). The reset stage first runs
+`reset_preamble` cycles with reset **deasserted**, then emits `reset_repeat`
+high-active pulses, each `reset_cycles` cycles reset-active followed by
+`reset_cycles` cycles reset-inactive. Some targets hold power-on state behind
+asynchronous-reset flops that only the reset *assertion edge* initializes in a
+2-state (Verilator) model — the preamble guarantees that edge exists (starting
+the simulation with reset already asserted does not). Set `reset_preamble = 0`
+only for targets that do not need it. Both keys are honored from the INI
 (`reset_cycles` was silently fixed at the compiled default 100 before).
 `reset_repeat = 0` is invalid and clamped to 1 with a warning. Note the
 default single pulse also ends with its inactive phase, so post-reset log

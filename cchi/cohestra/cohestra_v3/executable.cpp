@@ -21,6 +21,7 @@
 #include "../cohestra_simperf.hpp"
 #include "../cohestra_boot.hpp"
 #include "../cohestra_bootings/boot_delay.hpp"
+#include "../cohestra_bootings/boot_avocado.hpp"
 #include "../cohestra_stimulators/fuzz_ari.hpp"
 #include "../cohestra_stimulators/core2core.hpp"
 #include "boot_host.hpp"
@@ -49,6 +50,9 @@ const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_RESET_CYCLES
 
 const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_RESET_REPEAT
     ("RESET_REPEAT", "reset_repeat", "root", 1, Cohestra::DeserializeUInt32, Cohestra::SerializeUInt32);
+
+const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_RESET_PREAMBLE
+    ("RESET_PREAMBLE", "reset_preamble", "root", 1024, Cohestra::DeserializeUInt32, Cohestra::SerializeUInt32);
 
 const Cohestra::ConfigurationEntryBack<bool> CONFIG_LOG_VERBOSE
     ("LOG_VERBOSE", "verbose", "log", false, Cohestra::DeserializeBool, Cohestra::SerializeBool);
@@ -556,6 +560,9 @@ int main(const int argc, const char* argv[])
     bootSequencerRegistry.Register(
         std::make_shared<Cohestra::DelayBootSequencerFactory<Cohestra::V3BootHost<VerilatedTop>>>());
 
+    bootSequencerRegistry.Register(
+        std::make_shared<Cohestra::AvocadoBootSequencerFactory<Cohestra::V3BootHost<VerilatedTop>>>());
+
     spdlog::info("{} boot sequencer(s) registered.", bootSequencerRegistry.Size());
 
     std::unique_ptr<Cohestra::BootSequencer> bootSequencer;
@@ -593,6 +600,7 @@ int main(const int argc, const char* argv[])
     // loader, not from the instance Configuration (which never Load()s them).
     uint32_t resetCycles = CONFIG_RESET_CYCLES.defaultValue;
     uint32_t resetRepeat = CONFIG_RESET_REPEAT.defaultValue;
+    uint32_t resetPreamble = CONFIG_RESET_PREAMBLE.defaultValue;
 
     if (configurationLoader)
     {
@@ -615,7 +623,8 @@ int main(const int argc, const char* argv[])
         };
 
         if (!readResetKey(&CONFIG_RESET_CYCLES, resetCycles) ||
-            !readResetKey(&CONFIG_RESET_REPEAT, resetRepeat))
+            !readResetKey(&CONFIG_RESET_REPEAT, resetRepeat) ||
+            !readResetKey(&CONFIG_RESET_PREAMBLE, resetPreamble))
             return 1;
     }
 
@@ -625,8 +634,8 @@ int main(const int argc, const char* argv[])
         resetRepeat = 1;
     }
 
-    spdlog::info("Resetting: {} reset pulse(s) of {} cycle(s) active + {} cycle(s) inactive.",
-        resetRepeat, resetCycles, resetCycles);
+    spdlog::info("Resetting: {} cycle(s) of preamble (reset deasserted), then {} reset pulse(s) of {} cycle(s) active + {} cycle(s) inactive.",
+        resetPreamble, resetRepeat, resetCycles, resetCycles);
 
     auto runResetCycles = [&time, &top, &waveTracer] (uint32_t cycles)
     {
@@ -643,6 +652,18 @@ int main(const int argc, const char* argv[])
             waveTracer.Dump(time++);
         }
     };
+
+    // Power-on preamble: run with reset deasserted before the first
+    // assertion. Targets that keep power-on state behind asynchronous-reset
+    // flops (e.g. the credit-initialization counters in the Avocado mesh's
+    // PUB fabric) are only loaded by the reset *assertion* edge; starting the
+    // simulation with reset already asserted never produces that edge in a
+    // 2-state (Verilator) model and leaves such state wedged.
+    if (resetPreamble)
+    {
+        top.reset = 0;
+        runResetCycles(resetPreamble);
+    }
 
     for (uint32_t r = 0; r < resetRepeat; ++r)
     {
@@ -755,6 +776,13 @@ int main(const int argc, const char* argv[])
                 return instance.TickBoot(time);
             }))
                 break;
+        }
+
+        if (bootSequencer->HasBootFailed())
+        {
+            spdlog::error("Boot stage failed: sequencer \"{}\" reported an error.",
+                bootSequencer->GetName());
+            return 1;
         }
 
         if (bootSequencer->IsBootComplete())

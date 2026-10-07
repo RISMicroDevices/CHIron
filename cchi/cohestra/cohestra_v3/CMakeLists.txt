@@ -63,6 +63,11 @@ set_property(CACHE COHESTRA_V3_RTL PROPERTY STRINGS DUMMY VENUS VENUS_EXTMEM CUS
 set(COHESTRA_V3_TOP_MODULE "" CACHE STRING "Verilator TOP_MODULE (required for CUSTOM)")
 set(COHESTRA_V3_RTL_SOURCES "" CACHE STRING "Semicolon-separated SystemVerilog/Verilog sources (required for CUSTOM)")
 set(COHESTRA_V3_PREFIX "" CACHE STRING "Optional Verilator PREFIX override")
+# Extra arguments appended to the verilate() VERILATOR_ARGS list (a CMake
+# list — separate items with semicolons, not spaces).
+# Use e.g. -DCOHESTRA_V3_VERILATOR_ARGS="-f;/path/to/filelist.f" to feed a
+# Verilator options file (library -y dirs, +incdir+, waivers) for CUSTOM RTL.
+set(COHESTRA_V3_VERILATOR_ARGS "" CACHE STRING "Extra Verilator arguments (e.g. -f filelist.f, waivers)")
 set(COHESTRA_V3_ENABLE_WALL OFF CACHE BOOL "Enable -Wall/-Wextra/-Wpedantic (or /W4 on MSVC)")
 
 # Venus DUT geometry knobs (VENUS / VENUS_EXTMEM presets only; applied to the
@@ -217,7 +222,7 @@ verilate(cohestra_v3
     SOURCES ${COHESTRA_V3_VERILATOR_SOURCES}
     ${COHESTRA_V3_VERILATE_TRACE}
     ${COHESTRA_V3_VERILATE_THREADS}
-    VERILATOR_ARGS ${COHESTRA_V3_VERILATOR_GARGS} ${COHESTRA_V3_VERILATE_PROF_EXEC} -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-PINCONNECTEMPTY -Wno-IMPORTSTAR -Wno-VARHIDDEN -Wno-BLKSEQ -Wno-WIDTHTRUNC
+    VERILATOR_ARGS ${COHESTRA_V3_VERILATOR_GARGS} ${COHESTRA_V3_VERILATE_PROF_EXEC} ${COHESTRA_V3_VERILATOR_ARGS} -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-PINCONNECTEMPTY -Wno-IMPORTSTAR -Wno-VARHIDDEN -Wno-BLKSEQ -Wno-WIDTHTRUNC
 )
 
 target_compile_definitions(cohestra_v3 PRIVATE

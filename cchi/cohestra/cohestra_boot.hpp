@@ -90,6 +90,12 @@ namespace Cohestra {
         virtual bool        IsBootComplete() const noexcept = 0;
 
     public:
+        // Failure contract for the Boot Stage: a failed boot is fatal; the
+        // harness reports it and aborts before the stimulation stage.
+        // Defaults to "cannot fail".
+        virtual bool        HasBootFailed() const noexcept;
+
+    public:
         const std::string&  GetName() const noexcept;
         const std::string&  GetDescription() const noexcept;
     };
