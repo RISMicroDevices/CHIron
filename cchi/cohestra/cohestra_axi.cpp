@@ -615,9 +615,29 @@ namespace Cohestra {
 
             if (ooor)
             {
-                if (!activeReads.empty())
+                // AXI requires same-ID reads to be returned in issue order,
+                // so only the oldest active read of each ID is a legal
+                // candidate for an out-of-order pick.
+                std::vector<std::shared_ptr<ReadTransaction>> candidates;
+
+                for (auto iter = activeReads.begin(); iter != activeReads.end(); iter++)
                 {
-                    auto& randPicked = activeReads[rand() % activeReads.size()];
+                    bool blockedByOlder = false;
+
+                    for (auto prior = activeReads.begin(); prior != iter; prior++)
+                        if ((*prior)->request.Bundle.Id == (*iter)->request.Bundle.Id)
+                        {
+                            blockedByOlder = true;
+                            break;
+                        }
+
+                    if (!blockedByOlder)
+                        candidates.push_back(*iter);
+                }
+
+                if (!candidates.empty())
+                {
+                    auto& randPicked = candidates[rand() % candidates.size()];
 
                     if (uint64_t(readLatency) * cycleUnit <= time - randPicked->request.Time)
                         picked = randPicked;
@@ -828,12 +848,10 @@ namespace Cohestra {
                 return false;
         }
 
-        if (IsRActive(channel.Id))
-        {
-            ReportViolation("AR with an overlapped active read ID, denied");
-            return false;
-        }
-
+        // AXI permits multiple outstanding reads with the same ID. Same-ID
+        // ordering is preserved by the serving policy in TickPreHandshake:
+        // the sequential pick scans activeReads in acceptance order, and the
+        // ooor pick is restricted to the oldest active read of each ID.
         if (verbose)
             logger->debug("AXIMemory: [fire AR] id: {:#x}, addr: {:#x}, size: {:#x}, burst: {}, len: {:#x} at time {}.",
                 uint64_t(channel.Id), channel.Addr, uint64_t(channel.Size),
@@ -1070,15 +1088,6 @@ namespace Cohestra {
     {
         for (auto activeWrite : activeWrites)
             if (activeWrite->request.Bundle.Id == wid)
-                return true;
-
-        return false;
-    }
-
-    bool AXIMemory::IsRActive(uint32_t rid) const noexcept
-    {
-        for (auto activeRead : activeReads)
-            if (activeRead->request.Bundle.Id == rid)
                 return true;
 
         return false;

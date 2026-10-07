@@ -47,6 +47,9 @@ list(FILTER COHESTRA_V3_SOURCES EXCLUDE REGEX "/simpleini/")
 list(FILTER COHESTRA_V3_SOURCES EXCLUDE REGEX "/build[^/]*/")
 list(FILTER COHESTRA_V3_SOURCES EXCLUDE REGEX "/generated/")
 list(FILTER COHESTRA_V3_SOURCES EXCLUDE REGEX "/cohestra_earth/")
+# The VCS sibling harness has its own CMake project (and its own DPI/entry
+# sources that must never link into the Verilator executable).
+list(FILTER COHESTRA_V3_SOURCES EXCLUDE REGEX "/cohestra_vcs/")
 
 file(GLOB_RECURSE COHESTRA_V3_HEADERS CONFIGURE_DEPENDS
     "${COHES_TRA_ROOT}/*.h"

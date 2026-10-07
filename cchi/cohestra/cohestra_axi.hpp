@@ -929,7 +929,6 @@ namespace Cohestra {
 
     protected:
         bool                                IsWActive(uint32_t wid) const noexcept;
-        bool                                IsRActive(uint32_t rid) const noexcept;
 
         void                                EnsureAllocated() noexcept;
 
