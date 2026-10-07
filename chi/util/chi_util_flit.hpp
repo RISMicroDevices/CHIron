@@ -558,7 +558,7 @@ namespace CHI {
             flit.Opcode()           = walker.Walk32(REQ_t::OPCODE_WIDTH);
             flit.Size()             = walker.Walk32(REQ_t::SSIZE_WIDTH);
             flit.Addr()             = uint64_t(walker.Walk32())
-                                    | uint64_t(walker.Walk32(REQ_t::ADDR_WIDTH - 32));
+                                    | (uint64_t(walker.Walk32(REQ_t::ADDR_WIDTH - 32)) << 32);
             flit.NS()               = walker.Walk32(REQ_t::NS_WIDTH);
             flit.LikelyShared()     = walker.Walk32(REQ_t::LIKELYSHARED_WIDTH);
             flit.AllowRetry()       = walker.Walk32(REQ_t::ALLOWRETRY_WIDTH);
@@ -670,7 +670,7 @@ namespace CHI {
         //  flit.VMIDExt()
             flit.Opcode()           = walker.Walk32(SNP_t::OPCODE_WIDTH);
             flit.Addr()             = uint64_t(walker.Walk32())
-                                    | uint64_t(walker.Walk32(SNP_t::ADDR_WIDTH - 32));
+                                    | (uint64_t(walker.Walk32(SNP_t::ADDR_WIDTH - 32)) << 32);
             flit.NS()               = walker.Walk32(SNP_t::NS_WIDTH);
             flit.DoNotGoToSD()      = walker.Walk32(SNP_t::DONOTGOTOSD_WIDTH);
 #ifdef CHI_ISSUE_B_ENABLE
