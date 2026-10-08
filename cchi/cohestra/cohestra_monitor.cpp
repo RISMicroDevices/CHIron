@@ -175,6 +175,9 @@ namespace Cohestra {
         if (attached)
             return;
 
+        aliasRecords.clear();
+        aliasRecords.resize(instance.GetType1UpstreamCount());
+
         for (size_t index = 0; index < instance.GetType1UpstreamCount(); ++index)
         {
             auto* upstream = instance.GetType1Upstream(index);
@@ -197,6 +200,8 @@ namespace Cohestra {
                 Gravity::MakeListener(LISTENER_NAME, 0, &CacheLineDataMonitor::OnAcceptedCompCMO, this));
             upstream->events->OnSNPCacheStatePostDemotion.Register(
                 Gravity::MakeListener(LISTENER_NAME, 0, &CacheLineDataMonitor::OnSNPDemotion, this));
+            upstream->events->OnEVTCacheStatePostDemotion.Register(
+                Gravity::MakeListener(LISTENER_NAME, 0, &CacheLineDataMonitor::OnEVTDemotion, this));
 
             attachedHubs.push_back(upstream->events);
         }
@@ -213,6 +218,7 @@ namespace Cohestra {
             hub->OnCacheLinePostStore.Unregister(LISTENER_NAME);
             hub->OnAcceptedCompCMO.Unregister(LISTENER_NAME);
             hub->OnSNPCacheStatePostDemotion.Unregister(LISTENER_NAME);
+            hub->OnEVTCacheStatePostDemotion.Unregister(LISTENER_NAME);
         }
 
         attachedHubs.clear();
@@ -494,6 +500,33 @@ namespace Cohestra {
                         upstreamIndex, pa);
             }
         }
+
+        // TagAlias conflict check: a grant must never land while this node
+        // still holds the same PA under a *different* alias (no invalidation
+        // observed in between) - that leaves the L1 physically holding two
+        // cache lines with the same PA but different TagAlias. A correct DUT
+        // snoops the old-alias copy first (observed as a demotion to Invalid,
+        // which drops the record), so a conflict here is always a genuine DUT
+        // coherence bug, never a race artifact. Grants carrying no xaction are
+        // local hit-store completions with no wire traffic: nothing to check.
+        if constexpr (CCHI::Flits::REQ<CommonFlitConfigurationType1>::hasTagAlias)
+        {
+            if (auto xaction = event.GetXaction())
+            {
+                const uint8_t grantedAlias = static_cast<uint8_t>(xaction->GetFirst().flit.req.TagAlias);
+
+                if (upstreamIndex < aliasRecords.size())
+                {
+                    auto& records = aliasRecords[upstreamIndex];
+                    auto  iter    = records.find(pa);
+
+                    if (iter != records.end() && iter->second != grantedAlias)
+                        RecordAliasConflict(pa, upstreamIndex, iter->second, grantedAlias);
+
+                    records[pa] = grantedAlias;
+                }
+            }
+        }
     }
 
     void CacheLineDataMonitor::OnPostLoad(PostLoadEvent& event) noexcept
@@ -630,11 +663,29 @@ namespace Cohestra {
 
         DropExpectation(pa, MonitorDataSource::CMO_INVALIDATE, upstreamIndex);
 
+        // a completed MakeInvalid also ends this node's hold of the line
+        if constexpr (CCHI::Flits::REQ<CommonFlitConfigurationType1>::hasTagAlias)
+            DropAliasRecord(upstreamIndex, pa);
+
         ++countCMOInvalidations;
     }
 
     void CacheLineDataMonitor::OnSNPDemotion(SNPDemotionEvent& event) noexcept
     {
+        // a demotion to Invalid ends this node's hold of the line (any opcode,
+        // any previous state): drop the held-alias record, so a later grant
+        // under any alias is checked as a fresh hold
+        if constexpr (CCHI::Flits::REQ<CommonFlitConfigurationType1>::hasTagAlias)
+        {
+            if (event.GetNextState() == CCHI::Taurus::CacheState::Invalid)
+            {
+                const size_t aliasUpstreamIndex = instance.GetType1UpstreamIndex(&event.GetUpstream())
+                                                       .value_or(UNKNOWN_UPSTREAM);
+
+                DropAliasRecord(aliasUpstreamIndex, event.GetPA());
+            }
+        }
+
         // a SnpMakeInvalid that demotes a UniqueDirty line to Invalid discards
         // the dirty image right here - this is the exact point where dirty data
         // dies for both MakeInvalid CMOs and MakeUnique transactions, possibly
@@ -659,6 +710,63 @@ namespace Cohestra {
         DropExpectation(pa, MonitorDataSource::SNP_INVALIDATE, upstreamIndex);
 
         ++countSNPInvalidations;
+    }
+
+    void CacheLineDataMonitor::OnEVTDemotion(EVTDemotionEvent& event) noexcept
+    {
+        // an Evict/WriteBack demotion to Invalid ends this node's hold of the
+        // line: drop the held-alias record
+        if constexpr (CCHI::Flits::REQ<CommonFlitConfigurationType1>::hasTagAlias)
+        {
+            if (event.GetNextState() == CCHI::Taurus::CacheState::Invalid)
+            {
+                const size_t upstreamIndex = instance.GetType1UpstreamIndex(&event.GetUpstream())
+                                                  .value_or(UNKNOWN_UPSTREAM);
+
+                DropAliasRecord(upstreamIndex, event.GetPA());
+            }
+        }
+    }
+
+    void CacheLineDataMonitor::DropAliasRecord(size_t upstreamIndex, uint64_t pa) noexcept
+    {
+        if (upstreamIndex >= aliasRecords.size())
+            return;
+
+        aliasRecords[upstreamIndex].erase(pa);
+    }
+
+    void CacheLineDataMonitor::RecordAliasConflict(uint64_t pa,
+                                                   size_t   upstreamIndex,
+                                                   uint8_t  heldAlias,
+                                                   uint8_t  grantedAlias) noexcept
+    {
+        ++countAliasConflicts;
+
+        instance.GetLogger()->error(
+            "TagAlias conflict: PA {:#x}: upstream {} was granted the line under alias {} while still holding it under alias {} (no intervening invalidation, seq {}).",
+            pa,
+            upstreamIndex,
+            unsigned(grantedAlias),
+            unsigned(heldAlias),
+            sequence);
+
+        if (aliasConflicts.size() < ALIAS_CONFLICT_RECORD_LIMIT)
+            aliasConflicts.push_back({ pa, upstreamIndex, heldAlias, grantedAlias, sequence });
+
+        if (failOnMismatch && instance.IsAlive())
+        {
+            char message[256];
+
+            std::snprintf(message, sizeof(message),
+                "TagAlias conflict: L1 (upstream %zu) holds two cache lines with the same PA 0x%llx but different TagAlias (%u held, %u granted).",
+                upstreamIndex,
+                static_cast<unsigned long long>(pa),
+                unsigned(heldAlias),
+                unsigned(grantedAlias));
+
+            instance.SetFailed({ message });
+        }
     }
 }
 
@@ -726,9 +834,19 @@ namespace Cohestra {
         return countMismatchesByCheck[size_t(check)];
     }
 
+    uint64_t CacheLineDataMonitor::GetAliasConflictCount() const noexcept
+    {
+        return countAliasConflicts;
+    }
+
     const std::vector<MonitorMismatch>& CacheLineDataMonitor::GetMismatchRecords() const noexcept
     {
         return mismatches;
+    }
+
+    const std::vector<MonitorAliasConflict>& CacheLineDataMonitor::GetAliasConflictRecords() const noexcept
+    {
+        return aliasConflicts;
     }
 
     std::optional<std::reference_wrapper<const CacheLineDataMonitor::ScoreboardLine>>
@@ -771,39 +889,70 @@ namespace Cohestra {
         if (!countMismatches)
         {
             logger->info(" - mismatches: 0.");
+        }
+        else
+        {
+            logger->error(" - mismatches: {} (grant-data {}, grant-dataless {}, load {}).",
+                countMismatches,
+                countMismatchesByCheck[size_t(MonitorCheckKind::GRANT_DATA)],
+                countMismatchesByCheck[size_t(MonitorCheckKind::GRANT_DATALESS)],
+                countMismatchesByCheck[size_t(MonitorCheckKind::LOAD)]);
+
+            size_t shown = 0;
+
+            for (const auto& mismatch : mismatches)
+            {
+                if (shown >= REPORT_MISMATCH_LIMIT)
+                    break;
+
+                logger->error(
+                    "   [{}] PA {:#x} byte {}: expected {:#04x} ({} by upstream {} at seq {}), actual {:#04x}, observed by upstream {} (seq {}).",
+                    ToString(mismatch.check),
+                    mismatch.pa,
+                    mismatch.byteOffset,
+                    unsigned(mismatch.expected),
+                    ToString(mismatch.source),
+                    mismatch.sourceUpstreamIndex == UNKNOWN_UPSTREAM ? "unknown" : std::to_string(mismatch.sourceUpstreamIndex),
+                    mismatch.sourceSequence,
+                    unsigned(mismatch.actual),
+                    mismatch.upstreamIndex,
+                    mismatch.sequence);
+
+                ++shown;
+            }
+
+            if (countMismatches > shown)
+                logger->error("   ... and {} more mismatch(es).", countMismatches - shown);
+        }
+
+        if (!countAliasConflicts)
+        {
+            logger->info(" - TagAlias conflicts: 0.");
             return;
         }
 
-        logger->error(" - mismatches: {} (grant-data {}, grant-dataless {}, load {}).",
-            countMismatches,
-            countMismatchesByCheck[size_t(MonitorCheckKind::GRANT_DATA)],
-            countMismatchesByCheck[size_t(MonitorCheckKind::GRANT_DATALESS)],
-            countMismatchesByCheck[size_t(MonitorCheckKind::LOAD)]);
+        logger->error(" - TagAlias conflicts: {} (L1 granted a line under a new alias while still holding it under the old one).",
+            countAliasConflicts);
 
-        size_t shown = 0;
+        size_t shownConflicts = 0;
 
-        for (const auto& mismatch : mismatches)
+        for (const auto& conflict : aliasConflicts)
         {
-            if (shown >= REPORT_MISMATCH_LIMIT)
+            if (shownConflicts >= REPORT_MISMATCH_LIMIT)
                 break;
 
             logger->error(
-                "   [{}] PA {:#x} byte {}: expected {:#04x} ({} by upstream {} at seq {}), actual {:#04x}, observed by upstream {} (seq {}).",
-                ToString(mismatch.check),
-                mismatch.pa,
-                mismatch.byteOffset,
-                unsigned(mismatch.expected),
-                ToString(mismatch.source),
-                mismatch.sourceUpstreamIndex == UNKNOWN_UPSTREAM ? "unknown" : std::to_string(mismatch.sourceUpstreamIndex),
-                mismatch.sourceSequence,
-                unsigned(mismatch.actual),
-                mismatch.upstreamIndex,
-                mismatch.sequence);
+                "   PA {:#x}: upstream {} granted under alias {} while holding alias {} (seq {}).",
+                conflict.pa,
+                conflict.upstreamIndex,
+                unsigned(conflict.grantedAlias),
+                unsigned(conflict.heldAlias),
+                conflict.sequence);
 
-            ++shown;
+            ++shownConflicts;
         }
 
-        if (countMismatches > shown)
-            logger->error("   ... and {} more mismatch(es).", countMismatches - shown);
+        if (countAliasConflicts > shownConflicts)
+            logger->error("   ... and {} more TagAlias conflict(s).", countAliasConflicts - shownConflicts);
     }
 }

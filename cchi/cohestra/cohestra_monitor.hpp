@@ -83,6 +83,19 @@ namespace Cohestra {
         uint64_t                    sequence;           // monitor event sequence at detection
     };
 
+    // One detected TagAlias conflict: an upstream node was granted a line under
+    // an alias different from the alias it still held that PA under, with no
+    // intervening invalidation observed - the L1 physically holds two cache
+    // lines with the same PA but different TagAlias, a coherence violation the
+    // DUT must prevent (by snooping the old-alias copy before granting).
+    struct MonitorAliasConflict {
+        uint64_t                    pa;                 // line base address
+        size_t                      upstreamIndex;      // upstream node holding both aliases
+        uint8_t                     heldAlias;          // alias the line was still held under
+        uint8_t                     grantedAlias;       // alias of the conflicting grant
+        uint64_t                    sequence;           // monitor event sequence at detection
+    };
+
     // Fired on the monitor's EventHub for every detected mismatch, before any
     // configured instance failure is raised.
     class MonitorMismatchEvent : public Gravity::Event<MonitorMismatchEvent> {
@@ -151,6 +164,7 @@ namespace Cohestra {
     public:
         static constexpr size_t     MISMATCH_RECORD_LIMIT   = 64;
         static constexpr size_t     REPORT_MISMATCH_LIMIT   = 8;
+        static constexpr size_t     ALIAS_CONFLICT_RECORD_LIMIT = 64;
         static constexpr uint8_t    NO_UPSTREAM             = 0xFF;
 
         // Sentinel for MonitorMismatch::sourceUpstreamIndex when the producing
@@ -185,6 +199,7 @@ namespace Cohestra {
         using PostStoreEvent        = CCHI::Taurus::UpstreamNodeCacheLinePostStoreEvent<CommonFlitConfigurationType1>;
         using AcceptedCompCMOEvent  = CCHI::Taurus::UpstreamNodeXactAcceptedCompCMOEvent<CommonFlitConfigurationType1>;
         using SNPDemotionEvent      = CCHI::Taurus::UpstreamNodeSNPCacheStatePostDemotionEvent<CommonFlitConfigurationType1>;
+        using EVTDemotionEvent      = CCHI::Taurus::UpstreamNodeEVTCacheStatePostDemotionEvent<CommonFlitConfigurationType1>;
 
         static constexpr const char* LISTENER_NAME  = "Cohestra.CacheLineDataMonitor";
 
@@ -225,6 +240,16 @@ namespace Cohestra {
         std::vector<MonitorMismatch>
                                     mismatches;
 
+        // per-upstream held-line alias records (upstream index -> PA -> wire
+        // TagAlias the line was last granted under); consulted only in
+        // hasTagAlias builds, empty otherwise
+        std::vector<std::unordered_map<uint64_t, uint8_t>>
+                                    aliasRecords;
+
+        uint64_t                    countAliasConflicts     = 0;
+        std::vector<MonitorAliasConflict>
+                                    aliasConflicts;
+
     public:
         explicit                    CacheLineDataMonitor(Instance& instance) noexcept;
                                     ~CacheLineDataMonitor() noexcept;
@@ -249,12 +274,22 @@ namespace Cohestra {
         void                        OnPostStore(PostStoreEvent& event) noexcept;
         void                        OnAcceptedCompCMO(AcceptedCompCMOEvent& event) noexcept;
         void                        OnSNPDemotion(SNPDemotionEvent& event) noexcept;
+        void                        OnEVTDemotion(EVTDemotionEvent& event) noexcept;
 
         // drops a line's expectation (validMask := 0): bytes become not-yet-known
         // and are re-learned on the next data-carrying grant; loads skip them
         void                        DropExpectation(uint64_t pa,
                                                     MonitorDataSource source,
                                                     size_t upstreamIndex) noexcept;
+
+        // drops a node's held-alias record for a line: the node no longer holds
+        // the line, so a later grant under any alias is a fresh hold
+        void                        DropAliasRecord(size_t upstreamIndex, uint64_t pa) noexcept;
+
+        void                        RecordAliasConflict(uint64_t pa,
+                                                        size_t upstreamIndex,
+                                                        uint8_t heldAlias,
+                                                        uint8_t grantedAlias) noexcept;
 
     protected:
         ScoreboardLine&             RequireLine(uint64_t pa) noexcept;
@@ -294,8 +329,13 @@ namespace Cohestra {
         uint64_t                    GetMismatchCount() const noexcept;
         uint64_t                    GetMismatchCount(MonitorCheckKind check) const noexcept;
 
+        uint64_t                    GetAliasConflictCount() const noexcept;
+
         const std::vector<MonitorMismatch>&
                                     GetMismatchRecords() const noexcept;
+
+        const std::vector<MonitorAliasConflict>&
+                                    GetAliasConflictRecords() const noexcept;
 
         std::optional<std::reference_wrapper<const ScoreboardLine>>
                                     GetLine(uint64_t pa) const noexcept;

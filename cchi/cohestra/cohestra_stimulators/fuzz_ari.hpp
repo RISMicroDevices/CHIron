@@ -82,6 +82,14 @@ namespace Cohestra {
 
         static const ConfigurationEntryBack<uint64_t>   CONFIG_FUZZ_ARI_TAGALIAS_PERMILLIAGE;
 
+        // TagAlias-conflicting read stimulus: permillage rate per tick at which
+        // the fuzzer re-reads a line the upstream already holds under a
+        // *different* alias (0 = disabled, legacy behavior/RNG sequence). A
+        // real VIPT L1 misses in the second set on such an access, so the read
+        // reaches the wire and the home must snoop the old-alias copy before
+        // granting (nested alias snoop).
+        static const ConfigurationEntryBack<uint64_t>   CONFIG_FUZZ_ARI_TAGALIAS_READ_PERMILLIAGE;
+
     protected:
         std::vector<uint32_t>               type1Upstreams;
 
@@ -128,6 +136,8 @@ namespace Cohestra {
         // sequences (incl. S->U store-after-load upgrades) dominate by design.
         uint64_t                            tagaliasPermillage;
 
+        uint64_t                            tagaliasReadPermillage;
+
         std::vector<FuzzARIRange>           ranges;
         std::vector<size_t>                 rangeOrdinal;
 
@@ -155,6 +165,9 @@ namespace Cohestra {
         uint64_t                            countDeniedPF;
         uint64_t                            countIssuedPFLoad;
         uint64_t                            countIssuedPFStore;
+
+        uint64_t                            countIssuedTAR;
+        uint64_t                            countDeniedTAR;
 
         uint64_t                            countStoreCommitted;
         uint64_t                            countStoreDropped;
@@ -211,6 +224,8 @@ namespace Cohestra {
         bool                TryDoEvict(uint32_t upstreamIndex) noexcept;
 
         bool                TryDoPrefetch(uint32_t upstreamIndex) noexcept;
+
+        bool                TryDoAliasRead(uint32_t upstreamIndex) noexcept;
 
         template<class TEvent>
         void                CountResult(const std::shared_ptr<CCHI::Taurus::FutureNow<TEvent>>& result) noexcept;

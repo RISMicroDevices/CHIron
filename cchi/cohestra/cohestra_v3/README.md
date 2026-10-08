@@ -184,6 +184,22 @@ and same-alias sequences (incl. S→U store-after-load upgrades) dominate.
 stimulus to a pre-TagAlias tree). `config.fuzz_ta.ini` is the feature-on
 example config (`tagalias.permillage = 10`).
 
+`fuzz.ari.tagalias.read.permillage` (default 0) adds targeted
+TagAlias-conflicting reads: with probability permillage/1000 per tick the
+fuzzer picks a line the upstream already holds in **Shared** state and re-reads
+it under a *different* alias. A real VIPT L1 misses in the second set on such
+an access, so the Taurus model lets the `ReadShared` reach the wire instead of
+serving the local hit (its `DoLoad` alias-miss path, restricted to Shared-held
+lines because `ReadShared` is not a legal issue from Unique), and the DUT must
+snoop the old-alias copy before granting — the nested alias snoop. The
+CacheLineDataMonitor rejects the failure mode outright: a grant landing while
+the node still holds the same PA under a different alias (no intervening
+invalidation) means the L1 physically holds two cache lines with the same PA
+but different TagAlias; the monitor logs the conflict and fails the instance
+(gated by `monitor.fail.on.mismatch`, default 1, and reported as "TagAlias
+conflicts" in the monitor report). Both features compile out entirely in
+width-0 builds and keep legacy RNG sequences when their knob is 0.
+
 ```bash
 cd cchi/cohestra/cohestra_v3/build
 cmake .. -DCOHESTRA_V3_RTL=VENUS_EXTMEM

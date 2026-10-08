@@ -200,6 +200,15 @@ namespace CCHI::Taurus {
             uint64_t                                    data[8]                 = {};
             CacheStateEnum                              state                   = CacheState::Invalid;
 
+            // *NOTE: wire TagAlias the line was last granted under (the VIPT
+            //        alias of the granting request); meaningful only while the
+            //        line is valid. Updated at every grant, never cleared: a
+            //        line that left Valid always takes the miss path on the
+            //        next access, so a stale value is never consulted.
+            //        Consulted by the DoLoad alias-miss path; hasTagAlias
+            //        builds only (std::monostate otherwise).
+            Flits::REQ<config>::tagalias_t              tagAlias                = {};
+
             std::shared_ptr<Xact::Xaction<config>>      activeEVT               = nullptr;
             std::shared_ptr<FutureNow<EvictedEvent>>    activeEVTFuture         = nullptr;
             std::optional<Flits::EVT<config>>           pendingEVTHazardTXEVT   = std::nullopt;
@@ -1044,7 +1053,24 @@ namespace CCHI::Taurus {
 
         if (cacheLine)
         {
-            if ((cacheLine->state == CacheState::Shared
+            // *NOTE: VIPT TagAlias miss - a load whose alias differs from the
+            //        held copy's wire alias misses in its own cache set in a
+            //        real VIPT L1 and must reach the wire even though the PA
+            //        hits here; the home then resolves the conflict by snooping
+            //        the old-alias copy before granting (nested alias snoop).
+            //        Restricted to Shared-held lines: ReadShared issues legally
+            //        from Shared (initials I_SC in the xact state model) but
+            //        not from Unique, so Unique-held hits keep the local fast
+            //        path below.
+            bool aliasMiss = false;
+
+            if constexpr (Flits::REQ<config>::hasTagAlias)
+                aliasMiss = cacheLine->state == CacheState::Shared
+                         && static_cast<typename Flits::REQ<config>::tagalias_t>(tagAlias)
+                            != cacheLine->tagAlias;
+
+            if (!aliasMiss
+             && (cacheLine->state == CacheState::Shared
               || cacheLine->state == CacheState::UniqueClean
               || cacheLine->state == CacheState::UniqueDirty)
              && !IsREQFilling(*cacheLine))
@@ -2432,6 +2458,11 @@ namespace CCHI::Taurus {
                      && cacheLine.activeREQFuture 
                      && !cacheLine.activeREQFuture->Fired())
                     {
+                        // record the wire alias the line is granted under (see
+                        // CacheLine::tagAlias and the DoLoad alias-miss path)
+                        if constexpr (Flits::REQ<config>::hasTagAlias)
+                            cacheLine.tagAlias = cacheLine.activeREQ->GetFirst().flit.req.TagAlias;
+
                         if (events)
                             events->OnCacheLineGranted(*this, cacheLine, cacheLine.activeREQ);
 
@@ -2469,6 +2500,11 @@ namespace CCHI::Taurus {
                      && cacheLine.activeREQFuture 
                      && !cacheLine.activeREQFuture->Fired())
                     {
+                        // record the wire alias the line is granted under (see
+                        // CacheLine::tagAlias and the DoLoad alias-miss path)
+                        if constexpr (Flits::REQ<config>::hasTagAlias)
+                            cacheLine.tagAlias = cacheLine.activeREQ->GetFirst().flit.req.TagAlias;
+
                         if (events)
                             events->OnCacheLineGranted(*this, cacheLine, cacheLine.activeREQ);
 

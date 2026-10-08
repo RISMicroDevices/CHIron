@@ -87,6 +87,9 @@ namespace Cohestra {
 
     const ConfigurationEntryBack<uint64_t> FuzzARI::CONFIG_FUZZ_ARI_TAGALIAS_PERMILLIAGE
         ("FUZZ_ARI_TAGALIAS_PERMILLIAGE", "fuzz.ari.tagalias.permillage", nullptr, 0, DeserializeUInt64, SerializeUInt64);
+
+    const ConfigurationEntryBack<uint64_t> FuzzARI::CONFIG_FUZZ_ARI_TAGALIAS_READ_PERMILLIAGE
+        ("FUZZ_ARI_TAGALIAS_READ_PERMILLIAGE", "fuzz.ari.tagalias.read.permillage", nullptr, 0, DeserializeUInt64, SerializeUInt64);
 }
 
 // Implementation of: class FuzzARI
@@ -126,6 +129,7 @@ namespace Cohestra {
         , rangeSet            (CONFIG_FUZZ_ARI_RANGE_SET.defaultValue)
         , rangeAlias          (CONFIG_FUZZ_ARI_RANGE_ALIAS.defaultValue)
         , tagaliasPermillage  (CONFIG_FUZZ_ARI_TAGALIAS_PERMILLIAGE.defaultValue)
+        , tagaliasReadPermillage (CONFIG_FUZZ_ARI_TAGALIAS_READ_PERMILLIAGE.defaultValue)
         , ranges              ()
         , rangeOrdinal        ()
         , rangeIndex          (0)
@@ -146,6 +150,8 @@ namespace Cohestra {
         , countDeniedPF       (0)
         , countIssuedPFLoad   (0)
         , countIssuedPFStore  (0)
+        , countIssuedTAR      (0)
+        , countDeniedTAR      (0)
         , countStoreCommitted (0)
         , countStoreDropped   (0)
         , pendingStores       ()
@@ -181,7 +187,8 @@ namespace Cohestra {
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_RANGE_TAG,     rangeTag)      &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_RANGE_SET,     rangeSet)      &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_RANGE_ALIAS,   rangeAlias)    &&
-                    LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_TAGALIAS_PERMILLIAGE, tagaliasPermillage);
+                    LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_TAGALIAS_PERMILLIAGE, tagaliasPermillage) &&
+                    LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_TAGALIAS_READ_PERMILLIAGE, tagaliasReadPermillage);
 
         if (!good)
             return false;
@@ -233,6 +240,13 @@ namespace Cohestra {
         {
             GetOwner().GetLogger()->error("FuzzARI {}: fuzz.ari.tagalias.permillage ({}) must not exceed 1000.",
                 GetIndex(), tagaliasPermillage);
+            return false;
+        }
+
+        if (tagaliasReadPermillage > 1000)
+        {
+            GetOwner().GetLogger()->error("FuzzARI {}: fuzz.ari.tagalias.read.permillage ({}) must not exceed 1000.",
+                GetIndex(), tagaliasReadPermillage);
             return false;
         }
 
@@ -302,11 +316,11 @@ namespace Cohestra {
         {
             finished = true;
 
-            GetOwner().GetLogger()->info("FuzzARI {}: maximum cycle {} reached, stopping at time {}. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}), denied {} (CMO {}, EVT {}, PF {}), stores committed {}, dropped {}.",
+            GetOwner().GetLogger()->info("FuzzARI {}: maximum cycle {} reached, stopping at time {}. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}; TAR {}), denied {} (CMO {}, EVT {}, PF {}, TAR {}), stores committed {}, dropped {}.",
                 GetIndex(), maximumCycle, time,
                 countIssued, countIssuedCMO, countIssuedCMOClean, countIssuedCMOFlush, countIssuedCMOInval, countIssuedEVT,
-                countIssuedPF, countIssuedPFLoad, countIssuedPFStore,
-                countDenied, countDeniedCMO, countDeniedEVT, countDeniedPF, countStoreCommitted, countStoreDropped);
+                countIssuedPF, countIssuedPFLoad, countIssuedPFStore, countIssuedTAR,
+                countDenied, countDeniedCMO, countDeniedEVT, countDeniedPF, countDeniedTAR, countStoreCommitted, countStoreDropped);
 
             return;
         }
@@ -339,11 +353,11 @@ namespace Cohestra {
         {
             finished = true;
 
-            GetOwner().GetLogger()->info("FuzzARI {}: ARI target {} reached at time {}, finished. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}), denied {} (CMO {}, EVT {}, PF {}), stores committed {}, dropped {}.",
+            GetOwner().GetLogger()->info("FuzzARI {}: ARI target {} reached at time {}, finished. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}; TAR {}), denied {} (CMO {}, EVT {}, PF {}, TAR {}), stores committed {}, dropped {}.",
                 GetIndex(), ariTarget, time,
                 countIssued, countIssuedCMO, countIssuedCMOClean, countIssuedCMOFlush, countIssuedCMOInval, countIssuedEVT,
-                countIssuedPF, countIssuedPFLoad, countIssuedPFStore,
-                countDenied, countDeniedCMO, countDeniedEVT, countDeniedPF, countStoreCommitted, countStoreDropped);
+                countIssuedPF, countIssuedPFLoad, countIssuedPFStore, countIssuedTAR,
+                countDenied, countDeniedCMO, countDeniedEVT, countDeniedPF, countDeniedTAR, countStoreCommitted, countStoreDropped);
         }
     }
 
@@ -424,6 +438,19 @@ namespace Cohestra {
         // Evict-only configuration (memory and CMO both off) with a missed
         // draw or no live target: nothing else to issue this tick
         if (!memAvail && !cmoAvail)
+            return;
+
+        // TagAlias-conflicting read with permillage probability: re-read a line
+        // this upstream already holds under a *different* alias - a real VIPT
+        // L1 misses in the second set on such an access, so the read reaches
+        // the wire and the home must snoop the old-alias copy before granting
+        // (nested alias snoop). On no live target, fall through to the regular
+        // memory/CMO path - nothing issued, nothing counted. The draw is
+        // skipped entirely when the knob is 0, keeping the legacy RNG sequence
+        // bit-identical.
+        if (tagaliasReadPermillage && memAvail
+         && (Random64() % 1000) < tagaliasReadPermillage
+         && TryDoAliasRead(upstreamIndex))
             return;
 
         const FuzzARIRange& range = ranges[rangeOrdinal[rangeIndex]];
@@ -740,6 +767,82 @@ namespace Cohestra {
         }
 
         return true;
+    }
+
+    bool FuzzARI::TryDoAliasRead(uint32_t upstreamIndex) noexcept
+    {
+        // no TagAlias on the wire: a different-alias access is a plain local
+        // hit, so the whole stimulus is a no-op in width-0 builds
+        if constexpr (!CCHI::Flits::REQ<CommonFlitConfigurationType1>::hasTagAlias)
+        {
+            return false;
+        }
+        else
+        {
+            if (upstreamIndex >= evictableLines.size() || upstreamIndex >= aliasMap.size())
+                return false;
+
+            auto& lines = evictableLines[upstreamIndex];
+
+            if (lines.empty())
+                return false;
+
+            auto* upstream = GetOwner().GetType1Upstream(upstreamIndex);
+
+            if (!upstream)
+                return false;
+
+            const FuzzARIRange& range = ranges[rangeOrdinal[rangeIndex]];
+
+            if (range.maxAlias < 2)
+                return false;
+
+            auto& aliases = aliasMap[upstreamIndex];
+
+            // Probe a few tracked lines and re-read the first one the upstream
+            // still holds in Shared state under a *different* alias. Shared-only:
+            // the Taurus alias-miss path issues ReadShared, a legal issue from
+            // Shared (initials I_SC in the xact state model) but not from
+            // Unique, so Unique-held lines keep their local-hit fast path.
+            // Stale pool entries (snooped away or reaped since tracking) are
+            // just skipped.
+            for (size_t attempt = 0; attempt < EVICT_PROBE_ATTEMPTS; ++attempt)
+            {
+                const uint64_t pa = lines[Random64() % lines.size()];
+
+                auto line = upstream->GetCacheLine(pa);
+
+                if (!line || line->GetState() != CCHI::Taurus::CacheState::Shared)
+                    continue;
+
+                auto it = aliases.find(pa >> 6);
+
+                if (it == aliases.end())
+                    continue;   // current alias unknown (map safety valve fired)
+
+                const uint64_t newAlias = (it->second + 1 + (Random64() % (range.maxAlias - 1)))
+                                        % range.maxAlias;
+
+                auto result = upstream->DoLoad(pa, newAlias);
+
+                if (result && !result->IsRejected())
+                {
+                    countIssued++;
+                    countIssuedTAR++;
+
+                    it->second = static_cast<uint8_t>(newAlias);
+                }
+                else
+                {
+                    countDenied++;
+                    countDeniedTAR++;
+                }
+
+                return true;
+            }
+
+            return false;
+        }
     }
 
     size_t FuzzARI::Factorial(size_t n) noexcept
