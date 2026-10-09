@@ -52,6 +52,7 @@
 #include "../cohestra_boot.hpp"
 #include "../cohestra_bootings/boot_delay.hpp"
 #include "../cohestra_bootings/boot_avocado.hpp"
+#include "../cohestra_bootings/boot_biscotto.hpp"
 #include "../cohestra_stimulators/fuzz_ari.hpp"
 #include "../cohestra_stimulators/core2core.hpp"
 #include "boot_host.hpp"
@@ -589,6 +590,9 @@ int Cohestra::VCS::RunHarness(const Cohestra::VCS::HarnessArguments& args)
 
     bootSequencerRegistry.Register(
         std::make_shared<Cohestra::AvocadoBootSequencerFactory<Cohestra::V3BootHost<VcsTop>>>());
+
+    bootSequencerRegistry.Register(
+        std::make_shared<Cohestra::BiscottoBootSequencerFactory<Cohestra::V3BootHost<VcsTop>>>());
 
     spdlog::info("{} boot sequencer(s) registered.", bootSequencerRegistry.Size());
 
