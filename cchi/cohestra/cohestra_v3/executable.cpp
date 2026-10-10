@@ -24,6 +24,7 @@
 #include "../cohestra_bootings/boot_delay.hpp"
 #include "../cohestra_bootings/boot_avocado.hpp"
 #include "../cohestra_bootings/boot_biscotto.hpp"
+#include "../cohestra_bootings/boot_cornetto.hpp"
 #include "../cohestra_stimulators/fuzz_ari.hpp"
 #include "../cohestra_stimulators/core2core.hpp"
 #include "boot_host.hpp"
@@ -588,6 +589,9 @@ int main(const int argc, const char* argv[])
 
     bootSequencerRegistry.Register(
         std::make_shared<Cohestra::BiscottoBootSequencerFactory<Cohestra::V3BootHost<VerilatedTop>>>());
+
+    bootSequencerRegistry.Register(
+        std::make_shared<Cohestra::CornettoBootSequencerFactory<Cohestra::V3BootHost<VerilatedTop>>>());
 
     spdlog::info("{} boot sequencer(s) registered.", bootSequencerRegistry.Size());
 

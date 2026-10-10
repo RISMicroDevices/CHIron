@@ -75,6 +75,9 @@ set(COHESTRA_V3_VERILATOR_ARGS "" CACHE STRING "Extra Verilator arguments (e.g. 
 # Avocado-style CUSTOM top (avocado_top.sv); empty = the RTL default
 # (avocado_dut). Emitted as +define+AVOCADO_DUT_MODULE=<name>.
 set(COHESTRA_V3_AVOCADO_DUT_MODULE "" CACHE STRING "User DUT module name for Avocado-style CUSTOM tops (default: RTL default)")
+# Same for a Cornetto-style CUSTOM top (cornetto_top.sv); emitted as
+# +define+CORNETTO_DUT_MODULE=<name> (RTL default: cornetto_dut).
+set(COHESTRA_V3_CORNETTO_DUT_MODULE "" CACHE STRING "User DUT module name for Cornetto-style CUSTOM tops (default: RTL default)")
 set(COHESTRA_V3_ENABLE_WALL OFF CACHE BOOL "Enable -Wall/-Wextra/-Wpedantic (or /W4 on MSVC)")
 
 # Venus DUT geometry knobs (VENUS / VENUS_EXTMEM presets only; applied to the
@@ -230,6 +233,11 @@ target_link_libraries(cohestra_v3 PRIVATE
 # Optional user DUT module-name override (Avocado-style CUSTOM tops).
 if(NOT COHESTRA_V3_AVOCADO_DUT_MODULE STREQUAL "")
     list(APPEND COHESTRA_V3_VERILATOR_ARGS "+define+AVOCADO_DUT_MODULE=${COHESTRA_V3_AVOCADO_DUT_MODULE}")
+endif()
+
+# Optional user DUT module-name override (Cornetto-style CUSTOM tops).
+if(NOT COHESTRA_V3_CORNETTO_DUT_MODULE STREQUAL "")
+    list(APPEND COHESTRA_V3_VERILATOR_ARGS "+define+CORNETTO_DUT_MODULE=${COHESTRA_V3_CORNETTO_DUT_MODULE}")
 endif()
 
 verilate(cohestra_v3
