@@ -501,6 +501,11 @@ namespace Cohestra {
             }
         }
 
+// cohestra_monitor.cpp is compiled in non-template member functions, where an
+// if constexpr (hasTagAlias) discarded branch is still semantically checked and
+// the static_cast<uint8_t> of a std::monostate TagAlias breaks width-0 builds.
+// Guard with the preprocessor instead (COHESTRA_TAGALIAS_WIDTH defaults to 0).
+#if COHESTRA_TAGALIAS_WIDTH > 0
         // TagAlias conflict check: a grant must never land while this node
         // still holds the same PA under a *different* alias (no invalidation
         // observed in between) - that leaves the L1 physically holding two
@@ -527,6 +532,7 @@ namespace Cohestra {
                 }
             }
         }
+#endif // COHESTRA_TAGALIAS_WIDTH > 0
     }
 
     void CacheLineDataMonitor::OnPostLoad(PostLoadEvent& event) noexcept

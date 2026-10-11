@@ -28,15 +28,19 @@ find_package(verilator REQUIRED)
 # Waveform trace format compiled into cohestra_v3.
 # Verilator supports only one trace format per verilation; the runtime
 # configuration entry 'waveform.type' must match the format compiled here.
-set(COHESTRA_V3_WAVEFORM_FORMAT "FST" CACHE STRING "Waveform trace format compiled into cohestra_v3 (FST or VCD)")
-set_property(CACHE COHESTRA_V3_WAVEFORM_FORMAT PROPERTY STRINGS FST VCD)
+# OFF compiles with no trace runtime at all (fastest; waveform.enable must
+# stay 0 in the runtime configuration).
+set(COHESTRA_V3_WAVEFORM_FORMAT "FST" CACHE STRING "Waveform trace format compiled into cohestra_v3 (FST, VCD or OFF)")
+set_property(CACHE COHESTRA_V3_WAVEFORM_FORMAT PROPERTY STRINGS FST VCD OFF)
 
 if(COHESTRA_V3_WAVEFORM_FORMAT STREQUAL "FST")
     set(COHESTRA_V3_VERILATE_TRACE TRACE_FST)
 elseif(COHESTRA_V3_WAVEFORM_FORMAT STREQUAL "VCD")
     set(COHESTRA_V3_VERILATE_TRACE TRACE_VCD)
+elseif(COHESTRA_V3_WAVEFORM_FORMAT STREQUAL "OFF")
+    set(COHESTRA_V3_VERILATE_TRACE "")
 else()
-    message(FATAL_ERROR "Invalid COHESTRA_V3_WAVEFORM_FORMAT: ${COHESTRA_V3_WAVEFORM_FORMAT} (expected FST or VCD)")
+    message(FATAL_ERROR "Invalid COHESTRA_V3_WAVEFORM_FORMAT: ${COHESTRA_V3_WAVEFORM_FORMAT} (expected FST, VCD or OFF)")
 endif()
 
 file(GLOB_RECURSE COHESTRA_V3_SOURCES CONFIGURE_DEPENDS

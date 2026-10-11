@@ -161,6 +161,17 @@ namespace Cohestra::Waves {
 
         bool enable = config.GetOrDefault(&CONFIG_WAVEFORM_ENABLE);
 
+#ifdef COHESTRA_V3_WAVEFORM_FORMAT_OFF
+        if (enable)
+        {
+            spdlog::error(
+                "Waveform dumping requested (waveform.enable=1), but this build was compiled "
+                "with COHESTRA_V3_WAVEFORM_FORMAT=OFF (no trace runtime). "
+                "Rebuild with -DCOHESTRA_V3_WAVEFORM_FORMAT=FST or VCD to dump waves.");
+            return false;
+        }
+#endif
+
         std::string typeValue = config.GetOrDefault(&CONFIG_WAVEFORM_TYPE);
 
         WaveformType requestedType;
@@ -203,6 +214,16 @@ namespace Cohestra::Waves {
         if (!configured)
             return true;
 
+#ifdef COHESTRA_V3_WAVEFORM_FORMAT_OFF
+        // Configure() already rejects waveform.enable=1 on OFF builds, so this
+        // is unreachable defense-in-depth. The trace-backend body below must
+        // stay out of COMPILATION as well: with no trace runtime linked,
+        // instantiating WaveFile<VerilatedFstC> fails at link time.
+        (void)context;
+        (void)levels;
+        spdlog::error("Waveform support is compiled out of this build (COHESTRA_V3_WAVEFORM_FORMAT=OFF).");
+        return false;
+#else
         if (file)
         {
             spdlog::warn("Waveform tracer already open: {}.", path);
@@ -235,6 +256,7 @@ namespace Cohestra::Waves {
             spdlog::info("Waveform dumping starts at time {}.", startAt);
 
         return true;
+#endif
     }
 
     void Tracer::Close() noexcept
