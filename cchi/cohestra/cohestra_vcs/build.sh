@@ -69,6 +69,24 @@ COHESTRA_VCS_TOP_MODULE=${COHESTRA_VCS_TOP_MODULE:-avocado_top}
 # (+define), the DPI TU (-CFLAGS) and the harness archive (CMake option)
 # in sync — all three must agree on the wire-struct layout.
 COHESTRA_VCS_CHI_MON=${COHESTRA_VCS_CHI_MON:-$([ "$COHESTRA_VCS_TOP_MODULE" = avocado_top ] && echo 1 || echo 0)}
+# Monitor tap port count (when CHI_MON=1): number of mon_chi_rn* port sets the
+# DUT top really exports (avocado 4, biscotto 3, cornetto 2, l2zj $NUM_L2).
+# Emitted as per-port presence defines (COHESTRA_VCS_CHI_MON_P0..P(N-1)) plus
+# COHESTRA_VCS_CHI_MON_PORTCOUNT_SET to the SV, DPI-TU and harness-archive
+# sides so the DUT boundary stays honest (a 3-tap top has no port 3).
+COHESTRA_VCS_CHI_MON_PORTS=${COHESTRA_VCS_CHI_MON_PORTS:-4}
+case "$COHESTRA_VCS_CHI_MON_PORTS" in 0|1|2|3|4) ;; *) echo "COHESTRA_VCS_CHI_MON_PORTS must be 0..4 (got $COHESTRA_VCS_CHI_MON_PORTS)" >&2; exit 2 ;; esac
+# Per-port define expansion shared by the SV (+define) and C++ (-D) spellings.
+chi_mon_port_defines_sv=""
+chi_mon_port_defines_cc=""
+if [ "$COHESTRA_VCS_CHI_MON" = 1 ]; then
+    chi_mon_port_defines_sv="+define+COHESTRA_VCS_CHI_MON_PORTCOUNT_SET"
+    chi_mon_port_defines_cc="-DCOHESTRA_VCS_CHI_MON_PORTCOUNT_SET=1"
+    for ((p = 0; p < COHESTRA_VCS_CHI_MON_PORTS; p++)); do
+        chi_mon_port_defines_sv="$chi_mon_port_defines_sv +define+COHESTRA_VCS_CHI_MON_P$p"
+        chi_mon_port_defines_cc="$chi_mon_port_defines_cc -DCOHESTRA_VCS_CHI_MON_P$p=1"
+    done
+fi
 FILELIST=${FILELIST:-$AVOCADO_PKG/build/avocado_top.f}
 TOP_SOURCES=${TOP_SOURCES:-$AVOCADO_PKG/avocado_top.sv}
 EXTRA_VCS_FLAGS=${EXTRA_VCS_FLAGS:-}
@@ -88,6 +106,7 @@ stage_harness() {
     local chi_mon_args=()
     if [ "$COHESTRA_VCS_CHI_MON" = 1 ]; then
         chi_mon_args=(-DCOHESTRA_VCS_CHI_MON=ON
+                      -DCOHESTRA_VCS_CHI_MON_PORTS="$COHESTRA_VCS_CHI_MON_PORTS"
                       -DCOHESTRA_VCS_CHI_NODEID_WIDTH=11
                       -DCOHESTRA_VCS_CHI_DATACHECK_PRESENT=1
                       -DCOHESTRA_VCS_CHI_POISON_PRESENT=1
@@ -145,7 +164,7 @@ EOF
     # CHI monitor taps on the DPI boundary (knob defaulted at the top of this
     # script; keeps SV/DPI/harness struct layout in sync).
     if [ "$COHESTRA_VCS_CHI_MON" = 1 ]; then
-        defines="$defines +define+COHESTRA_VCS_CHI_MON"
+        defines="$defines +define+COHESTRA_VCS_CHI_MON $chi_mon_port_defines_sv"
     fi
 
     local pli_flags=""
@@ -172,7 +191,7 @@ EOF
         cflags="$cflags -DCOHESTRA_VCS_HAVE_FSDB=1"
     fi
     if [ "$COHESTRA_VCS_CHI_MON" = 1 ]; then
-        cflags="$cflags -DCOHESTRA_VCS_CHI_MON=1"
+        cflags="$cflags -DCOHESTRA_VCS_CHI_MON=1 $chi_mon_port_defines_cc"
     fi
     cflags="$cflags $EXTRA_VCS_CFLAGS"
 

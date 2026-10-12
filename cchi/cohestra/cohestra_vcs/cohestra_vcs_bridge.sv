@@ -637,12 +637,20 @@ module cohestra_vcs_bridge;
     `COHESTRA_VCS_AXI_S_SIGS(0);
 
 `ifdef COHESTRA_VCS_CHI_MON
-    // Passive CHI monitor taps (avocado_top only — l2openllc_vcs_top has no
-    // such pins and is built without this define)
+    // Passive CHI monitor taps; per-port presence gated by
+    // COHESTRA_VCS_CHI_MON_P0..P3 (see cohestra_vcs_dpi.svh).
+`ifdef COHESTRA_VCS_CHI_MON_P0
     `COHESTRA_VCS_CHI_MON_SIGS(0);
+`endif
+`ifdef COHESTRA_VCS_CHI_MON_P1
     `COHESTRA_VCS_CHI_MON_SIGS(1);
+`endif
+`ifdef COHESTRA_VCS_CHI_MON_P2
     `COHESTRA_VCS_CHI_MON_SIGS(2);
+`endif
+`ifdef COHESTRA_VCS_CHI_MON_P3
     `COHESTRA_VCS_CHI_MON_SIGS(3);
+`endif
 `endif
 
     // -------------------------------------------------------------------------
@@ -662,11 +670,18 @@ module cohestra_vcs_bridge;
 
         `COHESTRA_VCS_AXI_CONN(axi_s0_)
 `ifdef COHESTRA_VCS_CHI_MON
-        ,
-        `COHESTRA_VCS_CHI_MON_CONN(0),
-        `COHESTRA_VCS_CHI_MON_CONN(1),
-        `COHESTRA_VCS_CHI_MON_CONN(2),
-        `COHESTRA_VCS_CHI_MON_CONN(3)
+`ifdef COHESTRA_VCS_CHI_MON_P0
+        ,`COHESTRA_VCS_CHI_MON_CONN(0)
+`endif
+`ifdef COHESTRA_VCS_CHI_MON_P1
+        ,`COHESTRA_VCS_CHI_MON_CONN(1)
+`endif
+`ifdef COHESTRA_VCS_CHI_MON_P2
+        ,`COHESTRA_VCS_CHI_MON_CONN(2)
+`endif
+`ifdef COHESTRA_VCS_CHI_MON_P3
+        ,`COHESTRA_VCS_CHI_MON_CONN(3)
+`endif
 `endif
     );
 
@@ -708,10 +723,18 @@ module cohestra_vcs_bridge;
 
         `COHESTRA_VCS_SAMPLE_AXI_PULL(axi_s0, out_s);
 `ifdef COHESTRA_VCS_CHI_MON
+`ifdef COHESTRA_VCS_CHI_MON_P0
         `COHESTRA_VCS_SAMPLE_CHI_MON(0, out_s);
+`endif
+`ifdef COHESTRA_VCS_CHI_MON_P1
         `COHESTRA_VCS_SAMPLE_CHI_MON(1, out_s);
+`endif
+`ifdef COHESTRA_VCS_CHI_MON_P2
         `COHESTRA_VCS_SAMPLE_CHI_MON(2, out_s);
+`endif
+`ifdef COHESTRA_VCS_CHI_MON_P3
         `COHESTRA_VCS_SAMPLE_CHI_MON(3, out_s);
+`endif
 `endif
     endfunction
 

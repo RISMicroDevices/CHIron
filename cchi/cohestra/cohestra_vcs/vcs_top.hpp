@@ -30,18 +30,37 @@
 // avocado_top), so the operational V3CHI*Interface templates detect no ports
 // and stay inert, exactly as they do for a Verilated avocado_top.
 //
-// CHI MONITOR TAPS (COHESTRA_VCS_CHI_MON): when the DUT top is avocado_top
-// and the build defines COHESTRA_VCS_CHI_MON (VCS +define+ plus
+// CHI MONITOR TAPS (COHESTRA_VCS_CHI_MON): when the DUT top exports monitor
+// taps and the build defines COHESTRA_VCS_CHI_MON (VCS +define+ plus
 // -DCOHESTRA_VCS_CHI_MON=1 for EVERY C++ translation unit — see
-// cohestra_vcs_dpi.hpp), the passive mon_chi_rn0..3_* pins are shadowed here
+// cohestra_vcs_dpi.hpp), the passive mon_chi_rn*_* pins are shadowed here
 // with the exact pin names, so the cohestra_v3 CHI monitor pin-detection
 // concepts (V3CHIModuleMonitorRNPort*) bind the same way they do on the
 // Verilated top. The l2openllc build has no such pins and compiles this
 // header with the define unset.
+//
+// Port count: COHESTRA_VCS_CHI_MON_P0..P3 (emitted by build.sh from
+// COHESTRA_VCS_CHI_MON_PORTS, default 4) select which per-port member sets
+// exist. A top with N real taps (avocado 4, biscotto 3, cornetto 2, l2zj
+// NUM_L2) compiles with exactly P0..P(N-1), so the monitor interface reports
+// exactly N ports and a CLog.B config referencing a higher port fails the
+// boundary check instead of silently reading zeros.
 //*****************************************************************************
 #pragma once
 
 #include <cstdint>
+
+// Per-port presence fallback: when COHESTRA_VCS_CHI_MON is set without the
+// build.sh-emitted port-count markers (manual -D flow), all four taps default
+// present — the historical avocado behavior.
+#ifdef COHESTRA_VCS_CHI_MON
+#ifndef COHESTRA_VCS_CHI_MON_PORTCOUNT_SET
+#define COHESTRA_VCS_CHI_MON_P0
+#define COHESTRA_VCS_CHI_MON_P1
+#define COHESTRA_VCS_CHI_MON_P2
+#define COHESTRA_VCS_CHI_MON_P3
+#endif
+#endif
 
 #include "cohestra_vcs_dpi.hpp"
 
@@ -280,12 +299,20 @@ struct CohestraVCSTop {
     COHESTRA_VCS_AXI_S_MEMBERS(0);
 
 #ifdef COHESTRA_VCS_CHI_MON
-    // 4x passive CHI-E RN monitor taps (avocado_top only; sampled DUT
-    // outputs, never driven by the harness)
+    // Nx passive CHI-E RN monitor taps (per-port presence gated by
+    // COHESTRA_VCS_CHI_MON_P0..P3 — see the header comment)
+#ifdef COHESTRA_VCS_CHI_MON_P0
     COHESTRA_VCS_CHI_MON_MEMBERS(0);
+#endif
+#ifdef COHESTRA_VCS_CHI_MON_P1
     COHESTRA_VCS_CHI_MON_MEMBERS(1);
+#endif
+#ifdef COHESTRA_VCS_CHI_MON_P2
     COHESTRA_VCS_CHI_MON_MEMBERS(2);
+#endif
+#ifdef COHESTRA_VCS_CHI_MON_P3
     COHESTRA_VCS_CHI_MON_MEMBERS(3);
+#endif
 #endif
 
     // Verilator-model API parity: the harness loop calls eval() after every
@@ -338,17 +365,34 @@ static_assert(Cohestra::details::V3AXIMasterPortTraits<CohestraVCSTop, 0>::DataB
 static_assert(!Cohestra::details::V3AXIMonitorModulePort0<CohestraVCSTop>);
 
 #ifdef COHESTRA_VCS_CHI_MON
-// With COHESTRA_VCS_CHI_MON the boundary additionally exposes the 4x passive
-// CHI RN monitor taps: prove the cohestra_v3 CHI monitor pin-detection
-// concepts bind exactly ports 0..3 (the packed-flit monitor policy binds via
-// the same names plus `_flit`).
+// With COHESTRA_VCS_CHI_MON the boundary exposes the passive CHI RN monitor
+// taps selected by COHESTRA_VCS_CHI_MON_P0..P3 (build.sh
+// COHESTRA_VCS_CHI_MON_PORTS): prove the cohestra_v3 CHI monitor
+// pin-detection concepts bind exactly the configured ports and no more.
+#ifdef COHESTRA_VCS_CHI_MON_P0
 static_assert(Cohestra::details::V3CHIModuleMonitorRNPort0<CohestraVCSTop>);
+#else
+static_assert(!Cohestra::details::V3CHIModuleMonitorRNPort0<CohestraVCSTop>);
+#endif
+#ifdef COHESTRA_VCS_CHI_MON_P1
 static_assert(Cohestra::details::V3CHIModuleMonitorRNPort1<CohestraVCSTop>);
+#else
+static_assert(!Cohestra::details::V3CHIModuleMonitorRNPort1<CohestraVCSTop>);
+#endif
+#ifdef COHESTRA_VCS_CHI_MON_P2
 static_assert(Cohestra::details::V3CHIModuleMonitorRNPort2<CohestraVCSTop>);
+#else
+static_assert(!Cohestra::details::V3CHIModuleMonitorRNPort2<CohestraVCSTop>);
+#endif
+#ifdef COHESTRA_VCS_CHI_MON_P3
 static_assert(Cohestra::details::V3CHIModuleMonitorRNPort3<CohestraVCSTop>);
+#else
+static_assert(!Cohestra::details::V3CHIModuleMonitorRNPort3<CohestraVCSTop>);
+#endif
 static_assert(!Cohestra::details::V3CHIModuleMonitorRNPort4<CohestraVCSTop>);
 static_assert(!Cohestra::details::V3CHIModuleMonitorSNPort0<CohestraVCSTop>);
 
+#ifdef COHESTRA_VCS_CHI_MON_P0
 // The packed flit members must match the DPI wire struct word counts (pin
 // widths rounded up to whole words), so the from-DUT unpack is a clean copy.
 static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_txreq_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::txreq_flit)>);
@@ -357,4 +401,5 @@ static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_txdat_flit)> ==
 static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_rxsnp_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::rxsnp_flit)>);
 static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_rxrsp_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::rxrsp_flit)>);
 static_assert(std::extent_v<decltype(CohestraVCSTop::mon_chi_rn0_rxdat_flit)> == std::extent_v<decltype(Cohestra::VCS::wire::ChiMonSample::rxdat_flit)>);
+#endif
 #endif

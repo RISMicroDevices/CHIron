@@ -77,10 +77,26 @@
 // CHI monitor taps: define COHESTRA_VCS_CHI_MON (VCS +define+, and
 // -DCOHESTRA_VCS_CHI_MON=1 for BOTH the VCS -CFLAGS and the CMake harness
 // archive so every translation unit agrees) when the DUT top exports the
-// passive mon_chi_rn0..3_* pins (avocado_top does; l2openllc_vcs_top does
+// passive mon_chi_rn*_* pins (avocado_top does; l2openllc_vcs_top does
 // NOT — its build must leave this undefined). The define extends the
 // from-DUT exchange struct below and makes the bridge connect and sample
 // the taps; without it the bridge compiles exactly as before.
+//
+// Per-port presence: COHESTRA_VCS_CHI_MON_P0..P3 gate each tap port
+// individually (emitted by build.sh from COHESTRA_VCS_CHI_MON_PORTS, default
+// 4; build.sh also defines COHESTRA_VCS_CHI_MON_PORTCOUNT_SET then). A top
+// with N real taps (avocado 4, biscotto 3, cornetto 2, l2zj NUM_L2) builds
+// with exactly P0..P(N-1) — the bridge declares/connects/samples only those,
+// and the harness reports exactly N monitor ports. Manual +define flows
+// without PORTCOUNT_SET keep the historical all-4 behavior.
+`ifdef COHESTRA_VCS_CHI_MON
+`ifndef COHESTRA_VCS_CHI_MON_PORTCOUNT_SET
+`define COHESTRA_VCS_CHI_MON_P0
+`define COHESTRA_VCS_CHI_MON_P1
+`define COHESTRA_VCS_CHI_MON_P2
+`define COHESTRA_VCS_CHI_MON_P3
+`endif
+`endif
 
 // Waveform type codes exchanged with CohestraVCS_OpenWaveform.
 `define COHESTRA_VCS_WAVE_NONE 0

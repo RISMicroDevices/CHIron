@@ -80,6 +80,11 @@ option(COHESTRA_VCS_FSDB "Link-time FSDB support (Verdi PLI present)" OFF)
 # command line (build.sh keeps them in sync).
 option(COHESTRA_VCS_CHI_MON "CHI monitor pins on the VCS/DPI boundary" OFF)
 
+# Per-port presence for the monitor taps: emits COHESTRA_VCS_CHI_MON_P0..P(N-1)
+# (vcs_top.hpp members + runtime port traits). Must match the +define set on
+# the VCS command line (build.sh keeps them in sync). 4 = all ports.
+set(COHESTRA_VCS_CHI_MON_PORTS "4" CACHE STRING "Number of CHI monitor tap ports (0-4)")
+
 # Optimization level for the harness archive (same rationale as cohestra_v3).
 set(COHESTRA_VCS_OPT_LEVEL "3" CACHE STRING "Optimization level for cohestra_vcs (GCC/Clang -O<n>; empty = toolchain default)")
 
@@ -140,7 +145,17 @@ target_compile_definitions(cohestra_vcs PRIVATE
     COHESTRA_CHI_MPAM_PRESENT=${COHESTRA_VCS_CHI_MPAM_PRESENT}
     $<$<BOOL:${COHESTRA_VCS_FSDB}>:COHESTRA_VCS_HAVE_FSDB=1>
     $<$<BOOL:${COHESTRA_VCS_CHI_MON}>:COHESTRA_VCS_CHI_MON=1>
+    $<$<BOOL:${COHESTRA_VCS_CHI_MON}>:COHESTRA_VCS_CHI_MON_PORTCOUNT_SET=1>
 )
+
+# Per-port monitor-tap presence defines (P0..P(N-1) of COHESTRA_VCS_CHI_MON_PORTS).
+if(COHESTRA_VCS_CHI_MON)
+    foreach(P RANGE 0 3)
+        if(P LESS COHESTRA_VCS_CHI_MON_PORTS)
+            target_compile_definitions(cohestra_vcs PRIVATE COHESTRA_VCS_CHI_MON_P${P}=1)
+        endif()
+    endforeach()
+endif()
 
 if(COHESTRA_VCS_OPT_LEVEL)
     if(MSVC)

@@ -256,11 +256,20 @@ namespace {
         COHESTRA_VCS_UNPACK_AXI_PULL(t, w.axi_s0, axi_s0_);
 
 #ifdef COHESTRA_VCS_CHI_MON
-        // mon_chi_rn*: passive CHI monitor taps (all DUT outputs).
+        // mon_chi_rn*: passive CHI monitor taps (all DUT outputs); per-port
+        // presence gated by COHESTRA_VCS_CHI_MON_P0..P3 (see vcs_top.hpp).
+#ifdef COHESTRA_VCS_CHI_MON_P0
         COHESTRA_VCS_UNPACK_CHI_MON(0);
+#endif
+#ifdef COHESTRA_VCS_CHI_MON_P1
         COHESTRA_VCS_UNPACK_CHI_MON(1);
+#endif
+#ifdef COHESTRA_VCS_CHI_MON_P2
         COHESTRA_VCS_UNPACK_CHI_MON(2);
+#endif
+#ifdef COHESTRA_VCS_CHI_MON_P3
         COHESTRA_VCS_UNPACK_CHI_MON(3);
+#endif
 #endif
     }
 
