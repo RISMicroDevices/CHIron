@@ -102,6 +102,12 @@ namespace Cohestra::Hades {
         uint32_t    windowK         = 32;       // [hades] window_k: grant quantum / lead
         uint32_t    maxInflight     = 2;        // manifest max_inflight_windows (W)
         uint64_t    maxQuietPolls   = 2000000;  // wedge guard: polls w/o tick progress
+        uint32_t    viewLatency     = 40;       // [hades] view_latency: DUT-cycle view
+                                                // offset; staging cycle k stalls until the
+                                                // c2h tokens through k+2-viewLatency are
+                                                // unpacked (legal stall, never a skip).
+                                                // Deadlock floor: maxH2CGranule +
+                                                // maxC2HGranule (clamped with a warning).
     };
 
     class HadesLink {

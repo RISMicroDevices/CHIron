@@ -147,7 +147,8 @@ namespace Cohestra::Hades {
         if (this->config.windowK == 0)
             this->config.windowK = 1;
 
-        uint64_t maxGranule = 1;
+        uint64_t maxH2CGranule = 1;
+        uint64_t maxC2HGranule = 1;
 
         for (const ChannelInfo& chan : this->manifest.channels)
         {
@@ -159,16 +160,37 @@ namespace Cohestra::Hades {
             if (chan.h2c)
             {
                 st.buffer.assign(size_t(chan.granule) * chan.widthBytes, std::byte{0});
-                maxGranule = std::max<uint64_t>(maxGranule, chan.granule);
+                maxH2CGranule = std::max<uint64_t>(maxH2CGranule, chan.granule);
+            }
+            else
+            {
+                maxC2HGranule = std::max<uint64_t>(maxC2HGranule, chan.granule);
             }
 
             staging.push_back(std::move(st));
             c2hStreams.push_back(std::move(stream));
         }
 
+        const uint64_t maxGranule = std::max(maxH2CGranule, maxC2HGranule);
+
         grantLead = std::max<uint64_t>(
             uint64_t(this->config.maxInflight) * this->config.windowK,
             maxGranule + this->config.windowK);
+
+        // view-throttle deadlock floor: at a staging halt the fabric can only
+        // reach the worst-aligned flushed h2c granule frontier (staging - (max
+        // h2c granule - 1)), and unpack trails that by up to (max c2h granule
+        // - 1) — the throttle must clear k + 2 - L against that bound, so
+        // L >= maxH2CGranule + maxC2HGranule (README derivation)
+        const uint64_t viewFloor = maxH2CGranule + maxC2HGranule;
+
+        if (this->config.viewLatency < viewFloor)
+        {
+            spdlog::warn("[hades] view_latency = {} is below the deadlock floor "
+                "(h2c granule {} + c2h granule {}): clamping to {}.",
+                this->config.viewLatency, maxH2CGranule, maxC2HGranule, viewFloor);
+            this->config.viewLatency = static_cast<uint32_t>(viewFloor);
+        }
     }
 
     void HadesLink::Fail(std::string message) noexcept
@@ -302,15 +324,17 @@ namespace Cohestra::Hades {
 
     void HadesLink::PumpGrants() noexcept
     {
-        // Credit leads the staging frontier by one window_k quantum and stays
-        // at most grantLead cycles ahead of the fabric's reported completion
-        // (PROTOCOL.md §1.2 W=2 baseline shape, floored at the largest h2c
-        // granule + window_k so lockstep cannot wedge; ceilings are monotone
-        // per §5 invariant 2). With a final target set, ceilings clamp to
-        // target-1 so the fabric can never run past the harness's run length.
-        while (granted < staged + config.windowK &&
-               granted < completed + grantLead &&
-               !Failed())
+        // Grant staircase, purely staged-paced: credit leads the staging
+        // frontier by grantLead cycles, independent of the fabric's reported
+        // completion. The old completed-capped shape let grant frames shift
+        // their trace positions under host congestion (strict per-cycle wire
+        // identity is byte-compared across pacing). Bounding the pipeline is
+        // the view throttle's job instead (staging can never outrun the
+        // fabric by more than ~view_latency cycles, which is what keeps the
+        // fabric's input FIFO and the mock's over-send check safe).
+        // Ceilings are monotone per §5 invariant 2; the final target clamp is
+        // unchanged.
+        while (granted < staged + grantLead && !Failed())
         {
             std::uint64_t ceiling = granted + config.windowK - 1;   // inclusive
 
@@ -600,6 +624,43 @@ namespace Cohestra::Hades {
         if (Failed())
             return;
 
+        // ---- DUT-cycle-anchored view throttle (tick level) ------------------
+        // Hold this harness tick until the c2h tokens the Instance may consume
+        // during it (stimuli tagged <= (cycle+1) - viewLatency, per the
+        // delivery gate) are unpacked. Then the Instance's response production
+        // ticks are pinned to the stimulus tags whatever the harvest pacing —
+        // the stall is legal (the DUT simply waits; never a skip).
+        //
+        // Deadlock-free (no escape needed): the needed data is produced by the
+        // fabric at its tick ~ (cycle - L + maxC2HGranule - 1), which requires
+        // only staged input up to that tick — always present, since staged ==
+        // cycle here and L >= maxC2HGranule + 2 + (startup quirks). The fabric
+        // free-runs through the polls below while this tick waits.
+        const uint64_t cycle = time / 2;
+
+        std::uint64_t quiet = 0, markC = completed, markU = unpacked;
+
+        while (cycle + 1 > config.viewLatency &&
+               unpacked < cycle + 1 - config.viewLatency &&
+               !Failed())
+        {
+            PollHarvest();
+
+            if (completed > markC || unpacked > markU)
+            {
+                markC = completed;
+                markU = unpacked;
+                quiet = 0;
+            }
+            else if (++quiet > config.maxQuietPolls)
+            {
+                Fail("view throttle wedge: unpacked=" + std::to_string(unpacked) +
+                    " (need " + std::to_string(cycle + 1 - config.viewLatency) +
+                    ") at tick " + std::to_string(completed) +
+                    " (harness cycle " + std::to_string(cycle) + ")");
+            }
+        }
+
         PumpGrants();
         PollHarvest();
     }
@@ -698,6 +759,22 @@ namespace Cohestra::Hades {
                 Fail("final drain wedge: completed=" + std::to_string(completed) +
                     " staged=" + std::to_string(staged));
             }
+        }
+
+        // drain-quiet tail (session.cpp drainQuiet shape): after the fabric
+        // has completed every staged cycle, keep harvesting until the c2h
+        // side is quiet for a run of consecutive polls, so every formed frame
+        // is delivered before the run ends. Without this the trailing unpack
+        // count (and the c2h frame count) depends on harvest pacing.
+        for (unsigned quietDrain = 0, total = 0;
+             quietDrain < 16 && total < 4096 && !Failed(); ++total)
+        {
+            const std::uint64_t drainedBefore = c2hFrames;
+
+            PollHarvest();
+
+            if (c2hFrames == drainedBefore) ++quietDrain;
+            else                            quietDrain = 0;
         }
 
         if (unpacked < staged)

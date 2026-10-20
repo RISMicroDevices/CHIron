@@ -83,6 +83,38 @@ namespace Cohestra::Hades {
                                         // reset stretch (RST_CYCLES=128) runs — flits
                                         // staged during the stretch are flushed by the
                                         // wrapper without echo, which would leak them
+
+        // ---- DUT-cycle anchoring (strict replay-determinism, spec §1.4/D2) --
+        // viewLatency: a received c2h flit becomes visible to the Instance
+        // exactly (tag + viewLatency) harness cycles after its DUT cycle,
+        // never at harvest-arrival time. Deadlock floor (README):
+        // (largest h2c staging granule - 1) + (largest c2h emission
+        // granule - 1) + 2; the link clamps below it with a warning.
+        uint32_t    viewLatency = 40;
+        // anchorL*: extra DUT cycles beyond (production tick + 1) for the
+        // staging slot of a host-generated response flit (UpRSP/UpDAT/axi
+        // b/r). Effective stimulus->response DUT-cycle latency is
+        // viewLatency + prep + 1 + anchorL* (all deterministic).
+        uint32_t    anchorLRsp  = 0;
+        uint32_t    anchorLDat  = 0;
+        uint32_t    anchorLB    = 0;
+        uint32_t    anchorLR    = 0;
+    };
+
+    // a drive-side flit plus its assigned staging slot (absolute DUT cycle at
+    // which it may first be packed into a token)
+    template<class T>
+    struct SlottedFlit {
+        T           flit;
+        uint64_t    slot = 0;
+    };
+
+    // a received c2h flit tagged with the DUT cycle its token was unpacked
+    // from (exact, transport-independent)
+    template<class T>
+    struct TaggedFlit {
+        T           flit;
+        uint64_t    tag = 0;
     };
 
     // HadesFlitStore: the flit FIFOs/queues + the PACKING.md pack/unpack,
@@ -120,24 +152,55 @@ namespace Cohestra::Hades {
         virtual void        UnpackCh6(uint64_t cycle, TokenReader token) noexcept;
 
     public:
-        // drive-channel views (CCHI interface facade)
-        MirrorFIFO<FlitEVT>&        FifoEVT() noexcept    { return fifoEVT; }
-        MirrorFIFO<FlitREQ>&        FifoREQ() noexcept    { return fifoREQ; }
-        MirrorFIFO<FlitUpRSP>&      FifoUpRSP() noexcept  { return fifoUpRSP; }
-        MirrorFIFO<FlitUpDAT>&      FifoUpDAT() noexcept  { return fifoUpDAT; }
+        // ---- harness-tick bookkeeping (DUT-cycle anchoring) -----------------
+        // the harness tick index (== staged-cycle frontier, 1:1); the facades
+        // call this from their TickPreHandshake with the half-cycle time base
+        void        NoteCycle(uint64_t time) noexcept { currentCycle = time / 2; }
+        uint64_t    CurrentCycle() const noexcept     { return currentCycle; }
+        uint32_t    ViewLatency() const noexcept      { return config.viewLatency; }
 
-        // receive-channel queues
-        std::deque<FlitSNP>&        QueueSNP() noexcept   { return queueSNP; }
-        std::deque<FlitDnRSP>&      QueueDnRSP() noexcept { return queueDnRSP; }
-        std::deque<FlitDnDAT>&      QueueDnDAT() noexcept { return queueDnDAT; }
+        enum class DriveChan : size_t { EVT = 0, REQ, UpRSP, UpDAT, B, R };
+
+        // allocate the staging slot of a flit being pushed at the current
+        // harness tick: max(tick + 1 + anchorL, prev channel slot + 1) —
+        // monotone per channel, deterministic given the anchored view
+        uint64_t    AllocSlot(DriveChan chan) noexcept;
+
+        // drive-side pushes (Instance/AXIMemory -> store), slot assigned here
+        bool        PushSlottedEVT  (const FlitEVT& flit) noexcept;
+        bool        PushSlottedREQ  (const FlitREQ& flit) noexcept;
+        bool        PushSlottedUpRSP(const FlitUpRSP& flit) noexcept;
+        bool        PushSlottedUpDAT(const FlitUpDAT& flit) noexcept;
+        bool        PushSlottedB    (const AXI::BundleChannelB& flit) noexcept;
+        bool        PushSlottedR    (const AXI::BundleChannelR& flit) noexcept;
+
+        // gated receive access: a received flit is visible to the Instance
+        // only from (tag + viewLatency) on — the DUT-cycle-anchored view,
+        // never the harvest-arrival time
+        const FlitSNP*              PeekSNP() const noexcept;
+        std::optional<FlitSNP>      PopSNP() noexcept;
+        const FlitDnRSP*            PeekDnRSP() const noexcept;
+        std::optional<FlitDnRSP>    PopDnRSP() noexcept;
+        const FlitDnDAT*            PeekDnDAT() const noexcept;
+        std::optional<FlitDnDAT>    PopDnDAT() noexcept;
+
+        const AXI::BundleChannelAW* PeekAW() const noexcept;
+        std::optional<AXI::BundleChannelAW> PopAW() noexcept;
+        const AXI::BundleChannelW*  PeekW() const noexcept;
+        std::optional<AXI::BundleChannelW>  PopW() noexcept;
+        const AXI::BundleChannelAR* PeekAR() const noexcept;
+        std::optional<AXI::BundleChannelAR> PopAR() noexcept;
+
+    public:
+        // drive-channel views (CCHI interface facade)
+        MirrorFIFO<SlottedFlit<FlitEVT>>&        FifoEVT() noexcept    { return fifoEVT; }
+        MirrorFIFO<SlottedFlit<FlitREQ>>&        FifoREQ() noexcept    { return fifoREQ; }
+        MirrorFIFO<SlottedFlit<FlitUpRSP>>&      FifoUpRSP() noexcept  { return fifoUpRSP; }
+        MirrorFIFO<SlottedFlit<FlitUpDAT>>&      FifoUpDAT() noexcept  { return fifoUpDAT; }
 
         // AXI slave shadow views
-        MirrorFIFO<AXI::BundleChannelB>&    FifoB() noexcept { return fifoB; }
-        MirrorFIFO<AXI::BundleChannelR>&    FifoR() noexcept { return fifoR; }
-
-        std::deque<AXI::BundleChannelAW>&   QueueAW() noexcept { return queueAW; }
-        std::deque<AXI::BundleChannelW>&    QueueW()  noexcept { return queueW; }
-        std::deque<AXI::BundleChannelAR>&   QueueAR() noexcept { return queueAR; }
+        MirrorFIFO<SlottedFlit<AXI::BundleChannelB>>&    FifoB() noexcept { return fifoB; }
+        MirrorFIFO<SlottedFlit<AXI::BundleChannelR>>&    FifoR() noexcept { return fifoR; }
 
     public:
         // protocol-fault counters (logged by the harness at end of run)
@@ -150,20 +213,24 @@ namespace Cohestra::Hades {
     protected:
         // retire one drive flit on its accept echo (implementation in the .cpp)
         template<class T>
-        void ApplyEcho(MirrorFIFO<T>& fifo, std::deque<uint64_t>& stagedCycles,
+        void ApplyEcho(MirrorFIFO<SlottedFlit<T>>& fifo, std::deque<uint64_t>& stagedCycles,
                        size_t& inflight, bool readyEcho, uint64_t tokenCycle,
                        const char* what) noexcept;
+
+        // the anchored view gate (tag + viewLatency <= currentCycle)
+        template<class T>
+        const T* GatedFront(const std::deque<TaggedFlit<T>>& queue) const noexcept;
 
     private:
         BoundaryConfig config;
 
-        // drive FIFOs (pop on accept echo only)
-        MirrorFIFO<FlitEVT>             fifoEVT;
-        MirrorFIFO<FlitREQ>             fifoREQ;
-        MirrorFIFO<FlitUpRSP>           fifoUpRSP;
-        MirrorFIFO<FlitUpDAT>           fifoUpDAT;
-        MirrorFIFO<AXI::BundleChannelB> fifoB;
-        MirrorFIFO<AXI::BundleChannelR> fifoR;
+        // drive FIFOs (pop on accept echo only), slotted by DUT-cycle anchor
+        MirrorFIFO<SlottedFlit<FlitEVT>>             fifoEVT;
+        MirrorFIFO<SlottedFlit<FlitREQ>>             fifoREQ;
+        MirrorFIFO<SlottedFlit<FlitUpRSP>>           fifoUpRSP;
+        MirrorFIFO<SlottedFlit<FlitUpDAT>>           fifoUpDAT;
+        MirrorFIFO<SlottedFlit<AXI::BundleChannelB>> fifoB;
+        MirrorFIFO<SlottedFlit<AXI::BundleChannelR>> fifoR;
 
         // staged-but-unaccepted counts (mirror of the wrapper skid contents)
         size_t inflightEVT = 0, inflightREQ = 0, inflightUpRSP = 0;
@@ -180,13 +247,18 @@ namespace Cohestra::Hades {
         std::deque<uint64_t>    stagedR;
 
         // receive queues (c2h; the wrapper pre-asserts its own capture-ready,
-        // so these never exert backpressure on the DUT)
-        std::deque<FlitSNP>             queueSNP;
-        std::deque<FlitDnRSP>           queueDnRSP;
-        std::deque<FlitDnDAT>           queueDnDAT;
-        std::deque<AXI::BundleChannelAW> queueAW;
-        std::deque<AXI::BundleChannelW>  queueW;
-        std::deque<AXI::BundleChannelAR> queueAR;
+        // so these never exert backpressure on the DUT), DUT-cycle tagged
+        std::deque<TaggedFlit<FlitSNP>>             queueSNP;
+        std::deque<TaggedFlit<FlitDnRSP>>           queueDnRSP;
+        std::deque<TaggedFlit<FlitDnDAT>>           queueDnDAT;
+        std::deque<TaggedFlit<AXI::BundleChannelAW> > queueAW;
+        std::deque<TaggedFlit<AXI::BundleChannelW> >  queueW;
+        std::deque<TaggedFlit<AXI::BundleChannelAR> > queueAR;
+
+        // harness-tick index (== staged-cycle frontier) and per-drive-channel
+        // slot allocation state
+        uint64_t    currentCycle = 0;
+        uint64_t    prevSlot[6]  = { 0, 0, 0, 0, 0, 0 };
 
         uint64_t    fenceBlocked       = 0;   // ready echo with no drivable staged flit
                                             // (benign: the wrapper samples the raw

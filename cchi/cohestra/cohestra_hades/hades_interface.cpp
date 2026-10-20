@@ -90,7 +90,171 @@ namespace Cohestra::Hades {
         queueSNP.clear(); queueDnRSP.clear(); queueDnDAT.clear();
         queueAW .clear(); queueW     .clear(); queueAR .clear();
 
+        currentCycle = 0;
+        for (auto& slot : prevSlot)
+            slot = 0;
+
         fenceBlocked = fieldTruncations = 0;
+    }
+
+    uint64_t HadesFlitStore::AllocSlot(DriveChan chan) noexcept
+    {
+        // slot = max(tick + 1 + anchorL, prev slot + 1): the response (or
+        // self-paced flit) is staged into the token of a FIXED DUT cycle —
+        // deterministic given the anchored view, regardless of link pacing.
+        // The +1 keeps the flit out of its production cycle's token (the v3
+        // next-cycle drive rule).
+        uint32_t lead = 0;
+
+        switch (chan)
+        {
+            case DriveChan::UpRSP: lead = config.anchorLRsp; break;
+            case DriveChan::UpDAT: lead = config.anchorLDat; break;
+            case DriveChan::B:     lead = config.anchorLB;   break;
+            case DriveChan::R:     lead = config.anchorLR;   break;
+            default:               lead = 0;                 break;
+        }
+
+        uint64_t& prev = prevSlot[static_cast<size_t>(chan)];
+        const uint64_t slot = std::max(currentCycle + 1 + lead, prev + 1);
+
+        prev = slot;
+        return slot;
+    }
+
+    bool HadesFlitStore::PushSlottedEVT(const FlitEVT& flit) noexcept
+    {
+        return fifoEVT.Push(SlottedFlit<FlitEVT> { flit, AllocSlot(DriveChan::EVT) });
+    }
+
+    bool HadesFlitStore::PushSlottedREQ(const FlitREQ& flit) noexcept
+    {
+        return fifoREQ.Push(SlottedFlit<FlitREQ> { flit, AllocSlot(DriveChan::REQ) });
+    }
+
+    bool HadesFlitStore::PushSlottedUpRSP(const FlitUpRSP& flit) noexcept
+    {
+        return fifoUpRSP.Push(SlottedFlit<FlitUpRSP> { flit, AllocSlot(DriveChan::UpRSP) });
+    }
+
+    bool HadesFlitStore::PushSlottedUpDAT(const FlitUpDAT& flit) noexcept
+    {
+        return fifoUpDAT.Push(SlottedFlit<FlitUpDAT> { flit, AllocSlot(DriveChan::UpDAT) });
+    }
+
+    bool HadesFlitStore::PushSlottedB(const AXI::BundleChannelB& flit) noexcept
+    {
+        return fifoB.Push(SlottedFlit<AXI::BundleChannelB> { flit, AllocSlot(DriveChan::B) });
+    }
+
+    bool HadesFlitStore::PushSlottedR(const AXI::BundleChannelR& flit) noexcept
+    {
+        return fifoR.Push(SlottedFlit<AXI::BundleChannelR> { flit, AllocSlot(DriveChan::R) });
+    }
+
+    template<class T>
+    const T* HadesFlitStore::GatedFront(const std::deque<TaggedFlit<T>>& queue) const noexcept
+    {
+        // the anchored view: a received flit exists for the Instance only
+        // from (tag + viewLatency) on. The link's view throttle guarantees it
+        // has been unpacked by then (see HadesLink::DriveCycle).
+        if (queue.empty())
+            return nullptr;
+
+        if (queue.front().tag + config.viewLatency > currentCycle)
+            return nullptr;
+
+        return &queue.front().flit;
+    }
+
+    const HadesFlitStore::FlitSNP* HadesFlitStore::PeekSNP() const noexcept
+    { return GatedFront(queueSNP); }
+
+    std::optional<HadesFlitStore::FlitSNP> HadesFlitStore::PopSNP() noexcept
+    {
+        if (const FlitSNP* front = GatedFront(queueSNP))
+        {
+            FlitSNP flit = *front;
+            queueSNP.pop_front();
+            return { flit };
+        }
+
+        return std::nullopt;
+    }
+
+    const HadesFlitStore::FlitDnRSP* HadesFlitStore::PeekDnRSP() const noexcept
+    { return GatedFront(queueDnRSP); }
+
+    std::optional<HadesFlitStore::FlitDnRSP> HadesFlitStore::PopDnRSP() noexcept
+    {
+        if (const FlitDnRSP* front = GatedFront(queueDnRSP))
+        {
+            FlitDnRSP flit = *front;
+            queueDnRSP.pop_front();
+            return { flit };
+        }
+
+        return std::nullopt;
+    }
+
+    const HadesFlitStore::FlitDnDAT* HadesFlitStore::PeekDnDAT() const noexcept
+    { return GatedFront(queueDnDAT); }
+
+    std::optional<HadesFlitStore::FlitDnDAT> HadesFlitStore::PopDnDAT() noexcept
+    {
+        if (const FlitDnDAT* front = GatedFront(queueDnDAT))
+        {
+            FlitDnDAT flit = *front;
+            queueDnDAT.pop_front();
+            return { flit };
+        }
+
+        return std::nullopt;
+    }
+
+    const AXI::BundleChannelAW* HadesFlitStore::PeekAW() const noexcept
+    { return GatedFront(queueAW); }
+
+    std::optional<AXI::BundleChannelAW> HadesFlitStore::PopAW() noexcept
+    {
+        if (const AXI::BundleChannelAW* front = GatedFront(queueAW))
+        {
+            auto chan = std::move(queueAW.front().flit);
+            queueAW.pop_front();
+            return { std::move(chan) };
+        }
+
+        return std::nullopt;
+    }
+
+    const AXI::BundleChannelW* HadesFlitStore::PeekW() const noexcept
+    { return GatedFront(queueW); }
+
+    std::optional<AXI::BundleChannelW> HadesFlitStore::PopW() noexcept
+    {
+        if (const AXI::BundleChannelW* front = GatedFront(queueW))
+        {
+            auto chan = std::move(queueW.front().flit);
+            queueW.pop_front();
+            return { std::move(chan) };
+        }
+
+        return std::nullopt;
+    }
+
+    const AXI::BundleChannelAR* HadesFlitStore::PeekAR() const noexcept
+    { return GatedFront(queueAR); }
+
+    std::optional<AXI::BundleChannelAR> HadesFlitStore::PopAR() noexcept
+    {
+        if (const AXI::BundleChannelAR* front = GatedFront(queueAR))
+        {
+            auto chan = std::move(queueAR.front().flit);
+            queueAR.pop_front();
+            return { std::move(chan) };
+        }
+
+        return std::nullopt;
     }
 
     // ---- staging (h2c) ---------------------------------------------------------
@@ -112,10 +276,12 @@ namespace Cohestra::Hades {
         if (cycle < config.bubbleCycles)
             return;     // post-reset bubble window: idle tokens only
 
-        // rxevt
-        if (inflightEVT < fifoEVT.Count() && inflightEVT < config.skidDepth)
+        // rxevt — stage the head only once its anchor slot is due (the
+        // DUT-cycle-anchored schedule; a not-yet-due head keeps the lane idle)
+        if (inflightEVT < fifoEVT.Count() && inflightEVT < config.skidDepth &&
+            fifoEVT.PeekAt(inflightEVT)->slot <= cycle)
         {
-            const FlitEVT& flit = *fifoEVT.PeekAt(inflightEVT);
+            const FlitEVT& flit = fifoEVT.PeekAt(inflightEVT)->flit;
             ++inflightEVT;
             stagedEVT.push_back(cycle);
 
@@ -132,10 +298,11 @@ namespace Cohestra::Hades {
             token.Set(P::EVT_TXNID,    8,  Field(flit.TxnID));
         }
 
-        // rxreq
-        if (inflightREQ < fifoREQ.Count() && inflightREQ < config.skidDepth)
+        // rxreq (slot-gated, as rxevt)
+        if (inflightREQ < fifoREQ.Count() && inflightREQ < config.skidDepth &&
+            fifoREQ.PeekAt(inflightREQ)->slot <= cycle)
         {
-            const FlitREQ& flit = *fifoREQ.PeekAt(inflightREQ);
+            const FlitREQ& flit = fifoREQ.PeekAt(inflightREQ)->flit;
             ++inflightREQ;
             stagedREQ.push_back(cycle);
 
@@ -158,10 +325,11 @@ namespace Cohestra::Hades {
             token.Set(P::REQ_TXNID,    8,  Field(flit.TxnID));
         }
 
-        // rxrsp (UpRSP)
-        if (inflightUpRSP < fifoUpRSP.Count() && inflightUpRSP < config.skidDepth)
+        // rxrsp (UpRSP; slot-gated, as rxevt)
+        if (inflightUpRSP < fifoUpRSP.Count() && inflightUpRSP < config.skidDepth &&
+            fifoUpRSP.PeekAt(inflightUpRSP)->slot <= cycle)
         {
-            const FlitUpRSP& flit = *fifoUpRSP.PeekAt(inflightUpRSP);
+            const FlitUpRSP& flit = fifoUpRSP.PeekAt(inflightUpRSP)->flit;
             ++inflightUpRSP;
             stagedUpRSP.push_back(cycle);
 
@@ -175,10 +343,11 @@ namespace Cohestra::Hades {
             token.Set(P::RSP_TXNID,    8,  Field(flit.TxnID));
         }
 
-        // axi_m0_b
-        if (inflightB < fifoB.Count() && inflightB < config.skidDepth)
+        // axi_m0_b (slot-gated, as rxevt)
+        if (inflightB < fifoB.Count() && inflightB < config.skidDepth &&
+            fifoB.PeekAt(inflightB)->slot <= cycle)
         {
-            const AXI::BundleChannelB& flit = *fifoB.PeekAt(inflightB);
+            const AXI::BundleChannelB& flit = fifoB.PeekAt(inflightB)->flit;
             ++inflightB;
             stagedB.push_back(cycle);
 
@@ -195,10 +364,11 @@ namespace Cohestra::Hades {
         if (cycle < config.bubbleCycles)
             return;
 
-        // rxdat (UpDAT)
-        if (inflightUpDAT < fifoUpDAT.Count() && inflightUpDAT < config.skidDepth)
+        // rxdat (UpDAT; slot-gated, as rxevt)
+        if (inflightUpDAT < fifoUpDAT.Count() && inflightUpDAT < config.skidDepth &&
+            fifoUpDAT.PeekAt(inflightUpDAT)->slot <= cycle)
         {
-            const FlitUpDAT& flit = *fifoUpDAT.PeekAt(inflightUpDAT);
+            const FlitUpDAT& flit = fifoUpDAT.PeekAt(inflightUpDAT)->flit;
             ++inflightUpDAT;
             stagedUpDAT.push_back(cycle);
 
@@ -223,10 +393,11 @@ namespace Cohestra::Hades {
         if (cycle < config.bubbleCycles)
             return;
 
-        // axi_m0_r
-        if (inflightR < fifoR.Count() && inflightR < config.skidDepth)
+        // axi_m0_r (slot-gated, as rxevt)
+        if (inflightR < fifoR.Count() && inflightR < config.skidDepth &&
+            fifoR.PeekAt(inflightR)->slot <= cycle)
         {
-            const AXI::BundleChannelR& flit = *fifoR.PeekAt(inflightR);
+            const AXI::BundleChannelR& flit = fifoR.PeekAt(inflightR)->flit;
             ++inflightR;
             stagedR.push_back(cycle);
 
@@ -246,7 +417,7 @@ namespace Cohestra::Hades {
     // ---- retirement + receive (c2h) ---------------------------------------------
 
     template<class T>
-    void HadesFlitStore::ApplyEcho(MirrorFIFO<T>& fifo, std::deque<uint64_t>& stagedCycles,
+    void HadesFlitStore::ApplyEcho(MirrorFIFO<SlottedFlit<T>>& fifo, std::deque<uint64_t>& stagedCycles,
                                    size_t& inflight, bool readyEcho, uint64_t tokenCycle,
                                    const char* what) noexcept
     {
@@ -289,7 +460,7 @@ namespace Cohestra::Hades {
             // [2:1] alias is a DUT-side extra with no
             // CommonFlitConfigurationType1 field — read and dropped
 
-            queueSNP.push_back(flit);
+            queueSNP.push_back(TaggedFlit<FlitSNP> { flit, cycle });
         }
 
         // txrsp
@@ -308,7 +479,7 @@ namespace Cohestra::Hades {
             flit.SrcID    = token.Get(P::RSP_SRCID,    4);
             flit.TxnID    = token.Get(P::RSP_TXNID,    8);
 
-            queueDnRSP.push_back(flit);
+            queueDnRSP.push_back(TaggedFlit<FlitDnRSP> { flit, cycle });
         }
 
         // axi_m0_aw
@@ -324,7 +495,7 @@ namespace Cohestra::Hades {
             chan.Burst = burst == 0 ? AXI::Burst::FIXED
                        : burst == 1 ? AXI::Burst::INCR : AXI::Burst::WRAP;
 
-            queueAW.push_back(std::move(chan));
+            queueAW.push_back(TaggedFlit<AXI::BundleChannelAW> { std::move(chan), cycle });
         }
 
         // axi_m0_ar
@@ -340,7 +511,7 @@ namespace Cohestra::Hades {
             chan.Burst = burst == 0 ? AXI::Burst::FIXED
                        : burst == 1 ? AXI::Burst::INCR : AXI::Burst::WRAP;
 
-            queueAR.push_back(std::move(chan));
+            queueAR.push_back(TaggedFlit<AXI::BundleChannelAR> { std::move(chan), cycle });
         }
 
         // accept echo tail [213:208] — the ONLY retirement of the drive FIFOs.
@@ -382,7 +553,7 @@ namespace Cohestra::Hades {
             flit.SrcID      = token.Get(P::DAT_SRCID,    4);
             flit.TxnID      = token.Get(P::DAT_TXNID,    8);
 
-            queueDnDAT.push_back(flit);
+            queueDnDAT.push_back(TaggedFlit<FlitDnDAT> { flit, cycle });
         }
     }
 
@@ -401,7 +572,7 @@ namespace Cohestra::Hades {
             chan.Strb.assign(1, token.Get(P::W_STRB, 32));
             chan.Last = token.Get(P::W_LAST, 1);
 
-            queueW.push_back(std::move(chan));
+            queueW.push_back(TaggedFlit<AXI::BundleChannelW> { std::move(chan), cycle });
         }
     }
 
@@ -417,7 +588,9 @@ namespace Cohestra::Hades {
     {
         // drive phase over the link: poll/harvest/unpack (the cycle's own
         // token staging happens in the harness's DriveCycle tail, after the
-        // Instance's pushes of this tick have landed)
+        // Instance's pushes of this tick have landed). NoteCycle keeps the
+        // store's harness-tick index (the anchored view + slot clock).
+        store->NoteCycle(time);
         link->TickCycle(time);
     }
 
@@ -446,97 +619,100 @@ namespace Cohestra::Hades {
 
     bool HadesCCHIInterface::HasType1SNP(size_t index) const noexcept
     {
-        return index == 0 && !store->QueueSNP().empty();
+        return index == 0 && store->PeekSNP() != nullptr;
     }
 
     std::optional<CCHI::Flits::SNP<CommonFlitConfigurationType1>>
         HadesCCHIInterface::PeekType1SNP(size_t index) const noexcept
     {
-        if (index != 0 || store->QueueSNP().empty())
+        if (index != 0)
             return std::nullopt;
 
-        return { store->QueueSNP().front() };
+        if (const auto* flit = store->PeekSNP())
+            return { *flit };
+
+        return std::nullopt;
     }
 
     std::optional<CCHI::Flits::SNP<CommonFlitConfigurationType1>>
         HadesCCHIInterface::PopType1SNP(size_t index) noexcept
     {
-        if (index != 0 || store->QueueSNP().empty())
+        if (index != 0)
             return std::nullopt;
 
-        auto flit = store->QueueSNP().front();
-        store->QueueSNP().pop_front();
-        return { flit };
+        return store->PopSNP();
     }
 
     bool HadesCCHIInterface::HasType1DnRSP(size_t index) const noexcept
     {
-        return index == 0 && !store->QueueDnRSP().empty();
+        return index == 0 && store->PeekDnRSP() != nullptr;
     }
 
     std::optional<CCHI::Flits::DnRSP<CommonFlitConfigurationType1>>
         HadesCCHIInterface::PeekType1DnRSP(size_t index) const noexcept
     {
-        if (index != 0 || store->QueueDnRSP().empty())
+        if (index != 0)
             return std::nullopt;
 
-        return { store->QueueDnRSP().front() };
+        if (const auto* flit = store->PeekDnRSP())
+            return { *flit };
+
+        return std::nullopt;
     }
 
     std::optional<CCHI::Flits::DnRSP<CommonFlitConfigurationType1>>
         HadesCCHIInterface::PopType1DnRSP(size_t index) noexcept
     {
-        if (index != 0 || store->QueueDnRSP().empty())
+        if (index != 0)
             return std::nullopt;
 
-        auto flit = store->QueueDnRSP().front();
-        store->QueueDnRSP().pop_front();
-        return { flit };
+        return store->PopDnRSP();
     }
 
     bool HadesCCHIInterface::HasType1DnDAT(size_t index) const noexcept
     {
-        return index == 0 && !store->QueueDnDAT().empty();
+        return index == 0 && store->PeekDnDAT() != nullptr;
     }
 
     std::optional<CCHI::Flits::DnDAT<CommonFlitConfigurationType1>>
         HadesCCHIInterface::PeekType1DnDAT(size_t index) const noexcept
     {
-        if (index != 0 || store->QueueDnDAT().empty())
+        if (index != 0)
             return std::nullopt;
 
-        return { store->QueueDnDAT().front() };
+        if (const auto* flit = store->PeekDnDAT())
+            return { *flit };
+
+        return std::nullopt;
     }
 
     std::optional<CCHI::Flits::DnDAT<CommonFlitConfigurationType1>>
         HadesCCHIInterface::PopType1DnDAT(size_t index) noexcept
     {
-        if (index != 0 || store->QueueDnDAT().empty())
+        if (index != 0)
             return std::nullopt;
 
-        auto flit = store->QueueDnDAT().front();
-        store->QueueDnDAT().pop_front();
-        return { flit };
+        return store->PopDnDAT();
     }
 
     bool HadesCCHIInterface::PushType1EVT(size_t index, const CCHI::Flits::EVT<CommonFlitConfigurationType1>& flit) noexcept
     {
-        return index == 0 && store->FifoEVT().Push(flit);
+        return index == 0 && store->PushSlottedEVT(flit);
     }
 
     bool HadesCCHIInterface::PushType1REQ(size_t index, const CCHI::Flits::REQ<CommonFlitConfigurationType1>& flit) noexcept
     {
-        return index == 0 && store->FifoREQ().Push(flit);
+        return index == 0 && store->PushSlottedREQ(flit);
     }
 
     bool HadesCCHIInterface::PushType1UpRSP(size_t index, const CCHI::Flits::UpRSP<CommonFlitConfigurationType1>& flit) noexcept
     {
-        return index == 0 && store->FifoUpRSP().Push(flit);
+        return index == 0 && store->PushSlottedUpRSP(flit);
     }
 
     bool HadesCCHIInterface::PushType1UpDAT(size_t index, const CCHI::Flits::UpDAT<CommonFlitConfigurationType1>& flit) noexcept
     {
-        return index == 0 && store->FifoUpDAT().Push(flit);
+        return index == 0 && store->PushSlottedUpDAT(flit);
     }
 
     bool HadesCCHIInterface::SetType1EVTBufferSize(size_t index, size_t bufferSize) noexcept
@@ -589,6 +765,7 @@ namespace Cohestra::Hades {
 
     void HadesAXISlaveInterface::TickPreHandshake(uint64_t time) noexcept
     {
+        store->NoteCycle(time);
         link->TickCycle(time);  // idempotent within the same timestamp
     }
 
@@ -619,81 +796,84 @@ namespace Cohestra::Hades {
 
     bool HadesAXISlaveInterface::HasAW(size_t index) const noexcept
     {
-        return index == 0 && !store->QueueAW().empty();
+        return index == 0 && store->PeekAW() != nullptr;
     }
 
     std::optional<AXI::BundleChannelAW> HadesAXISlaveInterface::PeekAW(size_t index) const noexcept
     {
-        if (index != 0 || store->QueueAW().empty())
+        if (index != 0)
             return std::nullopt;
 
-        return { store->QueueAW().front() };
+        if (const auto* chan = store->PeekAW())
+            return { *chan };
+
+        return std::nullopt;
     }
 
     std::optional<AXI::BundleChannelAW> HadesAXISlaveInterface::PopAW(size_t index) noexcept
     {
-        if (index != 0 || store->QueueAW().empty())
+        if (index != 0)
             return std::nullopt;
 
-        auto chan = std::move(store->QueueAW().front());
-        store->QueueAW().pop_front();
-        return { std::move(chan) };
+        return store->PopAW();
     }
 
     bool HadesAXISlaveInterface::HasW(size_t index) const noexcept
     {
-        return index == 0 && !store->QueueW().empty();
+        return index == 0 && store->PeekW() != nullptr;
     }
 
     std::optional<AXI::BundleChannelW> HadesAXISlaveInterface::PeekW(size_t index) const noexcept
     {
-        if (index != 0 || store->QueueW().empty())
+        if (index != 0)
             return std::nullopt;
 
-        return { store->QueueW().front() };
+        if (const auto* chan = store->PeekW())
+            return { *chan };
+
+        return std::nullopt;
     }
 
     std::optional<AXI::BundleChannelW> HadesAXISlaveInterface::PopW(size_t index) noexcept
     {
-        if (index != 0 || store->QueueW().empty())
+        if (index != 0)
             return std::nullopt;
 
-        auto chan = std::move(store->QueueW().front());
-        store->QueueW().pop_front();
-        return { std::move(chan) };
+        return store->PopW();
     }
 
     bool HadesAXISlaveInterface::HasAR(size_t index) const noexcept
     {
-        return index == 0 && !store->QueueAR().empty();
+        return index == 0 && store->PeekAR() != nullptr;
     }
 
     std::optional<AXI::BundleChannelAR> HadesAXISlaveInterface::PeekAR(size_t index) const noexcept
     {
-        if (index != 0 || store->QueueAR().empty())
+        if (index != 0)
             return std::nullopt;
 
-        return { store->QueueAR().front() };
+        if (const auto* chan = store->PeekAR())
+            return { *chan };
+
+        return std::nullopt;
     }
 
     std::optional<AXI::BundleChannelAR> HadesAXISlaveInterface::PopAR(size_t index) noexcept
     {
-        if (index != 0 || store->QueueAR().empty())
+        if (index != 0)
             return std::nullopt;
 
-        auto chan = std::move(store->QueueAR().front());
-        store->QueueAR().pop_front();
-        return { std::move(chan) };
+        return store->PopAR();
     }
 
     bool HadesAXISlaveInterface::PushB(size_t index, const AXI::BundleChannelB& channel) noexcept
     {
-        return index == 0 && store->FifoB().Push(channel);
+        return index == 0 && store->PushSlottedB(channel);
     }
 
     bool HadesAXISlaveInterface::PushR(size_t index, const AXI::BundleChannelR& channel) noexcept
     {
-        return index == 0 && store->FifoR().Push(channel);
+        return index == 0 && store->PushSlottedR(channel);
     }
 
     bool HadesAXISlaveInterface::SetPortBFIFOSize(size_t index, size_t size) noexcept

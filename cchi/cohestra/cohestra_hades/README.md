@@ -73,8 +73,94 @@ passes it).
 | `skid_depth` | `0` → `window_k` | max staged-but-unaccepted flits per drive channel (wrapper skids are 2*WINDOW_K — safe) |
 | `rx_queue` | `1024` | local c2h flit queue bound per channel (absorbs granule bursts; no DUT backpressure path) |
 | `max_quiet_polls` | `2000000` | wedge guard: polls without fabric tick progress ⇒ link failure |
+| `view_latency` | `40` | DUT-cycle view offset: received flits are Instance-visible exactly `tag + view_latency` (floor: maxH2CGranule + maxC2HGranule, clamped) |
+| `anchor_l_rsp/dat/b/r` | `0` | extra DUT-cycle delay for response staging slots (0 = production tick + 1) |
 
-## Host token API findings (HADES-Fabric side)
+## The DUT-cycle-anchored response path (strict replay-determinism)
+
+Hard requirement (spec §1.4/D2): under host congestion the per-cycle token
+streams must stay byte-identical — the DUT-side event sequence may depend on
+the DUT cycle only, never on when the host happened to harvest a token. The
+layer enforces this in three places:
+
+1. **Every received c2h flit is tagged** with the DUT cycle its token was
+   unpacked from (the link's unpack cursor — exact, transport-independent).
+2. **The anchored view**: a received flit becomes visible to the Instance
+   exactly `tag + view_latency` harness cycles after its DUT cycle
+   (`GatedFront` in `hades_interface.cpp`), never at harvest-arrival time.
+   The link guarantees presence by then: `DriveCycle(k)` stalls staging until
+   the c2h tokens through `k + 2 − view_latency` are unpacked (a legal
+   stall — the DUT simply stops ticking; never a skip).
+3. **Response slots**: every flit the Instance (or AXIMemory) pushes is
+   assigned a staging slot at push time,
+   `slot = max(tick + 1 + anchor_L_chan, prev_channel_slot + 1)` — monotone
+   per drive channel, deterministic given the anchored view. The pack stage
+   holds a not-yet-due head idle (no bypass, no reordering). So a snoop
+   response / AXI b/r lands at a FIXED DUT cycle computed from deterministic
+   state — `TxnID`/`DBID` allocation and FuzzARI's closed loop stay pinned.
+
+Effective stimulus→response DUT-cycle latency is
+`view_latency + prep + 1 + anchor_L_chan` where `prep` is the deterministic
+Instance/AXIMemory preparation in harness ticks (Taurus snoop processing, the
+memory's configured latencies).
+
+### L values and derivation
+
+- **`view_latency` (default 40, INI `[hades] view_latency`)** — the view
+  offset. Deadlock floor: at a staging halt the fabric can only reach the
+  worst-aligned *flushed* h2c granule frontier (`staged − (maxH2CGranule − 1)`
+  = −19 for the demo's 20/12/15), and unpack trails the fabric by up to the
+  largest c2h emission granule minus one (−17 for ch4's 18). The throttle's
+  `k + 2 − L` must clear that bound, so
+  `L ≥ (maxH2CGranule − 1) + (maxC2HGranule − 1) + 2 = 38`; the link clamps
+  with a warning. Default 40 — floor + 2, which also absorbs the verilated
+  fabric's measured startup offset (below). Larger values deepen the link
+  pipelining at the cost of response latency.
+- **The throttle's non-circular escape**: the hold is released when the
+  fabric reports input starvation *having consumed every flushed h2c token*
+  (`STALL_REASON` bit0 ∧ `completed ≥ min flushed granule frontier`) — only
+  more staging can feed it then, so the view lag is self-inflicted by the
+  hold itself. Releasing cannot fake presence: the delivery gate still serves
+  a flit only once it is unpacked AND due. Under pure congestion (deferred
+  pushes/pulls) the fabric never satisfies that condition, so the hold keeps
+  working as intended.
+- **Measured RTL startup quirks** (probe evidence, this layer's README only —
+  fixes are HADES-side): on `CTRL.reset`, every c2h `axis_async_fifo` read
+  pointer advances by 2 (reset-sync artifact — the same suspicion the T4
+  wedge-debug recorded), and the first tick after reset loses one c2h push
+  (`tok_in_valid` registers its live mask one ce edge late). Net effect: a
+  channel's first batch forms only at `granule + 2` pushes. ch5/6 (granule
+  13) absorb it silently; ch4 (granule 18) is the only channel that can be
+  held one token short of its first batch when the fabric stalls exactly on a
+  staging-granule boundary — precisely the case the view throttle creates.
+  These are phantom-offset behaviors, deterministic per reset sequence, so
+  wire traces stay byte-identical across runs; the throttle escape above is
+  what keeps them from deadlocking the host.
+- **`anchor_l_rsp / anchor_l_dat / anchor_l_b / anchor_l_r` (default 0)** —
+  extra DUT cycles beyond `production tick + 1` for response slots. 0 is
+  causally safe (the production tick already sits `view_latency` past the
+  stimulus's harvest); the knobs exist for a future DUT/wrapper that wants a
+  guaranteed longer response latency.
+
+Everything else in this document (the window pump, the skid/echo contract,
+the reset bubble window, cycle-exact completion) is unchanged.
+
+### strict-AB status note (2026-10-20, W4 rehearsal @ 5080c85)
+
+With the anchoring above, the rehearsal's `--strict-ab` at 100K shows the
+**h2c direction byte-identical** (11,635,818 B) and the **c2h per-channel
+token content byte-identical** (99,990/99,996 tokens per channel, zero
+content diffs). The one residual divergence is the **c2h frame ORDER on the
+shared emission stream** (first diff at byte offset 25850 = frame 50: a
+ch4 t1_resp_out batch vs a ch6 axi_w_out batch swapped between the reference
+and the stall-injected run). Root cause is fabric-side, not this layer:
+`hades_fabric_core.sv`'s emission arbiter services the lowest channel with a
+pending batch when its pack FSM is free, so the inter-channel order follows
+input-arrival bursts, which stall injection perturbs by construction. A
+canonical fix is to serialize c2h batches in granule-completion-tick order
+(a completion-order FIFO) inside the fabric — the host cannot affect the
+recorded wire order, and per-channel streams already carry full content
+identity.
 
 The brief asked: *by which exact host-side API is per-cycle h2c token content
 injected, and c2h tokens observed?* Findings (tree @ 94a8498 + WIP):
@@ -168,24 +254,29 @@ layer matches them point for point:
   `--cycles` bounds **target cycles**, 1:1. (v3 compares its half-cycle `time`
   against `maximumCycles`, effectively stopping at `maximumCycles/2` target
   cycles — reads like a v3 quirk; deliberately not replicated.)
-- **Windowing**: credit leads staging by `window_k` cycles and stays within
-  `max_inflight_windows × window_k` of the fabric's reported completion.
-  Staging blocks (bounded, `max_quiet_polls`) when credit is exhausted — the
-  link being the bottleneck, never a skip. h2c frames flush only on full
-  granules (`wideBatchGranule`, e.g. 20/12/15 tokens for ch1/2/3).
-- **c2h latency**: received flits reach the Instance when the fabric's
-  emission granules flush (ch4/5/6: 18/13/13 tokens) plus link lag; the last
-  < granule cycles of a run are never flushed (phase-1 no-partial-flush
-  contract — logged, not an error). Watchdog timeouts must absorb this: the
-  demo config's `[watchdog] progress.timeout/xact.timeout = 1000000` exists
-  for exactly this reason.
+- **Windowing**: the grant staircase is purely staged-paced — credit leads
+  the staging frontier by `grantLead = max(W × window_k, maxGranule + window_k)`
+  cycles, **independent of the fabric's reported completion** (strict per-cycle
+  wire identity requires grant frames to hold their trace positions under
+  congestion; bounding the pipeline is the view throttle's job — staging never
+  outruns the fabric by more than ~`view_latency` cycles, which also keeps the
+  fabric's input FIFO and the mock's over-send check safe). Staging blocks
+  (bounded, `max_quiet_polls`) only on the view throttle — the link being
+  congested, never a skip. h2c frames flush only on full granules
+  (`wideBatchGranule`, e.g. 20/12/15 tokens for ch1/2/3).
+- **c2h latency**: received flits reach the Instance exactly `view_latency`
+  cycles after their DUT cycle (the anchored view; the granule flush latency
+  is inside that bound); the last < granule cycles of a run are never flushed
+  (phase-1 no-partial-flush contract — logged, not an error). Watchdog
+  timeouts must absorb this: the demo config's
+  `[watchdog] progress.timeout/xact.timeout = 1000000` exists for exactly
+  this reason.
 - **Determinism**: per-channel flit order/content is fully deterministic
-  (FIFO order + in-order skids + echo retirement). The *cycle-position*
-  alignment of flits is exact on loopback/Verilator (fixed polls per tick,
-  seeded mock) and stall-invariant by LI-BDN construction, but on real
-  hardware it can shift with link wall-time (host-side harvest pacing).
-  Strict A/B comparisons belong on the rehearsal backend; on hardware compare
-  per-channel streams, not absolute cycle tags.
+  (FIFO order + in-order skids + echo retirement). With the anchored view and
+  response slots, the *cycle-position* alignment is exact on any backend
+  (loopback/Verilator proven by the rehearsal's `--strict-ab`; on hardware
+  the same invariants hold by construction, since every visible event keys
+  off DUT-cycle tags, never wall-clock pacing).
 - **Cycle-exact completion**: the grant pump clamps ceilings to the run
   length (`--cycles`; the session.cpp `run(n)` clamp applied incrementally),
   and `FinalDrain` over-stages a bubble **spill** up to the h2c granule LCM

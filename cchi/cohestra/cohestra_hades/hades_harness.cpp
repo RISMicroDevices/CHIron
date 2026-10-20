@@ -75,6 +75,22 @@ const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_HADES_RX_QUEUE
 const Cohestra::ConfigurationEntryBack<uint64_t> CONFIG_HADES_MAX_QUIET_POLLS
     ("HADES_MAX_QUIET_POLLS", "max_quiet_polls", "hades", 2000000, Cohestra::DeserializeUInt64, Cohestra::SerializeUInt64);
 
+// DUT-cycle anchoring (strict replay-determinism under host congestion)
+const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_HADES_VIEW_LATENCY
+    ("HADES_VIEW_LATENCY", "view_latency", "hades", 40, Cohestra::DeserializeUInt32, Cohestra::SerializeUInt32);
+
+const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_HADES_ANCHOR_L_RSP
+    ("HADES_ANCHOR_L_RSP", "anchor_l_rsp", "hades", 0, Cohestra::DeserializeUInt32, Cohestra::SerializeUInt32);
+
+const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_HADES_ANCHOR_L_DAT
+    ("HADES_ANCHOR_L_DAT", "anchor_l_dat", "hades", 0, Cohestra::DeserializeUInt32, Cohestra::SerializeUInt32);
+
+const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_HADES_ANCHOR_L_B
+    ("HADES_ANCHOR_L_B", "anchor_l_b", "hades", 0, Cohestra::DeserializeUInt32, Cohestra::SerializeUInt32);
+
+const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_HADES_ANCHOR_L_R
+    ("HADES_ANCHOR_L_R", "anchor_l_r", "hades", 0, Cohestra::DeserializeUInt32, Cohestra::SerializeUInt32);
+
 // v3-compatible reset keys ([root]); NO-OPS over HADES — the FPGA wrapper owns
 // the DUT reset stretch. Parsed so v3-shaped configs load cleanly, logged once.
 const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_RESET_CYCLES
@@ -469,6 +485,11 @@ namespace Cohestra::Hades {
         uint32_t    skidDepth     = CONFIG_HADES_SKID_DEPTH.defaultValue;
         uint32_t    rxQueue       = CONFIG_HADES_RX_QUEUE.defaultValue;
         uint64_t    maxQuietPolls = CONFIG_HADES_MAX_QUIET_POLLS.defaultValue;
+        uint32_t    viewLatency   = CONFIG_HADES_VIEW_LATENCY.defaultValue;
+        uint32_t    anchorLRsp    = CONFIG_HADES_ANCHOR_L_RSP.defaultValue;
+        uint32_t    anchorLDat    = CONFIG_HADES_ANCHOR_L_DAT.defaultValue;
+        uint32_t    anchorLB      = CONFIG_HADES_ANCHOR_L_B.defaultValue;
+        uint32_t    anchorLR      = CONFIG_HADES_ANCHOR_L_R.defaultValue;
 
         if (!ReadHadesKey(configurationLoader, &CONFIG_HADES_MANIFEST, manifestPath) ||
             !ReadHadesKey(configurationLoader, &CONFIG_HADES_BACKEND, backend) ||
@@ -476,7 +497,12 @@ namespace Cohestra::Hades {
             !ReadHadesKey(configurationLoader, &CONFIG_HADES_WINDOW_K, windowK) ||
             !ReadHadesKey(configurationLoader, &CONFIG_HADES_SKID_DEPTH, skidDepth) ||
             !ReadHadesKey(configurationLoader, &CONFIG_HADES_RX_QUEUE, rxQueue) ||
-            !ReadHadesKey(configurationLoader, &CONFIG_HADES_MAX_QUIET_POLLS, maxQuietPolls))
+            !ReadHadesKey(configurationLoader, &CONFIG_HADES_MAX_QUIET_POLLS, maxQuietPolls) ||
+            !ReadHadesKey(configurationLoader, &CONFIG_HADES_VIEW_LATENCY, viewLatency) ||
+            !ReadHadesKey(configurationLoader, &CONFIG_HADES_ANCHOR_L_RSP, anchorLRsp) ||
+            !ReadHadesKey(configurationLoader, &CONFIG_HADES_ANCHOR_L_DAT, anchorLDat) ||
+            !ReadHadesKey(configurationLoader, &CONFIG_HADES_ANCHOR_L_B, anchorLB) ||
+            !ReadHadesKey(configurationLoader, &CONFIG_HADES_ANCHOR_L_R, anchorLR))
             return 1;
 
         if (manifestPath.empty())
@@ -514,8 +540,8 @@ namespace Cohestra::Hades {
             skidDepth = 2 * manifest.tickBatch;
         }
 
-        spdlog::info("HADES-Fabric link: design '{}', session '{}', backend '{}', window_k={}, skid_depth={}, rx_queue={}.",
-            manifest.designName, manifest.sessionName, backend, windowK, skidDepth, rxQueue);
+        spdlog::info("HADES-Fabric link: design '{}', session '{}', backend '{}', window_k={}, skid_depth={}, rx_queue={}, view_latency={}.",
+            manifest.designName, manifest.sessionName, backend, windowK, skidDepth, rxQueue, viewLatency);
 
         for (const auto& chan : manifest.channels)
             spdlog::info(" - chan {} {:14s} {} {}b token, fifo {}, granule {}.",
@@ -530,12 +556,16 @@ namespace Cohestra::Hades {
         auto transport = Hades::MakeTransport(backend, jtagUrl, manifest, linkSeed);
 
         auto store = std::make_shared<Hades::HadesFlitStore>(
-            Hades::BoundaryConfig { .skidDepth = skidDepth, .rxQueue = rxQueue });
+            Hades::BoundaryConfig { .skidDepth = skidDepth, .rxQueue = rxQueue,
+                                    .viewLatency = viewLatency,
+                                    .anchorLRsp = anchorLRsp, .anchorLDat = anchorLDat,
+                                    .anchorLB = anchorLB, .anchorLR = anchorLR });
 
         Hades::LinkConfig linkConfig;
         linkConfig.windowK       = windowK;
         linkConfig.maxInflight   = manifest.maxInflight;
         linkConfig.maxQuietPolls = maxQuietPolls;
+        linkConfig.viewLatency   = viewLatency;
 
         auto link = std::make_shared<Hades::HadesLink>(
             std::move(transport), manifest, linkConfig, store.get());
