@@ -22,6 +22,34 @@ AXIMemory -> HadesAXISlaveInterface ┘        pack/unpack, echo retire)
                     hades::TransportIF ── loopback mock | JTAG/TCP bridge
 ```
 
+## Self-neutralizing build (opt-in)
+
+Every source file in this layer is wrapped in a guard:
+
+```c
+#if defined(COHESTRA_HADES)
+#  if !__has_include(<hades/transport.hpp>)
+#    error "... set HADES_FABRIC_ROOT"
+#  endif
+#endif
+#if defined(COHESTRA_HADES) || __has_include(<hades/transport.hpp>)
+... entire file ...
+#endif
+```
+
+Outside this layer's own opt-in build every translation unit compiles EMPTY,
+so foreign builds that sweep `cchi/cohestra/**` (cohestra_v3's GLOB, the
+`cchi/build` Makefile header check) are unaffected by the layer's presence.
+
+**Consumer contract**: to actually compile the layer's content you need
+EITHER `COHESTRA_HADES=1` (this CMake exports it PUBLIC on
+`cohestra_hades_core` and `cohestra_hades`, so target-based consumers inherit
+it) OR the HADES-Fabric headers on the include path
+(`$HADES_FABRIC_ROOT/runtime/include` — the rehearsal uses this form, since
+it links the archive by file path and does not inherit target defines).
+Defining `COHESTRA_HADES` without the headers on the path is a hard `#error`
+by design. Visual Studio project files are out of scope for this layer.
+
 ## Build
 
 ```sh

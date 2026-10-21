@@ -131,6 +131,7 @@ set(COHESTRA_HADES_INCLUDE_DIRS
 )
 
 set(COHESTRA_HADES_DEFINES
+    COHESTRA_HADES=1
     COHESTRA_TAGALIAS_WIDTH=${COHESTRA_HADES_TAGALIAS_WIDTH}
     COHESTRA_CHI_NODEID_WIDTH=${COHESTRA_HADES_CHI_NODEID_WIDTH}
     COHESTRA_CHI_REQ_ADDR_WIDTH=${COHESTRA_HADES_CHI_REQ_ADDR_WIDTH}
@@ -171,6 +172,10 @@ target_compile_definitions(cohestra_hades_core PUBLIC
 # ---- cohestra_hades (the executable) --------------------------------------------
 add_executable(cohestra_hades
     "${CMAKE_CURRENT_LIST_DIR}/executable.cpp"
+)
+
+target_compile_definitions(cohestra_hades PUBLIC
+    COHESTRA_HADES=1
 )
 
 target_link_libraries(cohestra_hades PRIVATE
