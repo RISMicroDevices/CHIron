@@ -135,6 +135,76 @@ upstream nodes' CacheLine events and re-verifies every data-carrying grant,
 dataless grant, and load. Any mismatch fails the run (exit code 2, independent
 of `fail.on.mismatch`); any Taurus transaction denial also fails the run.
 
+### Taurus reply randomization
+
+Optional `[root]` overrides control randomized/delayed outbound Taurus replies
+without changing TXREQ/TXEVT requests or Cohestra's cross-channel polling
+order; Cohestra enables reply ranking and 0..8-tick delays by default. The scope is TXRSP (CompAck/SnpResp) and TXDAT
+(CopyBackWrData/SnpRespData) only. See
+`../../icn/taurus/docs/USER_GUIDE.md` §7.2 for selection and eligibility
+details.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `upstream.type1.random.seed` | `0` | base reply seed; each node's seed is base + its zero-based upstream index |
+| `upstream.type1.random.reply.order.enable` | `1` | `1` selects pending replies by a stable seed/action-age rank instead of age order |
+| `upstream.type1.random.reply.delay.min` | `0` | inclusive minimum per-action reply delay |
+| `upstream.type1.random.reply.delay.max` | `8` | inclusive maximum delay; `0` means immediate eligibility |
+
+Cohestra enables these defaults even though Taurus's own default configuration
+is deterministic and immediate. Ordering and delay are independent. Ranks and
+delays are deterministic for a given node seed and action-age schedule, with no
+mutable RNG in Taurus Peek/Pop. Equal ranks tie-break by action age and line
+key. Per-line priorities remain SnpResp before CompAck and SNP DAT0/DAT1 before
+EVT DAT0/DAT1. Normal channel-pending beats emit DAT0 before DAT1 (the existing
+listener-forced data-hazard path is the documented exception), and both beats of
+a reply share rank and ready time. Set `order.enable=0` and `delay.max=0` for
+legacy age ordering and immediate replies. A delay range with min > max fails
+initialization.
+
+Delays use raw `Tick(time)` units. V3 and VCS advance time by **2 ticks per
+clock cycle** (half-cycle ticks), while Earth uses **1 tick per cycle**. A reply
+pended at time `T` is eligible at `T+D` (saturating), so a fixed `D=2` delay is
+one V3/VCS cycle or two Earth cycles. `min=max` selects a fixed delay; a ranged
+delay is sampled once per action from the inclusive interval. An unready reply
+skips its line for that polling call and fires no Taurus `PreChannelChosen`
+event. Reply delay does not postpone grant futures or change hazard/protocol
+state at pend time.
+
+Current observer caveat: a delayed dirty SnpRespData response can be legally
+overtaken by a same-line request after TickSNP fixed its Resp/data. The
+observer-only `CacheStateMap` may then emit a false
+`XACT_DENIED_STATE_RESP_SNPRESPDATA` warning because it evaluates the narrowed
+later state instead of response-determination history. This does not indicate a
+CacheLineDataMonitor mismatch; the checker integration needs that history fix.
+A randomized OpenLLC smoke exposed this warning while still reaching FINISHED
+with zero mismatches and zero watchdog triggers.
+
+The feature is on by default in Cohestra (`order.enable=1`, delay `0..8`). To
+customize it, set a seed and/or bounds in `[root]`:
+
+```ini
+upstream.type1.random.seed                  = 1000
+upstream.type1.random.reply.delay.min       = 2
+upstream.type1.random.reply.delay.max       = 8
+```
+
+For a deterministic legacy replay, opt out explicitly:
+
+```ini
+upstream.type1.random.reply.order.enable    = 0
+upstream.type1.random.reply.delay.max       = 0
+```
+
+Then run, for example:
+
+```bash
+./build/cohestra_v3 --config config.fuzz.random.ini --cycles 1000000
+```
+
+An inclusive 2..8 delay range is 1..4 cycles in V3/VCS (or 2..8 cycles in
+Earth). The shipped `config.fuzz.ini` keeps only commented-out examples.
+
 With `fuzz.ari.cmo.enable = 1` (default), FuzzARI emits real CBO transactions:
 CBOClean / CBOFlush / CBOInval (CCHI `CleanShared` / `CleanInvalid` /
 `MakeInvalid` → `CompCMO`), exercising the home's CMO flows against live

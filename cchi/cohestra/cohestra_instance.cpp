@@ -84,6 +84,20 @@ namespace Cohestra {
                         false   // enableStrictInitialState
                     );
 
+                    CCHI::Taurus::UpstreamNode<CommonFlitConfigurationType1>::ReplyRandomizationConfig replyRandomization;
+                    replyRandomization.randomPendingPick = config.GetOrDefault(&CONFIG_T1_UPSTREAM_RANDOM_REPLY_ORDER_ENABLE);
+                    replyRandomization.delayMin = config.GetOrDefault(&CONFIG_T1_UPSTREAM_RANDOM_REPLY_DELAY_MIN);
+                    replyRandomization.delayMax = config.GetOrDefault(&CONFIG_T1_UPSTREAM_RANDOM_REPLY_DELAY_MAX);
+                    replyRandomization.seed = config.GetOrDefault(&CONFIG_T1_UPSTREAM_RANDOM_SEED) + index;
+
+                    if (!type1Upstreams[index]->SetReplyRandomizationConfig(replyRandomization))
+                    {
+                        logger->error("Invalid Type 1 Upstream {} reply randomization delay range (min={}, max={}). Stopping initialization.",
+                            index, replyRandomization.delayMin, replyRandomization.delayMax);
+                        state = InstanceState::FAILED;
+                        return;
+                    }
+
                     if (events)
                         events->OnUpstreamInitialized(*this, index, *type1Upstreams[index]);
                 }
@@ -192,7 +206,11 @@ namespace Cohestra {
                     LoadPreInitConfigurationEntry(loader, &CONFIG_T1_UPSTREAM_BUFFER_EVT) &&
                     LoadPreInitConfigurationEntry(loader, &CONFIG_T1_UPSTREAM_BUFFER_REQ) &&
                     LoadPreInitConfigurationEntry(loader, &CONFIG_T1_UPSTREAM_BUFFER_RSP) &&
-                    LoadPreInitConfigurationEntry(loader, &CONFIG_T1_UPSTREAM_BUFFER_DAT);
+                    LoadPreInitConfigurationEntry(loader, &CONFIG_T1_UPSTREAM_BUFFER_DAT) &&
+                    LoadPreInitConfigurationEntry(loader, &CONFIG_T1_UPSTREAM_RANDOM_SEED) &&
+                    LoadPreInitConfigurationEntry(loader, &CONFIG_T1_UPSTREAM_RANDOM_REPLY_ORDER_ENABLE) &&
+                    LoadPreInitConfigurationEntry(loader, &CONFIG_T1_UPSTREAM_RANDOM_REPLY_DELAY_MIN) &&
+                    LoadPreInitConfigurationEntry(loader, &CONFIG_T1_UPSTREAM_RANDOM_REPLY_DELAY_MAX);
 
         for (size_t i = 0; i < VECTOR_CONFIG_STIMULATOR.size() && good; ++i)
         {

@@ -11,6 +11,9 @@
 #include <vector>
 #include <deque>
 #include <span>
+#include <algorithm>
+#include <cstdint>
+#include <limits>
 
 #include "../../xact/cchi_joint.hpp"
 #include "../../xact/cchi_xact_state.hpp"
@@ -77,6 +80,14 @@ namespace CCHI::Taurus {
     //
     template<FlitConfigurationConcept config>
     class UpstreamNode {
+    public:
+        struct ReplyRandomizationConfig {
+            bool        randomPendingPick   = false;
+            uint64_t    delayMin            = 0;
+            uint64_t    delayMax            = 0;
+            uint64_t    seed                = 0;
+        };
+
     public:
         // *NOTE: event listeners follow the same callback contract as FutureNow
         //        (no calls back into the same node - see ERRATA N3).
@@ -241,6 +252,12 @@ namespace CCHI::Taurus {
             uint64_t                                    ageTXEVT                = 0;
             uint64_t                                    ageTXREQ                = 0;
             uint64_t                                    ageSNP                  = 0;
+
+            uint64_t                                    readyREQChannelTXRSP    = 0;
+            uint64_t                                    readySNPChannelTXRSP    = 0;
+            uint64_t                                    readySNPChannelTXDAT0   = 0;
+            uint64_t                                    readySNPChannelTXDAT1   = 0;
+            uint64_t                                    readyEVTChannelTXDAT    = 0;
 
         public:
             CacheLine(UpstreamNode<config>* owner, uint64_t PA) noexcept;
@@ -447,6 +464,9 @@ namespace CCHI::Taurus {
         std::deque<CMOEntry>                    cmoTracker;
 
     protected:
+        ReplyRandomizationConfig                replyRandomization;
+
+    protected:
         // TxnID allocation bitmap for upstream-initiated (REQ/EVT) transactions,
         // one bit per ID of the configured total xaction limit (clamped to the
         // TxnID field capacity, see the constructor)
@@ -521,6 +541,11 @@ namespace CCHI::Taurus {
 
         Xact::CacheStateMap<config>&             GetCacheStateMap() noexcept;
         const Xact::CacheStateMap<config>&       GetCacheStateMap() const noexcept;
+
+        // construction-time or quiescent configuration; returns false and leaves
+        // the current configuration unchanged when delayMin exceeds delayMax
+        bool                                    SetReplyRandomizationConfig(const ReplyRandomizationConfig& randomization) noexcept;
+        const ReplyRandomizationConfig&         GetReplyRandomizationConfig() const noexcept;
         
     public:
         bool                                    IsValid(uint64_t PA) const noexcept;
@@ -569,9 +594,10 @@ namespace CCHI::Taurus {
         // start (the Do* entry points and snoop acceptance) - see CacheLine::ageTXEVT
         uint64_t                                emissionAgeCounter = 0;
 
-        // per-channel emission order: one (action age, LineKey) entry per pending
-        // channel slot, kept sorted by AgedPush - the emission order per channel
-        // equals the action-start (Do* call) order
+        // per-channel pending-slot bookkeeping: one (action age, LineKey) entry
+        // per slot, kept sorted by AgedPush - by default, emission order per
+        // channel equals action-start (Do* call) order; TXRSP/TXDAT additionally
+        // support opt-in seeded random ranks and per-action reply delays
         std::deque<std::pair<uint64_t, uint64_t>>
                                                 agedTXEVT;
         std::deque<std::pair<uint64_t, uint64_t>>
@@ -583,6 +609,17 @@ namespace CCHI::Taurus {
 
     protected:
         uint64_t                                NextEmissionAge() noexcept;
+
+        static uint64_t                         MixReplyRandom(uint64_t value) noexcept;
+        uint64_t                                ReplyRandomValue(uint64_t age, uint64_t domain) const noexcept;
+        uint64_t                                ReplyRandomRank(uint64_t age) const noexcept;
+        uint64_t                                ReplyDelay(uint64_t age) const noexcept;
+        uint64_t                                ReplyReadyTime(uint64_t age) const noexcept;
+
+        std::vector<std::pair<uint64_t, uint64_t>>
+                                                GatherRandomTXRSPCandidates() noexcept;
+        std::vector<std::pair<uint64_t, uint64_t>>
+                                                GatherRandomTXDATCandidates() noexcept;
 
         // insert at the first position with a greater age (stable for equal
         // ages); the common case - the new entry is the youngest - is O(1) at
@@ -620,22 +657,20 @@ namespace CCHI::Taurus {
         void                                    CheckCacheStateTXUpDAT(uint64_t PA, std::shared_ptr<Xact::Xaction<config>> xaction, const Flits::UpDAT<config>& flit) noexcept;
 
     public:
-        // *NOTE: emission-order contract - per channel, pending flits are offered
-        //        in action-start order: the emission order extracted from the
-        //        action ages is identical to the Do* call order (snoops ordered
-        //        by acceptance), across lines and across action classes
-        //        (DoLoad/DoStore*/DoEvict, DoPrefetch*, DoCBO* - no action class
-        //        has fixed precedence; TXREQ merges per-line REQs and the
-        //        prefetch/CMO queue fronts into one age order). Per-line slot
-        //        priorities are unchanged (SNP-RSP before CompAck; SNP-DAT0,
-        //        SNP-DAT1, EVT-DAT0, EVT-DAT1) - a line selected through an
-        //        older slot's deque entry may emit its newer slot's flit.
-        //        Hazard-parked flits enter the order with their action-start
-        //        age when they are released to the channel. A PreChannelChosen
-        //        cancellation keeps the flit pended, skips that line for the
-        //        rest of the call and picks the next candidate strictly in age
-        //        order - a cancelled candidate is never re-offered within the
-        //        same call, and is offered first again on the next call.
+        // *NOTE: emission-order contract - by default, pending flits are offered
+        //        in action-start order (snoops ordered by acceptance), across
+        //        lines and action classes; TXREQ merges per-line REQs and the
+        //        prefetch/CMO queue fronts. TXRSP/TXDAT can instead use opt-in
+        //        stable random ranks derived from the configured seed and each
+        //        reply's action age. Per-line priorities always remain SNP-RSP
+        //        before CompAck and SNP-DAT0, SNP-DAT1, EVT-DAT0, EVT-DAT1.
+        //        Hazard-parked flits retain their action-start age when released.
+        //        Reply delays only postpone channel eligibility: an unready
+        //        highest-priority reply skips its line without firing chosen
+        //        events. A PreChannelChosen cancellation likewise skips the line
+        //        for the rest of the call; the next candidate follows the active
+        //        age/random ordering, and the cancelled reply is offered normally
+        //        again on the next call.
         std::optional<Flits::EVT<config>>       PeekTXEVT() noexcept;
         std::optional<Flits::EVT<config>>       PopTXEVT() noexcept;
 
@@ -808,6 +843,22 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
+    inline bool UpstreamNode<config>::SetReplyRandomizationConfig(const ReplyRandomizationConfig& randomization) noexcept
+    {
+        if (randomization.delayMin > randomization.delayMax)
+            return false;
+
+        replyRandomization = randomization;
+        return true;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline const typename UpstreamNode<config>::ReplyRandomizationConfig& UpstreamNode<config>::GetReplyRandomizationConfig() const noexcept
+    {
+        return replyRandomization;
+    }
+
+    template<FlitConfigurationConcept config>
     inline constexpr uint64_t UpstreamNode<config>::LineBase(uint64_t PA) noexcept
     {
         return PA & ~((uint64_t{1} << Sizes::B64) - 1);
@@ -860,6 +911,53 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::MixReplyRandom(uint64_t value) noexcept
+    {
+        value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        value = (value ^ (value >> 27)) * 0x94D049BB133111EBULL;
+        return value ^ (value >> 31);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::ReplyRandomValue(uint64_t age, uint64_t domain) const noexcept
+    {
+        return MixReplyRandom(replyRandomization.seed
+                            + 0x9E3779B97F4A7C15ULL * (age + 1 + domain));
+    }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::ReplyRandomRank(uint64_t age) const noexcept
+    {
+        return ReplyRandomValue(age, 0);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::ReplyDelay(uint64_t age) const noexcept
+    {
+        if (replyRandomization.delayMax == 0)
+            return 0;
+
+        const uint64_t span = replyRandomization.delayMax - replyRandomization.delayMin;
+        const uint64_t random = ReplyRandomValue(age, 1);
+
+        if (span == std::numeric_limits<uint64_t>::max())
+            return random;
+
+        return replyRandomization.delayMin + random % (span + 1);
+    }
+
+    template<FlitConfigurationConcept config>
+    inline uint64_t UpstreamNode<config>::ReplyReadyTime(uint64_t age) const noexcept
+    {
+        if (replyRandomization.delayMax == 0)
+            return 0;
+
+        const uint64_t delay = ReplyDelay(age);
+        const uint64_t maximum = std::numeric_limits<uint64_t>::max();
+        return delay > maximum - time ? maximum : time + delay;
+    }
+
+    template<FlitConfigurationConcept config>
     inline void UpstreamNode<config>::AgedPush(std::deque<std::pair<uint64_t, uint64_t>>& queue, uint64_t age, uint64_t key) noexcept
     {
         size_t pos = queue.size();
@@ -882,6 +980,90 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
+    inline std::vector<std::pair<uint64_t, uint64_t>> UpstreamNode<config>::GatherRandomTXRSPCandidates() noexcept
+    {
+        std::vector<uint64_t> seen;
+        std::vector<std::pair<uint64_t, uint64_t>> candidates;
+
+        for (size_t i = 0; i < agedTXRSP.size(); ++i)
+        {
+            auto [age, key] = agedTXRSP[i];
+
+            if (std::find(seen.begin(), seen.end(), key) != seen.end())
+                continue;
+
+            auto lineIt = cacheable.find(key);
+            if (lineIt == cacheable.end()
+             || (!(lineIt->second->pendingSNPChannelTXRSP && lineIt->second->ageSNP == age)
+              && !(lineIt->second->pendingREQChannelTXRSP && lineIt->second->ageTXREQ == age)))
+            {
+                agedTXRSP.erase(agedTXRSP.begin() + i);
+                --i;
+                continue;
+            }
+
+            seen.push_back(key);
+
+            const CacheLine& cacheLine = *lineIt->second;
+            if (cacheLine.pendingSNPChannelTXRSP)
+                candidates.push_back({ cacheLine.ageSNP, key });
+            else if (cacheLine.pendingREQChannelTXRSP)
+                candidates.push_back({ cacheLine.ageTXREQ, key });
+        }
+
+        std::sort(candidates.begin(), candidates.end(), [this](const auto& left, const auto& right) {
+            const uint64_t leftRank = ReplyRandomRank(left.first);
+            const uint64_t rightRank = ReplyRandomRank(right.first);
+            return leftRank != rightRank ? leftRank < rightRank : left < right;
+        });
+
+        return candidates;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline std::vector<std::pair<uint64_t, uint64_t>> UpstreamNode<config>::GatherRandomTXDATCandidates() noexcept
+    {
+        std::vector<uint64_t> seen;
+        std::vector<std::pair<uint64_t, uint64_t>> candidates;
+
+        for (size_t i = 0; i < agedTXDAT.size(); ++i)
+        {
+            auto [age, key] = agedTXDAT[i];
+
+            if (std::find(seen.begin(), seen.end(), key) != seen.end())
+                continue;
+
+            auto lineIt = cacheable.find(key);
+            if (lineIt == cacheable.end()
+             || (!(lineIt->second->pendingSNPChannelTXDAT0 && lineIt->second->ageSNP == age)
+              && !(lineIt->second->pendingSNPChannelTXDAT1 && lineIt->second->ageSNP == age)
+              && !(lineIt->second->pendingEVTChannelTXDAT0 && lineIt->second->ageTXEVT == age)
+              && !(lineIt->second->pendingEVTChannelTXDAT1 && lineIt->second->ageTXEVT == age)))
+            {
+                agedTXDAT.erase(agedTXDAT.begin() + i);
+                --i;
+                continue;
+            }
+
+            seen.push_back(key);
+
+            const CacheLine& cacheLine = *lineIt->second;
+            if (cacheLine.pendingSNPChannelTXDAT0 || cacheLine.pendingSNPChannelTXDAT1)
+                candidates.push_back({ cacheLine.ageSNP, key });
+            else if (cacheLine.pendingEVTChannelTXDAT0 || cacheLine.pendingEVTChannelTXDAT1)
+                candidates.push_back({ cacheLine.ageTXEVT, key });
+        }
+
+        std::sort(candidates.begin(), candidates.end(), [this](const auto& left, const auto& right) {
+            const uint64_t leftRank = ReplyRandomRank(left.first);
+            const uint64_t rightRank = ReplyRandomRank(right.first);
+            return leftRank != rightRank ? leftRank < rightRank : left < right;
+        });
+
+        return candidates;
+    }
+
+    template<FlitConfigurationConcept config>
     inline void UpstreamNode<config>::PendEVTChannelTXEVT(CacheLine& cacheLine, const Flits::EVT<config>& flit, uint64_t age) noexcept
     {
         cacheLine.pendingEVTChannelTXEVT = flit;
@@ -901,6 +1083,7 @@ namespace CCHI::Taurus {
     inline void UpstreamNode<config>::PendREQChannelTXRSP(CacheLine& cacheLine, const Flits::UpRSP<config>& flit) noexcept
     {
         cacheLine.pendingREQChannelTXRSP = flit;
+        cacheLine.readyREQChannelTXRSP = ReplyReadyTime(cacheLine.ageTXREQ);
         AgedPush(agedTXRSP, cacheLine.ageTXREQ, LineKey(cacheLine.PA));
     }
 
@@ -908,6 +1091,7 @@ namespace CCHI::Taurus {
     inline void UpstreamNode<config>::PendSNPChannelTXRSP(CacheLine& cacheLine, const Flits::UpRSP<config>& flit) noexcept
     {
         cacheLine.pendingSNPChannelTXRSP = flit;
+        cacheLine.readySNPChannelTXRSP = ReplyReadyTime(cacheLine.ageSNP);
         AgedPush(agedTXRSP, cacheLine.ageSNP, LineKey(cacheLine.PA));
     }
 
@@ -915,6 +1099,7 @@ namespace CCHI::Taurus {
     inline void UpstreamNode<config>::PendSNPChannelTXDAT0(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept
     {
         cacheLine.pendingSNPChannelTXDAT0 = flit;
+        cacheLine.readySNPChannelTXDAT0 = ReplyReadyTime(cacheLine.ageSNP);
         AgedPush(agedTXDAT, cacheLine.ageSNP, LineKey(cacheLine.PA));
     }
 
@@ -922,6 +1107,7 @@ namespace CCHI::Taurus {
     inline void UpstreamNode<config>::PendSNPChannelTXDAT1(CacheLine& cacheLine, const Flits::UpDAT<config>& flit) noexcept
     {
         cacheLine.pendingSNPChannelTXDAT1 = flit;
+        cacheLine.readySNPChannelTXDAT1 = ReplyReadyTime(cacheLine.ageSNP);
         AgedPush(agedTXDAT, cacheLine.ageSNP, LineKey(cacheLine.PA));
     }
 
@@ -2000,6 +2186,9 @@ namespace CCHI::Taurus {
                         {
                             justGotDBIDResp1 = false;
                         }
+
+                        if (justGotDBIDResp0 || justGotDBIDResp1)
+                            cacheLine.readyEVTChannelTXDAT = ReplyReadyTime(cacheLine.ageTXEVT);
                         
                         if (justGotDBIDResp0)
                         {
@@ -2997,9 +3186,15 @@ namespace CCHI::Taurus {
         // and after a cancellation its remaining entries must not re-offer it
         std::vector<uint64_t> skipped;
 
-        for (size_t i = 0; i < agedTXRSP.size(); ++i)
+        std::vector<std::pair<uint64_t, uint64_t>> randomCandidates;
+        const bool randomPendingPick = replyRandomization.randomPendingPick;
+
+        if (randomPendingPick)
+            randomCandidates = GatherRandomTXRSPCandidates();
+
+        for (size_t i = 0; i < (randomPendingPick ? randomCandidates.size() : agedTXRSP.size()); ++i)
         {
-            auto [age, key] = agedTXRSP[i];
+            auto [age, key] = randomPendingPick ? randomCandidates[i] : agedTXRSP[i];
 
             bool isSkipped = false;
             for (uint64_t skippedKey : skipped)
@@ -3019,8 +3214,11 @@ namespace CCHI::Taurus {
              || (!(lineIt->second->pendingSNPChannelTXRSP && lineIt->second->ageSNP == age)
               && !(lineIt->second->pendingREQChannelTXRSP && lineIt->second->ageTXREQ == age)))
             {
-                agedTXRSP.erase(agedTXRSP.begin() + i);
-                --i;
+                if (!randomPendingPick)
+                {
+                    agedTXRSP.erase(agedTXRSP.begin() + i);
+                    --i;
+                }
                 continue;
             }
 
@@ -3028,6 +3226,12 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXRSP)
             {
+                if (time < cacheLine.readySNPChannelTXRSP)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
+
                 if (events)
                     if (events->OnSNPUpRSPPreChannelChosen(*this, cacheLine, *cacheLine.pendingSNPChannelTXRSP).IsCancelled())
                     {
@@ -3043,6 +3247,12 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingREQChannelTXRSP)
             {
+                if (time < cacheLine.readyREQChannelTXRSP)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
+
                 if (events)
                     if (events->OnREQUpRSPPreChannelChosen(*this, cacheLine, *cacheLine.pendingREQChannelTXRSP).IsCancelled())
                     {
@@ -3068,9 +3278,15 @@ namespace CCHI::Taurus {
         // and after a cancellation its remaining entries must not re-offer it
         std::vector<uint64_t> skipped;
 
-        for (size_t i = 0; i < agedTXRSP.size(); ++i)
+        std::vector<std::pair<uint64_t, uint64_t>> randomCandidates;
+        const bool randomPendingPick = replyRandomization.randomPendingPick;
+
+        if (randomPendingPick)
+            randomCandidates = GatherRandomTXRSPCandidates();
+
+        for (size_t i = 0; i < (randomPendingPick ? randomCandidates.size() : agedTXRSP.size()); ++i)
         {
-            auto [age, key] = agedTXRSP[i];
+            auto [age, key] = randomPendingPick ? randomCandidates[i] : agedTXRSP[i];
 
             bool isSkipped = false;
             for (uint64_t skippedKey : skipped)
@@ -3090,8 +3306,11 @@ namespace CCHI::Taurus {
              || (!(lineIt->second->pendingSNPChannelTXRSP && lineIt->second->ageSNP == age)
               && !(lineIt->second->pendingREQChannelTXRSP && lineIt->second->ageTXREQ == age)))
             {
-                agedTXRSP.erase(agedTXRSP.begin() + i);
-                --i;
+                if (!randomPendingPick)
+                {
+                    agedTXRSP.erase(agedTXRSP.begin() + i);
+                    --i;
+                }
                 continue;
             }
 
@@ -3099,6 +3318,12 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXRSP)
             {
+                if (time < cacheLine.readySNPChannelTXRSP)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
+
                 auto& flit = *cacheLine.pendingSNPChannelTXRSP;
 
                 if (events)
@@ -3137,6 +3362,12 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingREQChannelTXRSP)
             {
+                if (time < cacheLine.readyREQChannelTXRSP)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
+
                 auto& flit = *cacheLine.pendingREQChannelTXRSP;
 
                 if (events)
@@ -3184,10 +3415,15 @@ namespace CCHI::Taurus {
         // common case - a line occupies one deque entry per pending beat, and
         // after a cancellation its remaining entries must not re-offer it
         std::vector<uint64_t> skipped;
+        std::vector<std::pair<uint64_t, uint64_t>> randomCandidates;
+        const bool randomPendingPick = replyRandomization.randomPendingPick;
 
-        for (size_t i = 0; i < agedTXDAT.size(); ++i)
+        if (randomPendingPick)
+            randomCandidates = GatherRandomTXDATCandidates();
+
+        for (size_t i = 0; i < (randomPendingPick ? randomCandidates.size() : agedTXDAT.size()); ++i)
         {
-            auto [age, key] = agedTXDAT[i];
+            auto [age, key] = randomPendingPick ? randomCandidates[i] : agedTXDAT[i];
 
             bool isSkipped = false;
             for (uint64_t skippedKey : skipped)
@@ -3209,8 +3445,11 @@ namespace CCHI::Taurus {
               && !(lineIt->second->pendingEVTChannelTXDAT0 && lineIt->second->ageTXEVT == age)
               && !(lineIt->second->pendingEVTChannelTXDAT1 && lineIt->second->ageTXEVT == age)))
             {
-                agedTXDAT.erase(agedTXDAT.begin() + i);
-                --i;
+                if (!randomPendingPick)
+                {
+                    agedTXDAT.erase(agedTXDAT.begin() + i);
+                    --i;
+                }
                 continue;
             }
 
@@ -3218,6 +3457,11 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXDAT0)
             {
+                if (time < cacheLine.readySNPChannelTXDAT0)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
                 if (events)
                     if (events->OnSNPUpDATPreChannelChosen(*this, cacheLine, *cacheLine.pendingSNPChannelTXDAT0).IsCancelled())
                     {
@@ -3233,6 +3477,11 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXDAT1)
             {
+                if (time < cacheLine.readySNPChannelTXDAT1)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
                 if (events)
                     if (events->OnSNPUpDATPreChannelChosen(*this, cacheLine, *cacheLine.pendingSNPChannelTXDAT1).IsCancelled())
                     {
@@ -3248,6 +3497,11 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingEVTChannelTXDAT0)
             {
+                if (time < cacheLine.readyEVTChannelTXDAT)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
                 if (events)
                     if (events->OnEVTUpDATPreChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXDAT0).IsCancelled())
                     {
@@ -3263,6 +3517,11 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingEVTChannelTXDAT1)
             {
+                if (time < cacheLine.readyEVTChannelTXDAT)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
                 if (events)
                     if (events->OnEVTUpDATPreChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXDAT1).IsCancelled())
                     {
@@ -3287,10 +3546,15 @@ namespace CCHI::Taurus {
         // common case - a line occupies one deque entry per pending beat, and
         // after a cancellation its remaining entries must not re-offer it
         std::vector<uint64_t> skipped;
+        std::vector<std::pair<uint64_t, uint64_t>> randomCandidates;
+        const bool randomPendingPick = replyRandomization.randomPendingPick;
 
-        for (size_t i = 0; i < agedTXDAT.size(); ++i)
+        if (randomPendingPick)
+            randomCandidates = GatherRandomTXDATCandidates();
+
+        for (size_t i = 0; i < (randomPendingPick ? randomCandidates.size() : agedTXDAT.size()); ++i)
         {
-            auto [age, key] = agedTXDAT[i];
+            auto [age, key] = randomPendingPick ? randomCandidates[i] : agedTXDAT[i];
 
             bool isSkipped = false;
             for (uint64_t skippedKey : skipped)
@@ -3312,8 +3576,11 @@ namespace CCHI::Taurus {
               && !(lineIt->second->pendingEVTChannelTXDAT0 && lineIt->second->ageTXEVT == age)
               && !(lineIt->second->pendingEVTChannelTXDAT1 && lineIt->second->ageTXEVT == age)))
             {
-                agedTXDAT.erase(agedTXDAT.begin() + i);
-                --i;
+                if (!randomPendingPick)
+                {
+                    agedTXDAT.erase(agedTXDAT.begin() + i);
+                    --i;
+                }
                 continue;
             }
 
@@ -3321,6 +3588,11 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXDAT0)
             {
+                if (time < cacheLine.readySNPChannelTXDAT0)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
                 auto& flit = *cacheLine.pendingSNPChannelTXDAT0;
 
                 if (events)
@@ -3361,6 +3633,11 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingSNPChannelTXDAT1)
             {
+                if (time < cacheLine.readySNPChannelTXDAT1)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
                 auto& flit = *cacheLine.pendingSNPChannelTXDAT1;
 
                 if (events)
@@ -3397,6 +3674,11 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingEVTChannelTXDAT0)
             {
+                if (time < cacheLine.readyEVTChannelTXDAT)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
                 auto& flit = *cacheLine.pendingEVTChannelTXDAT0;
 
                 if (events)
@@ -3433,6 +3715,11 @@ namespace CCHI::Taurus {
 
             if (cacheLine.pendingEVTChannelTXDAT1)
             {
+                if (time < cacheLine.readyEVTChannelTXDAT)
+                {
+                    skipped.push_back(key);
+                    continue;
+                }
                 auto& flit = *cacheLine.pendingEVTChannelTXDAT1;
 
                 if (events)

@@ -31,6 +31,7 @@ list(FILTER COHESTRA_EARTH_SOURCES EXCLUDE REGEX "/simpleini/")
 list(FILTER COHESTRA_EARTH_SOURCES EXCLUDE REGEX "/build/")
 list(FILTER COHESTRA_EARTH_SOURCES EXCLUDE REGEX "/generated/")
 list(FILTER COHESTRA_EARTH_SOURCES EXCLUDE REGEX "/cohestra_v3/")
+list(FILTER COHESTRA_EARTH_SOURCES EXCLUDE REGEX "/cohestra_vcs/")
 
 file(GLOB_RECURSE COHESTRA_EARTH_HEADERS CONFIGURE_DEPENDS
     "${COHES_TRA_ROOT}/*.h"
@@ -52,6 +53,7 @@ target_include_directories(cohestra_earth PRIVATE
 target_link_libraries(cohestra_earth PRIVATE
     SimpleIni::SimpleIni
     spdlog::spdlog
+    z
 )
 
 if(MSVC)

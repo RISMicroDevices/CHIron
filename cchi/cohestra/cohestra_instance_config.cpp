@@ -31,6 +31,18 @@ namespace Cohestra {
     const ConfigurationEntryBack<uint32_t> Instance::CONFIG_T1_UPSTREAM_BUFFER_DAT
         ("T1_UPSTREAM_BUFFER_DAT", "upstream.type1.buffer.dat", "root", 4, DeserializeUInt32, SerializeUInt32);
 
+    const ConfigurationEntryBack<uint64_t> Instance::CONFIG_T1_UPSTREAM_RANDOM_SEED
+        ("T1_UPSTREAM_RANDOM_SEED", "upstream.type1.random.seed", "root", 0, DeserializeUInt64, SerializeUInt64);
+
+    const ConfigurationEntryBack<bool> Instance::CONFIG_T1_UPSTREAM_RANDOM_REPLY_ORDER_ENABLE
+        ("T1_UPSTREAM_RANDOM_REPLY_ORDER_ENABLE", "upstream.type1.random.reply.order.enable", "root", true, DeserializeBool, SerializeBool);
+
+    const ConfigurationEntryBack<uint64_t> Instance::CONFIG_T1_UPSTREAM_RANDOM_REPLY_DELAY_MIN
+        ("T1_UPSTREAM_RANDOM_REPLY_DELAY_MIN", "upstream.type1.random.reply.delay.min", "root", 0, DeserializeUInt64, SerializeUInt64);
+
+    const ConfigurationEntryBack<uint64_t> Instance::CONFIG_T1_UPSTREAM_RANDOM_REPLY_DELAY_MAX
+        ("T1_UPSTREAM_RANDOM_REPLY_DELAY_MAX", "upstream.type1.random.reply.delay.max", "root", 8, DeserializeUInt64, SerializeUInt64);
+
 
     const ConfigurationEntryBack<std::string> Instance::CONFIG_STIMULATOR_0
         ("STIMULATOR_0", "stimulator.0", "root", "", DeserializeString, SerializeString);

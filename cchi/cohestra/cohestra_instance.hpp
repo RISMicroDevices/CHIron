@@ -41,6 +41,11 @@ namespace Cohestra {
         static const ConfigurationEntryBack<uint32_t>               CONFIG_T1_UPSTREAM_BUFFER_RSP;
         static const ConfigurationEntryBack<uint32_t>               CONFIG_T1_UPSTREAM_BUFFER_DAT;
 
+        static const ConfigurationEntryBack<uint64_t>               CONFIG_T1_UPSTREAM_RANDOM_SEED;
+        static const ConfigurationEntryBack<bool>                   CONFIG_T1_UPSTREAM_RANDOM_REPLY_ORDER_ENABLE;
+        static const ConfigurationEntryBack<uint64_t>               CONFIG_T1_UPSTREAM_RANDOM_REPLY_DELAY_MIN;
+        static const ConfigurationEntryBack<uint64_t>               CONFIG_T1_UPSTREAM_RANDOM_REPLY_DELAY_MAX;
+
         static const ConfigurationEntryBack<std::string>            CONFIG_STIMULATOR_0;
         static const ConfigurationEntryBack<bool>                   CONFIG_STIMULATOR_0_ENABLE;
         static const ConfigurationEntryBack<std::vector<uint32_t>>  CONFIG_STIMULATOR_0_T1_UPSTREAMS;
