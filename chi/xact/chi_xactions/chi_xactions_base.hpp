@@ -1872,7 +1872,7 @@ namespace /*CHI::*/Xact {
                         return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
                 
                 if (FieldTrait::IsApplicable(fields->EWA))
-                    if (MemAttrs::ExtractEWA(origin.MemAttr()) != MemAttrs::ExtractEWA(origin.MemAttr()))
+                    if (MemAttrs::ExtractEWA(origin.MemAttr()) != MemAttrs::ExtractEWA(retry.MemAttr()))
                         return XactDenial::DENIED_RETRY_DIFF_MEMATTR;
 
                 // SnpAttr

@@ -2074,13 +2074,13 @@ namespace /*CHI::*/Xact {
                     = reqDecoder.Decode(nestingXaction->GetFirst().flit.req.Opcode());
 
                 if (!opcodeInfo.IsValid()) // unknown opcode
-                    return this->DeniedTXREQ(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, nestingXaction, time, nestingXaction->GetFirst().flit.req,
+                    return this->DeniedTXREQ(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, nestingXaction, nestingXaction->GetFirst().time, nestingXaction->GetFirst().flit.req,
                         "This Opcode cannot be decoded by RN TXREQ");
 
                 trans = opcodeInfo.GetCompanion();
 
                 if (!trans)
-                    return this->DeniedTXREQ(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, nestingXaction, time, nestingXaction->GetFirst().flit.req,
+                    return this->DeniedTXREQ(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, nestingXaction, nestingXaction->GetFirst().time, nestingXaction->GetFirst().flit.req,
                         "This Opcode is not supported by coherency transition for RN Transfer");
                 
                 //

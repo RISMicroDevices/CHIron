@@ -218,7 +218,7 @@ namespace CHI {
 #endif
             static constexpr size_t     TXNID_LSB   = SRCID_MSB + 1;
             static constexpr size_t     TXNID_MSB   = SRCID_MSB + TXNID_WIDTH;
-            static constexpr FlitRange  TXNID_RANGE = { SRCID_LSB, SRCID_MSB };
+            static constexpr FlitRange  TXNID_RANGE = { TXNID_LSB, TXNID_MSB };
 
             using txnid_t = uint_fit_t<TXNID_WIDTH>;
 
@@ -1223,7 +1223,7 @@ namespace CHI {
 #endif
             static constexpr size_t     TXNID_LSB   = SRCID_MSB + 1;
             static constexpr size_t     TXNID_MSB   = SRCID_MSB + TXNID_WIDTH;
-            static constexpr FlitRange  TXNID_RANGE = { SRCID_LSB, SRCID_MSB };
+            static constexpr FlitRange  TXNID_RANGE = { TXNID_LSB, TXNID_MSB };
 
             using txnid_t = uint_fit_t<TXNID_WIDTH>;
 
@@ -1925,7 +1925,7 @@ namespace CHI {
 #endif
             static constexpr size_t     TXNID_LSB   = SRCID_MSB + 1;
             static constexpr size_t     TXNID_MSB   = SRCID_MSB + TXNID_WIDTH;
-            static constexpr FlitRange  TXNID_RANGE = { SRCID_LSB, SRCID_MSB };
+            static constexpr FlitRange  TXNID_RANGE = { TXNID_LSB, TXNID_MSB };
 
             using txnid_t = uint_fit_t<TXNID_WIDTH>;
 
