@@ -229,3 +229,23 @@ LUNATIC_TEST(Stage4UnsupportedRequestGetsErrorCompletion)
     LUNATIC_CHECK(!driver.node.GetErrors().empty());
     driver.Quiesce();
 }
+
+LUNATIC_TEST(Stage4SublineWriteDataCancelCompletes)
+{
+    CheckedDriver<Config256> driver;
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteNoSnpPtl, 4, 130, 0x29020);
+    request.Size() = 5;
+    driver.PushRequest(request);
+    auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp);
+    Driver<Config256>::DAT cancel{};
+    cancel.SrcID() = 4;
+    cancel.TgtID() = 2;
+    cancel.TxnID() = dbid.DBID();
+    cancel.DBID() = 0;
+    cancel.Opcode() = CHI::Eb::Opcodes::DAT::WriteDataCancel;
+    driver.Oracle(4).WriteData(driver.driver.now, cancel);
+    LUNATIC_CHECK(driver.driver.node.PushRXDAT(cancel));
+    driver.driver.Tick();
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+    driver.Quiesce();
+}

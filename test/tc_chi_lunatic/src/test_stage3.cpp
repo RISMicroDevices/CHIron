@@ -175,8 +175,8 @@ LUNATIC_TEST(Stage3CHIBackendWriteSeparatedResponses)
     LUNATIC_CHECK(driver.node.GetErrors().empty());
     auto beat0 = driver.NextDAT(CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
     auto beat1 = driver.NextDAT(CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
-    LUNATIC_CHECK(beat0.TgtID() == 6 && beat0.DBID() == 77);
-    LUNATIC_CHECK(beat1.TgtID() == 6 && beat1.DBID() == 77);
+    LUNATIC_CHECK(beat0.TgtID() == 6 && beat0.DBID() == 0);
+    LUNATIC_CHECK(beat1.TgtID() == 6 && beat1.DBID() == 0);
 
     response.Opcode() = CHI::Eb::Opcodes::RSP::Comp;
     LUNATIC_CHECK(driver.node.PushRXRSP(response));

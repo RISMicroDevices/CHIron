@@ -132,7 +132,7 @@ void Core::Impl::ActionCoherent(Transaction& transaction)
     {
         case RequestClass::ReadOnce:
         case RequestClass::CoherentRead:
-            if (!transaction.Complete(COMPLETE_MEMORY) && !transaction.homeHit && !flow.snoopDataValid)
+            if (!transaction.Complete(COMPLETE_MEMORY) && !transaction.homeHit && (!flow.snoopDataValid || flow.snoopDataPartial))
             {
                 StartMemoryRead(transaction);
                 return;
@@ -392,11 +392,20 @@ void Core::Impl::ProcessSnoopDAT(Transaction& transaction, const Data& flit)
     const bool dirty = IsDirty(initial);
     if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl)
     {
-        flow.snoopDataPartial = true;
-        for (size_t index = 0; index < bytes; ++index)
+        if (flow.snoopForVictim)
         {
-            flow.snoopValidBytes[offset + index] = flit.byteEnables[index];
-            flow.validBytes[offset + index] = flit.byteEnables[index];
+            flow.victimDataPartial = true;
+            for (size_t index = 0; index < bytes; ++index)
+                flow.victimValidBytes[offset + index] = flit.byteEnables[index];
+        }
+        else
+        {
+            flow.snoopDataPartial = true;
+            for (size_t index = 0; index < bytes; ++index)
+            {
+                flow.snoopValidBytes[offset + index] = flit.byteEnables[index];
+                flow.validBytes[offset + index] = flit.byteEnables[index];
+            }
         }
     }
     const bool replace = flow.snoopForVictim

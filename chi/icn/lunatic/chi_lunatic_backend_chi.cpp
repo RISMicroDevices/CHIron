@@ -13,7 +13,7 @@ void Core::Impl::StartMemoryRead(Transaction& transaction)
         transaction.readyTime = time;
         return;
     }
-    if (transaction.homeHit || (flow.snoopDataValid && !flow.snoopDataPartial))
+    if ((transaction.homeHit && !flow.victimDataPartial) || (flow.snoopDataValid && !flow.snoopDataPartial && !flow.victimDataPartial))
     {
         transaction.memoryRequired = false;
         transaction.Mark(COMPLETE_MEMORY);
@@ -21,7 +21,7 @@ void Core::Impl::StartMemoryRead(Transaction& transaction)
         transaction.readyTime = pipeline.ScheduleData(time);
         return;
     }
-    if (options.backend == BackendKind::CHI && flow.snoopDataPartial && !transaction.homeHit)
+    if (options.backend == BackendKind::CHI && (flow.snoopDataPartial || flow.victimDataPartial) && !transaction.homeHit)
     {
         flow.baselineFetch = true;
         flow.baselineFetched = false;
@@ -29,6 +29,7 @@ void Core::Impl::StartMemoryRead(Transaction& transaction)
 
     transaction.memoryRequired = true;
     flow.memoryWrite = false;
+    flow.backendBeatMask = 0;
     if (options.backend == BackendKind::Internal)
     {
         flow.memoryReady = pipeline.SaturatingAdd(time, memory.NextLatency(options.memoryLatency));
@@ -43,6 +44,12 @@ void Core::Impl::StartMemoryRead(Transaction& transaction)
     request.target = options.subordinateId;
     request.txnId = transaction.handle;
     request.opcode = CHI::Eb::Opcodes::REQ::ReadNoSnp;
+    if (flow.victimPending && flow.victimDataPartial)
+    {
+        request.address = flow.victimLine.address;
+        request.nonSecure = flow.victimLine.nonSecure;
+    }
+    request.memAttr &= ~CHI::Eb::MemAttrs::EWA;
     request.allowRetry = false;
     request.expCompAck = false;
     if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
@@ -166,7 +173,7 @@ void Core::Impl::AdvanceBackendWrite(Transaction& transaction)
     data.target = options.subordinateId;
     data.homeNid = nodeId;
     data.txnId = transaction.handle;
-    data.dbid = flow.backendDBID;
+    data.dbid = 0;
     data.opcode = CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
     data.dataId = offset / 16;
     data.ccid = flow.spillPending ? (flow.spillLine.address >> 4) & 3 : (transaction.request.address >> 4) & 3;
@@ -302,13 +309,16 @@ bool Core::Impl::HandleBackendDAT(Transaction& transaction, const Data& flit)
     if (received & bit)
         return false;
 
+    const bool victimBaseline = flow.baselineFetch && flow.victimPending && flow.victimDataPartial;
+    LineData& destination = victimBaseline ? flow.victimData : transaction.data;
     for (size_t index = 0; index < bytes; ++index)
     {
         const bool preserve = flow.baselineFetch &&
-            (flow.snoopDataPartial ? flow.snoopValidBytes[offset + index]
-                                   : IsCopybackRequest(transaction.request.opcode) && transaction.byteEnables[offset + index]);
+            (victimBaseline ? flow.victimValidBytes[offset + index]
+                            : flow.snoopDataPartial ? flow.snoopValidBytes[offset + index]
+                            : IsCopybackRequest(transaction.request.opcode) && transaction.byteEnables[offset + index]);
         if (!preserve)
-            transaction.data[offset + index] = flit.bytes[index];
+            destination[offset + index] = flit.bytes[index];
         if (!flow.baselineFetch || !IsCopybackRequest(transaction.request.opcode))
             transaction.byteEnables[offset + index] = 1;
         transaction.dataCheck[offset + index] = flit.dataCheck[index];
@@ -370,12 +380,13 @@ bool Core::Impl::FetchBaseline(Transaction& transaction)
     FlowState& flow = flows.at(transaction.handle);
     if (options.backend == BackendKind::Internal || flow.baselineFetched)
         return true;
-    if (flow.backendPhase == BackendPhase::Done)
+    if (flow.baselineFetch && flow.backendPhase == BackendPhase::Done)
     {
         flow.baselineFetched = true;
         return true;
     }
     flow.baselineFetch = true;
+    flow.baselineFetched = false;
     StartMemoryRead(transaction);
     return false;
 }

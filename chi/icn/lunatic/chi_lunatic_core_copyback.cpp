@@ -330,6 +330,11 @@ bool Core::Impl::CompleteVictim(Transaction& transaction)
     FlowState& flow = flows.at(transaction.handle);
     if (!flow.victimPending)
         return true;
+    if (options.backend == BackendKind::CHI && flow.victimDataPartial && !directory.Find(flow.victimLine))
+        flow.baselineFetched = false;
+    if (options.backend == BackendKind::CHI && flow.victimDataPartial && !directory.Find(flow.victimLine) &&
+        !FetchBaseline(transaction))
+        return false;
 
     if (flow.victimSnoopFilterOnly)
     {
@@ -361,6 +366,8 @@ bool Core::Impl::CompleteVictim(Transaction& transaction)
     flow.victimPending = false;
     flow.victimSnoopFilterOnly = false;
     flow.victimDataValid = false;
+    flow.victimDataPartial = false;
+    flow.victimValidBytes.fill(0);
     flow.victimDirty = false;
     flow.snoopForVictim = false;
     flow.snoopLine = transaction.request.Line();

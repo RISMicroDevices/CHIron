@@ -141,7 +141,7 @@ void Core::Impl::ProcessDAT(const Data& flit)
     if (flit.opcode == DAT::NonCopyBackWrData || flit.opcode == DAT::NCBWrDataCompAck ||
         flit.opcode == DAT::CopyBackWrData || flit.opcode == DAT::WriteDataCancel)
     {
-        Transaction* transaction = tracker.FindDBID(flit.source, flit.dbid);
+        Transaction* transaction = tracker.FindDBID(flit.source, flit.txnId);
         if (!transaction)
         {
             Error(INVALID_TRANSACTION, "unmatched write data");

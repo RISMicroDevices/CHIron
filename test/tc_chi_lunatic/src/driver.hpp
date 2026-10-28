@@ -127,8 +127,8 @@ public:
             data.SrcID() = source;
             data.TgtID() = node.GetNodeId();
             data.HomeNID() = node.GetNodeId();
-            data.TxnID() = txnId;
-            data.DBID() = dbid;
+            data.TxnID() = dbid;
+            data.DBID() = 0;
             data.Opcode() = opcode;
             data.Resp() = resp;
             data.DataID() = beat * bytes / 16;

@@ -67,6 +67,8 @@ struct FlowState {
     bool victimPending = false;
     bool victimLinked = false;
     bool victimDataValid = false;
+    bool victimDataPartial = false;
+    ByteEnables victimValidBytes{};
     bool victimDirty = false;
     size_t victimWay = 0;
     LineKey victimLine{};

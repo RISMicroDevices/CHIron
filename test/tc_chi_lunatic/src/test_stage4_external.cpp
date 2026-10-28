@@ -25,6 +25,7 @@ class BackendModel {
 
     void SendRead(Driver<Config256>& driver, const Driver<Config256>::REQ& request)
     {
+        LUNATIC_CHECK(CHI::Eb::MemAttrs::ExtractEWA(request.MemAttr()) == 0);
         const LineKey line = LineKey::FromAddress(request.Addr(), request.NS());
         const LineData data = Read(line);
         for (size_t beat = 0; beat < 2; ++beat)
@@ -319,4 +320,52 @@ LUNATIC_TEST(Stage4ExternalPartialSnoopUsesSubordinateBaseline)
     driver.CompAck(6, first.DBID());
     backend.Run(driver.driver);
     LUNATIC_CHECK(actual == data);
+}
+
+LUNATIC_TEST(Stage4ExternalPartialVictimBaselineAndMaskIsolation)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    options.policy = PolicyKind::Inclusive;
+    options.slcSets = 1;
+    options.slcWays = 1;
+    CheckedDriver<Config256> driver(options);
+    BackendModel backend;
+    const LineKey a = LineKey::FromAddress(0x2a000, false);
+    const LineKey b = LineKey::FromAddress(0x2a040, false);
+    LineData dataA{};
+    ByteEnables enables{};
+    for (size_t index = 0; index < dataA.size(); ++index)
+    {
+        dataA[index] = uint8_t(41 + index * 3);
+        if (index % 32 < 16)
+            enables[index] = 1;
+    }
+    const LineData dataB = ExternalData(131);
+    LineData expected = dataA;
+    for (size_t index = 0; index < expected.size(); ++index)
+        if (index % 32 >= 16)
+            expected[index] = 0;
+
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackPtl, 4, 10, a.address));
+    auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
+    driver.WriteData(4, 10, dbid.DBID(), dataA, enables, CHI::Eb::Opcodes::DAT::CopyBackWrData,
+                     CHI::Eb::Resps::CopyBackWrData_UD_PD);
+    LUNATIC_CHECK(ExternalReadData(driver, backend, 5, 11, a.address, CHI::Eb::Opcodes::REQ::ReadUnique) == expected);
+    backend.Run(driver.driver);
+
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackFull, 6, 12, b.address));
+    dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
+    driver.WriteData(6, 12, dbid.DBID(), dataB, ExternalEnables(), CHI::Eb::Opcodes::DAT::CopyBackWrData,
+                     CHI::Eb::Resps::CopyBackWrData_UD_PD);
+    auto victim = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanInvalid);
+    driver.SnoopData(5, victim.flit.TxnID(), dataA, CHI::Eb::Resps::SnpRespDataPtl_I_PD, true);
+    backend.Run(driver.driver);
+
+    LUNATIC_CHECK(backend.Read(a) == expected);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(b, 6) == CacheState::I);
+    LUNATIC_CHECK(driver.ReadData(7, 13, b.address, CHI::Eb::Opcodes::REQ::ReadUnique) == dataB);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(b, 7) == CacheState::UD);
+    LUNATIC_CHECK(driver.driver.node.InspectHome(b).valid);
 }

@@ -108,16 +108,13 @@ bool Core::Impl::HandleWriteDAT(Transaction& transaction, const Data& flit)
              (flit.opcode != DAT::NonCopyBackWrData && flit.opcode != DAT::NCBWrDataCompAck &&
               flit.opcode != DAT::WriteDataCancel))
         return false;
+    if (flit.txnId != transaction.dbid)
+        return false;
 
     const size_t bytes = BytesPerBeat(options);
     const size_t offset = flit.ByteOffset();
     if (offset + bytes > LINE_SIZE || offset % bytes != 0)
         return false;
-    const size_t beat = offset / bytes;
-    const uint64_t bit = uint64_t(1) << beat;
-    if (!(flow.expectedBeatMask & bit) || (transaction.receivedBeats & bit))
-        return false;
-
     if (flit.opcode == DAT::WriteDataCancel)
     {
         transaction.canceled = true;
@@ -128,18 +125,21 @@ bool Core::Impl::HandleWriteDAT(Transaction& transaction, const Data& flit)
         transaction.readyTime = time;
         return true;
     }
-    else
+
+    const size_t beat = offset / bytes;
+    const uint64_t bit = uint64_t(1) << beat;
+    if (!(flow.expectedBeatMask & bit) || (transaction.receivedBeats & bit))
+        return false;
+
+    for (size_t index = 0; index < bytes; ++index)
     {
-        for (size_t index = 0; index < bytes; ++index)
-        {
-            if (flit.byteEnables[index])
-                transaction.data[offset + index] = flit.bytes[index];
-            transaction.byteEnables[offset + index] = flit.byteEnables[index];
-            transaction.dataCheck[offset + index] = flit.dataCheck[index];
-        }
-        for (size_t lane = 0; lane < bytes / 8; ++lane)
-            transaction.poison[offset / 8 + lane] = flit.poison[lane];
+        if (flit.byteEnables[index])
+            transaction.data[offset + index] = flit.bytes[index];
+        transaction.byteEnables[offset + index] = flit.byteEnables[index];
+        transaction.dataCheck[offset + index] = flit.dataCheck[index];
     }
+    for (size_t lane = 0; lane < bytes / 8; ++lane)
+        transaction.poison[offset / 8 + lane] = flit.poison[lane];
 
     transaction.receivedBeats |= bit;
     if ((transaction.receivedBeats & flow.expectedBeatMask) != flow.expectedBeatMask)

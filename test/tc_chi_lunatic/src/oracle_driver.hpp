@@ -89,8 +89,8 @@ public:
             data.SrcID() = source;
             data.TgtID() = home;
             data.HomeNID() = 0;
-            data.TxnID() = opcode == CHI::Eb::Opcodes::DAT::CopyBackWrData ? dbid : txnId;
-            data.DBID() = dbid;
+            data.TxnID() = dbid;
+            data.DBID() = 0;
             data.Opcode() = opcode;
             data.Resp() = resp;
             data.DataID() = beat * bytes / 16;
