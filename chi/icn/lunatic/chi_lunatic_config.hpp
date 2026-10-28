@@ -37,6 +37,7 @@ struct Options {
     PolicyKind policy = PolicyKind::Exclusive;
     BackendKind backend = BackendKind::Internal;
     bool preciseSnoopFilter = true;
+    bool doNotGoToSD = false;
     bool retryEnabled = true;
     bool poisonEnabled = true;
     bool dataCheckEnabled = true;

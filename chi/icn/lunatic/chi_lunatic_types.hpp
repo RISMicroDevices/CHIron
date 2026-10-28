@@ -149,6 +149,12 @@ struct Snoop {
     LineKey Line() const noexcept { return LineKey::FromAddress(address, nonSecure); }
 };
 
+struct HomeLineInfo {
+    LineData data{};
+    bool valid = false;
+    bool dirty = false;
+};
+
 struct ErrorInfo {
     Time time = 0;
     TransactionHandle transaction = INVALID_TRANSACTION;

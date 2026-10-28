@@ -2,6 +2,7 @@
 
 #include "chi_lunatic_config.hpp"
 #include "chi_lunatic_events.hpp"
+#include "chi_lunatic_state.hpp"
 #include "chi_lunatic_types.hpp"
 #include "../../../chi_eb/spec/chi_eb_protocol.hpp"
 
@@ -12,6 +13,8 @@
 #include <vector>
 
 namespace CHI::Lunatic {
+
+class SparseMemory;
 
 class Core {
 public:
@@ -51,6 +54,11 @@ public:
     const Options& GetOptions() const noexcept;
     std::shared_ptr<EventHub> GetEvents() const noexcept;
     const std::vector<ErrorInfo>& GetErrors() const noexcept;
+    SparseMemory& GetMemory() noexcept;
+    const SparseMemory& GetMemory() const noexcept;
+    HomeLineInfo InspectHome(const LineKey& line) const noexcept;
+    CacheState InspectRequester(const LineKey& line, NodeId requester) const noexcept;
+    bool ValidateInvariants() const noexcept;
 };
 
 template<CHI::Eb::FlitConfigurationConcept config>
@@ -338,6 +346,11 @@ public:
     const Options& GetOptions() const noexcept { return core.GetOptions(); }
     std::shared_ptr<EventHub> GetEvents() const noexcept { return core.GetEvents(); }
     const std::vector<ErrorInfo>& GetErrors() const noexcept { return core.GetErrors(); }
+    SparseMemory& GetMemory() noexcept { return core.GetMemory(); }
+    const SparseMemory& GetMemory() const noexcept { return core.GetMemory(); }
+    HomeLineInfo InspectHome(const LineKey& line) const noexcept { return core.InspectHome(line); }
+    CacheState InspectRequester(const LineKey& line, NodeId requester) const noexcept { return core.InspectRequester(line, requester); }
+    bool ValidateInvariants() const noexcept { return core.ValidateInvariants(); }
 };
 
 }
