@@ -106,6 +106,8 @@ SnoopFilterEntry& SnoopFilter::Acquire(const LineKey& key, uint64_t age)
         return *current;
     }
 
+    if (!HasInvalidWay(key))
+        throw std::overflow_error("Lunatic snoop-filter replacement requires core back-invalidation");
     SnoopFilterEntry& entry = At(SetIndex(key), ChooseVictim(key));
     entry.requesters.clear();
     entry.key = key;
@@ -114,9 +116,23 @@ SnoopFilterEntry& SnoopFilter::Acquire(const LineKey& key, uint64_t age)
     return entry;
 }
 
+bool SnoopFilter::HasInvalidWay(const LineKey& key) const noexcept
+{
+    const size_t set = SetIndex(key);
+    for (size_t way = 0; way < ways; ++way)
+        if (!At(set, way).valid)
+            return true;
+    return false;
+}
+
+void SnoopFilter::Invalidate(size_t set, size_t way) noexcept
+{
+    At(set, way) = SnoopFilterEntry{};
+}
+
 void SnoopFilter::Track(const LineKey& key, NodeId requester, CacheState state, uint64_t age)
 {
-    if (precise && state == CacheState::I) {
+    if (state == CacheState::I && (precise || !Find(key))) {
         Remove(key, requester);
         return;
     }

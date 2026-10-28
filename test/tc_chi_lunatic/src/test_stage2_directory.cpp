@@ -200,6 +200,7 @@ LUNATIC_TEST(Stage2LossySnoopFilterRetainsInvalidTargets)
     const LineKey other = Line(2);
 
     LUNATIC_CHECK(!filter.IsPrecise());
+    filter.Track(key, 8, CacheState::UC, 0);
     filter.Track(key, 8, CacheState::I, 1);
     filter.Track(key, 3, CacheState::SC, 2);
     filter.Track(key, 5, CacheState::UC, 3);
@@ -261,8 +262,10 @@ LUNATIC_TEST(Stage2SnoopFilterReplacementAndFixedStorage)
         filter.Track(line0, 3, CacheState::UD, 1);
         LUNATIC_CHECK(filter.Find(line0)->age == 1);
         LUNATIC_CHECK(filter.ChooseVictim(line12) == 0);
-        filter.Track(line12, 4, CacheState::SC, 2);
+        CheckThrows<std::overflow_error>([&] { filter.Track(line12, 4, CacheState::SC, 2); });
+        filter.Invalidate(filter.SetIndex(line0), *filter.FindWay(line0));
         LUNATIC_CHECK(!filter.Find(line0));
+        filter.Track(line12, 4, CacheState::SC, 2);
         LUNATIC_CHECK(filter.FindWay(line12) == 0);
         LUNATIC_CHECK(filter.Find(line6));
         LUNATIC_CHECK(original == &filter.At(set, 0));

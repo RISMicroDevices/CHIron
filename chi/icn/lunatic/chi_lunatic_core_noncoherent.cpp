@@ -3,21 +3,6 @@
 #include <bit>
 
 namespace CHI::Lunatic {
-namespace {
-
-uint64_t WriteBeatMask(const Request& request, const Options& options)
-{
-    const size_t bytes = BytesPerBeat(options);
-    const size_t transfer = std::min<size_t>(LINE_SIZE, size_t(1) << request.size);
-    const size_t first = (request.address % LINE_SIZE) / bytes;
-    const size_t count = std::max<size_t>(1, (transfer + bytes - 1) / bytes);
-    uint64_t mask = 0;
-    for (size_t beat = 0; beat < count && first + beat < BeatsPerLine(options); ++beat)
-        mask |= uint64_t(1) << (first + beat);
-    return mask;
-}
-
-}
 
 void Core::Impl::ResolveNonCoherent(Transaction& transaction)
 {
@@ -25,6 +10,7 @@ void Core::Impl::ResolveNonCoherent(Transaction& transaction)
     switch (ClassifyRequest(transaction.request.opcode))
     {
         case RequestClass::NonCoherentRead:
+            flow.expectedBeatMask = TransferBeatMask(transaction.request, options);
             if (transaction.request.order != 0 && !flow.readReceiptSent)
             {
                 QueueReadReceipt(transaction);
@@ -37,7 +23,7 @@ void Core::Impl::ResolveNonCoherent(Transaction& transaction)
             StartMemoryRead(transaction);
             return;
         case RequestClass::NonCoherentWrite:
-            flow.expectedBeatMask = WriteBeatMask(transaction.request, options);
+            flow.expectedBeatMask = TransferBeatMask(transaction.request, options);
             pipeline.Advance(transaction, Phase::Action, time);
             return;
         case RequestClass::ZeroWrite:
@@ -135,6 +121,12 @@ bool Core::Impl::HandleWriteDAT(Transaction& transaction, const Data& flit)
     if (flit.opcode == DAT::WriteDataCancel)
     {
         transaction.canceled = true;
+        transaction.receivedBeats = flow.expectedBeatMask;
+        transaction.Mark(COMPLETE_WRITE_DATA);
+        transaction.phase = Phase::Action;
+        transaction.wait = WaitReason::None;
+        transaction.readyTime = time;
+        return true;
     }
     else
     {

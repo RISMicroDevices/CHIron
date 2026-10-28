@@ -7,13 +7,24 @@ namespace CHI::Lunatic {
 void Core::Impl::StartMemoryRead(Transaction& transaction)
 {
     FlowState& flow = flows.at(transaction.handle);
-    if (transaction.homeHit || flow.snoopDataValid)
+    if (transaction.memoryRequired)
+    {
+        transaction.phase = Phase::WaitMemory;
+        transaction.readyTime = time;
+        return;
+    }
+    if (transaction.homeHit || (flow.snoopDataValid && !flow.snoopDataPartial))
     {
         transaction.memoryRequired = false;
         transaction.Mark(COMPLETE_MEMORY);
         transaction.phase = Phase::Action;
         transaction.readyTime = pipeline.ScheduleData(time);
         return;
+    }
+    if (options.backend == BackendKind::CHI && flow.snoopDataPartial && !transaction.homeHit)
+    {
+        flow.baselineFetch = true;
+        flow.baselineFetched = false;
     }
 
     transaction.memoryRequired = true;
@@ -99,6 +110,22 @@ void Core::Impl::StartBackendWrite(Transaction& transaction)
     request.txnId = transaction.handle;
     request.allowRetry = false;
     request.expCompAck = false;
+    if (flow.spillPending)
+    {
+        request.opcode = CHI::Eb::Opcodes::REQ::WriteNoSnpFull;
+        request.address = flow.spillLine.address;
+        request.nonSecure = flow.spillLine.nonSecure;
+        request.size = 6;
+        request.memAttr = CHI::Eb::MemAttrs::NonCacheable_Bufferable;
+        request.snpAttr = 0;
+        flow.expectedBeatMask = (uint64_t(1) << BeatsPerLine(options)) - 1;
+        flow.backendBeat = 0;
+        flow.backendBeatMask = 0;
+        flow.backendCompReceived = false;
+        flow.backendDataEmitted = false;
+    }
+    else
+        flow.backendBeat = transaction.receivedBeats ? std::countr_zero(flow.expectedBeatMask) : 0;
     if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
     {
         transaction.readyTime = time;
@@ -111,7 +138,6 @@ void Core::Impl::StartBackendWrite(Transaction& transaction)
         transaction.phase = Phase::Commit;
         return;
     }
-    flow.backendBeat = transaction.receivedBeats ? std::countr_zero(flow.expectedBeatMask) : 0;
     flow.backendPhase = BackendPhase::WaitRequestEmission;
     transaction.phase = Phase::WaitMemory;
     transaction.wait = WaitReason::Memory;
@@ -143,13 +169,15 @@ void Core::Impl::AdvanceBackendWrite(Transaction& transaction)
     data.dbid = flow.backendDBID;
     data.opcode = CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
     data.dataId = offset / 16;
-    data.ccid = (offset / 16) % 2;
+    data.ccid = flow.spillPending ? (flow.spillLine.address >> 4) & 3 : (transaction.request.address >> 4) & 3;
     data.qos = transaction.request.qos;
     data.traceTag = transaction.request.traceTag;
+    const LineData& payload = flow.spillPending ? flow.spillData : transaction.data;
+    const ByteEnables& enables = flow.spillPending ? flow.spillEnables : transaction.byteEnables;
     for (size_t index = 0; index < bytes; ++index)
     {
-        data.bytes[index] = transaction.data[offset + index];
-        data.byteEnables[index] = transaction.byteEnables[offset + index];
+        data.bytes[index] = payload[offset + index];
+        data.byteEnables[index] = enables[offset + index];
         data.dataCheck[index] = transaction.dataCheck[offset + index];
     }
     for (size_t lane = 0; lane < bytes / 8; ++lane)
@@ -184,7 +212,7 @@ bool Core::Impl::HandleBackendRSP(Transaction& transaction, const Response& flit
     if (flit.opcode == RSP::ReadReceipt)
         return IsReadRequest(transaction.request.opcode) && transaction.request.order != 0;
 
-    if (IsCMORequest(transaction.request.opcode))
+    if (IsCMORequest(transaction.request.opcode) && !flow.spillPending)
     {
         if (flit.opcode != RSP::Comp)
             return false;
@@ -196,7 +224,7 @@ bool Core::Impl::HandleBackendRSP(Transaction& transaction, const Response& flit
         return true;
     }
 
-    if (IsReadRequest(transaction.request.opcode))
+    if (IsReadRequest(transaction.request.opcode) && !flow.spillPending)
         return false;
 
     if (flit.opcode == RSP::DBIDResp || flit.opcode == RSP::CompDBIDResp)
@@ -260,7 +288,8 @@ bool Core::Impl::HandleBackendRSP(Transaction& transaction, const Response& flit
 bool Core::Impl::HandleBackendDAT(Transaction& transaction, const Data& flit)
 {
     FlowState& flow = flows.at(transaction.handle);
-    if (!transaction.memoryRequired || flow.memoryWrite || !IsReadRequest(transaction.request.opcode))
+    if (!transaction.memoryRequired || flow.memoryWrite ||
+        (!IsReadRequest(transaction.request.opcode) && !flow.baselineFetch))
         return false;
 
     const size_t bytes = BytesPerBeat(options);
@@ -269,32 +298,86 @@ bool Core::Impl::HandleBackendDAT(Transaction& transaction, const Data& flit)
         return false;
     const size_t beat = offset / bytes;
     const uint64_t bit = uint64_t(1) << beat;
-    if (transaction.receivedBeats & bit)
+    uint64_t& received = flow.baselineFetch ? flow.backendBeatMask : transaction.receivedBeats;
+    if (received & bit)
         return false;
 
     for (size_t index = 0; index < bytes; ++index)
     {
-        transaction.data[offset + index] = flit.bytes[index];
-        transaction.byteEnables[offset + index] = 1;
+        const bool preserve = flow.baselineFetch &&
+            (flow.snoopDataPartial ? flow.snoopValidBytes[offset + index]
+                                   : IsCopybackRequest(transaction.request.opcode) && transaction.byteEnables[offset + index]);
+        if (!preserve)
+            transaction.data[offset + index] = flit.bytes[index];
+        if (!flow.baselineFetch || !IsCopybackRequest(transaction.request.opcode))
+            transaction.byteEnables[offset + index] = 1;
         transaction.dataCheck[offset + index] = flit.dataCheck[index];
     }
     for (size_t lane = 0; lane < bytes / 8; ++lane)
         transaction.poison[offset / 8 + lane] = flit.poison[lane];
     transaction.responseRespErr = flit.respErr;
-    transaction.receivedBeats |= bit;
+    received |= bit;
 
-    const uint64_t complete = (uint64_t(1) << BeatsPerLine(options)) - 1;
-    if ((transaction.receivedBeats & complete) != complete)
+    const uint64_t complete = flow.expectedBeatMask
+        ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+    if ((received & complete) != complete)
         return true;
 
     transaction.Mark(COMPLETE_MEMORY);
     transaction.memoryRequired = false;
     transaction.wait = WaitReason::None;
     flow.backendPhase = BackendPhase::Done;
+    if (flow.baselineFetch)
+    {
+        flow.baselineFetched = true;
+        flow.baselineFetch = false;
+    }
     tracker.UnbindMemory(options.subordinateId, transaction.handle);
     transaction.phase = Phase::Action;
     transaction.readyTime = pipeline.ScheduleData(time);
     return true;
+}
+
+bool Core::Impl::WriteLine(Transaction& transaction, const LineKey& line, const LineData& data, const ByteEnables& enables)
+{
+    FlowState& flow = flows.at(transaction.handle);
+    if (options.backend == BackendKind::Internal)
+    {
+        memory.Write(line, data, enables);
+        return true;
+    }
+
+    if (flow.spillPending)
+    {
+        if (flow.backendPhase != BackendPhase::Done)
+            return false;
+        memory.Write(flow.spillLine, flow.spillData, flow.spillEnables);
+        flow.spillPending = false;
+        flow.backendPhase = BackendPhase::None;
+        return true;
+    }
+
+    flow.spillPending = true;
+    flow.spillLine = line;
+    flow.spillData = data;
+    flow.spillEnables = enables;
+    StartBackendWrite(transaction);
+    return false;
+}
+
+bool Core::Impl::FetchBaseline(Transaction& transaction)
+{
+    FlowState& flow = flows.at(transaction.handle);
+    if (options.backend == BackendKind::Internal || flow.baselineFetched)
+        return true;
+    if (flow.backendPhase == BackendPhase::Done)
+    {
+        flow.baselineFetched = true;
+        return true;
+    }
+    flow.baselineFetch = true;
+    StartMemoryRead(transaction);
+    return false;
 }
 
 }

@@ -40,6 +40,18 @@ struct FlowState {
     std::map<NodeId, uint64_t> snoopBeatMasks;
     std::map<NodeId, uint8_t> snoopResponses;
     bool readReceiptSent = false;
+    bool readReceiptEmitted = false;
+    bool directoryCommitted = false;
+    bool baselineFetch = false;
+    bool baselineFetched = false;
+    bool snoopDataPartial = false;
+    ByteEnables snoopValidBytes{};
+    ByteEnables validBytes{};
+    bool spillPending = false;
+    LineKey spillLine{};
+    LineData spillData{};
+    ByteEnables spillEnables{};
+    bool victimSnoopFilterOnly = false;
     bool dbidSent = false;
     bool compSent = false;
     bool backendCompReceived = false;
@@ -199,7 +211,7 @@ struct Core::Impl {
     void ActionCoherent(Transaction& transaction);
     void ReturnRead(Transaction& transaction);
     void QueueDBID(Transaction& transaction);
-    void QueueComp(Transaction& transaction, bool withDBID = false, uint8_t resp = 0);
+    void QueueComp(Transaction& transaction, bool withDBID = false, uint8_t resp = 0, uint8_t respErr = 0);
     void QueueReadReceipt(Transaction& transaction);
     void QueueRetryCredit(size_t index);
     void FinishResponse(Transaction& transaction);
@@ -213,23 +225,26 @@ struct Core::Impl {
     bool HandleBackendDAT(Transaction& transaction, const Data& flit);
     bool HandleWriteDAT(Transaction& transaction, const Data& flit);
     void CompleteMemoryRead(Transaction& transaction);
+    bool WriteLine(Transaction& transaction, const LineKey& line, const LineData& data, const ByteEnables& enables);
+    bool FetchBaseline(Transaction& transaction);
 
     void PlanReadSnoops(Transaction& transaction);
     void PlanCMOSnoops(Transaction& transaction);
     bool EmitSnoops(Transaction& transaction);
     void ProcessSnoopRSP(Transaction& transaction, const Response& flit);
     void ProcessSnoopDAT(Transaction& transaction, const Data& flit);
-    void CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp, bool withData);
-    CacheState DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp) const;
-    bool ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp, bool withData) const;
+    void CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp, bool withData, bool partial = false);
+    CacheState DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp, bool partial = false) const;
+    bool ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp, bool withData, bool partial = false) const;
 
     bool PrepareHomeCommit(Transaction& transaction);
+    bool PrepareSnoopFilterCapacity(Transaction& transaction);
     bool PrepareVictim(Transaction& transaction);
-    void CompleteVictim(Transaction& transaction);
+    bool CompleteVictim(Transaction& transaction);
     bool CommitReadDirectory(Transaction& transaction);
     bool CommitCopyback(Transaction& transaction);
     bool CommitCMO(Transaction& transaction);
-    void InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty, Time age);
+    HomeLine& InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty, Time age);
     void EvictRequester(Transaction& transaction);
 
     void OnEmitted(const Pending<Request>& pending);

@@ -61,7 +61,7 @@ public:
         request.Size() = 6;
         request.AllowRetry() = 1;
         request.ExpCompAck() = expCompAck;
-        request.SnpAttr() = 1;
+        request.SnpAttr() = CHI::Lunatic::IsCoherentRequest(opcode) || opcode == CHI::Eb::Opcodes::REQ::ReadOnce ? 1 : 0;
         request.MemAttr() = opcode == CHI::Eb::Opcodes::REQ::Evict
             ? CHI::Eb::MemAttrs::WriteBack_NoAllocate
             : CHI::Lunatic::IsCoherentRequest(opcode) || opcode == CHI::Eb::Opcodes::REQ::ReadOnce

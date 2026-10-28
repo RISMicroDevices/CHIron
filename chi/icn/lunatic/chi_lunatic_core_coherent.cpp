@@ -45,6 +45,8 @@ void Core::Impl::ResolveCoherent(Transaction& transaction)
 {
     FlowState& flow = flows.at(transaction.handle);
     flow.snoopLine = transaction.request.Line();
+    if (IsReadRequest(transaction.request.opcode))
+        flow.expectedBeatMask = TransferBeatMask(transaction.request, options);
     switch (ClassifyRequest(transaction.request.opcode))
     {
         case RequestClass::ReadOnce:
@@ -74,6 +76,11 @@ void Core::Impl::ResolveCoherent(Transaction& transaction)
 void Core::Impl::ActionCoherent(Transaction& transaction)
 {
     FlowState& flow = flows.at(transaction.handle);
+    if (flow.backendPhase == BackendPhase::SendData)
+    {
+        AdvanceBackendWrite(transaction);
+        return;
+    }
 
     if (flow.victimPending)
     {
@@ -93,7 +100,12 @@ void Core::Impl::ActionCoherent(Transaction& transaction)
             transaction.readyTime = time;
             return;
         }
-        CompleteVictim(transaction);
+        if (!CompleteVictim(transaction))
+        {
+            transaction.phase = Phase::Action;
+            transaction.readyTime = time;
+            return;
+        }
     }
 
     if (transaction.snoopsRequired)
@@ -132,11 +144,11 @@ void Core::Impl::ActionCoherent(Transaction& transaction)
                 return;
             }
             if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique)
-                transaction.responseResp = flow.requesterFinal == CacheState::UD
+                transaction.responseResp = flow.requesterFinal == CacheState::UD || flow.requesterFinal == CacheState::UDP
                     ? CHI::Eb::Resps::CompData_UD_PD : CHI::Eb::Resps::CompData_UC;
             else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadShared)
             {
-                transaction.responseResp = flow.requesterFinal == CacheState::UD
+                transaction.responseResp = flow.requesterFinal == CacheState::UD || flow.requesterFinal == CacheState::UDP
                     ? CHI::Eb::Resps::CompData_UD_PD
                     : flow.requesterFinal == CacheState::SD
                         ? CHI::Eb::Resps::CompData_SD_PD : CHI::Eb::Resps::CompData_SC;
@@ -262,7 +274,7 @@ void Core::Impl::PlanReadSnoops(Transaction& transaction)
     }
 
     transaction.snoopTargets = candidates;
-    transaction.pendingSnoops = candidates;
+    transaction.pendingSnoops.clear();
     transaction.snoopsRequired = true;
     flow.nextSnoop = 0;
     transaction.phase = Phase::Action;
@@ -280,7 +292,7 @@ void Core::Impl::PlanCMOSnoops(Transaction& transaction)
         if (transaction.request.opcode != CHI::Eb::Opcodes::REQ::CleanShared || IsDirty(state))
             transaction.snoopTargets.push_back(target);
     }
-    transaction.pendingSnoops = transaction.snoopTargets;
+    transaction.pendingSnoops.clear();
     transaction.snoopsRequired = !transaction.snoopTargets.empty();
     flow.nextSnoop = 0;
     transaction.phase = Phase::Action;
@@ -290,6 +302,13 @@ void Core::Impl::PlanCMOSnoops(Transaction& transaction)
 bool Core::Impl::EmitSnoops(Transaction& transaction)
 {
     FlowState& flow = flows.at(transaction.handle);
+    if (transaction.pendingSnoops.size() >= options.snoopLimit)
+    {
+        transaction.phase = Phase::WaitSnoop;
+        transaction.wait = WaitReason::Snoop;
+        transaction.readyTime = time;
+        return false;
+    }
     if (flow.nextSnoop >= transaction.snoopTargets.size())
         return true;
 
@@ -298,7 +317,7 @@ bool Core::Impl::EmitSnoops(Transaction& transaction)
     Snoop snoop;
     snoop.source = nodeId;
     snoop.target = target;
-    snoop.txnId = transaction.handle * options.snoopLimit + index;
+    snoop.txnId = transaction.handle * options.snoopLimit + (index % options.snoopLimit);
     snoop.address = flow.snoopLine.address;
     snoop.nonSecure = flow.snoopLine.nonSecure;
     snoop.opcode = SnoopOpcode(transaction, flow);
@@ -312,6 +331,11 @@ bool Core::Impl::EmitSnoops(Transaction& transaction)
     snoop.retToSrc = snoop.opcode == CHI::Eb::Opcodes::SNP::SnpShared ||
         snoop.opcode == CHI::Eb::Opcodes::SNP::SnpOnce || snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique;
 
+    if (tracker.FindSnoop(target, snoop.txnId))
+    {
+        Error(transaction.handle, "snoop response ID is still live");
+        return false;
+    }
     if (!Queue(txsnp, snoop, transaction.handle, transaction.actionAge, index + 1 == transaction.snoopTargets.size()))
         return false;
     if (!tracker.BindSnoop(transaction.handle, target, snoop.txnId))
@@ -321,13 +345,12 @@ bool Core::Impl::EmitSnoops(Transaction& transaction)
         transaction.phase = Phase::Commit;
         return false;
     }
+    transaction.pendingSnoops.push_back(target);
     ++flow.nextSnoop;
-    if (flow.nextSnoop == transaction.snoopTargets.size())
-    {
-        transaction.phase = Phase::WaitSnoop;
-        transaction.wait = WaitReason::Snoop;
-        transaction.readyTime = time;
-    }
+    transaction.phase = transaction.pendingSnoops.size() >= options.snoopLimit || flow.nextSnoop == transaction.snoopTargets.size()
+        ? Phase::WaitSnoop : Phase::Action;
+    transaction.wait = transaction.phase == Phase::WaitSnoop ? WaitReason::Snoop : WaitReason::None;
+    transaction.readyTime = time;
     return true;
 }
 
@@ -362,11 +385,20 @@ void Core::Impl::ProcessSnoopDAT(Transaction& transaction, const Data& flit)
         return;
     }
     flow.snoopResponses[flit.source] = flit.resp;
-    if (!ValidateSnoopResponse(transaction, flit.source, flit.resp, true))
+    if (!ValidateSnoopResponse(transaction, flit.source, flit.resp, true, flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl))
         Error(transaction.handle, "illegal snoop data response");
 
     const CacheState initial = snoopFilter.State(flow.snoopLine, flit.source);
     const bool dirty = IsDirty(initial);
+    if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl)
+    {
+        flow.snoopDataPartial = true;
+        for (size_t index = 0; index < bytes; ++index)
+        {
+            flow.snoopValidBytes[offset + index] = flit.byteEnables[index];
+            flow.validBytes[offset + index] = flit.byteEnables[index];
+        }
+    }
     const bool replace = flow.snoopForVictim
         ? (!flow.victimDataValid || dirty || !flow.victimDirty)
         : (!flow.snoopDataValid || dirty || !flow.dataDirty);
@@ -394,17 +426,17 @@ void Core::Impl::ProcessSnoopDAT(Transaction& transaction, const Data& flit)
 
     const uint64_t complete = (uint64_t(1) << BeatsPerLine(options)) - 1;
     if ((received & complete) == complete)
-        CompleteSnoopTarget(transaction, flit.source, flit.resp, true);
+        CompleteSnoopTarget(transaction, flit.source, flit.resp, true, flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl);
 }
 
-bool Core::Impl::ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp, bool withData) const
+bool Core::Impl::ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp, bool withData, bool partial) const
 {
     const FlowState& flow = flows.at(transaction.handle);
     if (std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target) == transaction.pendingSnoops.end())
         return false;
     const CacheState initial = snoopFilter.State(flow.snoopLine, target);
     const uint16_t opcode = SnoopOpcode(transaction, flow);
-    const CacheState final = DecodeSnoopState(transaction, target, resp);
+    const CacheState final = DecodeSnoopState(transaction, target, resp, partial);
     const bool passDirty = (resp & CHI::Eb::Resps::PassDirty) != 0;
     if (passDirty && !IsDirty(initial))
         return false;
@@ -422,7 +454,7 @@ bool Core::Impl::ValidateSnoopResponse(Transaction& transaction, NodeId target, 
     return true;
 }
 
-CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp) const
+CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp, bool partial) const
 {
     const FlowState& flow = flows.at(transaction.handle);
     const CacheState initial = snoopFilter.State(flow.snoopLine, target);
@@ -433,6 +465,8 @@ CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target,
         case 0b001: return CacheState::SC;
         case 0b011: return CacheState::SD;
         default:
+            if (partial)
+                return CacheState::UDP;
             if (IsDirty(initial) && !(resp & CHI::Eb::Resps::PassDirty) &&
                 opcode != CHI::Eb::Opcodes::SNP::SnpCleanShared && opcode != CHI::Eb::Opcodes::SNP::SnpCleanInvalid)
                 return CacheState::UD;
@@ -440,15 +474,15 @@ CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target,
     }
 }
 
-void Core::Impl::CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp, bool)
+void Core::Impl::CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp, bool, bool partial)
 {
     FlowState& flow = flows.at(transaction.handle);
-    const CacheState final = DecodeSnoopState(transaction, target, resp);
+    const CacheState final = DecodeSnoopState(transaction, target, resp, partial);
     snoopFilter.Track(flow.snoopLine, target, final, time);
     auto it = std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target);
     if (it != transaction.pendingSnoops.end())
         transaction.pendingSnoops.erase(it);
-    if (transaction.pendingSnoops.empty() && flow.nextSnoop == transaction.snoopTargets.size())
+    if (transaction.pendingSnoops.empty())
     {
         transaction.phase = Phase::Action;
         transaction.wait = WaitReason::None;

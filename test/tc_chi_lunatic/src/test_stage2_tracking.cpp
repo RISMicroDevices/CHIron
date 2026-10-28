@@ -90,12 +90,12 @@ LUNATIC_TEST(Stage2TrackerExhaustionReuseAndClear)
     LUNATIC_CHECK(tracker.Retire(first->handle));
     Transaction* replacement = tracker.Allocate(duplicate, 8);
     LUNATIC_CHECK(replacement != nullptr);
-    LUNATIC_CHECK(replacement->handle == 2);
+    LUNATIC_CHECK(replacement->handle == 0);
     LUNATIC_CHECK(tracker.FindRequest(3, 10) == replacement);
     LUNATIC_CHECK(tracker.FindRequest(3, 11) == second);
-    LUNATIC_CHECK(!tracker.Find(0));
+    LUNATIC_CHECK(tracker.Find(0) == replacement);
     LUNATIC_CHECK(!tracker.Allocate(request, 9));
-    LUNATIC_CHECK((tracker.Handles() == std::vector<TransactionHandle>{ 1, 2 }));
+    LUNATIC_CHECK((tracker.Handles() == std::vector<TransactionHandle>{ 0, 1 }));
     LUNATIC_CHECK(tracker.Validate());
 
     tracker.Clear();

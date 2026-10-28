@@ -41,6 +41,8 @@ public:
     std::optional<size_t> FindWay(const LineKey& key) const noexcept;
     std::vector<size_t> VictimCandidates(const LineKey& key) const;
     size_t ChooseVictim(const LineKey& key) const;
+    bool HasInvalidWay(const LineKey& key) const noexcept;
+    void Invalidate(size_t set, size_t way) noexcept;
 
     void Track(const LineKey& key, NodeId requester, CacheState state, uint64_t age);
     void Remove(const LineKey& key, NodeId requester);

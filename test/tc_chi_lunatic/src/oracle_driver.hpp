@@ -85,6 +85,7 @@ public:
         for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
         {
             DAT data{};
+            data.BE() = 0;
             data.SrcID() = source;
             data.TgtID() = home;
             data.HomeNID() = 0;
@@ -126,6 +127,7 @@ public:
         for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
         {
             DAT data{};
+            data.BE() = 0;
             data.SrcID() = source;
             data.TgtID() = home;
             data.HomeNID() = 0;

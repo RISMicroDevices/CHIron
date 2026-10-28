@@ -9,7 +9,8 @@ enum class CacheState : uint8_t {
     SC,
     UC,
     SD,
-    UD
+    UD,
+    UDP
 };
 
 bool IsValid(CacheState state) noexcept;

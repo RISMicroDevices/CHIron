@@ -26,13 +26,17 @@ Transaction* Tracker::Allocate(const Request& request, Time actionAge)
     if (requestMap.find(requestKey) != requestMap.end())
         return nullptr;
 
-    const TransactionHandle initial = nextHandle;
-    TransactionHandle handle = initial;
-    while (handle == INVALID_TRANSACTION || transactions.find(handle) != transactions.end()) {
-        ++handle;
-        if (handle == initial)
-            return nullptr;
+    TransactionHandle handle = INVALID_TRANSACTION;
+    for (size_t attempt = 0; attempt < limit; ++attempt) {
+        const TransactionHandle candidate = nextHandle;
+        nextHandle = (nextHandle + 1) % limit;
+        if (candidate != INVALID_TRANSACTION && transactions.find(candidate) == transactions.end()) {
+            handle = candidate;
+            break;
+        }
     }
+    if (handle == INVALID_TRANSACTION)
+        return nullptr;
 
     auto transaction = std::make_unique<Transaction>(handle, request, actionAge);
     auto [requestIt, requestInserted] = requestMap.emplace(requestKey, handle);
@@ -46,7 +50,6 @@ Transaction* Tracker::Allocate(const Request& request, Time actionAge)
             return nullptr;
         }
 
-        nextHandle = handle + 1;
         return transactionIt->second.get();
     } catch (...) {
         requestMap.erase(requestIt);

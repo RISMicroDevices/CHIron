@@ -1,6 +1,8 @@
 #include "chi_lunatic_protocol.hpp"
 #include "../../../chi_eb/spec/chi_eb_protocol_encoding.hpp"
 
+#include <algorithm>
+
 namespace CHI::Lunatic {
 
 RequestClass ClassifyRequest(uint16_t opcode) noexcept
@@ -73,6 +75,18 @@ bool RequiresCompAck(const Request& request) noexcept
     return request.expCompAck &&
            (requestClass == RequestClass::NonCoherentRead || requestClass == RequestClass::ReadOnce ||
             requestClass == RequestClass::NonCoherentWrite);
+}
+
+uint64_t TransferBeatMask(const Request& request, const Options& options) noexcept
+{
+    const size_t bytes = BytesPerBeat(options);
+    const size_t transfer = std::min<size_t>(LINE_SIZE, size_t(1) << request.size);
+    const size_t first = (request.address % LINE_SIZE) / bytes;
+    const size_t count = std::max<size_t>(1, (transfer + bytes - 1) / bytes);
+    uint64_t mask = 0;
+    for (size_t beat = 0; beat < count && first + beat < BeatsPerLine(options); ++beat)
+        mask |= uint64_t(1) << (first + beat);
+    return mask;
 }
 
 }

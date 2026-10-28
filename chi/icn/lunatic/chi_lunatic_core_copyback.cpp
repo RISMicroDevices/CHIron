@@ -19,19 +19,36 @@ ByteEnables FullEnables()
 
 bool Core::Impl::PrepareHomeCommit(Transaction& transaction)
 {
-    switch (ClassifyRequest(transaction.request.opcode))
+    FlowState& flow = flows.at(transaction.handle);
+    if (flow.directoryCommitted)
+        return true;
+
+    const auto requestClass = ClassifyRequest(transaction.request.opcode);
+    if ((requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeUnique ||
+         requestClass == RequestClass::CopybackWrite) && !PrepareSnoopFilterCapacity(transaction))
+        return false;
+
+    bool committed = false;
+    switch (requestClass)
     {
         case RequestClass::ReadOnce:
         case RequestClass::CoherentRead:
         case RequestClass::MakeUnique:
-            return CommitReadDirectory(transaction);
+            committed = CommitReadDirectory(transaction);
+            break;
         case RequestClass::CopybackWrite:
-            return CommitCopyback(transaction);
+            committed = CommitCopyback(transaction);
+            break;
         case RequestClass::CMO:
-            return CommitCMO(transaction);
+            committed = CommitCMO(transaction);
+            break;
         default:
-            return true;
+            committed = true;
+            break;
     }
+    if (committed)
+        flow.directoryCommitted = true;
+    return committed;
 }
 
 bool Core::Impl::CommitReadDirectory(Transaction& transaction)
@@ -63,18 +80,24 @@ bool Core::Impl::CommitReadDirectory(Transaction& transaction)
             ++otherSharers;
     }
 
+    bool partialDirtyLine = false;
+    for (uint8_t valid : flow.validBytes)
+        partialDirtyLine |= !valid;
+
     switch (ClassifyRequest(transaction.request.opcode))
     {
         case RequestClass::CoherentRead:
             if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique)
-                flow.requesterFinal = flow.dataDirty || flow.passDirty || flow.homeDirty ? CacheState::UD : CacheState::UC;
+                flow.requesterFinal = partialDirtyLine && (flow.dataDirty || flow.passDirty || flow.homeDirty)
+                    ? CacheState::UDP
+                    : flow.dataDirty || flow.passDirty || flow.homeDirty ? CacheState::UD : CacheState::UC;
             else if (flow.passDirty)
                 flow.requesterFinal = otherSharers ? CacheState::SD : CacheState::UD;
             else
                 flow.requesterFinal = CacheState::SC;
             break;
         case RequestClass::MakeUnique:
-            flow.requesterFinal = flow.dataDirty || flow.passDirty || flow.homeDirty ? CacheState::UD : CacheState::UC;
+            flow.requesterFinal = CacheState::UD;
             break;
         case RequestClass::ReadOnce:
             flow.requesterFinal = CacheState::I;
@@ -96,17 +119,19 @@ bool Core::Impl::CommitReadDirectory(Transaction& transaction)
             if (target != transaction.request.source && IsDirty(snoopFilter.State(line, target)))
                 anyRequesterDirty = true;
         }
-        const bool dirty = anyRequesterDirty ? false : flow.homeDirty || (flow.dataDirty && !flow.passDirty);
-        InstallHome(line, way, transaction.data, dirty, time);
+        const bool dirty = anyRequesterDirty ? false : flow.homeDirty || flow.dataDirty;
+        HomeLine& home = InstallHome(line, way, transaction.data, dirty, time);
+        home.validBytes = flow.validBytes;
     }
     else if (decision.removeHome && transaction.homeHit)
     {
-        directory.Invalidate(directory.SetIndex(line), *directory.FindWay(line));
+        if (const auto way = directory.FindWay(line); way)
+            directory.Invalidate(directory.SetIndex(line), *way);
     }
 
     if (options.policy == PolicyKind::Exclusive && !decision.allocateHome && !decision.retainHome &&
-        (flow.homeDirty || flow.dataDirty))
-        memory.Write(line, transaction.data, FullEnables());
+        (flow.homeDirty || flow.dataDirty) && !WriteLine(transaction, line, transaction.data, FullEnables()))
+        return false;
 
     if (ClassifyRequest(transaction.request.opcode) != RequestClass::ReadOnce)
         snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
@@ -121,18 +146,24 @@ bool Core::Impl::CommitCopyback(Transaction& transaction)
 
     if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl && !transaction.homeHit)
     {
-        const LineData base = memory.Read(line);
-        for (size_t index = 0; index < LINE_SIZE; ++index)
+        if (options.backend == BackendKind::CHI && !FetchBaseline(transaction))
+            return false;
+        if (options.backend == BackendKind::Internal)
         {
-            if (!transaction.byteEnables[index])
-                transaction.data[index] = base[index];
+            const LineData base = memory.Read(line);
+            for (size_t index = 0; index < LINE_SIZE; ++index)
+            {
+                if (!transaction.byteEnables[index])
+                    transaction.data[index] = base[index];
+            }
         }
     }
 
     if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteCleanFull)
     {
         const uint8_t state = flow.writeResp & 0b011;
-        flow.requesterFinal = state == 0b000 ? CacheState::I : state == 0b001 ? CacheState::SC : CacheState::UC;
+        flow.requesterFinal = state == 0b000 ? CacheState::I
+                : (state == 0b001 || state == 0b011) ? CacheState::SC : CacheState::UC;
     }
     else
         flow.requesterFinal = CacheState::I;
@@ -153,13 +184,16 @@ bool Core::Impl::CommitCopyback(Transaction& transaction)
     if (decision.mergeCopyback && (decision.allocateHome || decision.retainHome || transaction.homeHit))
     {
         const std::optional<size_t> currentWay = directory.FindWay(line);
-        InstallHome(line, currentWay ? *currentWay : flow.victimWay, transaction.data, dirty, time);
+        HomeLine& home = InstallHome(line, currentWay ? *currentWay : flow.victimWay, transaction.data, dirty, time);
+        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl)
+            home.validBytes = transaction.byteEnables;
     }
-    else
-        memory.Write(line, transaction.data, transaction.byteEnables);
+    else if (!WriteLine(transaction, line, transaction.data, transaction.byteEnables))
+        return false;
 
     if (decision.removeHome && transaction.homeHit)
-        directory.Invalidate(directory.SetIndex(line), *directory.FindWay(line));
+        if (const auto way = directory.FindWay(line); way)
+            directory.Invalidate(directory.SetIndex(line), *way);
     snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
     return true;
 }
@@ -168,6 +202,8 @@ bool Core::Impl::CommitCMO(Transaction& transaction)
 {
     FlowState& flow = flows.at(transaction.handle);
     const LineKey line = transaction.request.Line();
+    if (options.backend == BackendKind::CHI && flow.snoopDataPartial && !transaction.homeHit && !FetchBaseline(transaction))
+        return false;
     HomeLine* home = directory.Find(line);
 
     if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanShared)
@@ -179,18 +215,65 @@ bool Core::Impl::CommitCMO(Transaction& transaction)
                 home->data = transaction.data;
             home->dirty = false;
         }
-        if (flow.dataDirty || flow.homeDirty)
-            memory.Write(line, transaction.data, FullEnables());
+        if ((flow.dataDirty || flow.homeDirty) && !WriteLine(transaction, line, transaction.data, FullEnables()))
+            return false;
         return true;
     }
 
     flow.requesterFinal = CacheState::I;
-    if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanInvalid && (flow.dataDirty || flow.homeDirty))
-        memory.Write(line, transaction.data, FullEnables());
+    if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanInvalid && (flow.dataDirty || flow.homeDirty) &&
+        !WriteLine(transaction, line, transaction.data, FullEnables()))
+        return false;
     if (home)
-        directory.Invalidate(directory.SetIndex(line), *directory.FindWay(line));
+        if (const auto way = directory.FindWay(line); way)
+            directory.Invalidate(directory.SetIndex(line), *way);
     snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
     return true;
+}
+
+bool Core::Impl::PrepareSnoopFilterCapacity(Transaction& transaction)
+{
+    const LineKey line = transaction.request.Line();
+    if (snoopFilter.Find(line) || snoopFilter.HasInvalidWay(line))
+        return true;
+
+    FlowState& flow = flows.at(transaction.handle);
+    if (flow.victimPending)
+        return false;
+
+    flow.victimSnoopFilterOnly = true;
+    flow.victimWay = snoopFilter.ChooseVictim(line);
+    const SnoopFilterEntry& victim = snoopFilter.At(snoopFilter.SetIndex(line), flow.victimWay);
+    flow.victimLine = victim.key;
+    flow.victimPending = true;
+    if (const HomeLine* home = directory.Find(flow.victimLine))
+    {
+        flow.victimData = home->data;
+        flow.victimDirty = home->dirty;
+    }
+    else
+    {
+        flow.victimData = memory.Read(flow.victimLine);
+        flow.victimDirty = false;
+    }
+    flow.victimDataValid = true;
+
+    hazards.Add(transaction.handle, flow.victimLine, transaction.actionAge);
+    flow.victimLinked = true;
+    if (!hazards.IsHead(transaction.handle, flow.victimLine))
+        return false;
+
+    flow.snoopLine = flow.victimLine;
+    flow.snoopForVictim = true;
+    transaction.snoopTargets = snoopFilter.Targets(flow.victimLine);
+    transaction.pendingSnoops.clear();
+    transaction.snoopsRequired = !transaction.snoopTargets.empty();
+    flow.nextSnoop = 0;
+    if (transaction.snoopTargets.empty())
+    {
+        return CompleteVictim(transaction);
+    }
+    return false;
 }
 
 bool Core::Impl::PrepareVictim(Transaction& transaction)
@@ -229,7 +312,7 @@ bool Core::Impl::PrepareVictim(Transaction& transaction)
         flow.snoopForVictim = true;
         flow.snoopLine = flow.victimLine;
         transaction.snoopTargets = snoopFilter.Targets(flow.victimLine);
-        transaction.pendingSnoops = transaction.snoopTargets;
+        transaction.pendingSnoops.clear();
         transaction.snoopsRequired = true;
         flow.nextSnoop = 0;
         return false;
@@ -237,21 +320,46 @@ bool Core::Impl::PrepareVictim(Transaction& transaction)
 
     if (flow.nextSnoop == 0)
     {
-        CompleteVictim(transaction);
-        return true;
+        return CompleteVictim(transaction);
     }
     return false;
 }
 
-void Core::Impl::CompleteVictim(Transaction& transaction)
+bool Core::Impl::CompleteVictim(Transaction& transaction)
 {
     FlowState& flow = flows.at(transaction.handle);
     if (!flow.victimPending)
-        return;
-    if (flow.victimDirty)
-        memory.Write(flow.victimLine, flow.victimData, FullEnables());
-    directory.Invalidate(directory.SetIndex(flow.victimLine), flow.victimWay);
+        return true;
+
+    if (flow.victimSnoopFilterOnly)
+    {
+        if (flow.victimDirty)
+        {
+            if (HomeLine* home = directory.Find(flow.victimLine))
+            {
+                home->data = flow.victimData;
+                home->dirty = true;
+            }
+            else if (!WriteLine(transaction, flow.victimLine, flow.victimData, FullEnables()))
+                return false;
+        }
+        const auto requesters = snoopFilter.Targets(flow.victimLine);
+        for (NodeId requester : requesters)
+            snoopFilter.Remove(flow.victimLine, requester);
+        snoopFilter.Invalidate(snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
+    }
+    else
+    {
+        if (flow.victimDirty && !WriteLine(transaction, flow.victimLine, flow.victimData, FullEnables()))
+            return false;
+        directory.Invalidate(directory.SetIndex(flow.victimLine), flow.victimWay);
+    }
+
+    if (flow.victimLinked)
+        hazards.Release(transaction.handle, flow.victimLine);
+    flow.victimLinked = false;
     flow.victimPending = false;
+    flow.victimSnoopFilterOnly = false;
     flow.victimDataValid = false;
     flow.victimDirty = false;
     flow.snoopForVictim = false;
@@ -262,14 +370,16 @@ void Core::Impl::CompleteVictim(Transaction& transaction)
     flow.nextSnoop = 0;
     flow.snoopBeatMasks.clear();
     flow.snoopResponses.clear();
+    return true;
 }
 
-void Core::Impl::InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty, Time age)
+HomeLine& Core::Impl::InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty, Time age)
 {
     HomeLine& home = directory.Install(line, way, age);
     home.data = data;
     home.validBytes = FullEnables();
     home.dirty = dirty;
+    return home;
 }
 
 void Core::Impl::EvictRequester(Transaction& transaction)

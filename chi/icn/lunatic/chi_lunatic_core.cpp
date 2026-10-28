@@ -89,9 +89,10 @@ void Core::Impl::ProcessRSP(const Response& flit)
             Error(INVALID_TRANSACTION, "unmatched CompAck");
             return;
         }
-        if (!RequiresCompAck(transaction->request) || transaction->Complete(COMPLETE_COMPACK))
+        if (!RequiresCompAck(transaction->request) || transaction->Complete(COMPLETE_COMPACK) ||
+            transaction->phase != Phase::WaitCompAck || !transaction->Complete(COMPLETE_RESPONSE))
         {
-            Error(transaction->handle, "unexpected CompAck");
+            Error(transaction->handle, "unexpected or early CompAck");
             return;
         }
         transaction->Mark(COMPLETE_COMPACK);
@@ -241,12 +242,13 @@ void Core::Impl::Advance(Transaction& transaction)
             pipeline.Advance(transaction, Phase::Decode, time);
             return;
         case Phase::Decode:
-            if (!IsSupportedRequest(transaction.request.opcode))
+            if (!IsSupportedRequest(transaction.request.opcode) || transaction.request.size > 6 ||
+                (ClassifyRequest(transaction.request.opcode) == RequestClass::ZeroWrite && transaction.request.size != 6))
             {
-                Deny(transaction.request, "unsupported request opcode");
+                Deny(transaction.request, "unsupported request opcode or transfer geometry");
                 transaction.canceled = true;
-                transaction.phase = Phase::Commit;
-                transaction.readyTime = time;
+                transaction.dbid = transaction.handle;
+                QueueComp(transaction, false, CHI::Eb::Resps::Comp_I, 0b10);
                 return;
             }
             pipeline.Advance(transaction, Phase::Admit, time);
@@ -281,12 +283,14 @@ void Core::Impl::Advance(Transaction& transaction)
         {
             const HomeLine* home = directory.Find(transaction.request.Line());
             transaction.homeHit = home && home->valid;
+            flow.validBytes.fill(1);
             if (transaction.homeHit)
             {
                 transaction.data = home->data;
                 flow.homeDirty = home->dirty;
+                flow.validBytes = home->validBytes;
             }
-            else if (IsReadRequest(transaction.request.opcode))
+            else if (IsReadRequest(transaction.request.opcode) || IsCMORequest(transaction.request.opcode))
                 transaction.data = memory.Read(transaction.request.Line());
             const CacheState requesterState = snoopFilter.State(transaction.request.Line(), transaction.request.source);
             flow.requesterWasValid = IsValid(requesterState);
@@ -364,7 +368,7 @@ void Core::Impl::QueueDBID(Transaction& transaction)
     }
 }
 
-void Core::Impl::QueueComp(Transaction& transaction, bool withDBID, uint8_t resp)
+void Core::Impl::QueueComp(Transaction& transaction, bool withDBID, uint8_t resp, uint8_t respErr)
 {
     FlowState& flow = flows.at(transaction.handle);
     if (flow.compSent)
@@ -377,6 +381,7 @@ void Core::Impl::QueueComp(Transaction& transaction, bool withDBID, uint8_t resp
     response.dbid = transaction.dbid;
     response.opcode = withDBID ? CHI::Eb::Opcodes::RSP::CompDBIDResp : CHI::Eb::Opcodes::RSP::Comp;
     response.resp = resp;
+    response.respErr = respErr;
     response.qos = transaction.request.qos;
     response.traceTag = transaction.request.traceTag;
     if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
@@ -422,13 +427,28 @@ void Core::Impl::QueueRetryCredit(size_t index)
 
 void Core::Impl::ReturnRead(Transaction& transaction)
 {
-    const size_t beats = BeatsPerLine(options);
-    const size_t bytes = BytesPerBeat(options);
-    if (transaction.sentBeats >= beats)
+    FlowState& flow = flows.at(transaction.handle);
+    if (transaction.request.order != 0 && !flow.readReceiptEmitted)
+    {
+        if (!flow.readReceiptSent)
+            QueueReadReceipt(transaction);
+        return;
+    }
+
+    uint64_t mask = flow.expectedBeatMask;
+    if (!mask)
+        mask = (uint64_t(1) << BeatsPerLine(options)) - 1;
+    if (transaction.sentBeats >= size_t(std::popcount(mask)))
         return;
 
-    const size_t beat = transaction.sentBeats;
+    uint64_t selected = mask;
+    for (size_t index = 0; index < transaction.sentBeats; ++index)
+        selected &= selected - 1;
+    const size_t beat = std::countr_zero(selected);
+    const size_t bytes = BytesPerBeat(options);
     const size_t offset = beat * bytes;
+    const uint64_t remaining = selected & ~(uint64_t(1) << beat);
+
     Data data;
     data.source = nodeId;
     data.target = transaction.request.source;
@@ -439,19 +459,19 @@ void Core::Impl::ReturnRead(Transaction& transaction)
     data.resp = transaction.responseResp;
     data.respErr = transaction.responseRespErr;
     data.dataId = offset / 16;
-    data.ccid = (offset / 16) % 2;
+    data.ccid = (transaction.request.address >> 4) & 3;
     data.qos = transaction.request.qos;
     data.traceTag = transaction.request.traceTag;
     for (size_t index = 0; index < bytes; ++index)
     {
         data.bytes[index] = transaction.data[offset + index];
-        data.byteEnables[index] = 1;
+        data.byteEnables[index] = flow.validBytes[offset + index];
         data.dataCheck[index] = transaction.dataCheck[offset + index];
     }
     for (size_t lane = 0; lane < bytes / 8; ++lane)
         data.poison[lane] = transaction.poison[offset / 8 + lane];
 
-    if (Queue(txdat, data, transaction.handle, transaction.actionAge, beat + 1 == beats))
+    if (Queue(txdat, data, transaction.handle, transaction.actionAge, remaining == 0))
         ++transaction.sentBeats;
 }
 
@@ -512,7 +532,7 @@ void Core::Impl::OnEmitted(const Pending<Request>& pending)
     FlowState& flow = flows.at(transaction->handle);
     if (flow.backendPhase == BackendPhase::WaitRequestEmission)
     {
-        flow.backendPhase = IsReadRequest(transaction->request.opcode) || IsCMORequest(transaction->request.opcode)
+        flow.backendPhase = !flow.spillPending && (IsReadRequest(transaction->request.opcode) || IsCMORequest(transaction->request.opcode))
             ? BackendPhase::WaitComp : BackendPhase::WaitDBID;
         transaction->phase = Phase::WaitMemory;
         transaction->readyTime = time;
@@ -538,6 +558,11 @@ void Core::Impl::OnEmitted(const Pending<Response>& pending)
     Transaction* transaction = tracker.Find(pending.transaction);
     if (!transaction)
         return;
+    if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::ReadReceipt)
+    {
+        flows.at(transaction->handle).readReceiptEmitted = true;
+        return;
+    }
     if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp && IsCopybackRequest(transaction->request.opcode))
     {
         transaction->Mark(COMPLETE_RESPONSE);

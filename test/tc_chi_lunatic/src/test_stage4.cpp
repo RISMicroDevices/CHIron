@@ -93,7 +93,7 @@ void CoherentReadMatrix(PolicyKind policy)
     LUNATIC_CHECK(comp.Resp() == CHI::Eb::Resps::Comp_UC);
     driver.CompAck(4, comp.DBID());
     driver.Quiesce();
-    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::UC);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::UD);
     LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::I);
 }
 
@@ -158,7 +158,7 @@ void DirtyAndCopybackMatrix(PolicyKind policy)
 
     LUNATIC_CHECK(driver.ReadData(8, 15, line.address, CHI::Eb::Opcodes::REQ::ReadUnique) == merged);
     driver.Quiesce();
-    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 8) == CacheState::UD);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 8) == CacheState::UDP);
     Writeback(driver, 8, 16, line, CHI::Eb::Opcodes::REQ::WriteCleanFull, merged, AllBytes(),
               CHI::Eb::Resps::CopyBackWrData_UD_PD);
     LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 8) == CacheState::UC);
