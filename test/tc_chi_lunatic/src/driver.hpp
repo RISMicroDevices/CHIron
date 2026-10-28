@@ -62,8 +62,10 @@ public:
         request.AllowRetry() = 1;
         request.ExpCompAck() = expCompAck;
         request.SnpAttr() = 1;
-        request.MemAttr() = CHI::Lunatic::IsCoherentRequest(opcode) || opcode == CHI::Eb::Opcodes::REQ::ReadOnce
-            ? CHI::Eb::MemAttrs::WriteBack_Allocate : CHI::Eb::MemAttrs::NonCacheable_Bufferable;
+        request.MemAttr() = opcode == CHI::Eb::Opcodes::REQ::Evict
+            ? CHI::Eb::MemAttrs::WriteBack_NoAllocate
+            : CHI::Lunatic::IsCoherentRequest(opcode) || opcode == CHI::Eb::Opcodes::REQ::ReadOnce
+                ? CHI::Eb::MemAttrs::WriteBack_Allocate : CHI::Eb::MemAttrs::NonCacheable_Bufferable;
         return request;
     }
 

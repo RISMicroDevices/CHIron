@@ -14,6 +14,7 @@ struct PolicyContext {
     bool homeDirty = false;
     bool requesterValid = false;
     bool requesterDirty = false;
+    bool requesterRetains = false;
     bool evictionHasData = false;
 };
 

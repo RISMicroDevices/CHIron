@@ -45,6 +45,11 @@ bool Core::Impl::CommitReadDirectory(Transaction& transaction)
     context.homeDirty = flow.homeDirty;
     context.requesterValid = flow.requesterWasValid;
     context.requesterDirty = flow.requesterWasDirty;
+    if (ClassifyRequest(transaction.request.opcode) == RequestClass::ReadOnce)
+    {
+        for (NodeId target : snoopFilter.Targets(line))
+            context.requesterValid |= IsValid(snoopFilter.State(line, target));
+    }
     const PolicyDecision decision = ClassifyRequest(transaction.request.opcode) == RequestClass::ReadOnce
         ? policy->OnHomeAllocation(context) : policy->OnRNFill(context);
     flow.allocateHome = decision.allocateHome;
@@ -85,14 +90,23 @@ bool Core::Impl::CommitReadDirectory(Transaction& transaction)
     {
         const std::optional<size_t> currentWay = directory.FindWay(line);
         const size_t way = currentWay ? *currentWay : flow.victimWay;
-        const bool requesterDirty = IsDirty(flow.requesterFinal);
-        const bool dirty = requesterDirty ? false : flow.homeDirty || (flow.dataDirty && !flow.passDirty);
+        bool anyRequesterDirty = IsDirty(flow.requesterFinal);
+        for (NodeId target : snoopFilter.Targets(line))
+        {
+            if (target != transaction.request.source && IsDirty(snoopFilter.State(line, target)))
+                anyRequesterDirty = true;
+        }
+        const bool dirty = anyRequesterDirty ? false : flow.homeDirty || (flow.dataDirty && !flow.passDirty);
         InstallHome(line, way, transaction.data, dirty, time);
     }
     else if (decision.removeHome && transaction.homeHit)
     {
         directory.Invalidate(directory.SetIndex(line), *directory.FindWay(line));
     }
+
+    if (options.policy == PolicyKind::Exclusive && !decision.allocateHome && !decision.retainHome &&
+        (flow.homeDirty || flow.dataDirty))
+        memory.Write(line, transaction.data, FullEnables());
 
     if (ClassifyRequest(transaction.request.opcode) != RequestClass::ReadOnce)
         snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
@@ -115,18 +129,6 @@ bool Core::Impl::CommitCopyback(Transaction& transaction)
         }
     }
 
-    PolicyContext context;
-    context.line = line;
-    context.requester = transaction.request.source;
-    context.homeValid = transaction.homeHit;
-    context.homeDirty = flow.homeDirty;
-    context.requesterValid = flow.requesterWasValid;
-    context.requesterDirty = dirty;
-    context.evictionHasData = true;
-    const PolicyDecision decision = policy->OnCopyback(context);
-    if (decision.allocateHome && !transaction.homeHit && !PrepareVictim(transaction))
-        return false;
-
     if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteCleanFull)
     {
         const uint8_t state = flow.writeResp & 0b011;
@@ -134,6 +136,19 @@ bool Core::Impl::CommitCopyback(Transaction& transaction)
     }
     else
         flow.requesterFinal = CacheState::I;
+
+    PolicyContext context;
+    context.line = line;
+    context.requester = transaction.request.source;
+    context.homeValid = transaction.homeHit;
+    context.homeDirty = flow.homeDirty;
+    context.requesterValid = flow.requesterWasValid;
+    context.requesterDirty = dirty;
+    context.requesterRetains = IsValid(flow.requesterFinal);
+    context.evictionHasData = true;
+    const PolicyDecision decision = policy->OnCopyback(context);
+    if (decision.allocateHome && !transaction.homeHit && !PrepareVictim(transaction))
+        return false;
 
     if (decision.mergeCopyback && (decision.allocateHome || decision.retainHome || transaction.homeHit))
     {
@@ -143,6 +158,8 @@ bool Core::Impl::CommitCopyback(Transaction& transaction)
     else
         memory.Write(line, transaction.data, transaction.byteEnables);
 
+    if (decision.removeHome && transaction.homeHit)
+        directory.Invalidate(directory.SetIndex(line), *directory.FindWay(line));
     snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
     return true;
 }

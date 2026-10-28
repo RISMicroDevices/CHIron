@@ -286,6 +286,8 @@ void Core::Impl::Advance(Transaction& transaction)
                 transaction.data = home->data;
                 flow.homeDirty = home->dirty;
             }
+            else if (IsReadRequest(transaction.request.opcode))
+                transaction.data = memory.Read(transaction.request.Line());
             const CacheState requesterState = snoopFilter.State(transaction.request.Line(), transaction.request.source);
             flow.requesterWasValid = IsValid(requesterState);
             flow.requesterWasDirty = IsDirty(requesterState);
@@ -536,6 +538,14 @@ void Core::Impl::OnEmitted(const Pending<Response>& pending)
     Transaction* transaction = tracker.Find(pending.transaction);
     if (!transaction)
         return;
+    if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp && IsCopybackRequest(transaction->request.opcode))
+    {
+        transaction->Mark(COMPLETE_RESPONSE);
+        transaction->phase = Phase::WaitWriteData;
+        transaction->wait = WaitReason::WriteData;
+        transaction->readyTime = time;
+        return;
+    }
     if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp ||
         pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
         FinishResponse(*transaction);
@@ -613,15 +623,32 @@ bool Core::Impl::ValidateInvariants() const noexcept
 {
     if (!tracker.Validate() || !hazards.Validate())
         return false;
+    if (!tracker.Empty())
+        return true;
 
-    for (size_t set = 0; set < directory.Sets(); ++set)
+    for (size_t set = 0; set < snoopFilter.Sets(); ++set)
     {
-        for (size_t way = 0; way < directory.Ways(); ++way)
+        for (size_t way = 0; way < snoopFilter.Ways(); ++way)
         {
-            const HomeLine& home = directory.At(set, way);
-            if (!home.valid)
+            const SnoopFilterEntry& entry = snoopFilter.At(set, way);
+            if (!entry.valid)
                 continue;
-            if (options.policy == PolicyKind::Exclusive && !snoopFilter.Sharers(home.key).empty() && tracker.Empty())
+            size_t validRequesters = 0;
+            size_t dirtyRequesters = 0;
+            for (const auto& [requester, state] : entry.requesters)
+            {
+                validRequesters += IsValid(state) ? 1 : 0;
+                dirtyRequesters += IsDirty(state) ? 1 : 0;
+            }
+
+            const HomeLine* home = directory.Find(entry.key);
+            if (options.policy == PolicyKind::Inclusive && validRequesters && (!home || !home->valid))
+                return false;
+            if (options.policy == PolicyKind::Exclusive && validRequesters && home && home->valid)
+                return false;
+            if (home && home->dirty && dirtyRequesters)
+                return false;
+            if (dirtyRequesters > 1)
                 return false;
         }
     }

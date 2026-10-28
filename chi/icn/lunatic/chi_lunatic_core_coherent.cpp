@@ -159,7 +159,8 @@ void Core::Impl::ActionCoherent(Transaction& transaction)
         case RequestClass::CopybackWrite:
             if (!flow.dbidSent)
             {
-                QueueDBID(transaction);
+                QueueComp(transaction, true);
+                flow.dbidSent = flow.compSent;
                 return;
             }
             if (!transaction.Complete(COMPLETE_WRITE_DATA))
@@ -174,7 +175,9 @@ void Core::Impl::ActionCoherent(Transaction& transaction)
                 transaction.readyTime = time;
                 return;
             }
-            QueueComp(transaction);
+            transaction.Mark(COMPLETE_COMMIT);
+            transaction.phase = Phase::Commit;
+            transaction.readyTime = time;
             return;
         case RequestClass::Evict:
             EvictRequester(transaction);
@@ -231,7 +234,8 @@ void Core::Impl::PlanReadSnoops(Transaction& transaction)
         const CacheState state = snoopFilter.State(transaction.request.Line(), target);
         const bool needsUnique = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique ||
                                  ClassifyRequest(transaction.request.opcode) == RequestClass::MakeUnique;
-        if (needsUnique || IsDirty(state))
+        const bool needsDowngrade = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadShared && IsUnique(state);
+        if (needsUnique || needsDowngrade || IsDirty(state))
             candidates.push_back(target);
     }
 
@@ -300,8 +304,13 @@ bool Core::Impl::EmitSnoops(Transaction& transaction)
     snoop.opcode = SnoopOpcode(transaction, flow);
     snoop.qos = transaction.request.qos;
     snoop.traceTag = transaction.request.traceTag;
-    snoop.doNotGoToSD = options.doNotGoToSD;
-    snoop.retToSrc = snoop.opcode != CHI::Eb::Opcodes::SNP::SnpMakeInvalid;
+    snoop.doNotGoToSD = options.doNotGoToSD ||
+        snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique ||
+        snoop.opcode == CHI::Eb::Opcodes::SNP::SnpCleanShared ||
+        snoop.opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid ||
+        snoop.opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid;
+    snoop.retToSrc = snoop.opcode == CHI::Eb::Opcodes::SNP::SnpShared ||
+        snoop.opcode == CHI::Eb::Opcodes::SNP::SnpOnce || snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique;
 
     if (!Queue(txsnp, snoop, transaction.handle, transaction.actionAge, index + 1 == transaction.snoopTargets.size()))
         return false;

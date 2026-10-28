@@ -3,6 +3,7 @@
 #include "common.hpp"
 #include "../../../chi_eb/xact/chi_eb_joint.hpp"
 
+#include <source_location>
 #include <stdexcept>
 #include <string>
 
@@ -15,10 +16,11 @@ class RNOracle {
     CHI::Lunatic::NodeId home;
     CHI::Lunatic::NodeId requester;
 
-    static void Accept(CHI::Eb::Xact::XactDenialEnum denial)
+    static void Accept(CHI::Eb::Xact::XactDenialEnum denial,
+                       std::source_location location = std::source_location::current())
     {
         if (denial != CHI::Eb::Xact::XactDenial::ACCEPTED)
-            throw std::runtime_error(std::string("CHIron RN denial: ") + denial->name);
+            throw std::runtime_error(std::string("CHIron RN denial in ") + location.function_name() + ": " + denial->name);
     }
 
 public:

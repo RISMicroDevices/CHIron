@@ -111,7 +111,11 @@ bool Core::Impl::HandleWriteDAT(Transaction& transaction, const Data& flit)
         return false;
     if (IsCopybackRequest(transaction.request.opcode))
     {
-        if (flit.opcode != DAT::CopyBackWrData)
+        if (flit.opcode != DAT::CopyBackWrData || flit.txnId != transaction.dbid)
+            return false;
+        if (transaction.receivedBeats == 0)
+            flow.writeResp = flit.resp;
+        else if (flow.writeResp != flit.resp)
             return false;
     }
     else if (ClassifyRequest(transaction.request.opcode) != RequestClass::NonCoherentWrite ||
@@ -136,7 +140,8 @@ bool Core::Impl::HandleWriteDAT(Transaction& transaction, const Data& flit)
     {
         for (size_t index = 0; index < bytes; ++index)
         {
-            transaction.data[offset + index] = flit.bytes[index];
+            if (flit.byteEnables[index])
+                transaction.data[offset + index] = flit.bytes[index];
             transaction.byteEnables[offset + index] = flit.byteEnables[index];
             transaction.dataCheck[offset + index] = flit.dataCheck[index];
         }

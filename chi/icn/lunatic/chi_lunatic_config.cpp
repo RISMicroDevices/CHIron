@@ -14,8 +14,9 @@ void ValidateOptions(const Options& options)
     if (!options.transactionLimit || !options.snoopLimit)
         throw std::invalid_argument("Lunatic tracker resources must be non-empty");
 
-    if (options.transactionLimit > 4096)
-        throw std::invalid_argument("Lunatic transaction IDs exceed the Issue E.b DBID width");
+    if (options.transactionLimit > 4096 || options.snoopLimit > 4096 ||
+        options.transactionLimit > 4096 / options.snoopLimit)
+        throw std::invalid_argument("Lunatic transaction or snoop IDs exceed the Issue E.b width");
 
     if (!options.slcSets || !options.slcWays || !options.snoopFilterSets || !options.snoopFilterWays)
         throw std::invalid_argument("Lunatic array geometry must be non-zero");

@@ -98,6 +98,12 @@ public:
 
     PolicyDecision OnCopyback(const PolicyContext& context) const override
     {
+        if (context.requesterRetains)
+        {
+            PolicyDecision decision;
+            decision.removeHome = context.homeValid;
+            return decision;
+        }
         return MergeCopyback(context);
     }
 };

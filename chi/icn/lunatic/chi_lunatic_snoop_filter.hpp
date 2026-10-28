@@ -30,6 +30,8 @@ public:
     SnoopFilter(size_t sets, size_t ways, bool precise = true);
     explicit SnoopFilter(const Options& options);
 
+    size_t Sets() const noexcept { return sets; }
+    size_t Ways() const noexcept { return ways; }
     size_t SetIndex(const LineKey& key) const noexcept;
     SnoopFilterEntry* Find(const LineKey& key) noexcept;
     const SnoopFilterEntry* Find(const LineKey& key) const noexcept;
