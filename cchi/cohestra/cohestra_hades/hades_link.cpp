@@ -964,10 +964,11 @@ namespace Cohestra::Hades {
         // drain-quiet tail (session.cpp drainQuiet shape): after the fabric
         // has completed every staged cycle, keep harvesting until the c2h
         // side is quiet for a run of consecutive polls, so every formed frame
-        // is delivered before the run ends. Without this the trailing unpack
-        // count (and the c2h frame count) depends on harvest pacing.
+        // is delivered before the run ends. The longer quiet run tolerates
+        // bounded host-congestion windows that swallow polls without making
+        // the transport actually quiet; the total iteration bound is unchanged.
         for (unsigned quietDrain = 0, total = 0;
-             quietDrain < 16 && total < 4096 && !Failed(); ++total)
+             quietDrain < 256 && total < 4096 && !Failed(); ++total)
         {
             const std::uint64_t drainedBefore = c2hFrames;
 
