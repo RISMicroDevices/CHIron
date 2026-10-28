@@ -289,6 +289,13 @@ namespace Cohestra::Hades {
 
     void JtagTcpTransport::write_mmio(std::uint64_t offset, std::uint32_t value)
     {
+        // Doorbell writes (0x040-0x07F) are accepted no-ops in the fabric core
+        // ("frames already stream" — hades_fabric_core.sv write decode), so
+        // each one here would be a pure ~55 ms round trip for nothing. Elide
+        // it; the wire-visible behavior is identical.
+        if (offset >= 0x040 && offset < 0x080)
+            return;
+
         try
         {
             RoundTrip({ Op { true, static_cast<std::uint32_t>(offset), { value } } });
@@ -304,13 +311,14 @@ namespace Cohestra::Hades {
         if (fatal)
             return;
 
-        // Phase J-0: the bridge maps one 64B frame to one AXIS beat; anything
-        // larger would be misread by the fabric as multiple frames
-        if (frame.size() != hades::kFrameAlign)
+        // The bridge h2c contract is ONE BURST = ONE FRAME (TLAST on the
+        // burst's final 16-word group), so multi-segment TOKEN_BATCH_WIDE
+        // frames are legal end to end: any 64 B multiple up to
+        // MAX_BATCH_FRAMES segments. Anything else is a host-side bug.
+        if (frame.size() % hades::kFrameAlign != 0 ||
+            frame.size() > size_t(hades::kMaxBatchFrames) * hades::kFrameAlign)
         {
-            LatchError("Phase J-0 bridge carries single-beat 64B frames only; "
-                "TOKEN_BATCH_WIDE payloads (oceanus channels) need the Phase J-1 "
-                "multi-beat bridge — use backend=loopback until then");
+            LatchError("jtag: h2c frame is not a 64 B multiple within MAX_BATCH_FRAMES");
             return;
         }
 
@@ -353,21 +361,31 @@ namespace Cohestra::Hades {
             return;     // mailbox full: retry next poll (never silently drop, §1.4)
 
         std::vector<Op> ops;
-        size_t n = 0;
+        size_t n = 0, segs = 0;
 
-        for (auto it = outbox.begin(); it != outbox.end() && n < h2cFree; ++it, ++n)
+        for (auto it = outbox.begin(); it != outbox.end(); ++it)
         {
-            Op op { true, kWinH2C, {} };    // 16 x u32 = one 64B frame, LSB-first
-            op.words.reserve(hades::kFrameAlign / 4);
+            const size_t frameSegs = it->size() / hades::kFrameAlign;
 
-            for (size_t w = 0; w < hades::kFrameAlign / 4; ++w)
+            if (segs + frameSegs > h2cFree)
+                break;  // leave the frame whole for the next poll (one burst = one frame)
+
+            Op op { true, kWinH2C, {} };    // one burst = one frame, LSB-first
+            op.words.reserve(it->size() / 4);
+
+            for (size_t w = 0; w < it->size() / 4; ++w)
                 op.words.push_back(GetU32(reinterpret_cast<const std::uint8_t*>(it->data()) + 4 * w));
 
             ops.push_back(std::move(op));
+            ++n;
+            segs += frameSegs;
         }
 
-        RoundTrip(ops);
-        outbox.erase(outbox.begin(), outbox.begin() + n);
+        if (n)
+        {
+            RoundTrip(ops);
+            outbox.erase(outbox.begin(), outbox.begin() + n);
+        }
     }
 
     void JtagTcpTransport::poll()
@@ -380,29 +398,39 @@ namespace Cohestra::Hades {
             RefreshStatus();
             FlushOutbox();
 
-            // drain the c2h mailbox: one 64B read burst per occupancy slot
-            const unsigned c2hOcc = (bridgeStatus >> 8) & 0x7F;
+            // drain the c2h mailbox frame by frame: STATUS[14:8] counts the
+            // COMPLETE frames queued and C2H_WORDS (@0x1010) gives the oldest
+            // frame's exact word count — the bridge contract requires bursts
+            // to end on frame boundaries. Multi-segment frames arrive intact
+            // (the bridge latches each frame's segment count on TLAST).
+            unsigned c2hFrames = (bridgeStatus >> 8) & 0x7F;
 
-            if (c2hOcc)
+            while (c2hFrames--)
             {
-                std::vector<Op> ops(c2hOcc, Op { false, kWinC2H, std::vector<std::uint32_t>(16, 0) });
+                const std::uint32_t words = read_mmio(0x1010);  // bridge C2H_WORDS
 
-                auto reads = RoundTrip(ops);
-
-                for (unsigned f = 0; f < c2hOcc; ++f)
+                if (words == 0 || (words % 16) != 0 ||
+                    words > std::uint32_t(hades::kMaxBatchFrames) * 16)
                 {
-                    std::vector<std::byte> frame(hades::kFrameAlign);
-
-                    for (size_t w = 0; w < 16; ++w)
-                    {
-                        const std::uint32_t word = reads[f * 16 + w];
-
-                        for (size_t b = 0; b < 4; ++b)
-                            frame[4 * w + b] = std::byte(word >> (8 * b));
-                    }
-
-                    inbox.push_back(std::move(frame));
+                    LatchError("bridge reported a malformed C2H_WORDS");
+                    return;
                 }
+
+                auto rd = RoundTrip({ Op { false, kWinC2H, std::vector<std::uint32_t>(words, 0) } });
+
+                if (rd.size() != words)
+                {
+                    LatchError("c2h drain returned a short word count");
+                    return;
+                }
+
+                std::vector<std::byte> frame(size_t(words) * 4);
+
+                for (size_t w = 0; w < words; ++w)
+                    for (size_t b = 0; b < 4; ++b)
+                        frame[4 * w + b] = std::byte(rd[w] >> (8 * b));
+
+                inbox.push_back(std::move(frame));
             }
 
             if (bridgeStatus & (0x1Fu << 16))   // sticky ERR bits [20:16]

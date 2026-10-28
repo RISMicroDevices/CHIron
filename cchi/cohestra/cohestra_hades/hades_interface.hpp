@@ -221,15 +221,18 @@ namespace Cohestra::Hades {
         uint64_t    GetFenceBlockedCount() const noexcept  { return fenceBlocked; }
         uint64_t    GetFieldTruncationCount() const noexcept { return fieldTruncations; }
 
+        AXIMonitor&       AXICompletionMonitor() noexcept       { return axiMonitor; }
+        const AXIMonitor& AXICompletionMonitor() const noexcept { return axiMonitor; }
+
         // debug/probe accessor (mirror-math validation)
         size_t      DebugInflightREQ() const noexcept { return inflightREQ; }
 
     protected:
         // retire one drive flit on its accept echo (implementation in the .cpp)
         template<class T>
-        void ApplyEcho(MirrorFIFO<SlottedFlit<T>>& fifo, std::deque<uint64_t>& stagedCycles,
+        bool ApplyEcho(MirrorFIFO<SlottedFlit<T>>& fifo, std::deque<uint64_t>& stagedCycles,
                        size_t& inflight, bool readyEcho, uint64_t tokenCycle,
-                       const char* what) noexcept;
+                       const char* what, T* accepted = nullptr) noexcept;
 
         // the anchored view gate (tag + viewLatency <= currentCycle)
         template<class T>
@@ -273,6 +276,8 @@ namespace Cohestra::Hades {
         // slot allocation state
         uint64_t    currentCycle = 0;
         uint64_t    prevSlot[6]  = { 0, 0, 0, 0, 0, 0 };
+
+        AXIMonitor  axiMonitor;
 
         uint64_t    fenceBlocked       = 0;   // ready echo with no drivable staged flit
                                             // (benign: the wrapper samples the raw

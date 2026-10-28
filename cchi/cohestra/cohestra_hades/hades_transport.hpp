@@ -12,10 +12,11 @@
 //                        (HADES-Fabric scripts/jtag/, TCP port 3122 default).
 //
 // NOTE (Phase J-0): the JTAG bridge RTL (rtl/link/jtag/hades_jtag_bridge.sv)
-// carries SINGLE-BEAT 64B frames only; the Oceanus token batches are
-// multi-segment TOKEN_BATCH_WIDE frames, so backend=jtag fails loudly on the
-// first token batch until the bridge grows multi-beat frames (Phase J-1).
-// Control-path MMIO (MAGIC/CTRL/descriptors/grants/doorbells) works today.
+// contract is ONE BURST = ONE FRAME h2c-side (TLAST on the burst's final
+// 16-word group) and frame-exact c2h drains (poll STATUS.c2h_occupancy, then
+// size each burst to C2H_WORDS), so multi-segment TOKEN_BATCH_WIDE frames
+// pass through end to end on this backend. Control-path MMIO (MAGIC/CTRL/
+// descriptors/grants/doorbells) needs none of this.
 //*****************************************************************************
 #pragma once
 

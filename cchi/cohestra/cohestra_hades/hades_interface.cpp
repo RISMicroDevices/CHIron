@@ -108,6 +108,10 @@ namespace Cohestra::Hades {
         for (auto& slot : prevSlot)
             slot = 0;
 
+        auto monitorEvents = axiMonitor.events;
+        axiMonitor = AXIMonitor{};
+        axiMonitor.events = std::move(monitorEvents);
+
         fenceBlocked = fieldTruncations = 0;
     }
 
@@ -431,12 +435,12 @@ namespace Cohestra::Hades {
     // ---- retirement + receive (c2h) ---------------------------------------------
 
     template<class T>
-    void HadesFlitStore::ApplyEcho(MirrorFIFO<SlottedFlit<T>>& fifo, std::deque<uint64_t>& stagedCycles,
+    bool HadesFlitStore::ApplyEcho(MirrorFIFO<SlottedFlit<T>>& fifo, std::deque<uint64_t>& stagedCycles,
                                    size_t& inflight, bool readyEcho, uint64_t tokenCycle,
-                                   const char* what) noexcept
+                                   const char* what, T* accepted) noexcept
     {
         if (!readyEcho)
-            return;
+            return false;
 
         if (stagedCycles.empty() ||
             stagedCycles.front() + kEchoFireLatency > tokenCycle)
@@ -446,14 +450,18 @@ namespace Cohestra::Hades {
             // ready pin, NOT an accept — do not pop. Expected constantly:
             // the wrapper samples the raw ready pin every tick.
             ++fenceBlocked;
-            return;
+            return false;
         }
 
         // accept: the wrapper committed the oldest staged flit at the sampled
         // edge — retire it (and only it: one hold register, one fire per edge)
+        if (accepted)
+            *accepted = fifo.PeekAt(0)->flit;
+
         fifo.Pop();
         stagedCycles.pop_front();
         --inflight;
+        return true;
     }
 
     void HadesFlitStore::UnpackCh4(uint64_t cycle, TokenReader token) noexcept
@@ -509,6 +517,7 @@ namespace Cohestra::Hades {
             chan.Burst = burst == 0 ? AXI::Burst::FIXED
                        : burst == 1 ? AXI::Burst::INCR : AXI::Burst::WRAP;
 
+            axiMonitor.PushAW({ cycle * 2, chan });
             queueAW.push_back(TaggedFlit<AXI::BundleChannelAW> { std::move(chan), cycle });
         }
 
@@ -525,6 +534,7 @@ namespace Cohestra::Hades {
             chan.Burst = burst == 0 ? AXI::Burst::FIXED
                        : burst == 1 ? AXI::Burst::INCR : AXI::Burst::WRAP;
 
+            axiMonitor.PushAR({ cycle * 2, chan });
             queueAR.push_back(TaggedFlit<AXI::BundleChannelAR> { std::move(chan), cycle });
         }
 
@@ -535,8 +545,14 @@ namespace Cohestra::Hades {
         ApplyEcho(fifoREQ,   stagedREQ,   inflightREQ,   token.Get(P::ECHO_REQ, 1) != 0, cycle, "rxreq");
         ApplyEcho(fifoUpRSP, stagedUpRSP, inflightUpRSP, token.Get(P::ECHO_RSP, 1) != 0, cycle, "rxrsp");
         ApplyEcho(fifoUpDAT, stagedUpDAT, inflightUpDAT, token.Get(P::ECHO_DAT, 1) != 0, cycle, "rxdat");
-        ApplyEcho(fifoB,     stagedB,     inflightB,     token.Get(P::ECHO_B,   1) != 0, cycle, "axi_m0_b");
-        ApplyEcho(fifoR,     stagedR,     inflightR,     token.Get(P::ECHO_R,   1) != 0, cycle, "axi_m0_r");
+
+        AXI::BundleChannelB responseB;
+        if (ApplyEcho(fifoB, stagedB, inflightB, token.Get(P::ECHO_B, 1) != 0, cycle, "axi_m0_b", &responseB))
+            axiMonitor.PushB({ (cycle - 1) * 2, responseB });
+
+        AXI::BundleChannelR responseR;
+        if (ApplyEcho(fifoR, stagedR, inflightR, token.Get(P::ECHO_R, 1) != 0, cycle, "axi_m0_r", &responseR))
+            axiMonitor.PushR({ (cycle - 1) * 2, responseR });
     }
 
     void HadesFlitStore::UnpackCh5(uint64_t cycle, TokenReader token) noexcept
@@ -586,6 +602,7 @@ namespace Cohestra::Hades {
             chan.Strb.assign(1, token.Get(P::W_STRB, 32));
             chan.Last = token.Get(P::W_LAST, 1);
 
+            axiMonitor.PushW({ cycle * 2, chan });
             queueW.push_back(TaggedFlit<AXI::BundleChannelW> { std::move(chan), cycle });
         }
     }

@@ -43,6 +43,7 @@
 
 #include "hades_harness.hpp"
 #include "hades_interface.hpp"
+#include "hades_report.hpp"
 #include "hades_transport.hpp"
 
 #include "../cohestra_logo.hpp"
@@ -88,6 +89,10 @@ const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_HADES_RX_QUEUE
 
 const Cohestra::ConfigurationEntryBack<uint64_t> CONFIG_HADES_MAX_QUIET_POLLS
     ("HADES_MAX_QUIET_POLLS", "max_quiet_polls", "hades", 2000000, Cohestra::DeserializeUInt64, Cohestra::SerializeUInt64);
+
+// Transport segment cap for h2c staging (1 = Phase J-0 single-beat JTAG bridge)
+const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_HADES_MAX_BATCH_FRAMES
+    ("HADES_MAX_BATCH_FRAMES", "max_batch_frames", "hades", 8, Cohestra::DeserializeUInt32, Cohestra::SerializeUInt32);
 
 // DUT-cycle anchoring (strict replay-determinism under host congestion)
 const Cohestra::ConfigurationEntryBack<uint32_t> CONFIG_HADES_VIEW_LATENCY
@@ -504,6 +509,7 @@ namespace Cohestra::Hades {
         uint32_t    anchorLDat    = CONFIG_HADES_ANCHOR_L_DAT.defaultValue;
         uint32_t    anchorLB      = CONFIG_HADES_ANCHOR_L_B.defaultValue;
         uint32_t    anchorLR      = CONFIG_HADES_ANCHOR_L_R.defaultValue;
+        uint32_t    maxBatchFrames = CONFIG_HADES_MAX_BATCH_FRAMES.defaultValue;
 
         if (!ReadHadesKey(configurationLoader, &CONFIG_HADES_MANIFEST, manifestPath) ||
             !ReadHadesKey(configurationLoader, &CONFIG_HADES_BACKEND, backend) ||
@@ -516,7 +522,8 @@ namespace Cohestra::Hades {
             !ReadHadesKey(configurationLoader, &CONFIG_HADES_ANCHOR_L_RSP, anchorLRsp) ||
             !ReadHadesKey(configurationLoader, &CONFIG_HADES_ANCHOR_L_DAT, anchorLDat) ||
             !ReadHadesKey(configurationLoader, &CONFIG_HADES_ANCHOR_L_B, anchorLB) ||
-            !ReadHadesKey(configurationLoader, &CONFIG_HADES_ANCHOR_L_R, anchorLR))
+            !ReadHadesKey(configurationLoader, &CONFIG_HADES_ANCHOR_L_R, anchorLR) ||
+            !ReadHadesKey(configurationLoader, &CONFIG_HADES_MAX_BATCH_FRAMES, maxBatchFrames))
             return 1;
 
         if (manifestPath.empty())
@@ -580,6 +587,16 @@ namespace Cohestra::Hades {
         linkConfig.maxInflight   = manifest.maxInflight;
         linkConfig.maxQuietPolls = maxQuietPolls;
         linkConfig.viewLatency   = viewLatency;
+        // The JTAG bridge's mailbox accumulates the unconfigured fabric's
+        // vacuous-tick flood before the session starts; flush it after CTRL.run
+        // (hades_link.cpp Reset). In-process backends have no bridge window.
+        linkConfig.flushBridgeOnReset = (backend == "jtag");
+        // Transport segment cap for h2c staging granules: the Phase J-0 JTAG
+        // bridge maps one 64B frame to one AXIS beat, so wide batches must be
+        // re-sliced to single-segment frames on this backend (hades_link.cpp
+        // ctor). In-process backends keep the full A3 budget.
+        if (backend == "jtag")
+            linkConfig.maxBatchFrames = maxBatchFrames;
 
         auto link = std::make_shared<Hades::HadesLink>(
             std::move(transport), manifest, linkConfig, store.get());
@@ -805,6 +822,9 @@ namespace Cohestra::Hades {
         }
         else
             spdlog::info("Simulation performance meter disabled by configuration.");
+
+        Cohestra::Hades::HadesCompletionReporter completionReporter(instance, *store);
+        completionReporter.Attach();
 
         // CLog.B log open (parameters/topology tags only — the null monitor
         // has no ports; every [clogb] rnf.nodeid.*/snf.nodeid.* key must
@@ -1063,6 +1083,7 @@ namespace Cohestra::Hades {
         profiler.Report(time);
         simPerfMeter.Report(time);
         opCount.Report();
+        completionReporter.Report();
 
         if (instance.IsFinished())
         {

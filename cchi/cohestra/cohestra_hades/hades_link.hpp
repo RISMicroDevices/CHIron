@@ -122,6 +122,20 @@ namespace Cohestra::Hades {
                                                 // unpacked (legal stall, never a skip).
                                                 // Deadlock floor: maxH2CGranule +
                                                 // maxC2HGranule (clamped with a warning).
+        bool        flushBridgeOnReset = false; // jtag backend: flush the JTAG bridge
+                                                // mailbox (pre-session vacuous-tick
+                                                // flood frames, incl. the intermittent
+                                                // all-zero anomaly) right after CTRL.run,
+                                                // before the first grant/poll.
+        uint32_t    maxBatchFrames = hades::kMaxBatchFrames; // [hades] max_batch_frames:
+                                                // transport segment cap for h2c staging
+                                                // granules (1 = Phase J-0 single-beat
+                                                // JTAG bridge, whose per-64B TLAST maps
+                                                // each segment to a whole frame). c2h
+                                                // decode is self-describing (arg token
+                                                // count) and never capped here.
+        uint64_t    freezeCycle = 0;            // opt-in HADES_FREEZE_CYCLE; 0 disables
+        bool        freezeFinal = false;        // opt-in HADES_FREEZE_FINAL=1
     };
 
     class HadesLink {
@@ -196,11 +210,14 @@ namespace Cohestra::Hades {
         void        NoteProgress() noexcept;
 
         std::uint64_t ReadTick64() noexcept;
+        bool        ConfigureFreeze() noexcept;
+        void        MaybeFreeze(uint64_t cycle, bool final) noexcept;
 
     private:
         std::unique_ptr<hades::TransportIF> link;
         ManifestInfo                        manifest;
         LinkConfig                          config;
+        bool                                freezeConfigured = false;
         HadesPinSink*                       sink;
 
         // per-channel staging state (index parallel to manifest.channels;

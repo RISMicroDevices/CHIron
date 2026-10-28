@@ -25,9 +25,12 @@
 #include "hades_link.hpp"
 
 #include <algorithm>
+#include <csignal>
+#include <cstdlib>
 #include <cstring>
 #include <numeric>
 #include <stdexcept>
+#include <unistd.h>
 
 #include "yaml-cpp/yaml.h"
 
@@ -44,6 +47,8 @@ namespace {
     constexpr std::uint64_t kCsrTickHi      = 0x01C;    // RO
     constexpr std::uint64_t kCsrDoorbellH2C = 0x040;    // WO (batched doorbell)
     constexpr std::uint64_t kCsrChanDesc    = 0x100;    // RW 32B x 256 entries (DD-8)
+    constexpr std::uint64_t kBridgeCtrl     = 0x1008;   // WO (hades_jtag_bridge window;
+                                                        // jtag backend only)
 
     constexpr std::uint32_t kCtrlRun        = 0x1;
     constexpr std::uint32_t kCtrlReset      = 0x4;
@@ -161,6 +166,17 @@ namespace Cohestra::Hades {
         if (this->config.windowK == 0)
             this->config.windowK = 1;
 
+        // Transport segment cap (Phase J-0 single-beat JTAG bridge = 1):
+        // re-slice the h2c staging granules so every staged TOKEN_BATCH_WIDE
+        // frame fits the cap — the manifest-loaded granules assume the full
+        // A3 budget (kMaxBatchFrames). c2h channels are untouched: their
+        // decode is self-describing (arg token count) and the fabric's
+        // emission granule is elaborated RTL-side.
+        for (ChannelInfo& chan : this->manifest.channels)
+            if (chan.h2c && hades::isWideTokenBytes(chan.widthBytes))
+                chan.granule = hades::wideBatchGranule(chan.widthBytes,
+                                                       this->config.maxBatchFrames);
+
         uint64_t maxH2CGranule = 1;
         uint64_t maxC2HGranule = 1;
 
@@ -216,8 +232,57 @@ namespace Cohestra::Hades {
         }
     }
 
+    bool HadesLink::ConfigureFreeze() noexcept
+    {
+        config.freezeCycle = 0;
+        config.freezeFinal = false;
+
+        if (const char* raw = std::getenv("HADES_FREEZE_CYCLE"))
+        {
+            try
+            {
+                size_t used = 0;
+                const uint64_t value = std::stoull(raw, &used, 0);
+                if (used != std::strlen(raw) || value == 0)
+                {
+                    Fail("HADES_FREEZE_CYCLE must be a positive target cycle");
+                    return false;
+                }
+                config.freezeCycle = value;
+            }
+            catch (const std::exception& e)
+            {
+                Fail(std::string("invalid HADES_FREEZE_CYCLE: ") + e.what());
+                return false;
+            }
+        }
+
+        if (const char* raw = std::getenv("HADES_FREEZE_FINAL"))
+        {
+            const std::string value(raw);
+            if (value != "0" && value != "1")
+            {
+                Fail("HADES_FREEZE_FINAL must be 0 or 1");
+                return false;
+            }
+            config.freezeFinal = (value == "1");
+        }
+
+        if (config.freezeCycle || config.freezeFinal)
+            spdlog::warn("HADES freeze diagnostics: cycle={} final={}",
+                config.freezeCycle, config.freezeFinal);
+
+        return true;
+    }
+
     bool HadesLink::Reset() noexcept
     {
+        if (!freezeConfigured)
+        {
+            freezeConfigured = true;
+            if (!ConfigureFreeze()) return false;
+        }
+
         // §6 CHAN_DESC_TABLE (DD-8): entry words +0x00 = {width[31:16],
         // dir[8], chan_id[7:0]} (must equal the entry index), +0x04 =
         // fifo_depth, +0x14 = flags bit0 enable. Matches the programming the
@@ -274,6 +339,22 @@ namespace Cohestra::Hades {
 
         // re-arm the run bit (the fabric side clears it on reset)
         link->write_mmio(kCsrCtrl, kCtrlRun);
+
+        if (config.flushBridgeOnReset)
+        {
+            // JTAG bridge only (hades_jtag_bridge): with the session configured
+            // and run armed, the fabric emits nothing until the first grant —
+            // but the bridge mailbox may still hold pre-session vacuous-tick
+            // flood frames (accumulated from program time until the CHAN_DESC
+            // writes; including the intermittent all-zero anomaly frames, which
+            // fail host-side decode and poison the first drain). Soft-reset the
+            // bridge pointers (CTRL bit0 — empties both mailboxes), then clear
+            // sticky errors (CTRL bit1). Nothing is staged yet, so this is
+            // lossless; in-process backends never see it (config-gated).
+            link->write_mmio(kBridgeCtrl, 0x1);
+            link->write_mmio(kBridgeCtrl, 0x2);
+        }
+
         running = true;
 
         spdlog::info("HADES link reset: {} DATA channel(s), window_k={}, W={}.",
@@ -627,6 +708,77 @@ namespace Cohestra::Hades {
             Fail("STATUS.error latched by the fabric");
     }
 
+    void HadesLink::MaybeFreeze(uint64_t cycle, bool finalGrant) noexcept
+    {
+        if (finalGrant)
+        {
+            if (!config.freezeFinal) return;
+        }
+        else if (config.freezeCycle == 0 || config.freezeCycle != cycle)
+            return;
+
+        if (staged != cycle)
+        {
+            Fail("freeze staging mismatch: staged=" + std::to_string(staged) +
+                " requested=" + std::to_string(cycle));
+            return;
+        }
+
+        // Stop only after complete MMIO replies. A read-only diagnostic client
+        // may then inspect the idle target while this process is stopped.
+        for (uint64_t quiet = 0; !Failed();)
+        {
+            const uint64_t tick = ReadTick64();
+            if (tick == staged) break;
+            if (tick > staged)
+            {
+                Fail("freeze target overshot: tick=" + std::to_string(tick) +
+                    " staged=" + std::to_string(staged));
+                return;
+            }
+            PollHarvest();
+            if (++quiet > config.maxQuietPolls)
+            {
+                Fail("freeze drain wedge: tick=" + std::to_string(tick) +
+                    " staged=" + std::to_string(staged));
+                return;
+            }
+        }
+
+        const uint64_t tick = ReadTick64();
+        NoteProgress();
+        if (Failed()) return;
+        if (tick != staged || (finalGrant && (granted != staged || completed != staged)))
+        {
+            Fail("freeze boundary mismatch: tick=" + std::to_string(tick) +
+                " staged=" + std::to_string(staged) +
+                " granted=" + std::to_string(granted) +
+                " completed=" + std::to_string(completed));
+            return;
+        }
+
+        const char* phase = finalGrant ? "final" : "mid";
+        spdlog::warn("HADES_FREEZE_READY phase={} cycle={} staged={} granted={} "
+            "completed={} tick={} pid={}", phase, cycle, staged, granted, completed,
+            tick, getpid());
+        spdlog::default_logger()->flush();
+
+        if (raise(SIGSTOP) != 0)
+        {
+            Fail("failed to raise SIGSTOP for freeze diagnostic");
+            return;
+        }
+
+        const uint64_t resumedTick = ReadTick64();
+        spdlog::warn("HADES_FREEZE_RESUMED phase={} tick={} pid={}",
+            phase, resumedTick, getpid());
+        spdlog::default_logger()->flush();
+
+        if (resumedTick != tick)
+            Fail("target tick changed across host freeze: before=" +
+                std::to_string(tick) + " after=" + std::to_string(resumedTick));
+    }
+
     void HadesLink::TickCycle(uint64_t time) noexcept
     {
         if (lastTickValid && lastTickTime == time)
@@ -677,6 +829,7 @@ namespace Cohestra::Hades {
 
         PumpGrants();
         PollHarvest();
+        MaybeFreeze(cycle, false);
     }
 
     bool HadesLink::DriveCycle(uint64_t cycle) noexcept
@@ -774,6 +927,8 @@ namespace Cohestra::Hades {
                     " staged=" + std::to_string(staged));
             }
         }
+
+        MaybeFreeze(staged, true);
 
         // drain-quiet tail (session.cpp drainQuiet shape): after the fabric
         // has completed every staged cycle, keep harvesting until the c2h

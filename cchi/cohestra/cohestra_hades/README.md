@@ -346,6 +346,22 @@ layer matches them point for point:
   Resp 1→3 and shifted all downstream offsets; the sync note in
   `hades_packing.hpp` records the tracked revision).
 
+## Completed-transaction reporting
+
+Every run logs each completed transaction and ends with a completion summary:
+
+- `HADES CCHI completion` reports upstream TXREQ/TXEVT class, opcode, TxnID,
+  address, response-flit count and request time. These are Joint `OnComplete`
+  events, not accepted flits or first-response retirements; RXSNP transactions
+  are excluded. The summary totals REQ/EVT and breaks them down by opcode.
+- `HADES AXI completion` reports slave-port direction, AXI ID, address, burst
+  length/size/type, data-beat count, response and request/completion times.
+  The passive monitor correlates captured AW/W/AR with admitted B/R accept
+  echoes: a write completes on its B handshake, a read on its final R handshake.
+  Queue pushes/pops and early responses do not count as completions.
+- Outstanding transactions are not counted as completed. Their presence at
+  the cycle limit remains visible in the existing watchdog report.
+
 ## Files
 
 | file | what |
@@ -354,6 +370,7 @@ layer matches them point for point:
 | `hades_link.{hpp,cpp}` | manifest subset parse + `HadesLink` window pump |
 | `hades_transport.{hpp,cpp}` | transport factory: loopback mock config; `JtagTcpTransport` |
 | `hades_interface.{hpp,cpp}` | `HadesFlitStore` + `HadesCCHIInterface` + `HadesAXISlaveInterface` + `HadesCHIMonitorNull` |
+| `hades_report.{hpp,cpp}` | completed CCHI/AXI transaction details and per-run totals |
 | `hades_harness.{hpp,cpp}` | the v3-shaped flow as `RunHarness()` (in the core lib) |
 | `executable.cpp` | thin `main()` |
 | `config.hades.ini` | reference configuration (see schema note above) |
