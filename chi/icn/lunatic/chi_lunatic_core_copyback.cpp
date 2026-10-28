@@ -330,8 +330,6 @@ bool Core::Impl::CompleteVictim(Transaction& transaction)
     FlowState& flow = flows.at(transaction.handle);
     if (!flow.victimPending)
         return true;
-    if (options.backend == BackendKind::CHI && flow.victimDataPartial && !directory.Find(flow.victimLine))
-        flow.baselineFetched = false;
     if (options.backend == BackendKind::CHI && flow.victimDataPartial && !directory.Find(flow.victimLine) &&
         !FetchBaseline(transaction))
         return false;

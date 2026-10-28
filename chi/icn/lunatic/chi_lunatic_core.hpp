@@ -44,6 +44,7 @@ struct FlowState {
     bool directoryCommitted = false;
     bool baselineFetch = false;
     bool baselineFetched = false;
+    LineKey baselineLine{};
     bool snoopDataPartial = false;
     ByteEnables snoopValidBytes{};
     ByteEnables validBytes{};

@@ -21,10 +21,11 @@ void Core::Impl::StartMemoryRead(Transaction& transaction)
         transaction.readyTime = pipeline.ScheduleData(time);
         return;
     }
-    if (options.backend == BackendKind::CHI && (flow.snoopDataPartial || flow.victimDataPartial) && !transaction.homeHit)
+    if ((flow.snoopDataPartial || flow.victimDataPartial) && !transaction.homeHit)
     {
         flow.baselineFetch = true;
         flow.baselineFetched = false;
+        flow.baselineLine = flow.victimPending && flow.victimDataPartial ? flow.victimLine : transaction.request.Line();
     }
 
     transaction.memoryRequired = true;
@@ -78,6 +79,20 @@ void Core::Impl::CompleteMemoryRead(Transaction& transaction)
 
     if (flow.memoryWrite)
         memory.Write(transaction.request.Line(), transaction.data, transaction.byteEnables);
+    else if (flow.baselineFetch)
+    {
+        const LineData baseline = memory.Read(transaction.request.Line());
+        const bool victimBaseline = flow.victimPending && flow.victimDataPartial;
+        LineData& destination = victimBaseline ? flow.victimData : transaction.data;
+        for (size_t index = 0; index < LINE_SIZE; ++index)
+        {
+            const bool preserve = victimBaseline ? flow.victimValidBytes[index]
+                : flow.snoopDataPartial ? flow.snoopValidBytes[index]
+                : IsCopybackRequest(transaction.request.opcode) && transaction.byteEnables[index];
+            if (!preserve)
+                destination[index] = baseline[index];
+        }
+    }
     else
         transaction.data = memory.Read(transaction.request.Line());
 
@@ -378,14 +393,19 @@ bool Core::Impl::WriteLine(Transaction& transaction, const LineKey& line, const 
 bool Core::Impl::FetchBaseline(Transaction& transaction)
 {
     FlowState& flow = flows.at(transaction.handle);
-    if (options.backend == BackendKind::Internal || flow.baselineFetched)
+    if (options.backend == BackendKind::Internal)
         return true;
-    if (flow.baselineFetch && flow.backendPhase == BackendPhase::Done)
+
+    const LineKey requested = flow.victimPending && flow.victimDataPartial ? flow.victimLine : transaction.request.Line();
+    if (flow.baselineFetched && flow.baselineLine == requested)
+        return true;
+    if (flow.baselineFetch && flow.backendPhase == BackendPhase::Done && flow.baselineLine == requested)
     {
         flow.baselineFetched = true;
         return true;
     }
     flow.baselineFetch = true;
+    flow.baselineLine = requested;
     flow.baselineFetched = false;
     StartMemoryRead(transaction);
     return false;

@@ -249,3 +249,27 @@ LUNATIC_TEST(Stage4SublineWriteDataCancelCompletes)
     driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
     driver.Quiesce();
 }
+
+LUNATIC_TEST(Stage4InternalBaselinePreservesPartialSnoopBytes)
+{
+    Options options;
+    options.policy = PolicyKind::Exclusive;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x2b000, false);
+    const LineData newer = RemedData(41);
+    const LineData baseline = RemedData(201);
+    RemedWriteback(driver, 4, 131, line, newer);
+    LUNATIC_CHECK(driver.ReadData(5, 132, line.address, CHI::Eb::Opcodes::REQ::ReadUnique) == newer);
+    driver.Quiesce();
+    driver.driver.node.GetMemory().WriteFull(line, baseline);
+
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 6, 133, line.address, true));
+    auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
+    driver.SnoopData(5, snoop.flit.TxnID(), newer, CHI::Eb::Resps::SnpRespDataPtl_I_PD, true);
+    LineData expected = baseline;
+    for (size_t index = 0; index < expected.size(); ++index)
+        if (index % 32 < 16)
+            expected[index] = newer[index];
+    LUNATIC_CHECK(RemedReceive(driver, 6, 133, CHI::Eb::Resps::CompData_UD_PD, true) == expected);
+    driver.Quiesce();
+}
