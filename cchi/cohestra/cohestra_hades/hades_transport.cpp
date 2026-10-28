@@ -20,6 +20,7 @@
 
 #include <stdexcept>
 
+#include "ethernet_backend.hpp"     // hades::EthernetBackend (runtime-internal)
 #include "loopback_backend.hpp"     // hades::LoopbackBackend (runtime-internal)
 
 // POSIX sockets (the JTAG MMIO server is a TCP bridge; WSL2/Linux host side)
@@ -70,6 +71,9 @@ namespace Cohestra::Hades {
         if (backend == "loopback")
             return MakeLoopbackTransport(manifest, seed, std::move(dutModel));
 
+        if (backend == "ethernet")
+            return std::make_unique<hades::EthernetBackend>(manifest.ethernet);
+
         if (backend == "jtag")
         {
             // jtag_url = tcp://host:port (default tcp://127.0.0.1:3122)
@@ -90,7 +94,7 @@ namespace Cohestra::Hades {
         }
 
         throw std::runtime_error("[hades] backend '" + backend +
-            "' not supported by cohestra_hades (loopback|jtag)");
+            "' not supported by cohestra_hades (loopback|jtag|ethernet)");
     }
 
 

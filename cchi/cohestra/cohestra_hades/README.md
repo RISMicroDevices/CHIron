@@ -95,12 +95,12 @@ passes it).
 | key | default | meaning |
 |---|---|---|
 | `manifest` | — (mandatory) | HADES manifest YAML (channel table); resolved CWD-relative, then INI-dir-relative |
-| `backend` | manifest's `transport.backend` | `loopback` (mock FPGA) or `jtag` |
+| `backend` | manifest's `transport.backend` | `loopback`, `jtag`, or `ethernet` (YAML-configured POSIX TCP) |
 | `jtag_url` | `tcp://127.0.0.1:3122` | jtag_mmio_server.tcl endpoint |
 | `window_k` | `32` | credit-lead quantum in target cycles; `1` = lockstep debug |
 | `skid_depth` | `0` → `window_k` | max staged-but-unaccepted flits per drive channel (wrapper skids are 2*WINDOW_K — safe) |
 | `rx_queue` | `1024` | local c2h flit queue bound per channel (absorbs granule bursts; no DUT backpressure path) |
-| `max_quiet_polls` | `2000000` | wedge guard: polls without fabric tick progress ⇒ link failure |
+| `max_quiet_polls` | `2000000` | legacy compatibility value; waits use monotonic 5 s warnings and do not fail on quiet polls |
 | `view_latency` | `40` | DUT-cycle view offset: received flits are Instance-visible exactly `tag + view_latency` (floor: maxH2CGranule + maxC2HGranule, clamped) |
 | `anchor_l_rsp/dat/b/r` | `0` | extra DUT-cycle delay for response staging slots (0 = production tick + 1) |
 
@@ -288,9 +288,10 @@ layer matches them point for point:
   wire identity requires grant frames to hold their trace positions under
   congestion; bounding the pipeline is the view throttle's job — staging never
   outruns the fabric by more than ~`view_latency` cycles, which also keeps the
-  fabric's input FIFO and the mock's over-send check safe). Staging blocks
-  (bounded, `max_quiet_polls`) only on the view throttle — the link being
-  congested, never a skip. h2c frames flush only on full granules
+  fabric's input FIFO and the mock's over-send check safe). Staging may wait on
+  the view throttle; monotonic 5 s reports describe congestion without turning
+  legal host pauses into errors, and target cycles are never skipped. h2c frames
+  flush only on full granules
   (`wideBatchGranule`, e.g. 20/12/15 tokens for ch1/2/3).
 - **c2h latency**: received flits reach the Instance exactly `view_latency`
   cycles after their DUT cycle (the anchored view; the granule flush latency

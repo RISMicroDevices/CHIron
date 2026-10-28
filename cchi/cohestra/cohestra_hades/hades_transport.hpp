@@ -10,6 +10,8 @@
 //   backend = jtag     : JtagTcpTransport — a minimal TransportIF over the
 //                        jtag_mmio_server.tcl binary batch protocol
 //                        (HADES-Fabric scripts/jtag/, TCP port 3122 default).
+//   backend = ethernet : hades::EthernetBackend using the manifest's checked
+//                        TCP endpoint, timeout, MSS, and queue configuration.
 //
 // NOTE (Phase J-0): the JTAG bridge RTL (rtl/link/jtag/hades_jtag_bridge.sv)
 // contract is ONE BURST = ONE FRAME h2c-side (TLAST on the burst's final
@@ -59,8 +61,7 @@ namespace Cohestra::Hades {
         hades::DutModel     dutModel = {});
 
     // Factory on the [hades] backend string. Throws std::runtime_error on
-    // unknown backends (xdma/ethernet are HADES-side milestones this layer
-    // does not drive).
+    // unknown backends (xdma remains a later HADES-side milestone).
     std::unique_ptr<hades::TransportIF> MakeTransport(
         const std::string&  backend,
         const std::string&  jtagUrl,

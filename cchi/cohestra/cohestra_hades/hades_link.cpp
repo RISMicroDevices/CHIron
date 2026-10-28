@@ -25,6 +25,7 @@
 #include "hades_link.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
@@ -43,14 +44,13 @@ namespace {
     constexpr std::uint64_t kCsrMagic       = 0x000;    // RO "HADS"
     constexpr std::uint64_t kCsrVersion     = 0x004;    // RO wire ver (frame.hpp kProtocolVer)
     constexpr std::uint64_t kCsrCtrl        = 0x010;    // WO
-    constexpr std::uint64_t kCsrTickLo      = 0x018;    // RO
-    constexpr std::uint64_t kCsrTickHi      = 0x01C;    // RO
     constexpr std::uint64_t kCsrDoorbellH2C = 0x040;    // WO (batched doorbell)
     constexpr std::uint64_t kCsrChanDesc    = 0x100;    // RW 32B x 256 entries (DD-8)
     constexpr std::uint64_t kBridgeCtrl     = 0x1008;   // WO (hades_jtag_bridge window;
                                                         // jtag backend only)
 
     constexpr std::uint32_t kCtrlRun        = 0x1;
+    constexpr std::uint32_t kCtrlPause      = 0x2;
     constexpr std::uint32_t kCtrlReset      = 0x4;
 
     constexpr std::uint32_t kMagicValue     = 0x48414453;   // "HADS"
@@ -103,6 +103,21 @@ namespace Cohestra::Hades {
             info.backend        = transport["backend"].as<std::string>("loopback");
             info.tickBatch      = transport["tick_batch"].as<uint32_t>(32);
             info.maxInflight    = transport["max_inflight_windows"].as<uint32_t>(2);
+            info.ethernet.remote = transport["remote"].as<std::string>(info.ethernet.remote);
+            info.ethernet.local = transport["local"].as<std::string>(info.ethernet.local);
+            info.ethernet.interface = transport["interface"].as<std::string>(info.ethernet.interface);
+            info.ethernet.connect_timeout_ms =
+                transport["connect_timeout_ms"].as<uint32_t>(info.ethernet.connect_timeout_ms);
+            info.ethernet.control_timeout_ms =
+                transport["control_timeout_ms"].as<uint32_t>(info.ethernet.control_timeout_ms);
+            info.ethernet.mss_bytes = transport["mss_bytes"].as<uint32_t>(info.ethernet.mss_bytes);
+            info.ethernet.max_envelope_payload_bytes =
+                transport["max_envelope_payload_bytes"].as<uint32_t>(
+                    info.ethernet.max_envelope_payload_bytes);
+            info.ethernet.rx_queue_frames =
+                transport["rx_queue_frames"].as<uint32_t>(info.ethernet.rx_queue_frames);
+            info.ethernet.tx_queue_frames =
+                transport["tx_queue_frames"].as<uint32_t>(info.ethernet.tx_queue_frames);
         }
 
         if (auto obs = root["obs"])
@@ -159,6 +174,7 @@ namespace Cohestra::Hades {
                          LinkConfig config,
                          HadesPinSink* sink) noexcept
         : link      (std::move(transport))
+        , clock     (dynamic_cast<hades::ProgressClock*>(link.get()))
         , manifest  (manifest)
         , config    (config)
         , sink      (sink)
@@ -321,6 +337,8 @@ namespace Cohestra::Hades {
         staged = granted = completed = unpacked = 0;
         ackHwm = 0;
         ackSeen = false;
+        std::fill(std::begin(channelTicks), std::end(channelTicks), 0);
+        std::fill(std::begin(channelTicksSeen), std::end(channelTicksSeen), false);
         mono.reset();
 
         for (Staging& st : staging)
@@ -363,30 +381,36 @@ namespace Cohestra::Hades {
         return true;
     }
 
-    std::uint64_t HadesLink::ReadTick64() noexcept
-    {
-        // DD-7 safe 64-bit CSR read (LO->HI->LO, retry if LO changed); on
-        // in-process backends the first pass is atomic (same as session.cpp).
-        for (unsigned attempt = 0; attempt < 16; ++attempt)
-        {
-            const std::uint32_t lo1 = link->read_mmio(kCsrTickLo);
-            const std::uint32_t hi  = link->read_mmio(kCsrTickHi);
-            const std::uint32_t lo2 = link->read_mmio(kCsrTickLo);
-
-            if (lo1 == lo2)
-                return (static_cast<std::uint64_t>(hi) << 32) | lo1;
-        }
-
-        return link->read_mmio(kCsrTickLo);
-    }
-
     void HadesLink::NoteProgress() noexcept
     {
-        if (const std::uint64_t t = ReadTick64(); t > completed)
-            completed = t;
+        if (clock)
+        {
+            const uint64_t t = clock->progress_tick();
+            if (t > completed) completed = t;
+        }
+
+        bool completeFrontier = !manifest.channels.empty();
+        uint64_t frontier = ~uint64_t{0};
+        for (const ChannelInfo& chan : manifest.channels)
+        {
+            completeFrontier = completeFrontier && channelTicksSeen[chan.id];
+            if (channelTicksSeen[chan.id])
+                frontier = std::min(frontier, channelTicks[chan.id]);
+        }
+        if (completeFrontier && frontier > completed) completed = frontier;
 
         if (ackSeen && ackHwm + 1 > completed)
             completed = ackHwm + 1;
+    }
+
+    void HadesLink::NoteWait(std::chrono::steady_clock::time_point& lastProgress,
+                             const char* phase) noexcept
+    {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - lastProgress < std::chrono::seconds(5)) return;
+        spdlog::warn("HADES link: {} still waiting at completed={} staged={} unpacked={}; "
+            "host/transport stalls remain nonfatal.", phase, completed, staged, unpacked);
+        lastProgress = now;
     }
 
     void HadesLink::PushGrant(hades::ChannelId c, std::uint32_t ceiling) noexcept
@@ -548,8 +572,8 @@ namespace Cohestra::Hades {
                 break;
 
             case hades::FrameType::CreditReturn:
-                // progress bookkeeping is CSR/ack-driven here; the return only
-                // confirms the per-channel frontier — nothing to do
+                channelTicks[h.chan_id] = static_cast<uint64_t>(h.cycle_tag) + 1;
+                channelTicksSeen[h.chan_id] = true;
                 break;
 
             case hades::FrameType::TokenBatch:
@@ -683,6 +707,13 @@ namespace Cohestra::Hades {
                 HandleFrame(frame);
             }
 
+            if (link->pull(hades::kChanObsMin, frame))
+            {
+                any = true;
+                ++c2hFrames;
+                HandleFrame(frame);
+            }
+
             // drain EVERY DATA channel, both directions: TOKEN_BATCHes arrive
             // only on c2h channels, but CREDIT_RETURN (§4.3) is emitted per
             // channel including h2c ones — a frame left on an undrained
@@ -724,28 +755,26 @@ namespace Cohestra::Hades {
             return;
         }
 
-        // Stop only after complete MMIO replies. A read-only diagnostic client
+        // Stop only after complete control replies. A read-only diagnostic client
         // may then inspect the idle target while this process is stopped.
-        for (uint64_t quiet = 0; !Failed();)
+        auto lastProgress = std::chrono::steady_clock::now();
+        for (; !Failed();)
         {
-            const uint64_t tick = ReadTick64();
-            if (tick == staged) break;
-            if (tick > staged)
+            NoteProgress();
+            if (completed == staged) break;
+            if (completed > staged)
             {
-                Fail("freeze target overshot: tick=" + std::to_string(tick) +
+                Fail("freeze target overshot: tick=" + std::to_string(completed) +
                     " staged=" + std::to_string(staged));
                 return;
             }
+            const uint64_t before = completed;
             PollHarvest();
-            if (++quiet > config.maxQuietPolls)
-            {
-                Fail("freeze drain wedge: tick=" + std::to_string(tick) +
-                    " staged=" + std::to_string(staged));
-                return;
-            }
+            if (completed > before) lastProgress = std::chrono::steady_clock::now();
+            else                    NoteWait(lastProgress, "freeze drain");
         }
 
-        const uint64_t tick = ReadTick64();
+        const uint64_t tick = completed;
         NoteProgress();
         if (Failed()) return;
         if (tick != staged || (finalGrant && (granted != staged || completed != staged)))
@@ -769,7 +798,8 @@ namespace Cohestra::Hades {
             return;
         }
 
-        const uint64_t resumedTick = ReadTick64();
+        PollHarvest();
+        const uint64_t resumedTick = completed;
         spdlog::warn("HADES_FREEZE_RESUMED phase={} tick={} pid={}",
             phase, resumedTick, getpid());
         spdlog::default_logger()->flush();
@@ -804,7 +834,8 @@ namespace Cohestra::Hades {
         // free-runs through the polls below while this tick waits.
         const uint64_t cycle = time / 2;
 
-        std::uint64_t quiet = 0, markC = completed, markU = unpacked;
+        std::uint64_t markC = completed, markU = unpacked;
+        auto lastProgress = std::chrono::steady_clock::now();
 
         while (cycle + 1 > config.viewLatency &&
                unpacked < cycle + 1 - config.viewLatency &&
@@ -816,14 +847,11 @@ namespace Cohestra::Hades {
             {
                 markC = completed;
                 markU = unpacked;
-                quiet = 0;
+                lastProgress = std::chrono::steady_clock::now();
             }
-            else if (++quiet > config.maxQuietPolls)
+            else
             {
-                Fail("view throttle wedge: unpacked=" + std::to_string(unpacked) +
-                    " (need " + std::to_string(cycle + 1 - config.viewLatency) +
-                    ") at tick " + std::to_string(completed) +
-                    " (harness cycle " + std::to_string(cycle) + ")");
+                NoteWait(lastProgress, "view throttle");
             }
         }
 
@@ -844,7 +872,8 @@ namespace Cohestra::Hades {
             return false;
         }
 
-        std::uint64_t quiet = 0, mark = completed;
+        std::uint64_t mark = completed;
+        auto lastProgress = std::chrono::steady_clock::now();
 
         while (staged == cycle && !Failed())
         {
@@ -867,13 +896,12 @@ namespace Cohestra::Hades {
 
                 if (completed > mark)
                 {
-                    mark  = completed;
-                    quiet = 0;
+                    mark = completed;
+                    lastProgress = std::chrono::steady_clock::now();
                 }
-                else if (++quiet > config.maxQuietPolls)
+                else
                 {
-                    Fail("poll budget exhausted at tick " + std::to_string(completed) +
-                        " (staging cycle " + std::to_string(cycle) + ") — link wedged");
+                    NoteWait(lastProgress, "credit-blocked staging");
                 }
             }
         }
@@ -910,21 +938,24 @@ namespace Cohestra::Hades {
             spdlog::info("HADES link: {} spill cycle(s) over-staged to flush the final "
                 "granules (phase-1 no-partial-flush contract).", spill);
 
-        std::uint64_t quiet = 0, mark = completed;
+        std::uint64_t mark = completed;
+        auto lastProgress = std::chrono::steady_clock::now();
 
         while (completed < staged && !Failed())
         {
+            if (!clock) link->write_mmio(kCsrCtrl, kCtrlPause);
             PollHarvest();
+            if (!clock && completed < staged && !Failed())
+                link->write_mmio(kCsrCtrl, kCtrlRun);
 
             if (completed > mark)
             {
-                mark  = completed;
-                quiet = 0;
+                mark = completed;
+                lastProgress = std::chrono::steady_clock::now();
             }
-            else if (++quiet > config.maxQuietPolls)
+            else
             {
-                Fail("final drain wedge: completed=" + std::to_string(completed) +
-                    " staged=" + std::to_string(staged));
+                NoteWait(lastProgress, "final drain");
             }
         }
 

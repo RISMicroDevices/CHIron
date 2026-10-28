@@ -468,7 +468,7 @@ namespace Cohestra::Hades {
 
         if (arguments.showHelp)
         {
-            spdlog::info("Usage: {} [--config <path>] [--cycles <n>] [--seed <n>] [--backend <loopback|jtag>] [--log-file[=<path>]] [--no-log-file] [--help]",
+            spdlog::info("Usage: {} [--config <path>] [--cycles <n>] [--seed <n>] [--backend <loopback|jtag|ethernet>] [--log-file[=<path>]] [--no-log-file] [--help]",
                 arguments.executableName);
             return 0;
         }
@@ -1052,8 +1052,8 @@ namespace Cohestra::Hades {
                 break;
         }
 
-        // let the fabric run out every staged cycle (bounded; c2h tails inside
-        // an unfilled emission granule stay behind per the phase-1 contract)
+        // let the fabric run out every staged cycle (c2h tails inside an
+        // unfilled emission granule stay behind per the phase-1 contract)
         if (!link->FinalDrain())
         {
             spdlog::error("HADES link final drain failed: {}.", link->LastError());
