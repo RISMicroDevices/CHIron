@@ -10,6 +10,8 @@ file(GLOB test_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp")
 
+set_source_files_properties(${test_sources} PROPERTIES COMPILE_OPTIONS "-Wno-error")
+
 add_executable(test_chi_lunatic ${test_sources} ${lunatic_sources})
 target_include_directories(test_chi_lunatic PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 target_compile_options(test_chi_lunatic PRIVATE
