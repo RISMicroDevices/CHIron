@@ -203,12 +203,12 @@ XACT_TEST(Stage5OracleAtomicAcceptsArbitraryReturnByteEnables)
     const auto dbid = Response(2, 4, Opcodes::RSP::DBIDResp, 1, 41);
     XACT_CHECK(fixture.joint.NextRXRSP(fixture.global, 2, dbid) == XactDenial::ACCEPTED);
 
-    auto data = Data(4, 2, Opcodes::DAT::NonCopyBackWrData, 41, 1);
+    auto data = Data(4, 2, Opcodes::DAT::NonCopyBackWrData, 41, 0);
     data.CCID() = 1;
-    data.BE() = 0xff00;
+    data.BE() = 0xff000000;
     XACT_ACCEPT(fixture.joint.NextTXDAT(fixture.global, 3, data));
 
-    auto result = Data(2, 4, Opcodes::DAT::CompData, 1, 1, 41);
+    auto result = Data(2, 4, Opcodes::DAT::CompData, 1, 0, 41);
     result.HomeNID() = 2;
     result.CCID() = 1;
     result.Resp() = Resps::CompData_I;
@@ -227,12 +227,12 @@ XACT_TEST(Stage5OracleAtomicAcceptsValidReturnByteEnables)
     const auto dbid = Response(2, 4, Opcodes::RSP::DBIDResp, 1, 41);
     XACT_CHECK(fixture.joint.NextRXRSP(fixture.global, 2, dbid) == XactDenial::ACCEPTED);
 
-    auto data = Data(4, 2, Opcodes::DAT::NonCopyBackWrData, 41, 1);
+    auto data = Data(4, 2, Opcodes::DAT::NonCopyBackWrData, 41, 0);
     data.CCID() = 1;
-    data.BE() = 0xff00;
+    data.BE() = 0xff000000;
     XACT_ACCEPT(fixture.joint.NextTXDAT(fixture.global, 3, data));
 
-    auto result = Data(2, 4, Opcodes::DAT::CompData, 1, 1, 41);
+    auto result = Data(2, 4, Opcodes::DAT::CompData, 1, 0, 41);
     result.HomeNID() = 2;
     result.CCID() = 1;
     result.Resp() = Resps::CompData_I;
@@ -254,17 +254,39 @@ XACT_TEST(Stage5OracleHomeAtomicAcceptsArbitraryReturnByteEnables)
     const auto dbid = Response(6, 2, Opcodes::RSP::DBIDResp, 1, 41);
     XACT_CHECK(fixture.joint.NextTXRSP(fixture.global, 2, dbid) == XactDenial::ACCEPTED);
 
-    auto data = Data(2, 6, Opcodes::DAT::NonCopyBackWrData, 41, 1);
+    auto data = Data(2, 6, Opcodes::DAT::NonCopyBackWrData, 41, 0);
     data.CCID() = 1;
-    data.BE() = 0xff00;
+    data.BE() = 0xff000000;
     XACT_ACCEPT(fixture.joint.NextRXDAT(fixture.global, 3, data));
 
-    auto result = Data(6, 2, Opcodes::DAT::CompData, 1, 1, 41);
+    auto result = Data(6, 2, Opcodes::DAT::CompData, 1, 0, 41);
     result.HomeNID() = 2;
     result.CCID() = 1;
     result.Resp() = Resps::CompData_I;
     result.BE() = 0;
     result.Data()[0] = 0xdeadbeef;
     XACT_CHECK(fixture.joint.NextTXDAT(fixture.global, 4, result) == XactDenial::ACCEPTED);
+    XACT_CHECK(!fixture.joint.HasInflight());
+}
+
+XACT_TEST(Stage5OracleAtomicCompare256UpperHalfUsesPacketDataID)
+{
+    RNFixture fixture;
+    auto request = AtomicRequest(Opcodes::REQ::AtomicCompare, 4);
+    request.Addr() = 0x10038;
+    XACT_CHECK(fixture.joint.NextTXREQ(fixture.global, 1, request) == XactDenial::ACCEPTED);
+    const auto dbid = Response(2, 4, Opcodes::RSP::DBIDResp, 1, 41);
+    XACT_CHECK(fixture.joint.NextRXRSP(fixture.global, 2, dbid) == XactDenial::ACCEPTED);
+
+    auto data = Data(4, 2, Opcodes::DAT::NonCopyBackWrData, 41, 2);
+    data.CCID() = 3;
+    data.BE() = 0xffff0000;
+    XACT_ACCEPT(fixture.joint.NextTXDAT(fixture.global, 3, data));
+
+    auto result = Data(2, 4, Opcodes::DAT::CompData, 1, 2, 41);
+    result.HomeNID() = 2;
+    result.CCID() = 3;
+    result.Resp() = Resps::CompData_I;
+    XACT_CHECK(fixture.joint.NextRXDAT(fixture.global, 4, result) == XactDenial::ACCEPTED);
     XACT_CHECK(!fixture.joint.HasInflight());
 }

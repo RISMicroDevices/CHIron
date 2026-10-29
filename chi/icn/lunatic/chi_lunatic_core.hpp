@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chi_lunatic_arbiter.hpp"
+#include "chi_lunatic_atomic.hpp"
 #include "chi_lunatic_component.hpp"
 #include "chi_lunatic_directory.hpp"
 #include "chi_lunatic_hazard.hpp"
@@ -25,6 +26,15 @@ namespace CHI::Lunatic {
         WaitDataEmission,
         WaitComp,
         Done
+    };
+
+    struct AtomicFlowState {
+        LineData        operands{};
+        AtomicExecution execution{};
+        uint64_t        resultBeatMask = 0;
+        bool            returnSent = false;
+        bool            returnEmitted = false;
+        bool            backendResultReceived = false;
     };
 
     struct FlowState {
@@ -85,6 +95,7 @@ namespace CHI::Lunatic {
         bool                       removeHome = false;
         bool                       retainHome = false;
         bool                       homeDirty = false;
+        AtomicFlowState            atomic;
     };
 
     struct RetryRecord {
@@ -230,6 +241,9 @@ namespace CHI::Lunatic {
         void ResolveStash(Transaction& transaction);
         void ActionStash(Transaction& transaction);
         void ActionPersistence(Transaction& transaction);
+        void ResolveAtomic(Transaction& transaction);
+        void ActionAtomic(Transaction& transaction);
+        void ReturnAtomic(Transaction& transaction);
         void ReturnRead(Transaction& transaction);
         void QueueDBID(Transaction& transaction);
         void QueueComp(Transaction& transaction, bool withDBID = false, uint8_t resp = 0,
@@ -249,6 +263,7 @@ namespace CHI::Lunatic {
         bool HandleBackendRSP(Transaction& transaction, const Response& flit);
         bool HandleBackendDAT(Transaction& transaction, const Data& flit);
         bool HandleWriteDAT(Transaction& transaction, const Data& flit);
+        bool HandleAtomicDAT(Transaction& transaction, const Data& flit);
         void CompleteMemoryRead(Transaction& transaction);
         bool WriteLine(Transaction& transaction, const LineKey& line, const LineData& data,
                        const ByteEnables& enables);
@@ -274,6 +289,7 @@ namespace CHI::Lunatic {
         bool      CommitReadDirectory(Transaction& transaction);
         bool      CommitCopyback(Transaction& transaction);
         bool      CommitImmediateWrite(Transaction& transaction);
+        bool      CommitAtomic(Transaction& transaction);
         bool      CommitCleanUnique(Transaction& transaction);
         bool      CommitCMO(Transaction& transaction);
         HomeLine& InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty,

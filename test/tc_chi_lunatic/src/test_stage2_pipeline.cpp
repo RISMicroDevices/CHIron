@@ -46,7 +46,8 @@ LUNATIC_TEST(Stage2ProtocolClassification)
     LUNATIC_CHECK(IsCoherentRequest(REQ::ReadUnique));
     LUNATIC_CHECK(IsCopybackRequest(REQ::WriteBackPtl));
     LUNATIC_CHECK(IsCMORequest(REQ::MakeInvalid));
-    LUNATIC_CHECK(!IsSupportedRequest(REQ::AtomicSwap));
+    LUNATIC_CHECK(IsSupportedRequest(REQ::AtomicSwap));
+    LUNATIC_CHECK(IsSupportedRequest(REQ::AtomicCompare));
 
     Request request;
     request.opcode = REQ::ReadShared;

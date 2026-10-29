@@ -94,6 +94,8 @@ namespace CHI::Lunatic {
         namespace DAT = CHI::Eb::Opcodes::DAT;
         FlowState& flow = flows.at(transaction.handle);
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
+        if (requestClass == RequestClass::Atomic)
+            return HandleAtomicDAT(transaction, flit);
         const bool actionWrite = transaction.phase == Phase::Action && flow.dbidEmitted &&
             (requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ImmediateWrite);
         if (transaction.phase != Phase::WaitWriteData && !actionWrite)

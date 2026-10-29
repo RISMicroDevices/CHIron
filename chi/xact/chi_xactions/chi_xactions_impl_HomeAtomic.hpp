@@ -199,7 +199,7 @@ namespace /*CHI::*/Xact {
 
         if (dataSize <= 16)
         {
-            if (dat.DataID() != ((dataAddress >> 4) & 0x3))
+            if (dat.DataID() != (windowOffset / packetSize) * (packetSize / 16))
                 return XactDenial::DENIED_DAT_FIELD_DATAID;
         }
         else

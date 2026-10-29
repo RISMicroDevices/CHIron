@@ -166,6 +166,20 @@ namespace CHI::Lunatic {
             transaction.readyTime = time;
             return;
         }
+        if (!transaction.canceled && requestClass == RequestClass::Atomic)
+        {
+            const bool store = CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction.request.opcode);
+            const bool responseComplete = flow.dbidEmitted &&
+                (store ? flow.compEmitted : flow.atomic.returnEmitted);
+            if (!transaction.Complete(COMPLETE_WRITE_DATA) || !flow.directoryCommitted || !responseComplete)
+            {
+                const bool responseQueueIncomplete = !flow.dbidSent || (store && !flow.compSent);
+                transaction.phase = responseQueueIncomplete || transaction.Complete(COMPLETE_WRITE_DATA)
+                    ? Phase::Action : Phase::WaitWriteData;
+                transaction.readyTime = time;
+                return;
+            }
+        }
         if (!transaction.canceled && requestClass == RequestClass::Stash &&
             IsSeparatedStashRequest(transaction.request.opcode) && (!flow.compEmitted || !flow.stashDoneEmitted))
         {

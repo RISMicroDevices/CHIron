@@ -53,6 +53,9 @@ namespace CHI::Lunatic {
             case RequestClass::Stash:
                 ResolveStash(transaction);
                 return;
+            case RequestClass::Atomic:
+                ResolveAtomic(transaction);
+                return;
             default:
                 Error(transaction.handle, "invalid coherent request class");
                 transaction.canceled = true;
@@ -192,6 +195,9 @@ namespace CHI::Lunatic {
                 return;
             case RequestClass::Stash:
                 ActionStash(transaction);
+                return;
+            case RequestClass::Atomic:
+                ActionAtomic(transaction);
                 return;
             case RequestClass::MakeUnique:
                 if (!PrepareHomeCommit(transaction))

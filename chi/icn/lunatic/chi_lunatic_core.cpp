@@ -261,9 +261,12 @@ namespace CHI::Lunatic {
                     (transaction.request.size != 6 || transaction.request.expCompAck ||
                      (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersist &&
                       transaction.request.pGroupId != 0));
+                AtomicGeometry atomicGeometry;
+                const bool invalidAtomic = requestClass == RequestClass::Atomic &&
+                    (!GetAtomicGeometry(transaction.request, atomicGeometry) || transaction.request.expCompAck);
                 if (!IsSupportedRequest(transaction.request.opcode) || transaction.request.size > 6 ||
                     (requestClass == RequestClass::ZeroWrite && transaction.request.size != 6) || invalidStash ||
-                    invalidCleanUnique || invalidPersistence)
+                    invalidCleanUnique || invalidPersistence || invalidAtomic)
                 {
                     Deny(transaction.request, "unsupported request opcode or transfer geometry");
                     transaction.canceled = true;
@@ -341,7 +344,9 @@ namespace CHI::Lunatic {
                     pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case Phase::Return:
-                if (IsReadRequest(transaction.request.opcode))
+                if (IsAtomicRequest(transaction.request.opcode))
+                    ReturnAtomic(transaction);
+                else if (IsReadRequest(transaction.request.opcode))
                     ReturnRead(transaction);
                 return;
             case Phase::Commit:
@@ -462,7 +467,8 @@ namespace CHI::Lunatic {
         {
             flows.at(transaction->handle).dbidEmitted = true;
             const auto requestClass = ClassifyRequest(transaction->request.opcode);
-            if (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero)
+            if (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero ||
+                requestClass == RequestClass::Atomic)
                 FinishResponse(*transaction);
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp ||
@@ -514,7 +520,12 @@ namespace CHI::Lunatic {
             return;
         }
         if (pending.last)
+        {
+            if (IsAtomicRequest(transaction->request.opcode) &&
+                !CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction->request.opcode))
+                flow.atomic.returnEmitted = true;
             FinishResponse(*transaction);
+        }
     }
 
     void Core::Impl::OnEmitted(const Pending<Snoop>&)

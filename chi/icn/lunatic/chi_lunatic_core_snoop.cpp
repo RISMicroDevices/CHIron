@@ -39,6 +39,7 @@ namespace CHI::Lunatic {
                 return SNP::SnpUnique;
             case RequestClass::WriteUniqueZero: return SNP::SnpUnique;
             case RequestClass::CleanUnique: return SNP::SnpUnique;
+            case RequestClass::Atomic: return SNP::SnpUnique;
             case RequestClass::Persistence: return SNP::SnpCleanShared;
             case RequestClass::CMO:
                 if (transaction.request.opcode == REQ::CleanShared)
@@ -173,7 +174,7 @@ namespace CHI::Lunatic {
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
-        snoop.retToSrc = !IsCMORequest(transaction.request.opcode) &&
+        snoop.retToSrc = !IsCMORequest(transaction.request.opcode) && !IsAtomicRequest(transaction.request.opcode) &&
             (snoop.opcode == CHI::Eb::Opcodes::SNP::SnpShared ||
              snoop.opcode == CHI::Eb::Opcodes::SNP::SnpOnce || snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique);
 

@@ -47,6 +47,9 @@ namespace CHI::Lunatic {
             case RequestClass::WriteUniqueZero:
                 committed = CommitImmediateWrite(transaction);
                 break;
+            case RequestClass::Atomic:
+                committed = CommitAtomic(transaction);
+                break;
             case RequestClass::CleanUnique:
                 committed = CommitCleanUnique(transaction);
                 break;

@@ -53,6 +53,8 @@ namespace CHI::Lunatic {
     bool IsSupportedRequest(uint16_t opcode) noexcept
     {
         namespace REQ = CHI::Eb::Opcodes::REQ;
+        if (IsAtomicRequest(opcode))
+            return true;
         switch (opcode)
         {
             case REQ::ReadNoSnp:
