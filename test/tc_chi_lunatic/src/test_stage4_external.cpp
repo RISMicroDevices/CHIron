@@ -20,34 +20,40 @@ namespace {
         return enables;
     }
 
+    template<typename config>
     class BackendModel {
+        using Base = Driver<config>;
+
         std::map<LineKey, LineData> lines;
 
-        void SendRead(Driver<Config256>& driver, const Driver<Config256>::REQ& request)
+        void SendRead(Base& driver, const typename Base::REQ& request)
         {
+            constexpr size_t bytes = config::dataWidth / 8;
             LUNATIC_CHECK(CHI::Eb::MemAttrs::ExtractEWA(request.MemAttr()) == 0);
             const LineKey line = LineKey::FromAddress(request.Addr(), request.NS());
             const LineData data = Read(line);
-            for (size_t beat = 0; beat < 2; ++beat)
+            for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
             {
-                Driver<Config256>::DAT response{};
+                typename Base::DAT response{};
                 response.SrcID() = 6;
                 response.TgtID() = 2;
                 response.TxnID() = request.TxnID();
                 response.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
                 response.Resp() = CHI::Eb::Resps::CompData_I;
-                response.DataID() = beat * 2;
+                response.DataID() = beat * bytes / 16;
                 response.CCID() = (request.Addr() >> 4) & 3;
-                for (size_t index = 0; index < 32; ++index)
-                    response.Data()[index / 8] |= uint64_t(data[beat * 32 + index]) << ((index % 8) * 8);
+                for (size_t index = 0; index < bytes; ++index)
+                    response.Data()[index / 8] |= uint64_t(data[beat * bytes + index]) << ((index % 8) * 8);
                 LUNATIC_CHECK(driver.node.PushRXDAT(response));
             }
             driver.Tick();
         }
 
-        void HandleWrite(Driver<Config256>& driver, const Driver<Config256>::REQ& request)
+        void HandleWrite(Base& driver, const typename Base::REQ& request)
         {
-            Driver<Config256>::RSP response{};
+            constexpr size_t bytes = config::dataWidth / 8;
+            constexpr uint64_t fullEnables = bytes == 64 ? ~uint64_t(0) : (uint64_t(1) << bytes) - 1;
+            typename Base::RSP response{};
             response.SrcID() = 6;
             response.TgtID() = 2;
             response.TxnID() = request.TxnID();
@@ -58,16 +64,16 @@ namespace {
 
             const LineKey line = LineKey::FromAddress(request.Addr(), request.NS());
             LineData update = Read(line);
-            for (size_t beat = 0; beat < 2; ++beat)
+            for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
             {
                 auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
                 LUNATIC_CHECK(data.TgtID() == 6);
                 LUNATIC_CHECK(data.TxnID() == request.TxnID());
                 LUNATIC_CHECK(data.DBID() == response.DBID());
                 if (request.Opcode() == CHI::Eb::Opcodes::REQ::WriteNoSnpFull)
-                    LUNATIC_CHECK(uint64_t(data.BE()) == 0xffffffffull);
+                    LUNATIC_CHECK(uint64_t(data.BE()) == fullEnables);
                 const size_t offset = size_t(data.DataID()) * 16;
-                for (size_t index = 0; index < 32; ++index)
+                for (size_t index = 0; index < bytes; ++index)
                 {
                     if ((uint64_t(data.BE()) >> index) & 1)
                         update[offset + index] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
@@ -88,7 +94,7 @@ namespace {
 
         void Write(const LineKey& line, const LineData& data) { lines[line] = data; }
 
-        void Step(Driver<Config256>& driver)
+        void Step(Base& driver)
         {
             if (!driver.node.PeekTXREQ())
                 return;
@@ -108,7 +114,7 @@ namespace {
             if (request->Opcode() == CHI::Eb::Opcodes::REQ::WriteNoSnpZero)
             {
                 lines[LineKey::FromAddress(request->Addr(), request->NS())] = LineData{};
-                Driver<Config256>::RSP response{};
+                typename Base::RSP response{};
                 response.SrcID() = 6;
                 response.TgtID() = 2;
                 response.TxnID() = request->TxnID();
@@ -121,7 +127,7 @@ namespace {
                 request->Opcode() == CHI::Eb::Opcodes::REQ::CleanInvalid ||
                 request->Opcode() == CHI::Eb::Opcodes::REQ::MakeInvalid)
             {
-                Driver<Config256>::RSP response{};
+                typename Base::RSP response{};
                 response.SrcID() = 6;
                 response.TgtID() = 2;
                 response.TxnID() = request->TxnID();
@@ -133,7 +139,7 @@ namespace {
             throw std::runtime_error("unexpected downstream opcode");
         }
 
-        void Run(Driver<Config256>& driver)
+        void Run(Base& driver)
         {
             for (size_t cycle = 0; cycle < 1000; ++cycle)
             {
@@ -146,7 +152,8 @@ namespace {
         }
     };
 
-    Driver<Config256>::DAT ExternalNextDAT(CheckedDriver<Config256>& driver, BackendModel& backend)
+    template<typename config>
+    typename Driver<config>::DAT ExternalNextDAT(CheckedDriver<config>& driver, BackendModel<config>& backend)
     {
         for (size_t cycle = 0; cycle < 1000; ++cycle)
         {
@@ -158,9 +165,11 @@ namespace {
         throw std::runtime_error("external data timed out");
     }
 
-    LineData ExternalReadData(CheckedDriver<Config256>& driver, BackendModel& backend, NodeId source,
-                                                         TransactionId txnId, uint64_t address, uint16_t opcode)
+    template<typename config>
+    LineData ExternalReadData(CheckedDriver<config>& driver, BackendModel<config>& backend, NodeId source,
+                              TransactionId txnId, uint64_t address, uint16_t opcode)
     {
+        constexpr size_t bytes = config::dataWidth / 8;
         auto request = driver.Request(opcode, source, txnId, address, true);
         if (opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
             opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid)
@@ -171,20 +180,21 @@ namespace {
         driver.PushRequest(request);
         LineData result{};
         DataBufferId dbid = 0;
-        for (size_t beat = 0; beat < 2; ++beat)
+        for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
         {
             auto data = ExternalNextDAT(driver, backend);
             dbid = data.DBID();
             const size_t offset = size_t(data.DataID()) * 16;
-            for (size_t index = 0; index < 32; ++index)
+            for (size_t index = 0; index < bytes; ++index)
                 result[offset + index] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
         }
         driver.CompAck(source, dbid);
         return result;
     }
 
-    void ExternalWriteback(CheckedDriver<Config256>& driver, const LineKey& line, const LineData& data,
-                                                          uint16_t opcode = CHI::Eb::Opcodes::REQ::WriteBackFull)
+    template<typename config>
+    void ExternalWriteback(CheckedDriver<config>& driver, const LineKey& line, const LineData& data,
+                           uint16_t opcode = CHI::Eb::Opcodes::REQ::WriteBackFull)
     {
         driver.PushRequest(driver.Request(opcode, 4, 1, line.address));
         auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
@@ -192,19 +202,9 @@ namespace {
                          CHI::Eb::Resps::CopyBackWrData_UD_PD);
     }
 
-    void ExternalReceiveUnique(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId)
-    {
-        DataBufferId dbid = 0;
-        for (size_t beat = 0; beat < 2; ++beat)
-        {
-            auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
-            LUNATIC_CHECK(data.Resp() == CHI::Eb::Resps::CompData_UC);
-            dbid = data.DBID();
-        }
-        driver.CompAck(source, dbid);
-    }
-
-    Driver<Config256>::RSP ExternalNextRSP(CheckedDriver<Config256>& driver, BackendModel& backend, uint16_t opcode)
+    template<typename config>
+    typename Driver<config>::RSP ExternalNextRSP(CheckedDriver<config>& driver, BackendModel<config>& backend,
+                                                 uint16_t opcode)
     {
         for (size_t cycle = 0; cycle < 1000; ++cycle)
         {
@@ -227,7 +227,7 @@ LUNATIC_TEST(Stage4ExternalDirtyCleanSharedWritesSubordinate)
     options.backend = BackendKind::CHI;
     options.subordinateId = 6;
     CheckedDriver<Config256> driver(options);
-    BackendModel backend;
+    BackendModel<Config256> backend;
     const LineKey line = LineKey::FromAddress(0x21000, false);
     const LineData initial = ExternalData(3);
     const LineData dirty = ExternalData(91);
@@ -251,7 +251,7 @@ LUNATIC_TEST(Stage4ExternalDirtyVictimWritesSubordinate)
     options.slcSets = 1;
     options.slcWays = 1;
     CheckedDriver<Config256> driver(options);
-    BackendModel backend;
+    BackendModel<Config256> backend;
     const LineKey a = LineKey::FromAddress(0x22000, false);
     const LineKey b = LineKey::FromAddress(0x22040, false);
     const LineData dataA = ExternalData(17);
@@ -279,7 +279,7 @@ LUNATIC_TEST(Stage4ExternalPartialWritebackUsesSubordinateBaseline)
     options.subordinateId = 6;
     options.policy = PolicyKind::Exclusive;
     CheckedDriver<Config256> driver(options);
-    BackendModel backend;
+    BackendModel<Config256> backend;
     const LineKey line = LineKey::FromAddress(0x23000, false);
     const LineData data = ExternalData(29);
     backend.Write(line, ExternalData(4));
@@ -309,7 +309,7 @@ LUNATIC_TEST(Stage4ExternalPartialSnoopUsesSubordinateBaseline)
     options.subordinateId = 6;
     options.policy = PolicyKind::Exclusive;
     CheckedDriver<Config256> driver(options);
-    BackendModel backend;
+    BackendModel<Config256> backend;
     const LineKey line = LineKey::FromAddress(0x24000, false);
     const LineData data = ExternalData(37);
     backend.Write(line, ExternalData(5));
@@ -342,7 +342,7 @@ LUNATIC_TEST(Stage4ExternalPartialVictimBaselineAndMaskIsolation)
     options.slcSets = 1;
     options.slcWays = 1;
     CheckedDriver<Config256> driver(options);
-    BackendModel backend;
+    BackendModel<Config256> backend;
     const LineKey a = LineKey::FromAddress(0x2a000, false);
     const LineKey b = LineKey::FromAddress(0x2a040, false);
     LineData dataA{};
@@ -387,7 +387,7 @@ LUNATIC_TEST(Stage5ExternalReadVariants)
     options.backend = BackendKind::CHI;
     options.subordinateId = 6;
     CheckedDriver<Config256> driver(options);
-    BackendModel backend;
+    BackendModel<Config256> backend;
     const LineKey line = LineKey::FromAddress(0x32000, false);
     const LineData expected = ExternalData(67);
     backend.Write(line, expected);
@@ -414,26 +414,46 @@ LUNATIC_TEST(Stage5ExternalReadVariants)
     }
 }
 
+namespace {
+
+    template<typename config>
+    void RunExternalWriteUnique()
+    {
+        Options options;
+        options.backend = BackendKind::CHI;
+        options.subordinateId = 6;
+        CheckedDriver<config> driver(options);
+        BackendModel<config> backend;
+        const LineKey line = LineKey::FromAddress(0x43000, false);
+        const LineData expected = ExternalData(103);
+        backend.Write(line, ExternalData(7));
+
+        auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniqueFull, 4, 1, line.address);
+        request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+        driver.PushRequest(request);
+        const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+        driver.WriteData(4, 1, dbid, expected, ExternalEnables(), CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
+        LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);
+        backend.Run(driver.driver);
+        LUNATIC_CHECK(backend.Read(line) == expected);
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
+    }
+
+}
+
+LUNATIC_TEST(Stage5ExternalWriteUnique128)
+{
+    RunExternalWriteUnique<Config128>();
+}
+
 LUNATIC_TEST(Stage5ExternalWriteUnique)
 {
-    Options options;
-    options.backend = BackendKind::CHI;
-    options.subordinateId = 6;
-    CheckedDriver<Config256> driver(options);
-    BackendModel backend;
-    const LineKey line = LineKey::FromAddress(0x43000, false);
-    const LineData expected = ExternalData(103);
-    backend.Write(line, ExternalData(7));
+    RunExternalWriteUnique<Config256>();
+}
 
-    auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniqueFull, 4, 1, line.address);
-    request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
-    driver.PushRequest(request);
-    const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
-    driver.WriteData(4, 1, dbid, expected, ExternalEnables(), CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
-    LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);
-    backend.Run(driver.driver);
-    LUNATIC_CHECK(backend.Read(line) == expected);
-    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
+LUNATIC_TEST(Stage5ExternalWriteUnique512)
+{
+    RunExternalWriteUnique<Config512>();
 }
 
 LUNATIC_TEST(Stage5ExternalWriteUniquePartial)
@@ -442,7 +462,7 @@ LUNATIC_TEST(Stage5ExternalWriteUniquePartial)
     options.backend = BackendKind::CHI;
     options.subordinateId = 6;
     CheckedDriver<Config256> driver(options);
-    BackendModel backend;
+    BackendModel<Config256> backend;
     const LineKey line = LineKey::FromAddress(0x43100, false);
     const LineData initial = ExternalData(11);
     const LineData update = ExternalData(171);
@@ -471,7 +491,7 @@ LUNATIC_TEST(Stage5ExternalWriteUniqueZero)
     options.backend = BackendKind::CHI;
     options.subordinateId = 6;
     CheckedDriver<Config256> driver(options);
-    BackendModel backend;
+    BackendModel<Config256> backend;
 
     for (TransactionHandle form = 0; form < 3; ++form)
     {
