@@ -10,51 +10,99 @@ namespace CHI::Lunatic {
         namespace REQ = CHI::Eb::Opcodes::REQ;
         if (opcode == REQ::ReadNoSnp)
             return RequestClass::NonCoherentRead;
-        if (opcode == REQ::ReadOnce)
+        if (opcode == REQ::ReadOnce || opcode == REQ::ReadOnceCleanInvalid || opcode == REQ::ReadOnceMakeInvalid)
             return RequestClass::ReadOnce;
-        if (opcode == REQ::ReadShared || opcode == REQ::ReadUnique)
+        if (opcode == REQ::ReadShared || opcode == REQ::ReadUnique || opcode == REQ::ReadClean ||
+            opcode == REQ::ReadNotSharedDirty || opcode == REQ::ReadPreferUnique)
             return RequestClass::CoherentRead;
         if (opcode == REQ::MakeUnique)
             return RequestClass::MakeUnique;
+        if (opcode == REQ::MakeReadUnique)
+            return RequestClass::MakeReadUnique;
         if (opcode == REQ::WriteNoSnpPtl || opcode == REQ::WriteNoSnpFull)
             return RequestClass::NonCoherentWrite;
+        if (opcode == REQ::WriteUniquePtl || opcode == REQ::WriteUniqueFull ||
+            opcode == REQ::WriteUniquePtlStash || opcode == REQ::WriteUniqueFullStash)
+            return RequestClass::ImmediateWrite;
         if (opcode == REQ::WriteNoSnpZero)
             return RequestClass::ZeroWrite;
+        if (opcode == REQ::WriteUniqueZero)
+            return RequestClass::WriteUniqueZero;
         if (opcode == REQ::WriteBackPtl || opcode == REQ::WriteBackFull ||
             opcode == REQ::WriteCleanFull || opcode == REQ::WriteEvictFull)
             return RequestClass::CopybackWrite;
         if (opcode == REQ::Evict)
             return RequestClass::Evict;
+        if (opcode == REQ::WriteEvictOrEvict)
+            return RequestClass::WriteEvictOrEvict;
         if (opcode == REQ::CleanShared || opcode == REQ::CleanInvalid || opcode == REQ::MakeInvalid)
             return RequestClass::CMO;
+        if (opcode == REQ::CleanUnique)
+            return RequestClass::CleanUnique;
+        if (opcode == REQ::CleanSharedPersist || opcode == REQ::CleanSharedPersistSep)
+            return RequestClass::Persistence;
+        if (opcode == REQ::StashOnceUnique || opcode == REQ::StashOnceShared ||
+            opcode == REQ::StashOnceSepUnique || opcode == REQ::StashOnceSepShared)
+            return RequestClass::Stash;
+        if (REQ::AtomicStore::Is(opcode) || REQ::AtomicLoad::Is(opcode) ||
+            opcode == REQ::AtomicSwap || opcode == REQ::AtomicCompare)
+            return RequestClass::Atomic;
         return RequestClass::Unsupported;
     }
 
     bool IsSupportedRequest(uint16_t opcode) noexcept
     {
-        return ClassifyRequest(opcode) != RequestClass::Unsupported;
+        namespace REQ = CHI::Eb::Opcodes::REQ;
+        switch (opcode)
+        {
+            case REQ::ReadNoSnp:
+            case REQ::ReadOnce:
+            case REQ::ReadShared:
+            case REQ::ReadUnique:
+            case REQ::MakeUnique:
+            case REQ::WriteNoSnpPtl:
+            case REQ::WriteNoSnpFull:
+            case REQ::WriteNoSnpZero:
+            case REQ::WriteBackPtl:
+            case REQ::WriteBackFull:
+            case REQ::WriteCleanFull:
+            case REQ::WriteEvictFull:
+            case REQ::Evict:
+            case REQ::CleanShared:
+            case REQ::CleanInvalid:
+            case REQ::MakeInvalid:
+                return true;
+            default:
+                return false;
+        }
     }
 
     bool IsCoherentRequest(uint16_t opcode) noexcept
     {
         const auto requestClass = ClassifyRequest(opcode);
         return requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeUnique ||
-               requestClass == RequestClass::CopybackWrite || requestClass == RequestClass::Evict ||
-               requestClass == RequestClass::CMO;
+               requestClass == RequestClass::MakeReadUnique || requestClass == RequestClass::ImmediateWrite ||
+               requestClass == RequestClass::WriteUniqueZero || requestClass == RequestClass::CopybackWrite ||
+               requestClass == RequestClass::Evict || requestClass == RequestClass::WriteEvictOrEvict ||
+               requestClass == RequestClass::CMO || requestClass == RequestClass::CleanUnique ||
+               requestClass == RequestClass::Persistence || requestClass == RequestClass::Stash ||
+               requestClass == RequestClass::Atomic;
     }
 
     bool IsReadRequest(uint16_t opcode) noexcept
     {
         const auto requestClass = ClassifyRequest(opcode);
         return requestClass == RequestClass::NonCoherentRead || requestClass == RequestClass::ReadOnce ||
-               requestClass == RequestClass::CoherentRead;
+               requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeReadUnique;
     }
 
     bool IsWriteRequest(uint16_t opcode) noexcept
     {
         const auto requestClass = ClassifyRequest(opcode);
-        return requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ZeroWrite ||
-               requestClass == RequestClass::CopybackWrite;
+        return requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ImmediateWrite ||
+               requestClass == RequestClass::ZeroWrite || requestClass == RequestClass::WriteUniqueZero ||
+               requestClass == RequestClass::CopybackWrite || requestClass == RequestClass::WriteEvictOrEvict ||
+               requestClass == RequestClass::Atomic;
     }
 
     bool IsCopybackRequest(uint16_t opcode) noexcept
@@ -64,17 +112,32 @@ namespace CHI::Lunatic {
 
     bool IsCMORequest(uint16_t opcode) noexcept
     {
-        return ClassifyRequest(opcode) == RequestClass::CMO;
+        const auto requestClass = ClassifyRequest(opcode);
+        return requestClass == RequestClass::CMO || requestClass == RequestClass::CleanUnique ||
+               requestClass == RequestClass::Persistence;
+    }
+
+    bool IsAtomicRequest(uint16_t opcode) noexcept
+    {
+        return ClassifyRequest(opcode) == RequestClass::Atomic;
+    }
+
+    bool IsStashRequest(uint16_t opcode) noexcept
+    {
+        namespace REQ = CHI::Eb::Opcodes::REQ;
+        return ClassifyRequest(opcode) == RequestClass::Stash || opcode == REQ::WriteUniquePtlStash ||
+               opcode == REQ::WriteUniqueFullStash;
     }
 
     bool RequiresCompAck(const Request& request) noexcept
     {
         const auto requestClass = ClassifyRequest(request.opcode);
-        if (requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeUnique)
+        if (requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeUnique ||
+            requestClass == RequestClass::MakeReadUnique || requestClass == RequestClass::CleanUnique)
             return true;
         return request.expCompAck &&
                (requestClass == RequestClass::NonCoherentRead || requestClass == RequestClass::ReadOnce ||
-                requestClass == RequestClass::NonCoherentWrite);
+                requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ImmediateWrite);
     }
 
     uint64_t TransferBeatMask(const Request& request, const Options& options) noexcept

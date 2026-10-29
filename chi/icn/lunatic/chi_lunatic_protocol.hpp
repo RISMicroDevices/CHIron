@@ -10,11 +10,19 @@ namespace CHI::Lunatic {
         ReadOnce,
         CoherentRead,
         MakeUnique,
+        MakeReadUnique,
         NonCoherentWrite,
+        ImmediateWrite,
         ZeroWrite,
+        WriteUniqueZero,
         CopybackWrite,
         Evict,
-        CMO
+        WriteEvictOrEvict,
+        CMO,
+        CleanUnique,
+        Persistence,
+        Stash,
+        Atomic
     };
 
     RequestClass ClassifyRequest(uint16_t opcode) noexcept;
@@ -24,6 +32,8 @@ namespace CHI::Lunatic {
     bool         IsWriteRequest(uint16_t opcode) noexcept;
     bool         IsCopybackRequest(uint16_t opcode) noexcept;
     bool         IsCMORequest(uint16_t opcode) noexcept;
+    bool         IsAtomicRequest(uint16_t opcode) noexcept;
+    bool         IsStashRequest(uint16_t opcode) noexcept;
     bool         RequiresCompAck(const Request& request) noexcept;
     uint64_t     TransferBeatMask(const Request& request, const Options& options) noexcept;
 

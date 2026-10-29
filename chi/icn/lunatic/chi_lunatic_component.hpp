@@ -92,11 +92,20 @@ namespace CHI::Lunatic {
             result.memAttr = flit.MemAttr();
             result.snpAttr = flit.SnpAttr();
             result.pCrdType = flit.PCrdType();
+            result.pGroupId = flit.PGroupID();
+            result.stashGroupId = flit.StashGroupID();
+            result.stashLpid = flit.StashLPID();
             result.traceTag = flit.TraceTag();
             result.nonSecure = flit.NS();
             result.allowRetry = flit.AllowRetry();
             result.expCompAck = flit.ExpCompAck();
             result.likelyShared = flit.LikelyShared();
+            result.stashNidValid = flit.StashNIDValid();
+            result.stashLpidValid = flit.StashLPIDValid();
+            result.endian = flit.Endian();
+            result.deep = flit.Deep();
+            result.doDwt = flit.DoDWT();
+            result.snoopMe = flit.SnoopMe();
             return result;
         }
 
@@ -112,6 +121,8 @@ namespace CHI::Lunatic {
             result.respErr = flit.RespErr();
             result.fwdState = flit.FwdState();
             result.pCrdType = flit.PCrdType();
+            result.pGroupId = flit.PGroupID();
+            result.stashGroupId = flit.StashGroupID();
             result.qos = flit.QoS();
             result.cBusy = flit.CBusy();
             result.traceTag = flit.TraceTag();
@@ -172,6 +183,7 @@ namespace CHI::Lunatic {
             flit.SrcID() = value.source;
             flit.TxnID() = value.txnId;
             flit.ReturnNID() = value.returnNid;
+            flit.StashNID() = value.returnNid;
             flit.ReturnTxnID() = value.returnTxnId;
             flit.Opcode() = value.opcode;
             flit.Size() = value.size;
@@ -184,6 +196,24 @@ namespace CHI::Lunatic {
             flit.MemAttr() = value.memAttr;
             flit.SnpAttr() = value.snpAttr;
             flit.ExpCompAck() = value.expCompAck;
+            if (value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersist ||
+                value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+                flit.PGroupID() = value.pGroupId;
+            else if (value.opcode == CHI::Eb::Opcodes::REQ::StashOnceSepUnique ||
+                     value.opcode == CHI::Eb::Opcodes::REQ::StashOnceSepShared)
+                flit.StashGroupID() = value.stashGroupId;
+            else
+            {
+                flit.PGroupID() = value.pGroupId;
+                flit.StashGroupID() = value.stashGroupId;
+            }
+            flit.StashNIDValid() = value.stashNidValid;
+            flit.StashLPIDValid() = value.stashLpidValid;
+            flit.StashLPID() = value.stashLpid;
+            flit.Endian() = value.endian;
+            flit.Deep() = value.deep;
+            flit.DoDWT() = value.doDwt;
+            flit.SnoopMe() = value.snoopMe;
             flit.TraceTag() = value.traceTag;
             return flit;
         }
@@ -200,7 +230,13 @@ namespace CHI::Lunatic {
             flit.Resp() = value.resp;
             flit.FwdState() = value.fwdState;
             flit.CBusy() = value.cBusy;
-            flit.DBID() = value.dbid;
+            if (value.opcode == CHI::Eb::Opcodes::RSP::Persist || value.opcode == CHI::Eb::Opcodes::RSP::CompPersist)
+                flit.PGroupID() = value.pGroupId;
+            else if (value.opcode == CHI::Eb::Opcodes::RSP::StashDone ||
+                     value.opcode == CHI::Eb::Opcodes::RSP::CompStashDone)
+                flit.StashGroupID() = value.stashGroupId;
+            else
+                flit.DBID() = value.dbid;
             flit.PCrdType() = value.pCrdType;
             flit.TraceTag() = value.traceTag;
             return flit;
@@ -268,6 +304,8 @@ namespace CHI::Lunatic {
             emission.flit.NS() = value.nonSecure;
             emission.flit.DoNotGoToSD() = value.doNotGoToSD;
             emission.flit.RetToSrc() = value.retToSrc;
+            emission.flit.StashLPIDValid() = value.stashLpidValid;
+            emission.flit.StashLPID() = value.stashLpid;
             emission.flit.TraceTag() = value.traceTag;
             return emission;
         }

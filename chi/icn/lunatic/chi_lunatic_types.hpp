@@ -87,11 +87,20 @@ namespace CHI::Lunatic {
         uint8_t       memAttr = 0;
         uint8_t       snpAttr = 0;
         uint8_t       pCrdType = 0;
+        uint8_t       pGroupId = 0;
+        uint8_t       stashGroupId = 0;
+        uint8_t       stashLpid = 0;
         uint8_t       traceTag = 0;
         bool          nonSecure = false;
         bool          allowRetry = true;
         bool          expCompAck = false;
         bool          likelyShared = false;
+        bool          stashNidValid = false;
+        bool          stashLpidValid = false;
+        bool          endian = false;
+        bool          deep = false;
+        bool          doDwt = false;
+        bool          snoopMe = false;
 
         LineKey Line() const noexcept { return LineKey::FromAddress(address, nonSecure); }
     };
@@ -106,6 +115,8 @@ namespace CHI::Lunatic {
         uint8_t       respErr = 0;
         uint8_t       fwdState = 0;
         uint8_t       pCrdType = 0;
+        uint8_t       pGroupId = 0;
+        uint8_t       stashGroupId = 0;
         uint8_t       qos = 0;
         uint8_t       cBusy = 0;
         uint8_t       traceTag = 0;
@@ -141,10 +152,12 @@ namespace CHI::Lunatic {
         uint64_t      address = 0;
         uint16_t      opcode = 0;
         uint8_t       qos = 0;
+        uint8_t       stashLpid = 0;
         uint8_t       traceTag = 0;
         bool          nonSecure = false;
         bool          doNotGoToSD = false;
         bool          retToSrc = false;
+        bool          stashLpidValid = false;
 
         LineKey Line() const noexcept { return LineKey::FromAddress(address, nonSecure); }
     };
