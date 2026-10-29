@@ -5,7 +5,7 @@
 namespace CHI::Lunatic {
     namespace {
 
-        PolicyDecision                  KeepHome(const PolicyContext& context)
+        PolicyDecision KeepHome(const PolicyContext& context)
         {
             PolicyDecision decision;
             decision.allocateHome = !context.homeValid;
@@ -13,14 +13,14 @@ namespace CHI::Lunatic {
             return decision;
         }
 
-        PolicyDecision                  MergeEviction(const PolicyContext& context)
+        PolicyDecision MergeEviction(const PolicyContext& context)
         {
             PolicyDecision decision = KeepHome(context);
             decision.mergeCopyback = context.evictionHasData;
             return decision;
         }
 
-        PolicyDecision                  MergeCopyback(const PolicyContext& context)
+        PolicyDecision MergeCopyback(const PolicyContext& context)
         {
             PolicyDecision decision = KeepHome(context);
             decision.mergeCopyback = context.requesterDirty || context.evictionHasData;
@@ -29,14 +29,14 @@ namespace CHI::Lunatic {
 
         class NinePolicy final : public CachePolicy {
         public:
-            PolicyKind                  Kind() const noexcept override { return PolicyKind::NINE; }
+            PolicyKind Kind() const noexcept override { return PolicyKind::NINE; }
 
-            PolicyDecision              OnRNFill(const PolicyContext& context) const override
+            PolicyDecision OnRNFill(const PolicyContext& context) const override
             {
                 return KeepHome(context);
             }
 
-            PolicyDecision              OnRNEviction(const PolicyContext& context) const override
+            PolicyDecision OnRNEviction(const PolicyContext& context) const override
             {
                 PolicyDecision decision;
                 decision.allocateHome = !context.homeValid && context.evictionHasData;
@@ -45,19 +45,19 @@ namespace CHI::Lunatic {
                 return decision;
             }
 
-            PolicyDecision              OnHomeAllocation(const PolicyContext& context) const override
+            PolicyDecision OnHomeAllocation(const PolicyContext& context) const override
             {
                 return KeepHome(context);
             }
 
-            PolicyDecision              OnHomeEviction(const PolicyContext& context) const override
+            PolicyDecision OnHomeEviction(const PolicyContext& context) const override
             {
                 PolicyDecision decision;
                 decision.removeHome = context.homeValid;
                 return decision;
             }
 
-            PolicyDecision              OnCopyback(const PolicyContext& context) const override
+            PolicyDecision OnCopyback(const PolicyContext& context) const override
             {
                 return MergeCopyback(context);
             }
@@ -65,21 +65,21 @@ namespace CHI::Lunatic {
 
         class ExclusivePolicy final : public CachePolicy {
         public:
-            PolicyKind                  Kind() const noexcept override { return PolicyKind::Exclusive; }
+            PolicyKind Kind() const noexcept override { return PolicyKind::Exclusive; }
 
-            PolicyDecision              OnRNFill(const PolicyContext& context) const override
+            PolicyDecision OnRNFill(const PolicyContext& context) const override
             {
                 PolicyDecision decision;
                 decision.removeHome = context.homeValid;
                 return decision;
             }
 
-            PolicyDecision              OnRNEviction(const PolicyContext& context) const override
+            PolicyDecision OnRNEviction(const PolicyContext& context) const override
             {
                 return MergeEviction(context);
             }
 
-            PolicyDecision              OnHomeAllocation(const PolicyContext& context) const override
+            PolicyDecision OnHomeAllocation(const PolicyContext& context) const override
             {
                 if (!context.requesterValid)
                     return KeepHome(context);
@@ -89,14 +89,14 @@ namespace CHI::Lunatic {
                 return decision;
             }
 
-            PolicyDecision              OnHomeEviction(const PolicyContext& context) const override
+            PolicyDecision OnHomeEviction(const PolicyContext& context) const override
             {
                 PolicyDecision decision;
                 decision.removeHome = context.homeValid;
                 return decision;
             }
 
-            PolicyDecision              OnCopyback(const PolicyContext& context) const override
+            PolicyDecision OnCopyback(const PolicyContext& context) const override
             {
                 if (context.requesterRetains)
                 {
@@ -110,14 +110,14 @@ namespace CHI::Lunatic {
 
         class InclusivePolicy final : public CachePolicy {
         public:
-            PolicyKind                  Kind() const noexcept override { return PolicyKind::Inclusive; }
+            PolicyKind Kind() const noexcept override { return PolicyKind::Inclusive; }
 
-            PolicyDecision              OnRNFill(const PolicyContext& context) const override
+            PolicyDecision OnRNFill(const PolicyContext& context) const override
             {
                 return KeepHome(context);
             }
 
-            PolicyDecision              OnRNEviction(const PolicyContext& context) const override
+            PolicyDecision OnRNEviction(const PolicyContext& context) const override
             {
                 PolicyDecision decision;
                 decision.allocateHome = !context.homeValid && context.evictionHasData;
@@ -126,12 +126,12 @@ namespace CHI::Lunatic {
                 return decision;
             }
 
-            PolicyDecision              OnHomeAllocation(const PolicyContext& context) const override
+            PolicyDecision OnHomeAllocation(const PolicyContext& context) const override
             {
                 return KeepHome(context);
             }
 
-            PolicyDecision              OnHomeEviction(const PolicyContext& context) const override
+            PolicyDecision OnHomeEviction(const PolicyContext& context) const override
             {
                 PolicyDecision decision;
                 decision.removeHome = context.homeValid;
@@ -139,7 +139,7 @@ namespace CHI::Lunatic {
                 return decision;
             }
 
-            PolicyDecision              OnCopyback(const PolicyContext& context) const override
+            PolicyDecision OnCopyback(const PolicyContext& context) const override
             {
                 return MergeCopyback(context);
             }
@@ -147,7 +147,7 @@ namespace CHI::Lunatic {
 
     }
 
-    std::unique_ptr<CachePolicy>        MakePolicy(PolicyKind kind)
+    std::unique_ptr<CachePolicy> MakePolicy(PolicyKind kind)
     {
         switch (kind) {
             case PolicyKind::NINE:

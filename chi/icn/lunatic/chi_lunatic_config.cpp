@@ -6,7 +6,7 @@
 
 namespace CHI::Lunatic {
 
-    void                                ValidateOptions(const Options& options)
+    void ValidateOptions(const Options& options)
     {
         if (!options.inputQueueLimit || !options.outputQueueLimit)
             throw std::invalid_argument("Lunatic channel queues must be non-empty");
@@ -38,12 +38,12 @@ namespace CHI::Lunatic {
             throw std::invalid_argument("Lunatic MTE and DVM are not enabled in this profile");
     }
 
-    size_t                              BytesPerBeat(const Options& options) noexcept
+    size_t BytesPerBeat(const Options& options) noexcept
     {
         return options.dataWidth / 8;
     }
 
-    size_t                              BeatsPerLine(const Options& options) noexcept
+    size_t BeatsPerLine(const Options& options) noexcept
     {
         return LINE_SIZE / BytesPerBeat(options);
     }

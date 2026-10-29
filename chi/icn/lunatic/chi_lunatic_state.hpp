@@ -13,10 +13,10 @@ namespace CHI::Lunatic {
         UDP
     };
 
-    bool                            IsValid(CacheState state) noexcept;
-    bool                            IsShared(CacheState state) noexcept;
-    bool                            IsUnique(CacheState state) noexcept;
-    bool                            IsDirty(CacheState state) noexcept;
-    bool                            IsPartialDirty(CacheState state) noexcept;
+    bool IsValid(CacheState state) noexcept;
+    bool IsShared(CacheState state) noexcept;
+    bool IsUnique(CacheState state) noexcept;
+    bool IsDirty(CacheState state) noexcept;
+    bool IsPartialDirty(CacheState state) noexcept;
 
 }

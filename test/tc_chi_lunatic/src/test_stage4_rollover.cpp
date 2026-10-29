@@ -5,7 +5,7 @@ using namespace LunaticTest;
 
 namespace {
 
-    LineData                            RolloverData()
+    LineData RolloverData()
     {
         LineData data{};
         for (size_t index = 0; index < data.size(); ++index)
@@ -13,10 +13,10 @@ namespace {
         return data;
     }
 
-    void                                RolloverReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
+    void RolloverReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
                                                         uint8_t expectedResp = CHI::Eb::Resps::CompData_UC)
     {
-        DatabaseId dbid = 0;
+        DataBufferId dbid = 0;
         for (size_t beat = 0; beat < 2; ++beat)
         {
             auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);

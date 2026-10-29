@@ -5,7 +5,7 @@ namespace CHI::Lunatic {
     namespace {
 
         template<typename Index>
-        void                            EraseHandle(Index& index, TransactionHandle handle) noexcept
+        void EraseHandle(Index& index, TransactionHandle handle) noexcept
         {
             for (auto it = index.begin(); it != index.end();) {
                 if (it->second == handle)
@@ -17,7 +17,7 @@ namespace CHI::Lunatic {
 
     }
 
-    Transaction*                        Tracker::Allocate(const Request& request, Time actionAge)
+    Transaction* Tracker::Allocate(const Request& request, Time actionAge)
     {
         if (transactions.size() >= limit || transactions.size() >= size_t(INVALID_TRANSACTION))
             return nullptr;
@@ -57,37 +57,37 @@ namespace CHI::Lunatic {
         }
     }
 
-    Transaction*                        Tracker::Find(TransactionHandle handle) const noexcept
+    Transaction* Tracker::Find(TransactionHandle handle) const noexcept
     {
         auto it = transactions.find(handle);
         return it == transactions.end() ? nullptr : it->second.get();
     }
 
-    Transaction*                        Tracker::FindRequest(NodeId source, TransactionId txnId) const noexcept
+    Transaction* Tracker::FindRequest(NodeId source, TransactionId txnId) const noexcept
     {
         auto it = requestMap.find({ source, txnId });
         return it == requestMap.end() ? nullptr : Find(it->second);
     }
 
-    Transaction*                        Tracker::FindDBID(NodeId source, DatabaseId dbid) const noexcept
+    Transaction* Tracker::FindDBID(NodeId source, DataBufferId dbid) const noexcept
     {
         auto it = dbidMap.find({ source, dbid });
         return it == dbidMap.end() ? nullptr : Find(it->second);
     }
 
-    Transaction*                        Tracker::FindSnoop(NodeId source, TransactionId txnId) const noexcept
+    Transaction* Tracker::FindSnoop(NodeId source, TransactionId txnId) const noexcept
     {
         auto it = snoopMap.find({ source, txnId });
         return it == snoopMap.end() ? nullptr : Find(it->second);
     }
 
-    Transaction*                        Tracker::FindMemory(NodeId source, TransactionId txnId) const noexcept
+    Transaction* Tracker::FindMemory(NodeId source, TransactionId txnId) const noexcept
     {
         auto it = memoryMap.find({ source, txnId });
         return it == memoryMap.end() ? nullptr : Find(it->second);
     }
 
-    bool                                Tracker::BindDBID(TransactionHandle handle, DatabaseId dbid)
+    bool Tracker::BindDBID(TransactionHandle handle, DataBufferId dbid)
     {
         Transaction* transaction = Find(handle);
         if (!transaction)
@@ -111,26 +111,26 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    bool                                Tracker::BindSnoop(TransactionHandle handle, NodeId target, TransactionId txnId)
+    bool Tracker::BindSnoop(TransactionHandle handle, NodeId target, TransactionId txnId)
     {
         if (!Find(handle))
             return false;
         return snoopMap.emplace(RequestKey{ target, txnId }, handle).second;
     }
 
-    bool                                Tracker::BindMemory(TransactionHandle handle, NodeId subordinate, TransactionId txnId)
+    bool Tracker::BindMemory(TransactionHandle handle, NodeId subordinate, TransactionId txnId)
     {
         if (!Find(handle))
             return false;
         return memoryMap.emplace(RequestKey{ subordinate, txnId }, handle).second;
     }
 
-    bool                                Tracker::UnbindMemory(NodeId subordinate, TransactionId txnId)
+    bool Tracker::UnbindMemory(NodeId subordinate, TransactionId txnId)
     {
         return memoryMap.erase({ subordinate, txnId }) != 0;
     }
 
-    bool                                Tracker::Retire(TransactionHandle handle)
+    bool Tracker::Retire(TransactionHandle handle)
     {
         auto it = transactions.find(handle);
         if (it == transactions.end())
@@ -144,7 +144,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    std::vector<TransactionHandle>      Tracker::Handles() const
+    std::vector<TransactionHandle> Tracker::Handles() const
     {
         std::vector<TransactionHandle> handles;
         handles.reserve(transactions.size());
@@ -155,7 +155,7 @@ namespace CHI::Lunatic {
         return handles;
     }
 
-    bool                                Tracker::Validate() const noexcept
+    bool Tracker::Validate() const noexcept
     {
         if (transactions.size() > limit)
             return false;
@@ -205,7 +205,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    void                                Tracker::Clear() noexcept
+    void Tracker::Clear() noexcept
     {
         requestMap.clear();
         dbidMap.clear();

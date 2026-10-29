@@ -16,11 +16,11 @@ namespace LunaticTest {
     using Config512 = CHI::Eb::FlitConfiguration<7, 48, 0, 0, 512, true, true, false>;
 
     struct Case {
-        std::string                     name;
-        std::function<void()>           run;
+        std::string           name;
+        std::function<void()> run;
     };
 
-    inline std::vector<Case>&       Registry()
+    inline std::vector<Case>& Registry()
     {
         static std::vector<Case> cases;
         return cases;
@@ -33,14 +33,14 @@ namespace LunaticTest {
         }
     };
 
-    inline void                     Check(bool condition, const char* expression, const char* file, int line)
+    inline void Check(bool condition, const char* expression, const char* file, int line)
     {
         if (!condition)
             throw std::runtime_error(std::string(file) + ":" + std::to_string(line) + ": " + expression);
     }
 
     template<typename Exception = std::invalid_argument, typename Callable>
-    void                            CheckThrows(Callable&& callable)
+    void CheckThrows(Callable&& callable)
     {
         bool caught = false;
         try

@@ -5,7 +5,7 @@
 
 namespace CHI::Lunatic {
 
-    uint64_t                            EventHub::Register(std::string name, int priority, Listener listener)
+    uint64_t EventHub::Register(std::string name, int priority, Listener listener)
     {
         if (!listener)
             return 0;
@@ -20,7 +20,7 @@ namespace CHI::Lunatic {
         return id;
     }
 
-    bool                                EventHub::Unregister(uint64_t id) noexcept
+    bool EventHub::Unregister(uint64_t id) noexcept
     {
         if (dispatching)
             return false;
@@ -35,12 +35,12 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    void                                EventHub::Publish(Event event)
+    void EventHub::Publish(Event event)
     {
         pending.push_back(std::move(event));
     }
 
-    bool                                EventHub::Dispatch()
+    bool EventHub::Dispatch()
     {
         if (dispatching)
         {
@@ -60,7 +60,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    void                                EventHub::Clear() noexcept
+    void EventHub::Clear() noexcept
     {
         pending.clear();
         reentryRejected = false;

@@ -4,7 +4,7 @@
 
 namespace CHI::Lunatic {
 
-    bool                                HazardGraph::Add(TransactionHandle handle, const LineKey& line, Time age)
+    bool HazardGraph::Add(TransactionHandle handle, const LineKey& line, Time age)
     {
         if (handle == INVALID_TRANSACTION)
             return false;
@@ -27,19 +27,19 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    bool                                HazardGraph::IsHead(TransactionHandle handle, const LineKey& line) const noexcept
+    bool HazardGraph::IsHead(TransactionHandle handle, const LineKey& line) const noexcept
     {
         auto it = lines.find(line);
         return it != lines.end() && !it->second.empty() && it->second.front().handle == handle;
     }
 
-    bool                                HazardGraph::Has(const LineKey& line) const noexcept
+    bool HazardGraph::Has(const LineKey& line) const noexcept
     {
         auto it = lines.find(line);
         return it != lines.end() && !it->second.empty();
     }
 
-    std::optional<TransactionHandle>    HazardGraph::Next(const LineKey& line) const
+    std::optional<TransactionHandle> HazardGraph::Next(const LineKey& line) const
     {
         auto it = lines.find(line);
         if (it == lines.end() || it->second.empty())
@@ -47,7 +47,7 @@ namespace CHI::Lunatic {
         return it->second.front().handle;
     }
 
-    std::vector<TransactionHandle>      HazardGraph::Order(const LineKey& line) const
+    std::vector<TransactionHandle> HazardGraph::Order(const LineKey& line) const
     {
         std::vector<TransactionHandle> handles;
         auto it = lines.find(line);
@@ -60,7 +60,7 @@ namespace CHI::Lunatic {
         return handles;
     }
 
-    bool                                HazardGraph::Release(TransactionHandle handle, const LineKey& line) noexcept
+    bool HazardGraph::Release(TransactionHandle handle, const LineKey& line) noexcept
     {
         auto lineIt = lines.find(line);
         if (lineIt == lines.end() || lineIt->second.empty() || lineIt->second.front().handle != handle)
@@ -73,7 +73,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    bool                                HazardGraph::Validate() const noexcept
+    bool HazardGraph::Validate() const noexcept
     {
         for (const auto& [line, entries] : lines) {
             (void)line;

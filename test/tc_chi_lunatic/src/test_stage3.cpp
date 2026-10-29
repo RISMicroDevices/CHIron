@@ -5,7 +5,7 @@ using namespace LunaticTest;
 
 namespace {
 
-    LineData                            Pattern(uint8_t seed)
+    LineData Pattern(uint8_t seed)
     {
         LineData data{};
         for (size_t index = 0; index < data.size(); ++index)
@@ -14,7 +14,7 @@ namespace {
     }
 
     template<typename config>
-    void                                ReadGeometry()
+    void ReadGeometry()
     {
         Driver<config> driver;
         const LineKey line = LineKey::FromAddress(0x2000, false);
@@ -28,7 +28,7 @@ namespace {
     }
 
     template<typename config>
-    void                                SendBackendReadData(Driver<config>& driver, TransactionId txnId, const LineData& line)
+    void SendBackendReadData(Driver<config>& driver, TransactionId txnId, const LineData& line)
     {
         constexpr size_t bytes = config::dataWidth / 8;
         for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)

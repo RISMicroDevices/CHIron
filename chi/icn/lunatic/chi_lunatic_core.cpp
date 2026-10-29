@@ -18,7 +18,7 @@ namespace CHI::Lunatic {
     {
     }
 
-    void                                Core::Impl::Reset()
+    void Core::Impl::Reset()
     {
         rxreq.clear();
         rxrsp.clear();
@@ -48,7 +48,7 @@ namespace CHI::Lunatic {
         events->Publish(std::move(event));
     }
 
-    void                                Core::Impl::Tick()
+    void Core::Impl::Tick()
     {
         ProcessResponses();
         AdmitRequests();
@@ -61,7 +61,7 @@ namespace CHI::Lunatic {
         events->Dispatch();
     }
 
-    void                                Core::Impl::ProcessResponses()
+    void Core::Impl::ProcessResponses()
     {
         while (!rxrsp.empty())
         {
@@ -77,7 +77,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::ProcessRSP(const Response& flit)
+    void Core::Impl::ProcessRSP(const Response& flit)
     {
         namespace RSP = CHI::Eb::Opcodes::RSP;
 
@@ -124,7 +124,7 @@ namespace CHI::Lunatic {
         Error(INVALID_TRANSACTION, "unmatched response");
     }
 
-    void                                Core::Impl::ProcessDAT(const Data& flit)
+    void Core::Impl::ProcessDAT(const Data& flit)
     {
         namespace DAT = CHI::Eb::Opcodes::DAT;
 
@@ -167,7 +167,7 @@ namespace CHI::Lunatic {
         Error(INVALID_TRANSACTION, "unsupported or unmatched data response");
     }
 
-    void                                Core::Impl::AdmitRequests()
+    void Core::Impl::AdmitRequests()
     {
         if (rxreq.empty())
             return;
@@ -199,7 +199,7 @@ namespace CHI::Lunatic {
         AdmitRequest(request);
     }
 
-    void                                Core::Impl::AdmitRequest(const Request& request)
+    void Core::Impl::AdmitRequest(const Request& request)
     {
         const Time age = nextAge++;
         Transaction* transaction = tracker.Allocate(request, age);
@@ -214,7 +214,7 @@ namespace CHI::Lunatic {
         transaction->phase = Phase::Receive;
     }
 
-    void                                Core::Impl::AdvanceTransactions()
+    void Core::Impl::AdvanceTransactions()
     {
         std::vector<TransactionHandle> handles = tracker.Handles();
         std::sort(handles.begin(), handles.end(), [&](TransactionHandle a, TransactionHandle b) {
@@ -233,7 +233,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::Advance(Transaction& transaction)
+    void Core::Impl::Advance(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         switch (transaction.phase)
@@ -329,7 +329,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::Resolve(Transaction& transaction)
+    void Core::Impl::Resolve(Transaction& transaction)
     {
         if (IsCoherentRequest(transaction.request.opcode) || ClassifyRequest(transaction.request.opcode) == RequestClass::ReadOnce)
             ResolveCoherent(transaction);
@@ -337,7 +337,7 @@ namespace CHI::Lunatic {
             ResolveNonCoherent(transaction);
     }
 
-    void                                Core::Impl::Action(Transaction& transaction)
+    void Core::Impl::Action(Transaction& transaction)
     {
         if (IsCoherentRequest(transaction.request.opcode) || ClassifyRequest(transaction.request.opcode) == RequestClass::ReadOnce)
             ActionCoherent(transaction);
@@ -345,7 +345,7 @@ namespace CHI::Lunatic {
             ActionNonCoherent(transaction);
     }
 
-    void                                Core::Impl::QueueDBID(Transaction& transaction)
+    void Core::Impl::QueueDBID(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.dbidSent)
@@ -368,7 +368,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::QueueComp(Transaction& transaction, bool withDBID, uint8_t resp, uint8_t respErr)
+    void Core::Impl::QueueComp(Transaction& transaction, bool withDBID, uint8_t resp, uint8_t respErr)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.compSent)
@@ -392,7 +392,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::QueueReadReceipt(Transaction& transaction)
+    void Core::Impl::QueueReadReceipt(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.readReceiptSent || transaction.request.order == 0)
@@ -410,7 +410,7 @@ namespace CHI::Lunatic {
             flow.readReceiptSent = true;
     }
 
-    void                                Core::Impl::QueueRetryCredit(size_t index)
+    void Core::Impl::QueueRetryCredit(size_t index)
     {
         auto it = retries.find(index);
         if (it == retries.end() || !it->second.ackPopped || it->second.grantQueued || tracker.Size() >= tracker.Limit())
@@ -425,7 +425,7 @@ namespace CHI::Lunatic {
             it->second.grantQueued = true;
     }
 
-    void                                Core::Impl::ReturnRead(Transaction& transaction)
+    void Core::Impl::ReturnRead(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (transaction.request.order != 0 && !flow.readReceiptEmitted)
@@ -475,7 +475,7 @@ namespace CHI::Lunatic {
             ++transaction.sentBeats;
     }
 
-    void                                Core::Impl::FinishResponse(Transaction& transaction)
+    void Core::Impl::FinishResponse(Transaction& transaction)
     {
         transaction.Mark(COMPLETE_RESPONSE);
         transaction.wait = RequiresCompAck(transaction.request) && !transaction.Complete(COMPLETE_COMPACK)
@@ -484,7 +484,7 @@ namespace CHI::Lunatic {
         transaction.readyTime = time;
     }
 
-    void                                Core::Impl::RetireFinished()
+    void Core::Impl::RetireFinished()
     {
         std::vector<TransactionHandle> handles;
         for (TransactionHandle handle : tracker.Handles())
@@ -497,7 +497,7 @@ namespace CHI::Lunatic {
             Retire(handle);
     }
 
-    void                                Core::Impl::Retire(TransactionHandle handle)
+    void Core::Impl::Retire(TransactionHandle handle)
     {
         Transaction* transaction = tracker.Find(handle);
         if (!transaction)
@@ -524,7 +524,7 @@ namespace CHI::Lunatic {
         flows.erase(handle);
     }
 
-    void                                Core::Impl::OnEmitted(const Pending<Request>& pending)
+    void Core::Impl::OnEmitted(const Pending<Request>& pending)
     {
         Transaction* transaction = tracker.Find(pending.transaction);
         if (!transaction)
@@ -539,7 +539,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::OnEmitted(const Pending<Response>& pending)
+    void Core::Impl::OnEmitted(const Pending<Response>& pending)
     {
         if (pending.retry != std::numeric_limits<size_t>::max())
         {
@@ -576,7 +576,7 @@ namespace CHI::Lunatic {
             FinishResponse(*transaction);
     }
 
-    void                                Core::Impl::OnEmitted(const Pending<Data>& pending)
+    void Core::Impl::OnEmitted(const Pending<Data>& pending)
     {
         Transaction* transaction = tracker.Find(pending.transaction);
         if (!transaction)
@@ -606,11 +606,11 @@ namespace CHI::Lunatic {
             FinishResponse(*transaction);
     }
 
-    void                                Core::Impl::OnEmitted(const Pending<Snoop>&)
+    void Core::Impl::OnEmitted(const Pending<Snoop>&)
     {
     }
 
-    void                                Core::Impl::Error(TransactionHandle handle, std::string reason)
+    void Core::Impl::Error(TransactionHandle handle, std::string reason)
     {
         errors.push_back({ time, handle, reason });
         Event event;
@@ -622,7 +622,7 @@ namespace CHI::Lunatic {
         events->Publish(std::move(event));
     }
 
-    void                                Core::Impl::Deny(const Request& request, std::string reason)
+    void Core::Impl::Deny(const Request& request, std::string reason)
     {
         Error(INVALID_TRANSACTION, reason);
         Event event;
@@ -638,13 +638,13 @@ namespace CHI::Lunatic {
         events->Publish(std::move(event));
     }
 
-    bool                                Core::Impl::HasInflight() const noexcept
+    bool Core::Impl::HasInflight() const noexcept
     {
         return !rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
                !txdat.empty() || !txsnp.empty() || !retries.empty() || !tracker.Empty() || !hazards.Empty();
     }
 
-    bool                                Core::Impl::ValidateInvariants() const noexcept
+    bool Core::Impl::ValidateInvariants() const noexcept
     {
         if (!tracker.Validate() || !hazards.Validate())
             return false;

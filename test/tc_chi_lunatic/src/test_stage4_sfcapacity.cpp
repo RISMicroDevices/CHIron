@@ -5,7 +5,7 @@ using namespace LunaticTest;
 
 namespace {
 
-    LineData                            SFData(uint8_t seed)
+    LineData SFData(uint8_t seed)
     {
         LineData data{};
         for (size_t index = 0; index < data.size(); ++index)
@@ -13,16 +13,16 @@ namespace {
         return data;
     }
 
-    ByteEnables                         SFEnables()
+    ByteEnables SFEnables()
     {
         ByteEnables enables{};
         enables.fill(1);
         return enables;
     }
 
-    void                                SFReceiveUnique(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId)
+    void SFReceiveUnique(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId)
     {
-        DatabaseId dbid = 0;
+        DataBufferId dbid = 0;
         for (size_t beat = 0; beat < 2; ++beat)
         {
             auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
@@ -32,7 +32,7 @@ namespace {
         driver.CompAck(source, dbid);
     }
 
-    void                                SFWriteback(CheckedDriver<Config256>& driver, const LineKey& line, const LineData& data)
+    void SFWriteback(CheckedDriver<Config256>& driver, const LineKey& line, const LineData& data)
     {
         driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackFull, 4, 1, line.address));
         auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
@@ -41,7 +41,7 @@ namespace {
         driver.Quiesce();
     }
 
-    void                                CleanCapacity(bool precise)
+    void CleanCapacity(bool precise)
     {
         Options options;
         options.policy = PolicyKind::NINE;
@@ -78,7 +78,7 @@ namespace {
         LUNATIC_CHECK(driver.driver.node.InspectHome(a).data == dataA);
     }
 
-    void                                DirtyCapacity(bool precise)
+    void DirtyCapacity(bool precise)
     {
         Options options;
         options.policy = PolicyKind::NINE;

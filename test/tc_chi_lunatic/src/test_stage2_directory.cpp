@@ -10,12 +10,12 @@ using namespace LunaticTest;
 
 namespace {
 
-    LineKey                             Line(uint64_t index, bool nonSecure = false)
+    LineKey Line(uint64_t index, bool nonSecure = false)
     {
         return LineKey::FromAddress(index * LINE_SIZE, nonSecure);
     }
 
-    void                                CheckDecision(const PolicyDecision& actual, const PolicyDecision& expected)
+    void CheckDecision(const PolicyDecision& actual, const PolicyDecision& expected)
     {
         LUNATIC_CHECK(actual.allocateHome == expected.allocateHome);
         LUNATIC_CHECK(actual.retainHome == expected.retainHome);

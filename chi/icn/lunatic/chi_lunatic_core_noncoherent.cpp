@@ -4,7 +4,7 @@
 
 namespace CHI::Lunatic {
 
-    void                                Core::Impl::ResolveNonCoherent(Transaction& transaction)
+    void Core::Impl::ResolveNonCoherent(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         switch (ClassifyRequest(transaction.request.opcode))
@@ -40,7 +40,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::ActionNonCoherent(Transaction& transaction)
+    void Core::Impl::ActionNonCoherent(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         switch (ClassifyRequest(transaction.request.opcode))
@@ -89,7 +89,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    bool                                Core::Impl::HandleWriteDAT(Transaction& transaction, const Data& flit)
+    bool Core::Impl::HandleWriteDAT(Transaction& transaction, const Data& flit)
     {
         namespace DAT = CHI::Eb::Opcodes::DAT;
         FlowState& flow = flows.at(transaction.handle);

@@ -5,7 +5,7 @@
 namespace CHI::Lunatic {
     namespace {
 
-        uint64_t                        CopybackMask(const Request& request, const Options& options)
+        uint64_t CopybackMask(const Request& request, const Options& options)
         {
             const size_t bytes = BytesPerBeat(options);
             const size_t transfer = std::min<size_t>(LINE_SIZE, size_t(1) << request.size);
@@ -17,7 +17,7 @@ namespace CHI::Lunatic {
             return mask;
         }
 
-        uint16_t                        SnoopOpcode(const Transaction& transaction, const FlowState& flow)
+        uint16_t SnoopOpcode(const Transaction& transaction, const FlowState& flow)
         {
             namespace REQ = CHI::Eb::Opcodes::REQ;
             namespace SNP = CHI::Eb::Opcodes::SNP;
@@ -41,7 +41,7 @@ namespace CHI::Lunatic {
 
     }
 
-    void                                Core::Impl::ResolveCoherent(Transaction& transaction)
+    void Core::Impl::ResolveCoherent(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         flow.snoopLine = transaction.request.Line();
@@ -73,7 +73,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::ActionCoherent(Transaction& transaction)
+    void Core::Impl::ActionCoherent(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.backendPhase == BackendPhase::SendData)
@@ -235,7 +235,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::PlanReadSnoops(Transaction& transaction)
+    void Core::Impl::PlanReadSnoops(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         std::vector<NodeId> candidates;
@@ -281,7 +281,7 @@ namespace CHI::Lunatic {
         transaction.readyTime = time;
     }
 
-    void                                Core::Impl::PlanCMOSnoops(Transaction& transaction)
+    void Core::Impl::PlanCMOSnoops(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
@@ -299,7 +299,7 @@ namespace CHI::Lunatic {
         transaction.readyTime = time;
     }
 
-    bool                                Core::Impl::EmitSnoops(Transaction& transaction)
+    bool Core::Impl::EmitSnoops(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (transaction.pendingSnoops.size() >= options.snoopLimit)
@@ -354,14 +354,14 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    void                                Core::Impl::ProcessSnoopRSP(Transaction& transaction, const Response& flit)
+    void Core::Impl::ProcessSnoopRSP(Transaction& transaction, const Response& flit)
     {
         if (!ValidateSnoopResponse(transaction, flit.source, flit.resp, false))
             Error(transaction.handle, "illegal snoop response");
         CompleteSnoopTarget(transaction, flit.source, flit.resp, false);
     }
 
-    void                                Core::Impl::ProcessSnoopDAT(Transaction& transaction, const Data& flit)
+    void Core::Impl::ProcessSnoopDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
         const size_t bytes = BytesPerBeat(options);
@@ -438,7 +438,7 @@ namespace CHI::Lunatic {
             CompleteSnoopTarget(transaction, flit.source, flit.resp, true, flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl);
     }
 
-    bool                                Core::Impl::ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp, bool withData, bool partial) const
+    bool Core::Impl::ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp, bool withData, bool partial) const
     {
         const FlowState& flow = flows.at(transaction.handle);
         if (std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target) == transaction.pendingSnoops.end())
@@ -463,7 +463,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    CacheState                          Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp, bool partial) const
+    CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp, bool partial) const
     {
         const FlowState& flow = flows.at(transaction.handle);
         const CacheState initial = snoopFilter.State(flow.snoopLine, target);
@@ -483,7 +483,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                Core::Impl::CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp, bool, bool partial)
+    void Core::Impl::CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp, bool, bool partial)
     {
         FlowState& flow = flows.at(transaction.handle);
         const CacheState final = DecodeSnoopState(transaction, target, resp, partial);

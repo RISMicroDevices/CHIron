@@ -3,12 +3,12 @@
 namespace CHI::Lunatic {
     namespace {
 
-        bool                            IsDirtyCopyback(uint8_t resp)
+        bool IsDirtyCopyback(uint8_t resp)
         {
             return resp == CHI::Eb::Resps::CopyBackWrData_UD_PD || resp == CHI::Eb::Resps::CopyBackWrData_SD_PD;
         }
 
-        ByteEnables                     FullEnables()
+        ByteEnables FullEnables()
         {
             ByteEnables enables{};
             enables.fill(1);
@@ -17,7 +17,7 @@ namespace CHI::Lunatic {
 
     }
 
-    bool                                Core::Impl::PrepareHomeCommit(Transaction& transaction)
+    bool Core::Impl::PrepareHomeCommit(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.directoryCommitted)
@@ -51,7 +51,7 @@ namespace CHI::Lunatic {
         return committed;
     }
 
-    bool                                Core::Impl::CommitReadDirectory(Transaction& transaction)
+    bool Core::Impl::CommitReadDirectory(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         const LineKey line = transaction.request.Line();
@@ -138,7 +138,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    bool                                Core::Impl::CommitCopyback(Transaction& transaction)
+    bool Core::Impl::CommitCopyback(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         const LineKey line = transaction.request.Line();
@@ -198,7 +198,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    bool                                Core::Impl::CommitCMO(Transaction& transaction)
+    bool Core::Impl::CommitCMO(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         const LineKey line = transaction.request.Line();
@@ -231,7 +231,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    bool                                Core::Impl::PrepareSnoopFilterCapacity(Transaction& transaction)
+    bool Core::Impl::PrepareSnoopFilterCapacity(Transaction& transaction)
     {
         const LineKey line = transaction.request.Line();
         if (snoopFilter.Find(line) || snoopFilter.HasInvalidWay(line))
@@ -276,7 +276,7 @@ namespace CHI::Lunatic {
         return false;
     }
 
-    bool                                Core::Impl::PrepareVictim(Transaction& transaction)
+    bool Core::Impl::PrepareVictim(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         const LineKey line = transaction.request.Line();
@@ -325,7 +325,7 @@ namespace CHI::Lunatic {
         return false;
     }
 
-    bool                                Core::Impl::CompleteVictim(Transaction& transaction)
+    bool Core::Impl::CompleteVictim(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (!flow.victimPending)
@@ -378,7 +378,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    HomeLine&                           Core::Impl::InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty, Time age)
+    HomeLine& Core::Impl::InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty, Time age)
     {
         HomeLine& home = directory.Install(line, way, age);
         home.data = data;
@@ -387,7 +387,7 @@ namespace CHI::Lunatic {
         return home;
     }
 
-    void                                Core::Impl::EvictRequester(Transaction& transaction)
+    void Core::Impl::EvictRequester(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         snoopFilter.Remove(transaction.request.Line(), transaction.request.source);

@@ -5,12 +5,12 @@
 
 namespace CHI::Lunatic {
 
-    bool                                VirtualPipeline::Eligible(const Transaction& transaction, Time time) const noexcept
+    bool VirtualPipeline::Eligible(const Transaction& transaction, Time time) const noexcept
     {
         return transaction.phase != Phase::Retired && transaction.readyTime <= time;
     }
 
-    Time                                VirtualPipeline::StageLatency(Phase phase) const noexcept
+    Time VirtualPipeline::StageLatency(Phase phase) const noexcept
     {
         switch (phase)
         {
@@ -27,35 +27,35 @@ namespace CHI::Lunatic {
         }
     }
 
-    Time                                VirtualPipeline::Advance(Transaction& transaction, Phase next, Time time) const noexcept
+    Time VirtualPipeline::Advance(Transaction& transaction, Phase next, Time time) const noexcept
     {
         transaction.phase = next;
         transaction.readyTime = SaturatingAdd(time, StageLatency(next));
         return transaction.readyTime;
     }
 
-    Time                                VirtualPipeline::ScheduleTag(Time earliest) noexcept
+    Time VirtualPipeline::ScheduleTag(Time earliest) noexcept
     {
         const Time slot = std::max(earliest, tagPortFree);
         tagPortFree = SaturatingAdd(slot, 1);
         return SaturatingAdd(slot, options.tagLatency);
     }
 
-    Time                                VirtualPipeline::ScheduleData(Time earliest) noexcept
+    Time VirtualPipeline::ScheduleData(Time earliest) noexcept
     {
         const Time slot = std::max(earliest, dataPortFree);
         dataPortFree = SaturatingAdd(slot, 1);
         return SaturatingAdd(slot, options.dataLatency);
     }
 
-    Time                                VirtualPipeline::SaturatingAdd(Time time, Time delay) const noexcept
+    Time VirtualPipeline::SaturatingAdd(Time time, Time delay) const noexcept
     {
         if (delay > std::numeric_limits<Time>::max() - time)
             return std::numeric_limits<Time>::max();
         return time + delay;
     }
 
-    void                                VirtualPipeline::Reset() noexcept
+    void VirtualPipeline::Reset() noexcept
     {
         tagPortFree = 0;
         dataPortFree = 0;

@@ -5,7 +5,7 @@ using namespace LunaticTest;
 
 namespace {
 
-    LineData                            NegativeData(uint8_t seed)
+    LineData NegativeData(uint8_t seed)
     {
         LineData data{};
         for (size_t index = 0; index < data.size(); ++index)
@@ -13,14 +13,14 @@ namespace {
         return data;
     }
 
-    ByteEnables                         NegativeEnables()
+    ByteEnables NegativeEnables()
     {
         ByteEnables enables{};
         enables.fill(1);
         return enables;
     }
 
-    void                                NegativeWriteback(CheckedDriver<Config256>& driver, const LineKey& line, const LineData& data)
+    void NegativeWriteback(CheckedDriver<Config256>& driver, const LineKey& line, const LineData& data)
     {
         driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackFull, 4, 70, line.address));
         auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
@@ -29,11 +29,11 @@ namespace {
         driver.Quiesce();
     }
 
-    LineData                            NegativeReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId, uint8_t resp,
+    LineData NegativeReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId, uint8_t resp,
                                                         bool compAck = true)
     {
         LineData result{};
-        DatabaseId dbid = 0;
+        DataBufferId dbid = 0;
         for (size_t beat = 0; beat < 2; ++beat)
         {
             auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
@@ -48,7 +48,7 @@ namespace {
         return result;
     }
 
-    void                                RawSnoopData(Driver<Config256>& driver, NodeId source, TransactionId txnId,
+    void RawSnoopData(Driver<Config256>& driver, NodeId source, TransactionId txnId,
                                                      const LineData& line, uint8_t resp)
     {
         for (size_t beat = 0; beat < 2; ++beat)
@@ -70,7 +70,7 @@ namespace {
         driver.Tick();
     }
 
-    void                                PartialDirtyMatrix(PolicyKind policy)
+    void PartialDirtyMatrix(PolicyKind policy)
     {
         Options options;
         options.policy = policy;

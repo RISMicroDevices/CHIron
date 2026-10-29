@@ -21,44 +21,44 @@ namespace CHI::Lunatic {
         struct Impl;
 
     private:
-        std::unique_ptr<Impl>           impl;
+        std::unique_ptr<Impl> impl;
 
     public:
         Core(NodeId nodeId, Options options, std::shared_ptr<EventHub> events);
         ~Core();
         Core(const Core&) = delete;
-        Core&                           operator=(const Core&) = delete;
+        Core& operator=(const Core&) = delete;
 
-        void                            Reset();
-        void                            Tick(Time time);
-        bool                            Drain();
-        bool                            DispatchEvents();
-        bool                            HasInflight() const noexcept;
+        void Reset();
+        void Tick(Time time);
+        bool Drain();
+        bool DispatchEvents();
+        bool HasInflight() const noexcept;
 
-        bool                            PushRXREQ(const Request& flit);
-        bool                            PushRXRSP(const Response& flit);
-        bool                            PushRXDAT(const Data& flit);
+        bool PushRXREQ(const Request& flit);
+        bool PushRXRSP(const Response& flit);
+        bool PushRXDAT(const Data& flit);
 
-        std::optional<Request>          PeekTXREQ() const;
-        std::optional<Response>         PeekTXRSP() const;
-        std::optional<Data>             PeekTXDAT() const;
-        std::optional<Snoop>            PeekTXSNP() const;
+        std::optional<Request>  PeekTXREQ() const;
+        std::optional<Response> PeekTXRSP() const;
+        std::optional<Data>     PeekTXDAT() const;
+        std::optional<Snoop>    PeekTXSNP() const;
 
-        std::optional<Request>          PopTXREQ();
-        std::optional<Response>         PopTXRSP();
-        std::optional<Data>             PopTXDAT();
-        std::optional<Snoop>            PopTXSNP();
+        std::optional<Request>  PopTXREQ();
+        std::optional<Response> PopTXRSP();
+        std::optional<Data>     PopTXDAT();
+        std::optional<Snoop>    PopTXSNP();
 
-        NodeId                          GetNodeId() const noexcept;
-        Time                            GetTime() const noexcept;
-        const Options&                  GetOptions() const noexcept;
-        std::shared_ptr<EventHub>       GetEvents() const noexcept;
-        const std::vector<ErrorInfo>&   GetErrors() const noexcept;
-        SparseMemory&                   GetMemory() noexcept;
-        const SparseMemory&             GetMemory() const noexcept;
-        HomeLineInfo                    InspectHome(const LineKey& line) const noexcept;
-        CacheState                      InspectRequester(const LineKey& line, NodeId requester) const noexcept;
-        bool                            ValidateInvariants() const noexcept;
+        NodeId                        GetNodeId() const noexcept;
+        Time                          GetTime() const noexcept;
+        const Options&                GetOptions() const noexcept;
+        std::shared_ptr<EventHub>     GetEvents() const noexcept;
+        const std::vector<ErrorInfo>& GetErrors() const noexcept;
+        SparseMemory&                 GetMemory() noexcept;
+        const SparseMemory&           GetMemory() const noexcept;
+        HomeLineInfo                  InspectHome(const LineKey& line) const noexcept;
+        CacheState                    InspectRequester(const LineKey& line, NodeId requester) const noexcept;
+        bool                          ValidateInvariants() const noexcept;
     };
 
     template<CHI::Eb::FlitConfigurationConcept config>
@@ -70,16 +70,16 @@ namespace CHI::Lunatic {
         using SNPFlit = CHI::Eb::Flits::SNP<config>;
 
         struct SNPEmission {
-            NodeId                  target = 0;
-            SNPFlit                 flit{};
+            NodeId  target = 0;
+            SNPFlit flit{};
         };
 
     private:
-        Core                        core;
+        Core core;
 
-        static Request              Decode(const REQFlit& flit)
+        static Request Decode(const REQFlit& flit)
         {
-            Request                 result;
+            Request result;
             result.source = flit.SrcID();
             result.target = flit.TgtID();
             result.txnId = flit.TxnID();
@@ -101,9 +101,9 @@ namespace CHI::Lunatic {
             return result;
         }
 
-        static Response             Decode(const RSPFlit& flit)
+        static Response Decode(const RSPFlit& flit)
         {
-            Response                result;
+            Response result;
             result.source = flit.SrcID();
             result.target = flit.TgtID();
             result.txnId = flit.TxnID();
@@ -119,9 +119,9 @@ namespace CHI::Lunatic {
             return result;
         }
 
-        static Data                 Decode(const DATFlit& flit)
+        static Data Decode(const DATFlit& flit)
         {
-            Data                    result;
+            Data result;
             result.source = flit.SrcID();
             result.target = flit.TgtID();
             result.homeNid = flit.HomeNID();
@@ -137,37 +137,37 @@ namespace CHI::Lunatic {
             result.cBusy = flit.CBusy();
             result.traceTag = flit.TraceTag();
 
-            constexpr size_t        lanes = config::dataWidth / 64;
-            constexpr size_t        bytes = config::dataWidth / 8;
+            constexpr size_t lanes = config::dataWidth / 64;
+            constexpr size_t bytes = config::dataWidth / 8;
             for (size_t lane = 0; lane < lanes; ++lane)
             {
-                const uint64_t      word = flit.Data()[lane];
+                const uint64_t word = flit.Data()[lane];
                 for (size_t byte = 0; byte < 8; ++byte)
                     result.bytes[lane * 8 + byte] = uint8_t(word >> (byte * 8));
             }
 
-            const uint64_t          enables = flit.BE();
+            const uint64_t enables = flit.BE();
             for (size_t byte = 0; byte < bytes; ++byte)
                 result.byteEnables[byte] = uint8_t((enables >> byte) & 1);
 
             if constexpr (DATFlit::hasPoison)
             {
-                const uint64_t      poison = flit.Poison();
+                const uint64_t poison = flit.Poison();
                 for (size_t lane = 0; lane < lanes; ++lane)
                     result.poison[lane] = uint8_t((poison >> lane) & 1);
             }
             if constexpr (DATFlit::hasDataCheck)
             {
-                const uint64_t      check = flit.DataCheck();
+                const uint64_t check = flit.DataCheck();
                 for (size_t byte = 0; byte < bytes; ++byte)
                     result.dataCheck[byte] = uint8_t((check >> byte) & 1);
             }
             return result;
         }
 
-        static REQFlit              Encode(const Request& value)
+        static REQFlit Encode(const Request& value)
         {
-            REQFlit                 flit{};
+            REQFlit flit{};
             flit.QoS() = value.qos;
             flit.TgtID() = value.target;
             flit.SrcID() = value.source;
@@ -189,9 +189,9 @@ namespace CHI::Lunatic {
             return flit;
         }
 
-        static RSPFlit              Encode(const Response& value)
+        static RSPFlit Encode(const Response& value)
         {
-            RSPFlit                 flit{};
+            RSPFlit flit{};
             flit.QoS() = value.qos;
             flit.TgtID() = value.target;
             flit.SrcID() = value.source;
@@ -207,9 +207,9 @@ namespace CHI::Lunatic {
             return flit;
         }
 
-        static DATFlit              Encode(const Data& value)
+        static DATFlit Encode(const Data& value)
         {
-            DATFlit                 flit{};
+            DATFlit flit{};
             flit.QoS() = value.qos;
             flit.TgtID() = value.target;
             flit.SrcID() = value.source;
@@ -225,31 +225,31 @@ namespace CHI::Lunatic {
             flit.DataID() = value.dataId;
             flit.TraceTag() = value.traceTag;
 
-            constexpr size_t        lanes = config::dataWidth / 64;
-            constexpr size_t        bytes = config::dataWidth / 8;
+            constexpr size_t lanes = config::dataWidth / 64;
+            constexpr size_t bytes = config::dataWidth / 8;
             for (size_t lane = 0; lane < lanes; ++lane)
             {
-                uint64_t            word = 0;
+                uint64_t word = 0;
                 for (size_t byte = 0; byte < 8; ++byte)
                     word |= uint64_t(value.bytes[lane * 8 + byte]) << (byte * 8);
                 flit.Data()[lane] = word;
             }
 
-            uint64_t                enables = 0;
+            uint64_t enables = 0;
             for (size_t byte = 0; byte < bytes; ++byte)
                 enables |= uint64_t(value.byteEnables[byte] & 1) << byte;
             flit.BE() = enables;
 
             if constexpr (DATFlit::hasPoison)
             {
-                uint64_t            poison = 0;
+                uint64_t poison = 0;
                 for (size_t lane = 0; lane < lanes; ++lane)
                     poison |= uint64_t(value.poison[lane] & 1) << lane;
                 flit.Poison() = poison;
             }
             if constexpr (DATFlit::hasDataCheck)
             {
-                uint64_t            check = 0;
+                uint64_t check = 0;
                 for (size_t byte = 0; byte < bytes; ++byte)
                     check |= uint64_t(value.dataCheck[byte] & 1) << byte;
                 flit.DataCheck() = check;
@@ -257,9 +257,9 @@ namespace CHI::Lunatic {
             return flit;
         }
 
-        static SNPEmission          Encode(const Snoop& value)
+        static SNPEmission Encode(const Snoop& value)
         {
-            SNPEmission             emission;
+            SNPEmission emission;
             emission.target = value.target;
             emission.flit.QoS() = value.qos;
             emission.flit.SrcID() = value.source;
@@ -283,78 +283,77 @@ namespace CHI::Lunatic {
         {
         }
 
-        void                        Reset() { core.Reset(); }
-        void                        Tick(Time time) { core.Tick(time); }
-        bool                        Drain() { return core.Drain(); }
-        bool                        DispatchEvents() { return core.DispatchEvents(); }
-        bool                        HasInflight() const noexcept { return core.HasInflight(); }
+        void Reset() { core.Reset(); }
+        void Tick(Time time) { core.Tick(time); }
+        bool Drain() { return core.Drain(); }
+        bool DispatchEvents() { return core.DispatchEvents(); }
+        bool HasInflight() const noexcept { return core.HasInflight(); }
 
-        bool                        PushRXREQ(const REQFlit& flit) { return core.PushRXREQ(Decode(flit)); }
-        bool                        PushRXRSP(const RSPFlit& flit) { return core.PushRXRSP(Decode(flit)); }
-        bool                        PushRXDAT(const DATFlit& flit) { return core.PushRXDAT(Decode(flit)); }
+        bool PushRXREQ(const REQFlit& flit) { return core.PushRXREQ(Decode(flit)); }
+        bool PushRXRSP(const RSPFlit& flit) { return core.PushRXRSP(Decode(flit)); }
+        bool PushRXDAT(const DATFlit& flit) { return core.PushRXDAT(Decode(flit)); }
 
         std::optional<REQFlit>      PeekTXREQ() const
         {
-            const auto              value = core.PeekTXREQ();
+            const auto value = core.PeekTXREQ();
             return value ? std::optional<REQFlit>(Encode(*value)) : std::nullopt;
         }
 
         std::optional<RSPFlit>      PeekTXRSP() const
         {
-            const auto              value = core.PeekTXRSP();
+            const auto value = core.PeekTXRSP();
             return value ? std::optional<RSPFlit>(Encode(*value)) : std::nullopt;
         }
 
         std::optional<DATFlit>      PeekTXDAT() const
         {
-            const auto              value = core.PeekTXDAT();
+            const auto value = core.PeekTXDAT();
             return value ? std::optional<DATFlit>(Encode(*value)) : std::nullopt;
         }
 
-        std::optional<SNPEmission>  PeekTXSNP() const
+        std::optional<SNPEmission> PeekTXSNP() const
         {
-            const auto              value = core.PeekTXSNP();
+            const auto value = core.PeekTXSNP();
             return value ? std::optional<SNPEmission>(Encode(*value)) : std::nullopt;
         }
 
         std::optional<REQFlit>      PopTXREQ()
         {
-            const auto              value = core.PopTXREQ();
+            const auto value = core.PopTXREQ();
             return value ? std::optional<REQFlit>(Encode(*value)) : std::nullopt;
         }
 
         std::optional<RSPFlit>      PopTXRSP()
         {
-            const auto              value = core.PopTXRSP();
+            const auto value = core.PopTXRSP();
             return value ? std::optional<RSPFlit>(Encode(*value)) : std::nullopt;
         }
 
         std::optional<DATFlit>      PopTXDAT()
         {
-            const auto              value = core.PopTXDAT();
+            const auto value = core.PopTXDAT();
             return value ? std::optional<DATFlit>(Encode(*value)) : std::nullopt;
         }
 
-        std::optional<SNPEmission>  PopTXSNP()
+        std::optional<SNPEmission> PopTXSNP()
         {
-            const auto              value = core.PopTXSNP();
+            const auto value = core.PopTXSNP();
             return value ? std::optional<SNPEmission>(Encode(*value)) : std::nullopt;
         }
 
-        NodeId                      GetNodeId() const noexcept { return core.GetNodeId(); }
-        Time                        GetTime() const noexcept { return core.GetTime(); }
-        const Options&              GetOptions() const noexcept { return core.GetOptions(); }
-        std::shared_ptr<EventHub>   GetEvents() const noexcept { return core.GetEvents(); }
-        const std::vector<ErrorInfo>&
-                                    GetErrors() const noexcept { return core.GetErrors(); }
-        SparseMemory&               GetMemory() noexcept { return core.GetMemory(); }
-        const SparseMemory&         GetMemory() const noexcept { return core.GetMemory(); }
-        HomeLineInfo                InspectHome(const LineKey& line) const noexcept { return core.InspectHome(line); }
-        CacheState                  InspectRequester(const LineKey& line, NodeId requester) const noexcept
+        NodeId                        GetNodeId() const noexcept { return core.GetNodeId(); }
+        Time                          GetTime() const noexcept { return core.GetTime(); }
+        const Options&                GetOptions() const noexcept { return core.GetOptions(); }
+        std::shared_ptr<EventHub>     GetEvents() const noexcept { return core.GetEvents(); }
+        const std::vector<ErrorInfo>& GetErrors() const noexcept { return core.GetErrors(); }
+        SparseMemory&                 GetMemory() noexcept { return core.GetMemory(); }
+        const SparseMemory&           GetMemory() const noexcept { return core.GetMemory(); }
+        HomeLineInfo                  InspectHome(const LineKey& line) const noexcept { return core.InspectHome(line); }
+        CacheState                    InspectRequester(const LineKey& line, NodeId requester) const noexcept
         {
             return core.InspectRequester(line, requester);
         }
-        bool                        ValidateInvariants() const noexcept { return core.ValidateInvariants(); }
+        bool                          ValidateInvariants() const noexcept { return core.ValidateInvariants(); }
     };
 
 }

@@ -5,7 +5,7 @@
 
 namespace CHI::Lunatic {
 
-    RequestClass                        ClassifyRequest(uint16_t opcode) noexcept
+    RequestClass ClassifyRequest(uint16_t opcode) noexcept
     {
         namespace REQ = CHI::Eb::Opcodes::REQ;
         if (opcode == REQ::ReadNoSnp)
@@ -30,12 +30,12 @@ namespace CHI::Lunatic {
         return RequestClass::Unsupported;
     }
 
-    bool                                IsSupportedRequest(uint16_t opcode) noexcept
+    bool IsSupportedRequest(uint16_t opcode) noexcept
     {
         return ClassifyRequest(opcode) != RequestClass::Unsupported;
     }
 
-    bool                                IsCoherentRequest(uint16_t opcode) noexcept
+    bool IsCoherentRequest(uint16_t opcode) noexcept
     {
         const auto requestClass = ClassifyRequest(opcode);
         return requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeUnique ||
@@ -43,31 +43,31 @@ namespace CHI::Lunatic {
                requestClass == RequestClass::CMO;
     }
 
-    bool                                IsReadRequest(uint16_t opcode) noexcept
+    bool IsReadRequest(uint16_t opcode) noexcept
     {
         const auto requestClass = ClassifyRequest(opcode);
         return requestClass == RequestClass::NonCoherentRead || requestClass == RequestClass::ReadOnce ||
                requestClass == RequestClass::CoherentRead;
     }
 
-    bool                                IsWriteRequest(uint16_t opcode) noexcept
+    bool IsWriteRequest(uint16_t opcode) noexcept
     {
         const auto requestClass = ClassifyRequest(opcode);
         return requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ZeroWrite ||
                requestClass == RequestClass::CopybackWrite;
     }
 
-    bool                                IsCopybackRequest(uint16_t opcode) noexcept
+    bool IsCopybackRequest(uint16_t opcode) noexcept
     {
         return ClassifyRequest(opcode) == RequestClass::CopybackWrite;
     }
 
-    bool                                IsCMORequest(uint16_t opcode) noexcept
+    bool IsCMORequest(uint16_t opcode) noexcept
     {
         return ClassifyRequest(opcode) == RequestClass::CMO;
     }
 
-    bool                                RequiresCompAck(const Request& request) noexcept
+    bool RequiresCompAck(const Request& request) noexcept
     {
         const auto requestClass = ClassifyRequest(request.opcode);
         if (requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeUnique)
@@ -77,7 +77,7 @@ namespace CHI::Lunatic {
                 requestClass == RequestClass::NonCoherentWrite);
     }
 
-    uint64_t                            TransferBeatMask(const Request& request, const Options& options) noexcept
+    uint64_t TransferBeatMask(const Request& request, const Options& options) noexcept
     {
         const size_t bytes = BytesPerBeat(options);
         const size_t transfer = std::min<size_t>(LINE_SIZE, size_t(1) << request.size);

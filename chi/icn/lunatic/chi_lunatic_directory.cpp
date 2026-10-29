@@ -22,17 +22,17 @@ namespace CHI::Lunatic {
     {
     }
 
-    size_t                              Directory::Index(size_t set, size_t way) const noexcept
+    size_t Directory::Index(size_t set, size_t way) const noexcept
     {
         return set * ways + way;
     }
 
-    size_t                              Directory::SetIndex(const LineKey& key) const noexcept
+    size_t Directory::SetIndex(const LineKey& key) const noexcept
     {
         return size_t((key.address / LINE_SIZE) % sets);
     }
 
-    HomeLine*                           Directory::Find(const LineKey& key) noexcept
+    HomeLine* Directory::Find(const LineKey& key) noexcept
     {
         const size_t set = SetIndex(key);
         for (size_t way = 0; way < ways; ++way) {
@@ -43,7 +43,7 @@ namespace CHI::Lunatic {
         return nullptr;
     }
 
-    const HomeLine*                     Directory::Find(const LineKey& key) const noexcept
+    const HomeLine* Directory::Find(const LineKey& key) const noexcept
     {
         const size_t set = SetIndex(key);
         for (size_t way = 0; way < ways; ++way) {
@@ -54,17 +54,17 @@ namespace CHI::Lunatic {
         return nullptr;
     }
 
-    HomeLine&                           Directory::At(size_t set, size_t way) noexcept
+    HomeLine& Directory::At(size_t set, size_t way) noexcept
     {
         return lines[Index(set, way)];
     }
 
-    const HomeLine&                     Directory::At(size_t set, size_t way) const noexcept
+    const HomeLine& Directory::At(size_t set, size_t way) const noexcept
     {
         return lines[Index(set, way)];
     }
 
-    std::optional<size_t>               Directory::FindWay(const LineKey& key) const noexcept
+    std::optional<size_t> Directory::FindWay(const LineKey& key) const noexcept
     {
         const size_t set = SetIndex(key);
         for (size_t way = 0; way < ways; ++way) {
@@ -75,7 +75,7 @@ namespace CHI::Lunatic {
         return std::nullopt;
     }
 
-    std::vector<size_t>                 Directory::VictimCandidates(const LineKey&) const
+    std::vector<size_t> Directory::VictimCandidates(const LineKey&) const
     {
         std::vector<size_t> candidates;
         candidates.reserve(ways);
@@ -84,7 +84,7 @@ namespace CHI::Lunatic {
         return candidates;
     }
 
-    size_t                              Directory::ChooseVictim(const LineKey& key) const
+    size_t Directory::ChooseVictim(const LineKey& key) const
     {
         const size_t set = SetIndex(key);
         size_t victim = 0;
@@ -99,7 +99,7 @@ namespace CHI::Lunatic {
         return victim;
     }
 
-    HomeLine&                           Directory::Install(const LineKey& key, size_t way, uint64_t age)
+    HomeLine& Directory::Install(const LineKey& key, size_t way, uint64_t age)
     {
         if (way >= ways)
             throw std::out_of_range("Lunatic directory way is out of range");
@@ -112,18 +112,18 @@ namespace CHI::Lunatic {
         return line;
     }
 
-    void                                Directory::Invalidate(size_t set, size_t way) noexcept
+    void Directory::Invalidate(size_t set, size_t way) noexcept
     {
         At(set, way) = HomeLine{};
     }
 
-    void                                Directory::Clear() noexcept
+    void Directory::Clear() noexcept
     {
         for (HomeLine& line : lines)
             line = HomeLine{};
     }
 
-    size_t                              Directory::ValidCount() const noexcept
+    size_t Directory::ValidCount() const noexcept
     {
         return size_t(std::count_if(lines.begin(), lines.end(), [](const HomeLine& line) {
             return line.valid;

@@ -5,7 +5,7 @@ using namespace LunaticTest;
 
 namespace {
 
-    LineData                            DataPattern(uint8_t seed)
+    LineData DataPattern(uint8_t seed)
     {
         LineData data{};
         for (size_t index = 0; index < data.size(); ++index)
@@ -13,7 +13,7 @@ namespace {
         return data;
     }
 
-    ByteEnables                         AllBytes()
+    ByteEnables AllBytes()
     {
         ByteEnables enables{};
         enables.fill(1);
@@ -21,10 +21,10 @@ namespace {
     }
 
     template<typename config>
-    LineData                            ReceiveData(CheckedDriver<config>& driver, NodeId source, TransactionId txnId, uint8_t expectedResp)
+    LineData ReceiveData(CheckedDriver<config>& driver, NodeId source, TransactionId txnId, uint8_t expectedResp)
     {
         LineData result{};
-        DatabaseId dbid = 0;
+        DataBufferId dbid = 0;
         for (size_t beat = 0; beat < BeatsPerLine(driver.driver.node.GetOptions()); ++beat)
         {
             auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
@@ -41,7 +41,7 @@ namespace {
     }
 
     template<typename config>
-    void                                CheckResidency(CheckedDriver<config>& driver, const LineKey& line, PolicyKind policy, bool expectedHome)
+    void CheckResidency(CheckedDriver<config>& driver, const LineKey& line, PolicyKind policy, bool expectedHome)
     {
         const HomeLineInfo home = driver.driver.node.InspectHome(line);
         LUNATIC_CHECK(home.valid == expectedHome);
@@ -49,7 +49,7 @@ namespace {
             LUNATIC_CHECK(!expectedHome || driver.driver.node.InspectRequester(line, 4) == CacheState::I);
     }
 
-    void                                CoherentReadMatrix(PolicyKind policy)
+    void CoherentReadMatrix(PolicyKind policy)
     {
         Options options;
         options.policy = policy;
@@ -97,7 +97,7 @@ namespace {
         LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::I);
     }
 
-    void                                Writeback(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId, const LineKey& line,
+    void Writeback(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId, const LineKey& line,
                                                   uint16_t opcode, const LineData& data, const ByteEnables& enables, uint8_t resp)
     {
         driver.PushRequest(driver.Request(opcode, source, txnId, line.address));
@@ -106,7 +106,7 @@ namespace {
         driver.Quiesce();
     }
 
-    void                                DirtyAndCopybackMatrix(PolicyKind policy)
+    void DirtyAndCopybackMatrix(PolicyKind policy)
     {
         Options options;
         options.policy = policy;

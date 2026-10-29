@@ -5,7 +5,7 @@ using namespace LunaticTest;
 
 namespace {
 
-    LineData                            CMOData(uint8_t seed)
+    LineData CMOData(uint8_t seed)
     {
         LineData data{};
         for (size_t index = 0; index < data.size(); ++index)
@@ -13,14 +13,14 @@ namespace {
         return data;
     }
 
-    ByteEnables                         CMOEnables()
+    ByteEnables CMOEnables()
     {
         ByteEnables enables{};
         enables.fill(1);
         return enables;
     }
 
-    void                                CMOWriteback(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId, const LineKey& line,
+    void CMOWriteback(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId, const LineKey& line,
                                                      const LineData& data, uint8_t resp = CHI::Eb::Resps::CopyBackWrData_UD_PD,
                                                      uint16_t opcode = CHI::Eb::Opcodes::REQ::WriteBackFull)
     {
@@ -30,9 +30,9 @@ namespace {
         driver.Quiesce();
     }
 
-    void                                CMOReceiveUnique(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId)
+    void CMOReceiveUnique(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId)
     {
-        DatabaseId dbid = 0;
+        DataBufferId dbid = 0;
         for (size_t beat = 0; beat < 2; ++beat)
         {
             auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
@@ -42,7 +42,7 @@ namespace {
         driver.CompAck(source, dbid);
     }
 
-    void                                CMOMatrix(PolicyKind policy)
+    void CMOMatrix(PolicyKind policy)
     {
         Options options;
         options.policy = policy;
@@ -93,7 +93,7 @@ namespace {
         LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 7) == CacheState::I);
     }
 
-    void                                CapacityMatrix(PolicyKind policy)
+    void CapacityMatrix(PolicyKind policy)
     {
         Options options;
         options.policy = policy;
@@ -128,7 +128,7 @@ namespace {
         LUNATIC_CHECK(driver.driver.node.InspectHome(b).valid == (policy != PolicyKind::Exclusive));
     }
 
-    void                                DirtyVictimMatrix(PolicyKind policy)
+    void DirtyVictimMatrix(PolicyKind policy)
     {
         Options options;
         options.policy = policy;

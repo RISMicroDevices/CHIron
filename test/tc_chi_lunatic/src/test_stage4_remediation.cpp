@@ -5,7 +5,7 @@ using namespace LunaticTest;
 
 namespace {
 
-    LineData                            RemedData(uint8_t seed)
+    LineData RemedData(uint8_t seed)
     {
         LineData data{};
         for (size_t index = 0; index < data.size(); ++index)
@@ -13,14 +13,14 @@ namespace {
         return data;
     }
 
-    ByteEnables                         RemedEnables()
+    ByteEnables RemedEnables()
     {
         ByteEnables enables{};
         enables.fill(1);
         return enables;
     }
 
-    void                                RemedWriteback(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
+    void RemedWriteback(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
                                                        const LineKey& line, const LineData& data, uint8_t resp = CHI::Eb::Resps::CopyBackWrData_UD_PD,
                                                        uint16_t opcode = CHI::Eb::Opcodes::REQ::WriteBackFull)
     {
@@ -30,11 +30,11 @@ namespace {
         driver.Quiesce();
     }
 
-    LineData                            RemedReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
+    LineData RemedReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
                                                      uint8_t resp, bool acknowledge = false)
     {
         LineData result{};
-        DatabaseId dbid = 0;
+        DataBufferId dbid = 0;
         for (size_t beat = 0; beat < 2; ++beat)
         {
             auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
@@ -49,7 +49,7 @@ namespace {
         return result;
     }
 
-    void                                ReadOnceDirtyPolicy(PolicyKind policy)
+    void ReadOnceDirtyPolicy(PolicyKind policy)
     {
         Options options;
         options.policy = policy;
@@ -75,7 +75,7 @@ namespace {
     }
 
     template<typename config>
-    void                                SublineReadGeometry()
+    void SublineReadGeometry()
     {
         Driver<config> driver;
         const LineKey line = LineKey::FromAddress(0x16000, false);

@@ -335,15 +335,15 @@ LUNATIC_TEST(Stage2ArbiterQoSThenAgeAndHandle)
 
 LUNATIC_TEST(Stage2SparseMemoryDefaultFullWritesAndSecurityNamespace)
 {
-    SparseMemory                    memory;
-    const LineKey                   key = LineKey::FromAddress(0x1047, false);
-    const LineKey                   secureKey = LineKey::FromAddress(0x1047, true);
+    SparseMemory memory;
+    const LineKey key = LineKey::FromAddress(0x1047, false);
+    const LineKey secureKey = LineKey::FromAddress(0x1047, true);
     LUNATIC_CHECK(key.address == 0x1040);
     LUNATIC_CHECK(memory.Size() == 0);
     LUNATIC_CHECK(!memory.Contains(key));
     LUNATIC_CHECK(memory.Read(key) == LineData{});
 
-    LineData                        initial{};
+    LineData initial{};
     for (size_t index = 0; index < LINE_SIZE; ++index)
         initial[index] = uint8_t(index + 1);
     memory.WriteFull(key, initial);
@@ -353,7 +353,7 @@ LUNATIC_TEST(Stage2SparseMemoryDefaultFullWritesAndSecurityNamespace)
     LUNATIC_CHECK(!memory.Contains(secureKey));
     LUNATIC_CHECK(memory.Read(secureKey) == LineData{});
 
-    LineData                        replacement{};
+    LineData replacement{};
     replacement.fill(0xA5);
     memory.WriteFull(key, replacement);
     LUNATIC_CHECK(memory.Read(key) == replacement);
@@ -368,24 +368,24 @@ LUNATIC_TEST(Stage2SparseMemoryDefaultFullWritesAndSecurityNamespace)
 
 LUNATIC_TEST(Stage2SparseMemoryByteEnableMerge)
 {
-    SparseMemory                    memory;
-    const LineKey                   key = LineKey::FromAddress(0x2000, false);
-    LineData                        initial{};
+    SparseMemory memory;
+    const LineKey key = LineKey::FromAddress(0x2000, false);
+    LineData initial{};
     for (size_t index = 0; index < LINE_SIZE; ++index)
         initial[index] = uint8_t(0x10 + index);
     memory.WriteFull(key, initial);
 
-    LineData                        update{};
+    LineData update{};
     for (size_t index = 0; index < LINE_SIZE; ++index)
         update[index] = uint8_t(0x80 + index);
-    ByteEnables                     enables{};
+    ByteEnables enables{};
     enables[0] = 1;
     enables[7] = 2;
     enables[31] = 1;
     enables[63] = 0xFF;
     memory.Write(key, update, enables);
 
-    LineData                        expected = initial;
+    LineData expected = initial;
     expected[0] = update[0];
     expected[7] = update[7];
     expected[31] = update[31];
@@ -393,12 +393,12 @@ LUNATIC_TEST(Stage2SparseMemoryByteEnableMerge)
     LUNATIC_CHECK(memory.Read(key) == expected);
     LUNATIC_CHECK(memory.Size() == 1);
 
-    const LineKey                   partialKey = LineKey::FromAddress(0x3000, true);
-    ByteEnables                     partialEnables{};
+    const LineKey partialKey = LineKey::FromAddress(0x3000, true);
+    ByteEnables partialEnables{};
     partialEnables[5] = 1;
     partialEnables[63] = 1;
     memory.Write(partialKey, update, partialEnables);
-    LineData                        partialExpected{};
+    LineData partialExpected{};
     partialExpected[5] = update[5];
     partialExpected[63] = update[63];
     LUNATIC_CHECK(memory.Contains(partialKey));

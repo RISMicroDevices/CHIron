@@ -13,8 +13,8 @@ namespace LunaticTest {
         using DAT = typename Node::DATFlit;
         using SNP = typename Node::SNPEmission;
 
-        Node                                node;
-        uint64_t                            now = 0;
+        Node     node;
+        uint64_t now = 0;
 
         explicit Driver(CHI::Lunatic::Options options = {}, CHI::Lunatic::NodeId home = 2)
             : node(home, [&options] {
@@ -24,10 +24,10 @@ namespace LunaticTest {
         {
         }
 
-        void                                Tick() { node.Tick(++now); }
+        void Tick() { node.Tick(++now); }
 
         template<typename Predicate>
-        void                                Until(Predicate&& predicate, size_t limit = 500)
+        void Until(Predicate&& predicate, size_t limit = 500)
         {
             for (size_t cycle = 0; cycle < limit; ++cycle)
             {
@@ -38,7 +38,7 @@ namespace LunaticTest {
             throw std::runtime_error("Lunatic driver condition timed out");
         }
 
-        void                                Quiesce(size_t limit = 500)
+        void Quiesce(size_t limit = 500)
         {
             for (size_t cycle = 0; cycle < limit; ++cycle)
             {
@@ -49,8 +49,8 @@ namespace LunaticTest {
             throw std::runtime_error("Lunatic driver failed to drain");
         }
 
-        REQ                                 Request(uint16_t opcode, CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
-                                                    uint64_t address, bool expCompAck = false) const
+        REQ Request(uint16_t opcode, CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
+                    uint64_t address, bool expCompAck = false) const
         {
             REQ request{};
             request.SrcID() = source;
@@ -69,7 +69,7 @@ namespace LunaticTest {
             return request;
         }
 
-        RSP                                 NextRSP(uint16_t opcode)
+        RSP NextRSP(uint16_t opcode)
         {
             Until([&] { return static_cast<bool>(node.PeekTXRSP()); });
             auto flit = node.PopTXRSP();
@@ -78,7 +78,7 @@ namespace LunaticTest {
             return *flit;
         }
 
-        DAT                                 NextDAT(uint16_t opcode)
+        DAT NextDAT(uint16_t opcode)
         {
             Until([&] { return static_cast<bool>(node.PeekTXDAT()); });
             auto flit = node.PopTXDAT();
@@ -87,7 +87,7 @@ namespace LunaticTest {
             return *flit;
         }
 
-        REQ                                 NextREQ(uint16_t opcode)
+        REQ NextREQ(uint16_t opcode)
         {
             Until([&] { return static_cast<bool>(node.PeekTXREQ()); });
             auto flit = node.PopTXREQ();
@@ -96,7 +96,7 @@ namespace LunaticTest {
             return *flit;
         }
 
-        SNP                                 NextSNP(uint16_t opcode)
+        SNP NextSNP(uint16_t opcode)
         {
             Until([&] { return static_cast<bool>(node.PeekTXSNP()); });
             auto flit = node.PopTXSNP();
@@ -105,7 +105,7 @@ namespace LunaticTest {
             return *flit;
         }
 
-        void                                CompAck(CHI::Lunatic::NodeId source, CHI::Lunatic::DatabaseId dbid)
+        void CompAck(CHI::Lunatic::NodeId source, CHI::Lunatic::DataBufferId dbid)
         {
             RSP response{};
             response.SrcID() = source;
@@ -116,9 +116,9 @@ namespace LunaticTest {
             Tick();
         }
 
-        void                                WriteData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
-                                                      CHI::Lunatic::DatabaseId dbid, const CHI::Lunatic::LineData& line,
-                                                      const CHI::Lunatic::ByteEnables& enables, uint16_t opcode, uint8_t resp = 0)
+        void WriteData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
+                       CHI::Lunatic::DataBufferId dbid, const CHI::Lunatic::LineData& line,
+                       const CHI::Lunatic::ByteEnables& enables, uint16_t opcode, uint8_t resp = 0)
         {
             constexpr size_t bytes = config::dataWidth / 8;
             for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
@@ -144,13 +144,13 @@ namespace LunaticTest {
             Tick();
         }
 
-        CHI::Lunatic::LineData              ReadData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
-                                                     uint64_t address, uint16_t opcode, bool compAck = false)
+        CHI::Lunatic::LineData ReadData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
+                                        uint64_t address, uint16_t opcode, bool compAck = false)
         {
             LUNATIC_CHECK(node.PushRXREQ(Request(opcode, source, txnId, address, compAck)));
             CHI::Lunatic::LineData result{};
             constexpr size_t bytes = config::dataWidth / 8;
-            CHI::Lunatic::DatabaseId dbid = 0;
+            CHI::Lunatic::DataBufferId dbid = 0;
             for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
             {
                 DAT data = NextDAT(CHI::Eb::Opcodes::DAT::CompData);

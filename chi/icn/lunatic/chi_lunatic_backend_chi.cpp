@@ -4,7 +4,7 @@
 
 namespace CHI::Lunatic {
 
-    void                                Core::Impl::StartMemoryRead(Transaction& transaction)
+    void Core::Impl::StartMemoryRead(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (transaction.memoryRequired)
@@ -71,7 +71,7 @@ namespace CHI::Lunatic {
         transaction.readyTime = time;
     }
 
-    void                                Core::Impl::CompleteMemoryRead(Transaction& transaction)
+    void Core::Impl::CompleteMemoryRead(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (!transaction.memoryRequired)
@@ -104,7 +104,7 @@ namespace CHI::Lunatic {
         transaction.readyTime = pipeline.ScheduleData(time);
     }
 
-    void                                Core::Impl::StartBackendWrite(Transaction& transaction)
+    void Core::Impl::StartBackendWrite(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (transaction.canceled)
@@ -166,7 +166,7 @@ namespace CHI::Lunatic {
         transaction.readyTime = time;
     }
 
-    void                                Core::Impl::AdvanceBackendWrite(Transaction& transaction)
+    void Core::Impl::AdvanceBackendWrite(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.backendPhase != BackendPhase::SendData)
@@ -226,7 +226,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    bool                                Core::Impl::HandleBackendRSP(Transaction& transaction, const Response& flit)
+    bool Core::Impl::HandleBackendRSP(Transaction& transaction, const Response& flit)
     {
         namespace RSP = CHI::Eb::Opcodes::RSP;
         FlowState& flow = flows.at(transaction.handle);
@@ -307,7 +307,7 @@ namespace CHI::Lunatic {
         return false;
     }
 
-    bool                                Core::Impl::HandleBackendDAT(Transaction& transaction, const Data& flit)
+    bool Core::Impl::HandleBackendDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (!transaction.memoryRequired || flow.memoryWrite ||
@@ -363,7 +363,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    bool                                Core::Impl::WriteLine(Transaction& transaction, const LineKey& line, const LineData& data, const ByteEnables& enables)
+    bool Core::Impl::WriteLine(Transaction& transaction, const LineKey& line, const LineData& data, const ByteEnables& enables)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (options.backend == BackendKind::Internal)
@@ -390,7 +390,7 @@ namespace CHI::Lunatic {
         return false;
     }
 
-    bool                                Core::Impl::FetchBaseline(Transaction& transaction)
+    bool Core::Impl::FetchBaseline(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (options.backend == BackendKind::Internal)

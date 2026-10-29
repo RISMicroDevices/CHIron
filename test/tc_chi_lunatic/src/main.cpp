@@ -2,9 +2,9 @@
 
 int main(int argc, char** argv)
 {
-    const std::string               filter = argc > 1 ? argv[1] : "";
-    size_t                          failures = 0;
-    size_t                          executed = 0;
+    const std::string filter = argc > 1 ? argv[1] : "";
+    size_t failures = 0;
+    size_t executed = 0;
     for (const auto& test : LunaticTest::Registry())
     {
         if (!filter.empty() && test.name.find(filter) == std::string::npos)

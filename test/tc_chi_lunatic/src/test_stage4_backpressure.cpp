@@ -5,7 +5,7 @@ using namespace LunaticTest;
 
 namespace {
 
-    LineData                            BackpressureData(uint8_t seed)
+    LineData BackpressureData(uint8_t seed)
     {
         LineData data{};
         for (size_t index = 0; index < data.size(); ++index)
@@ -13,14 +13,14 @@ namespace {
         return data;
     }
 
-    ByteEnables                         BackpressureEnables()
+    ByteEnables BackpressureEnables()
     {
         ByteEnables enables{};
         enables.fill(1);
         return enables;
     }
 
-    void                                BackpressureWriteback(CheckedDriver<Config256>& driver, const LineKey& line, const LineData& data)
+    void BackpressureWriteback(CheckedDriver<Config256>& driver, const LineKey& line, const LineData& data)
     {
         driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackFull, 4, 1, line.address));
         auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
@@ -30,7 +30,7 @@ namespace {
     }
 
     template<typename config>
-    void                                CoherentGeometry()
+    void CoherentGeometry()
     {
         CheckedDriver<config> driver;
         const LineKey line = LineKey::FromAddress(0x25000, false);
@@ -43,7 +43,7 @@ namespace {
         driver.SnoopData(4, snoop.flit.TxnID(), expected, CHI::Eb::Resps::SnpRespData_SC);
 
         LineData actual{};
-        DatabaseId dbid = 0;
+        DataBufferId dbid = 0;
         for (size_t beat = 0; beat < BeatsPerLine(driver.driver.node.GetOptions()); ++beat)
         {
             auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);

@@ -16,8 +16,8 @@ namespace LunaticTest {
         using DAT = typename Base::DAT;
         using SNP = typename Base::SNP;
 
-        Base                                driver;
-        CHI::Lunatic::NodeId                home;
+        Base                                                              driver;
+        CHI::Lunatic::NodeId                                              home;
         std::map<CHI::Lunatic::NodeId, std::unique_ptr<RNOracle<config>>> oracles;
 
         explicit CheckedDriver(CHI::Lunatic::Options options = {}, CHI::Lunatic::NodeId home = 2)
@@ -25,7 +25,7 @@ namespace LunaticTest {
         {
         }
 
-        RNOracle<config>&                   Oracle(CHI::Lunatic::NodeId requester)
+        RNOracle<config>& Oracle(CHI::Lunatic::NodeId requester)
         {
             auto& oracle = oracles[requester];
             if (!oracle)
@@ -33,13 +33,13 @@ namespace LunaticTest {
             return *oracle;
         }
 
-        REQ                                 Request(uint16_t opcode, CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
-                                                    uint64_t address, bool expCompAck = false)
+        REQ Request(uint16_t opcode, CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
+                    uint64_t address, bool expCompAck = false)
         {
             return driver.Request(opcode, source, txnId, address, expCompAck);
         }
 
-        void                                PushRequest(const REQ& request)
+        void PushRequest(const REQ& request)
         {
             try
             {
@@ -53,36 +53,36 @@ namespace LunaticTest {
             LUNATIC_CHECK(driver.node.PushRXREQ(request));
         }
 
-        RSP                                 NextRSP(uint16_t opcode)
+        RSP NextRSP(uint16_t opcode)
         {
             RSP response = driver.NextRSP(opcode);
             Oracle(response.TgtID()).Response(driver.now, response);
             return response;
         }
 
-        DAT                                 NextDAT(uint16_t opcode)
+        DAT NextDAT(uint16_t opcode)
         {
             DAT data = driver.NextDAT(opcode);
             Oracle(data.TgtID()).Data(driver.now, data);
             return data;
         }
 
-        SNP                                 NextSNP(uint16_t opcode)
+        SNP NextSNP(uint16_t opcode)
         {
             SNP snoop = driver.NextSNP(opcode);
             Oracle(snoop.target).Snoop(driver.now, snoop.flit);
             return snoop;
         }
 
-        void                                CompAck(CHI::Lunatic::NodeId source, CHI::Lunatic::DatabaseId dbid)
+        void CompAck(CHI::Lunatic::NodeId source, CHI::Lunatic::DataBufferId dbid)
         {
             Oracle(source).CompAck(driver.now, dbid);
             driver.CompAck(source, dbid);
         }
 
-        void                                WriteData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
-                                                      CHI::Lunatic::DatabaseId dbid, const CHI::Lunatic::LineData& line,
-                                                      const CHI::Lunatic::ByteEnables& enables, uint16_t opcode, uint8_t resp = 0)
+        void WriteData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
+                       CHI::Lunatic::DataBufferId dbid, const CHI::Lunatic::LineData& line,
+                       const CHI::Lunatic::ByteEnables& enables, uint16_t opcode, uint8_t resp = 0)
         {
             constexpr size_t bytes = config::dataWidth / 8;
             for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
@@ -110,7 +110,7 @@ namespace LunaticTest {
             driver.Tick();
         }
 
-        void                                SnoopResponse(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId, uint8_t resp)
+        void SnoopResponse(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId, uint8_t resp)
         {
             RSP response{};
             response.SrcID() = source;
@@ -123,8 +123,8 @@ namespace LunaticTest {
             driver.Tick();
         }
 
-        void                                SnoopData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
-                                                      const CHI::Lunatic::LineData& line, uint8_t resp, bool partial = false)
+        void SnoopData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
+                       const CHI::Lunatic::LineData& line, uint8_t resp, bool partial = false)
         {
             constexpr size_t bytes = config::dataWidth / 8;
             for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
@@ -151,13 +151,13 @@ namespace LunaticTest {
             driver.Tick();
         }
 
-        CHI::Lunatic::LineData              ReadData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
-                                                     uint64_t address, uint16_t opcode, bool compAck = true)
+        CHI::Lunatic::LineData ReadData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
+                                        uint64_t address, uint16_t opcode, bool compAck = true)
         {
             PushRequest(Request(opcode, source, txnId, address, compAck));
             CHI::Lunatic::LineData result{};
             constexpr size_t bytes = config::dataWidth / 8;
-            CHI::Lunatic::DatabaseId dbid = 0;
+            CHI::Lunatic::DataBufferId dbid = 0;
             for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
             {
                 DAT data = NextDAT(CHI::Eb::Opcodes::DAT::CompData);
@@ -173,7 +173,7 @@ namespace LunaticTest {
             return result;
         }
 
-        void                                Quiesce()
+        void Quiesce()
         {
             driver.Quiesce();
             for (auto& [requester, oracle] : oracles)

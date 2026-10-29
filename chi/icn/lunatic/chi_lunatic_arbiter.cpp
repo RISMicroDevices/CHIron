@@ -4,7 +4,7 @@
 
 namespace CHI::Lunatic {
 
-    bool                                Arbiter::Submit(TransactionHandle handle, Time age, uint8_t qos)
+    bool Arbiter::Submit(TransactionHandle handle, Time age, uint8_t qos)
     {
         if (handle == INVALID_TRANSACTION)
             return false;
@@ -18,7 +18,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    bool                                Arbiter::Remove(TransactionHandle handle) noexcept
+    bool Arbiter::Remove(TransactionHandle handle) noexcept
     {
         auto it = std::find_if(entries.begin(), entries.end(),
                                [handle](const Entry& entry) { return entry.handle == handle; });
@@ -29,7 +29,7 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    std::optional<TransactionHandle>    Arbiter::Peek() const noexcept
+    std::optional<TransactionHandle> Arbiter::Peek() const noexcept
     {
         const Entry* selected = nullptr;
         for (const Entry& entry : entries) {
@@ -43,7 +43,7 @@ namespace CHI::Lunatic {
         return selected->handle;
     }
 
-    std::optional<TransactionHandle>    Arbiter::PeekQoS() const noexcept
+    std::optional<TransactionHandle> Arbiter::PeekQoS() const noexcept
     {
         const Entry* selected = nullptr;
         for (const Entry& entry : entries) {

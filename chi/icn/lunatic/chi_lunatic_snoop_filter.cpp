@@ -22,17 +22,17 @@ namespace CHI::Lunatic {
     {
     }
 
-    size_t                              SnoopFilter::Index(size_t set, size_t way) const noexcept
+    size_t SnoopFilter::Index(size_t set, size_t way) const noexcept
     {
         return set * ways + way;
     }
 
-    size_t                              SnoopFilter::SetIndex(const LineKey& key) const noexcept
+    size_t SnoopFilter::SetIndex(const LineKey& key) const noexcept
     {
         return size_t((key.address / LINE_SIZE) % sets);
     }
 
-    SnoopFilterEntry*                   SnoopFilter::Find(const LineKey& key) noexcept
+    SnoopFilterEntry* SnoopFilter::Find(const LineKey& key) noexcept
     {
         const size_t set = SetIndex(key);
         for (size_t way = 0; way < ways; ++way) {
@@ -43,7 +43,7 @@ namespace CHI::Lunatic {
         return nullptr;
     }
 
-    const SnoopFilterEntry*             SnoopFilter::Find(const LineKey& key) const noexcept
+    const SnoopFilterEntry* SnoopFilter::Find(const LineKey& key) const noexcept
     {
         const size_t set = SetIndex(key);
         for (size_t way = 0; way < ways; ++way) {
@@ -54,17 +54,17 @@ namespace CHI::Lunatic {
         return nullptr;
     }
 
-    SnoopFilterEntry&                   SnoopFilter::At(size_t set, size_t way) noexcept
+    SnoopFilterEntry& SnoopFilter::At(size_t set, size_t way) noexcept
     {
         return entries[Index(set, way)];
     }
 
-    const SnoopFilterEntry&             SnoopFilter::At(size_t set, size_t way) const noexcept
+    const SnoopFilterEntry& SnoopFilter::At(size_t set, size_t way) const noexcept
     {
         return entries[Index(set, way)];
     }
 
-    std::optional<size_t>               SnoopFilter::FindWay(const LineKey& key) const noexcept
+    std::optional<size_t> SnoopFilter::FindWay(const LineKey& key) const noexcept
     {
         const size_t set = SetIndex(key);
         for (size_t way = 0; way < ways; ++way) {
@@ -75,7 +75,7 @@ namespace CHI::Lunatic {
         return std::nullopt;
     }
 
-    std::vector<size_t>                 SnoopFilter::VictimCandidates(const LineKey&) const
+    std::vector<size_t> SnoopFilter::VictimCandidates(const LineKey&) const
     {
         std::vector<size_t> candidates;
         candidates.reserve(ways);
@@ -84,7 +84,7 @@ namespace CHI::Lunatic {
         return candidates;
     }
 
-    size_t                              SnoopFilter::ChooseVictim(const LineKey& key) const
+    size_t SnoopFilter::ChooseVictim(const LineKey& key) const
     {
         const size_t set = SetIndex(key);
         for (size_t way = 0; way < ways; ++way) {
@@ -99,7 +99,7 @@ namespace CHI::Lunatic {
         return victim;
     }
 
-    SnoopFilterEntry&                   SnoopFilter::Acquire(const LineKey& key, uint64_t age)
+    SnoopFilterEntry& SnoopFilter::Acquire(const LineKey& key, uint64_t age)
     {
         if (SnoopFilterEntry* current = Find(key)) {
             current->age = age;
@@ -116,7 +116,7 @@ namespace CHI::Lunatic {
         return entry;
     }
 
-    bool                                SnoopFilter::HasInvalidWay(const LineKey& key) const noexcept
+    bool SnoopFilter::HasInvalidWay(const LineKey& key) const noexcept
     {
         const size_t set = SetIndex(key);
         for (size_t way = 0; way < ways; ++way)
@@ -125,12 +125,12 @@ namespace CHI::Lunatic {
         return false;
     }
 
-    void                                SnoopFilter::Invalidate(size_t set, size_t way) noexcept
+    void SnoopFilter::Invalidate(size_t set, size_t way) noexcept
     {
         At(set, way) = SnoopFilterEntry{};
     }
 
-    void                                SnoopFilter::Track(const LineKey& key, NodeId requester, CacheState state, uint64_t age)
+    void SnoopFilter::Track(const LineKey& key, NodeId requester, CacheState state, uint64_t age)
     {
         if (state == CacheState::I && (precise || !Find(key))) {
             Remove(key, requester);
@@ -140,7 +140,7 @@ namespace CHI::Lunatic {
         Acquire(key, age).requesters[requester] = state;
     }
 
-    void                                SnoopFilter::Remove(const LineKey& key, NodeId requester)
+    void SnoopFilter::Remove(const LineKey& key, NodeId requester)
     {
         SnoopFilterEntry* entry = Find(key);
         if (!entry)
@@ -154,7 +154,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    void                                SnoopFilter::RemoveRequester(NodeId requester) noexcept
+    void SnoopFilter::RemoveRequester(NodeId requester) noexcept
     {
         for (SnoopFilterEntry& entry : entries) {
             if (!entry.valid)
@@ -169,7 +169,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    CacheState                          SnoopFilter::State(const LineKey& key, NodeId requester) const noexcept
+    CacheState SnoopFilter::State(const LineKey& key, NodeId requester) const noexcept
     {
         const SnoopFilterEntry* entry = Find(key);
         if (!entry)
@@ -179,7 +179,7 @@ namespace CHI::Lunatic {
         return requesterIt == entry->requesters.end() ? CacheState::I : requesterIt->second;
     }
 
-    std::vector<NodeId>                 SnoopFilter::Sharers(const LineKey& key) const
+    std::vector<NodeId> SnoopFilter::Sharers(const LineKey& key) const
     {
         std::vector<NodeId> sharers;
         const SnoopFilterEntry* entry = Find(key);
@@ -193,7 +193,7 @@ namespace CHI::Lunatic {
         return sharers;
     }
 
-    std::vector<NodeId>                 SnoopFilter::Targets(const LineKey& key) const
+    std::vector<NodeId> SnoopFilter::Targets(const LineKey& key) const
     {
         std::vector<NodeId> targets;
         const SnoopFilterEntry* entry = Find(key);
@@ -207,13 +207,13 @@ namespace CHI::Lunatic {
         return targets;
     }
 
-    bool                                SnoopFilter::HasRequester(const LineKey& key, NodeId requester) const noexcept
+    bool SnoopFilter::HasRequester(const LineKey& key, NodeId requester) const noexcept
     {
         const SnoopFilterEntry* entry = Find(key);
         return entry && entry->requesters.contains(requester);
     }
 
-    void                                SnoopFilter::Clear() noexcept
+    void SnoopFilter::Clear() noexcept
     {
         for (SnoopFilterEntry& entry : entries) {
             entry.requesters.clear();
@@ -223,7 +223,7 @@ namespace CHI::Lunatic {
         }
     }
 
-    size_t                              SnoopFilter::ValidCount() const noexcept
+    size_t SnoopFilter::ValidCount() const noexcept
     {
         return size_t(std::count_if(entries.begin(), entries.end(), [](const SnoopFilterEntry& entry) {
             return entry.valid;
