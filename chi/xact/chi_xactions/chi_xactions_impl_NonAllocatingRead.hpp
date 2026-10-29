@@ -328,6 +328,9 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
+            if (this->first.flit.req.Order() == 0)
+                return XactDenial::DENIED_READRECEIPT_ON_NO_ORDER;
+
             if (this->HasRSP({ Opcodes::RSP::ReadReceipt }))
                 return XactDenial::DENIED_DUPLICATED_READRECEIPT;
 
@@ -380,6 +383,41 @@ namespace /*CHI::*/Xact {
             return XactDenial::ACCEPTED;
         }
 #endif
+        else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompAck)
+        {
+            if (!this->first.flit.req.ExpCompAck())
+                return XactDenial::DENIED_COMPACK_ON_NON_EXPCOMPACK;
+
+            if (!rspFlit.IsFromRequesterToHome(glbl))
+                return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_RN_TO_HN, rspFlit);
+
+            if (!this->HasDAT({ Opcodes::DAT::CompData })
+#ifdef CHI_ISSUE_EB_ENABLE
+             && !this->HasRSP({ Opcodes::RSP::RespSepData })
+#endif
+            )
+#ifdef CHI_ISSUE_EB_ENABLE
+                return XactDenial::DENIED_COMPACK_BEFORE_COMPDATA_OR_RESPSEPDATA;
+#else
+                return XactDenial::DENIED_COMPACK_BEFORE_COMPDATA;
+#endif
+
+            auto optDBID = this->GetDBID();
+            if (!optDBID)
+                return XactDenial::DENIED_COMPACK_BEFORE_DBID;
+
+            if (rspFlit.flit.rsp.TxnID() != *optDBID)
+                return XactDenial::DENIED_RSP_TXNID_MISMATCHING_DBID;
+
+            if (glbl.CHECK_FIELD_MAPPING.enable)
+            {
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(rspFlit.flit.rsp);
+                if (denial != XactDenial::ACCEPTED)
+                    return denial;
+            }
+
+            return XactDenial::ACCEPTED;
+        }
 
         return this->ResponseFlitDenied(XactDenial::DENIED_RSP_OPCODE, rspFlit,
             "This RSP Opcode is not expected for Non-Allocating Read transactions");

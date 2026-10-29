@@ -392,6 +392,7 @@ namespace /*CHI::*/Xact {
                 !this->HasDAT({ Opcodes::DAT::CompData })
 #ifdef CHI_ISSUE_EB_ENABLE
              && !this->HasRSP({ Opcodes::RSP::RespSepData })
+             && !this->HasRSP({ Opcodes::RSP::Comp })
 #endif
             )
 #ifdef CHI_ISSUE_EB_ENABLE

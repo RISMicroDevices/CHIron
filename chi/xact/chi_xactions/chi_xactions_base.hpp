@@ -451,7 +451,7 @@ namespace /*CHI::*/Xact::details {
             if (requestSize <= 128)
                 collectedDataID.set(0);
             else if (requestSize <= 256)
-                collectedDataID.set(dataID & 0x02);
+                collectedDataID.set(dataID & 0x01);
             else // 512
                 collectedDataID.set(dataID);
         }
@@ -530,7 +530,7 @@ namespace /*CHI::*/Xact::details {
             else if (requestSize <= 256)
             {
                 collectedDataID.set(0);
-                collectedDataID.set(2);
+                collectedDataID.set(1);
             }
             else // 512
             {

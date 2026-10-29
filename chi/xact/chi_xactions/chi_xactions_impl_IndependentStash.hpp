@@ -320,8 +320,12 @@ namespace /*CHI::*/Xact {
                 if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
                     return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
 
-                if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
+                if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::CompStashDone &&
+                    rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                     return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
+
+                if (rspFlit.flit.rsp.StashGroupID() != this->first.flit.req.StashGroupID())
+                    return XactDenial::DENIED_RSP_FIELD_STASHGROUPID;
 
                 if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::StashDone)
                 {

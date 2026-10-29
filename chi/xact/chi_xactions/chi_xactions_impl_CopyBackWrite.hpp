@@ -450,7 +450,7 @@ namespace /*CHI::*/Xact {
 
 #ifdef CHI_ISSUE_EB_ENABLE
             // WriteEvictOrEvict only
-            if (this->first.flit.req.Opcode() != Opcodes::REQ::WriteEvictOrEvict)
+            if (this->first.flit.req.Opcode() == Opcodes::REQ::WriteEvictOrEvict)
                 if (this->HasRSP({ Opcodes::RSP::Comp }))
                     return XactDenial::DENIED_DATA_AFTER_COMP;
 #endif
