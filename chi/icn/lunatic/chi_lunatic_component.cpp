@@ -23,11 +23,9 @@ namespace CHI::Lunatic {
     bool Core::Drain()
     {
         impl->Tick();
-        impl->events->Dispatch();
-        return !HasInflight() && impl->events->Pending() == 0;
+        return !HasInflight();
     }
 
-    bool Core::DispatchEvents() { return impl->events->Dispatch(); }
     bool Core::HasInflight() const noexcept { return impl->HasInflight(); }
 
     bool Core::PushRXREQ(const Request& flit) { return impl->Push(impl->rxreq, flit, EventKind::AcceptedRXREQ); }

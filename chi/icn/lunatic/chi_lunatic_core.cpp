@@ -40,7 +40,6 @@ namespace CHI::Lunatic {
         nextAge = 0;
         nextSerial = 0;
         nextRetry = 0;
-        events->Clear();
 
         Event event;
         event.kind = EventKind::Reset;
@@ -58,7 +57,6 @@ namespace CHI::Lunatic {
             QueueRetryCredit(index);
 
         RetireFinished();
-        events->Dispatch();
     }
 
     void Core::Impl::ProcessResponses()

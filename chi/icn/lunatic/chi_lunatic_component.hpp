@@ -32,7 +32,6 @@ namespace CHI::Lunatic {
         void Reset();
         void Tick(Time time);
         bool Drain();
-        bool DispatchEvents();
         bool HasInflight() const noexcept;
 
         bool PushRXREQ(const Request& flit);
@@ -286,7 +285,6 @@ namespace CHI::Lunatic {
         void Reset() { core.Reset(); }
         void Tick(Time time) { core.Tick(time); }
         bool Drain() { return core.Drain(); }
-        bool DispatchEvents() { return core.DispatchEvents(); }
         bool HasInflight() const noexcept { return core.HasInflight(); }
 
         bool PushRXREQ(const REQFlit& flit) { return core.PushRXREQ(Decode(flit)); }

@@ -109,11 +109,14 @@ LUNATIC_TEST(Stage3OutputBackpressureAndPurePeek)
     Options options;
     options.outputQueueLimit = 1;
     Driver<Config256> driver(options);
+    size_t emitted = 0;
+    driver.node.GetEvents()->OnEmittedTXDAT.Register(
+        Gravity::MakeListener<EmittedTXDATEvent>("emitted", 0, [&](EmittedTXDATEvent&) { ++emitted; }));
     const LineKey line = LineKey::FromAddress(0x4000, false);
     driver.node.GetMemory().WriteFull(line, Pattern(3));
     LUNATIC_CHECK(driver.node.PushRXREQ(driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 30, line.address)));
     driver.Until([&] { return static_cast<bool>(driver.node.PeekTXDAT()); });
-    const size_t pending = driver.node.GetEvents()->Pending();
+    const size_t emittedBeforePeek = emitted;
     const auto first = driver.node.PeekTXDAT();
     for (size_t index = 0; index < 5; ++index)
     {
@@ -121,12 +124,14 @@ LUNATIC_TEST(Stage3OutputBackpressureAndPurePeek)
         LUNATIC_CHECK(next && first);
         LUNATIC_CHECK(next->DataID() == first->DataID());
         LUNATIC_CHECK(next->TxnID() == first->TxnID());
-        LUNATIC_CHECK(driver.node.GetEvents()->Pending() == pending);
+        LUNATIC_CHECK(emitted == emittedBeforePeek);
     }
     auto beat0 = driver.node.PopTXDAT();
     LUNATIC_CHECK(beat0 && beat0->DataID() == 0);
+    LUNATIC_CHECK(emitted == 1);
     auto beat1 = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
     LUNATIC_CHECK(beat1.DataID() == 2);
+    LUNATIC_CHECK(emitted == 2);
     driver.Quiesce();
 }
 

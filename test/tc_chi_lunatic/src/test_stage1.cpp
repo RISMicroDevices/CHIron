@@ -54,10 +54,11 @@ LUNATIC_TEST(Stage1BoundedAcceptanceAndReset)
 {
     auto events = std::make_shared<EventHub>();
     size_t accepted = 0;
-    events->Register("accepted", 0, [&](const Event& event) {
-        if (event.kind == EventKind::AcceptedRXREQ)
+    events->OnAcceptedRXREQ.Register(
+        Gravity::MakeListener<AcceptedRXREQEvent>("accepted", 0, [&](AcceptedRXREQEvent& event) {
+            LUNATIC_CHECK(event.kind == EventKind::AcceptedRXREQ);
             ++accepted;
-    });
+        }));
 
     Options options;
     options.inputQueueLimit = 1;
@@ -71,9 +72,10 @@ LUNATIC_TEST(Stage1BoundedAcceptanceAndReset)
     req.Size() = 6;
 
     LUNATIC_CHECK(node.PushRXREQ(req));
+    LUNATIC_CHECK(accepted == 1);
     LUNATIC_CHECK(!node.PushRXREQ(req));
+    LUNATIC_CHECK(accepted == 1);
     LUNATIC_CHECK(node.HasInflight());
-    LUNATIC_CHECK(accepted == 0);
     node.Tick(3);
     LUNATIC_CHECK(accepted == 1);
     LUNATIC_CHECK(node.GetTime() == 3);
@@ -81,45 +83,63 @@ LUNATIC_TEST(Stage1BoundedAcceptanceAndReset)
     node.Reset();
     LUNATIC_CHECK(node.GetTime() == 0);
     LUNATIC_CHECK(!node.HasInflight());
+    LUNATIC_CHECK(node.PushRXREQ(req));
+    LUNATIC_CHECK(accepted == 2);
+    node.Reset();
     LUNATIC_CHECK(node.Drain());
-    LUNATIC_CHECK(accepted == 1);
+    LUNATIC_CHECK(accepted == 2);
 }
 
-LUNATIC_TEST(Stage1EventPriorityAndReentry)
+LUNATIC_TEST(Stage1EventPriorityIsolationAndClear)
 {
     auto events = std::make_shared<EventHub>();
     std::vector<int> order;
-    events->Register("late", 10, [&](const Event&) { order.push_back(10); });
-    events->Register("early", -10, [&](const Event&) {
-        order.push_back(-10);
-        LUNATIC_CHECK(!events->Dispatch());
-    });
-    events->Register("middle", 0, [&](const Event&) { order.push_back(0); });
+    size_t accepted = 0;
+    events->OnReset.Register(
+        Gravity::MakeListener<ResetEvent>("late", 10, [&](ResetEvent&) { order.push_back(10); }));
+    events->OnReset.Register(
+        Gravity::MakeListener<ResetEvent>("early", -10, [&](ResetEvent&) { order.push_back(-10); }));
+    events->OnReset.Register(
+        Gravity::MakeListener<ResetEvent>("middle", 0, [&](ResetEvent&) { order.push_back(0); }));
+    events->OnAcceptedRXREQ.Register(
+        Gravity::MakeListener<AcceptedRXREQEvent>("accepted", 0, [&](AcceptedRXREQEvent&) { ++accepted; }));
 
-    Event event;
-    event.kind = EventKind::Reset;
-    events->Publish(event);
-    LUNATIC_CHECK(events->Pending() == 1);
-    LUNATIC_CHECK(events->Dispatch());
+    ResetEvent event;
+    events->OnReset.Fire(event);
     LUNATIC_CHECK((order == std::vector<int>{ -10, 0, 10 }));
-    LUNATIC_CHECK(events->ReentryRejected());
-    LUNATIC_CHECK(events->Pending() == 0);
+    LUNATIC_CHECK(accepted == 0);
+    LUNATIC_CHECK(!events->OnReset.empty());
+
+    events->Clear();
+    LUNATIC_CHECK(events->OnReset.empty());
+    events->OnReset.Fire(event);
+    LUNATIC_CHECK((order == std::vector<int>{ -10, 0, 10 }));
 }
 
 LUNATIC_TEST(Stage1PureEmptyPeek)
 {
     HomeNode<Config256> node(2);
     auto events = node.GetEvents();
+    size_t emitted = 0;
+    events->OnEmittedTXREQ.Register(
+        Gravity::MakeListener<EmittedTXREQEvent>("emitted", 0, [&](EmittedTXREQEvent&) { ++emitted; }));
+    events->OnEmittedTXRSP.Register(
+        Gravity::MakeListener<EmittedTXRSPEvent>("emitted", 0, [&](EmittedTXRSPEvent&) { ++emitted; }));
+    events->OnEmittedTXDAT.Register(
+        Gravity::MakeListener<EmittedTXDATEvent>("emitted", 0, [&](EmittedTXDATEvent&) { ++emitted; }));
+    events->OnEmittedTXSNP.Register(
+        Gravity::MakeListener<EmittedTXSNPEvent>("emitted", 0, [&](EmittedTXSNPEvent&) { ++emitted; }));
+
     LUNATIC_CHECK(!node.PeekTXREQ());
     LUNATIC_CHECK(!node.PeekTXRSP());
     LUNATIC_CHECK(!node.PeekTXDAT());
     LUNATIC_CHECK(!node.PeekTXSNP());
-    LUNATIC_CHECK(events->Pending() == 0);
+    LUNATIC_CHECK(emitted == 0);
     LUNATIC_CHECK(!node.PopTXREQ());
     LUNATIC_CHECK(!node.PopTXRSP());
     LUNATIC_CHECK(!node.PopTXDAT());
     LUNATIC_CHECK(!node.PopTXSNP());
-    LUNATIC_CHECK(events->Pending() == 0);
+    LUNATIC_CHECK(emitted == 0);
 }
 
 LUNATIC_TEST(Stage1FacadeForms)
@@ -132,13 +152,16 @@ LUNATIC_TEST(Stage1FacadeForms)
     Bridge<Config512> wide(2, options512);
     Interconnect<Config256> interconnect(2);
 
+    size_t accepted = 0;
+    interconnect.GetNode().GetEvents()->OnAcceptedRXREQ.Register(
+        Gravity::MakeListener<AcceptedRXREQEvent>("accepted", 0, [&](AcceptedRXREQEvent&) { ++accepted; }));
     HomeNode<Config256>::REQFlit req{};
     req.SrcID() = 4;
     req.TgtID() = 2;
     req.Opcode() = CHI::Eb::Opcodes::REQ::ReadNoSnp;
     req.Size() = 6;
     LUNATIC_CHECK(interconnect.PushRXREQ(req));
-    LUNATIC_CHECK(interconnect.GetNode().GetEvents()->Pending() == 1);
+    LUNATIC_CHECK(accepted == 1);
     interconnect.Reset();
     LUNATIC_CHECK(interconnect.Drain());
     LUNATIC_CHECK(wide.Drain());
