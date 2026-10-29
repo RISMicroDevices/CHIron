@@ -29,6 +29,8 @@ namespace CHI::Lunatic {
                 return SNP::SnpOnce;
             case RequestClass::MakeUnique: return SNP::SnpUnique;
             case RequestClass::MakeReadUnique: return SNP::SnpCleanInvalid;
+            case RequestClass::ImmediateWrite:
+            case RequestClass::WriteUniqueZero: return SNP::SnpUnique;
             case RequestClass::CMO:
                 if (transaction.request.opcode == REQ::CleanShared)
                     return SNP::SnpCleanShared;
@@ -228,6 +230,11 @@ namespace CHI::Lunatic {
                     flow.validBytes[offset + index] = flit.byteEnables[index];
                 }
             }
+        }
+        else if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite)
+        {
+            for (size_t index = 0; index < bytes; ++index)
+                flow.validBytes[offset + index] = 1;
         }
         const bool replace = flow.snoopForVictim
             ? (!flow.victimDataValid || dirty || !flow.victimDirty)

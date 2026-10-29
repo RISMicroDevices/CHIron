@@ -25,8 +25,8 @@ namespace CHI::Lunatic {
 
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         if ((requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeUnique ||
-             requestClass == RequestClass::MakeReadUnique || requestClass == RequestClass::CopybackWrite) &&
-            !PrepareSnoopFilterCapacity(transaction))
+             requestClass == RequestClass::MakeReadUnique || requestClass == RequestClass::CopybackWrite ||
+             requestClass == RequestClass::WriteEvictOrEvict) && !PrepareSnoopFilterCapacity(transaction))
             return false;
 
         bool committed = false;
@@ -39,7 +39,12 @@ namespace CHI::Lunatic {
                 committed = CommitReadDirectory(transaction);
                 break;
             case RequestClass::CopybackWrite:
+            case RequestClass::WriteEvictOrEvict:
                 committed = CommitCopyback(transaction);
+                break;
+            case RequestClass::ImmediateWrite:
+            case RequestClass::WriteUniqueZero:
+                committed = CommitImmediateWrite(transaction);
                 break;
             case RequestClass::CMO:
                 committed = CommitCMO(transaction);

@@ -132,16 +132,27 @@ namespace CHI::Lunatic {
         request.txnId = transaction.handle;
         request.allowRetry = false;
         request.expCompAck = false;
+        const auto requestClass = ClassifyRequest(transaction.request.opcode);
+        if (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteEvictOrEvict)
+            request.opcode = request.size == 6 ? CHI::Eb::Opcodes::REQ::WriteNoSnpFull
+                : CHI::Eb::Opcodes::REQ::WriteNoSnpPtl;
+        else if (requestClass == RequestClass::WriteUniqueZero)
+            request.opcode = CHI::Eb::Opcodes::REQ::WriteNoSnpZero;
         if (flow.spillPending)
         {
-            request.opcode = CHI::Eb::Opcodes::REQ::WriteNoSnpFull;
+            const bool sameLineImmediate = flow.spillLine == transaction.request.Line() &&
+                (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero);
             request.address = flow.spillLine.address;
             request.nonSecure = flow.spillLine.nonSecure;
-            request.size = 6;
             request.memAttr = CHI::Eb::MemAttrs::NonCacheable_Bufferable;
             request.snpAttr = 0;
-            flow.expectedBeatMask = (uint64_t(1) << BeatsPerLine(options)) - 1;
-            flow.backendBeat = 0;
+            if (!sameLineImmediate)
+            {
+                request.opcode = CHI::Eb::Opcodes::REQ::WriteNoSnpFull;
+                request.size = 6;
+                flow.expectedBeatMask = (uint64_t(1) << BeatsPerLine(options)) - 1;
+            }
+            flow.backendBeat = transaction.receivedBeats ? std::countr_zero(flow.expectedBeatMask) : 0;
             flow.backendBeatMask = 0;
             flow.backendCompReceived = false;
             flow.backendDataEmitted = false;
@@ -188,7 +199,7 @@ namespace CHI::Lunatic {
         data.target = options.subordinateId;
         data.homeNid = nodeId;
         data.txnId = transaction.handle;
-        data.dbid = 0;
+        data.dbid = flow.backendDBID;
         data.opcode = CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
         data.dataId = offset / 16;
         data.ccid = flow.spillPending ? (flow.spillLine.address >> 4) & 3 : (transaction.request.address >> 4) & 3;
@@ -255,7 +266,8 @@ namespace CHI::Lunatic {
                 return false;
             flow.backendDBID = flit.dbid;
             flow.backendCompReceived = flit.opcode == RSP::CompDBIDResp;
-            if (ClassifyRequest(transaction.request.opcode) == RequestClass::ZeroWrite)
+            if (ClassifyRequest(transaction.request.opcode) == RequestClass::ZeroWrite ||
+                ClassifyRequest(transaction.request.opcode) == RequestClass::WriteUniqueZero)
             {
                 if (flow.backendCompReceived)
                 {
@@ -280,7 +292,8 @@ namespace CHI::Lunatic {
 
         if (flit.opcode == RSP::Comp)
         {
-            if (ClassifyRequest(transaction.request.opcode) == RequestClass::ZeroWrite)
+            if (ClassifyRequest(transaction.request.opcode) == RequestClass::ZeroWrite ||
+                ClassifyRequest(transaction.request.opcode) == RequestClass::WriteUniqueZero)
             {
                 if (flow.backendPhase != BackendPhase::WaitComp)
                     return false;

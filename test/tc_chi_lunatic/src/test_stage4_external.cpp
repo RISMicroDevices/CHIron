@@ -62,6 +62,8 @@ namespace {
             {
                 auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
                 LUNATIC_CHECK(data.TgtID() == 6);
+                LUNATIC_CHECK(data.TxnID() == request.TxnID());
+                LUNATIC_CHECK(data.DBID() == response.DBID());
                 const size_t offset = size_t(data.DataID()) * 16;
                 for (size_t index = 0; index < 32; ++index)
                 {
@@ -407,5 +409,60 @@ LUNATIC_TEST(Stage5ExternalReadVariants)
         LUNATIC_CHECK(ExternalReadData(driver, backend, 5, txnId++, line.address, variant.opcode) == expected);
         backend.Run(driver.driver);
         LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 5) == variant.final);
+    }
+}
+
+LUNATIC_TEST(Stage5ExternalWriteUnique)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    CheckedDriver<Config256> driver(options);
+    BackendModel backend;
+    const LineKey line = LineKey::FromAddress(0x43000, false);
+    const LineData expected = ExternalData(103);
+    backend.Write(line, ExternalData(7));
+
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniqueFull, 4, 1, line.address);
+    request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+    driver.PushRequest(request);
+    const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+    driver.WriteData(4, 1, dbid, expected, ExternalEnables(), CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
+    LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);
+    backend.Run(driver.driver);
+    LUNATIC_CHECK(backend.Read(line) == expected);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
+}
+
+LUNATIC_TEST(Stage5ExternalWriteUniqueZero)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    CheckedDriver<Config256> driver(options);
+    BackendModel backend;
+
+    for (TransactionHandle form = 0; form < 3; ++form)
+    {
+        const LineKey line = LineKey::FromAddress(0x43000 + form * LINE_SIZE, false);
+        backend.Write(line, ExternalData(7));
+        auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniqueZero, 4, form + 1, line.address);
+        request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+        driver.PushRequest(request);
+        if (form == 0)
+        {
+            LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::DBIDResp).TxnID() == form + 1);
+            LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == form + 1);
+        }
+        else if (form == 1)
+        {
+            LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == form + 1);
+            LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::DBIDResp).TxnID() == form + 1);
+        }
+        else
+            LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::CompDBIDResp).TxnID() == form + 1);
+        backend.Run(driver.driver);
+        LUNATIC_CHECK(backend.Read(line) == LineData{});
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
     }
 }

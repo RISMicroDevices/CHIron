@@ -104,7 +104,8 @@ namespace CHI::Lunatic {
             else if (flow.writeResp != flit.resp)
                 return false;
         }
-        else if (ClassifyRequest(transaction.request.opcode) != RequestClass::NonCoherentWrite ||
+        else if ((ClassifyRequest(transaction.request.opcode) != RequestClass::NonCoherentWrite &&
+                  ClassifyRequest(transaction.request.opcode) != RequestClass::ImmediateWrite) ||
                  (flit.opcode != DAT::NonCopyBackWrData && flit.opcode != DAT::NCBWrDataCompAck &&
                   flit.opcode != DAT::WriteDataCancel))
             return false;
@@ -136,6 +137,8 @@ namespace CHI::Lunatic {
             if (flit.byteEnables[index])
                 transaction.data[offset + index] = flit.bytes[index];
             transaction.byteEnables[offset + index] = flit.byteEnables[index];
+            if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite)
+                flow.validBytes[offset + index] = flit.byteEnables[index];
             transaction.dataCheck[offset + index] = flit.dataCheck[index];
         }
         for (size_t lane = 0; lane < bytes / 8; ++lane)

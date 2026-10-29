@@ -69,6 +69,10 @@ namespace CHI::Lunatic {
             case REQ::WriteNoSnpPtl:
             case REQ::WriteNoSnpFull:
             case REQ::WriteNoSnpZero:
+            case REQ::WriteUniquePtl:
+            case REQ::WriteUniqueFull:
+            case REQ::WriteUniqueZero:
+            case REQ::WriteEvictOrEvict:
             case REQ::WriteBackPtl:
             case REQ::WriteBackFull:
             case REQ::WriteCleanFull:
@@ -113,7 +117,8 @@ namespace CHI::Lunatic {
 
     bool IsCopybackRequest(uint16_t opcode) noexcept
     {
-        return ClassifyRequest(opcode) == RequestClass::CopybackWrite;
+        const auto requestClass = ClassifyRequest(opcode);
+        return requestClass == RequestClass::CopybackWrite || requestClass == RequestClass::WriteEvictOrEvict;
     }
 
     bool IsCMORequest(uint16_t opcode) noexcept

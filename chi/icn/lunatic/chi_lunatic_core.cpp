@@ -87,7 +87,7 @@ namespace CHI::Lunatic {
                 Error(INVALID_TRANSACTION, "unmatched CompAck");
                 return;
             }
-            if (!RequiresCompAck(transaction->request) || transaction->Complete(COMPLETE_COMPACK) ||
+            if (!RequiresTransactionCompAck(*transaction) || transaction->Complete(COMPLETE_COMPACK) ||
                 transaction->phase != Phase::WaitCompAck || !transaction->Complete(COMPLETE_RESPONSE))
             {
                 Error(transaction->handle, "unexpected or early CompAck");
@@ -421,6 +421,20 @@ namespace CHI::Lunatic {
         {
             flows.at(transaction->handle).readReceiptEmitted = true;
             return;
+        }
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::DBIDResp)
+        {
+            flows.at(transaction->handle).dbidEmitted = true;
+            const auto requestClass = ClassifyRequest(transaction->request.opcode);
+            if (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero)
+                FinishResponse(*transaction);
+        }
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp ||
+            pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
+        {
+            flows.at(transaction->handle).compEmitted = true;
+            if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
+                flows.at(transaction->handle).dbidEmitted = true;
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp && IsCopybackRequest(transaction->request.opcode))
         {

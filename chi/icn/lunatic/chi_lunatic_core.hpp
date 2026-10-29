@@ -55,6 +55,11 @@ namespace CHI::Lunatic {
         bool                       victimSnoopFilterOnly = false;
         bool                       dbidSent = false;
         bool                       compSent = false;
+        uint8_t                    responseForm = 0;
+        bool                       compEmitted = false;
+        bool                       dbidEmitted = false;
+        bool                       evictOrEvictNoData = false;
+        bool                       mergeImmediateHome = false;
         bool                       backendCompReceived = false;
         bool                       backendDataEmitted = false;
         bool                       snoopDataValid = false;
@@ -216,6 +221,10 @@ namespace CHI::Lunatic {
         void Action(Transaction& transaction);
         void ActionNonCoherent(Transaction& transaction);
         void ActionCoherent(Transaction& transaction);
+        void ResolveImmediateWrite(Transaction& transaction);
+        void ActionImmediateWrite(Transaction& transaction);
+        void QueueImmediateResponse(Transaction& transaction);
+        void ActionEvictOrEvict(Transaction& transaction);
         void ReturnRead(Transaction& transaction);
         void QueueDBID(Transaction& transaction);
         void QueueComp(Transaction& transaction, bool withDBID = false, uint8_t resp = 0,
@@ -223,6 +232,7 @@ namespace CHI::Lunatic {
         void QueueReadReceipt(Transaction& transaction);
         void QueueRetryCredit(size_t index);
         void FinishResponse(Transaction& transaction);
+        bool RequiresTransactionCompAck(const Transaction& transaction) const;
         void RetireFinished();
         void Retire(TransactionHandle handle);
 
@@ -256,6 +266,7 @@ namespace CHI::Lunatic {
         bool      CompleteVictim(Transaction& transaction);
         bool      CommitReadDirectory(Transaction& transaction);
         bool      CommitCopyback(Transaction& transaction);
+        bool      CommitImmediateWrite(Transaction& transaction);
         bool      CommitCMO(Transaction& transaction);
         HomeLine& InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty,
                               Time age);

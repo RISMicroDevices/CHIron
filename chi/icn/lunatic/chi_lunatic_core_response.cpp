@@ -21,8 +21,18 @@ namespace CHI::Lunatic {
         if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
         {
             flow.dbidSent = true;
-            transaction.phase = Phase::WaitWriteData;
-            transaction.wait = WaitReason::WriteData;
+            const auto requestClass = ClassifyRequest(transaction.request.opcode);
+            if ((requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ImmediateWrite) &&
+                !transaction.Complete(COMPLETE_WRITE_DATA))
+            {
+                transaction.phase = Phase::WaitWriteData;
+                transaction.wait = WaitReason::WriteData;
+            }
+            else
+            {
+                transaction.phase = Phase::Action;
+                transaction.wait = WaitReason::None;
+            }
             transaction.readyTime = time;
         }
     }
@@ -46,7 +56,14 @@ namespace CHI::Lunatic {
         if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
         {
             flow.compSent = true;
-            transaction.phase = Phase::Return;
+            if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite &&
+                !transaction.Complete(COMPLETE_WRITE_DATA))
+            {
+                transaction.phase = Phase::WaitWriteData;
+                transaction.wait = WaitReason::WriteData;
+            }
+            else
+                transaction.phase = Phase::Return;
             transaction.readyTime = time;
         }
     }
@@ -136,11 +153,29 @@ namespace CHI::Lunatic {
 
     void Core::Impl::FinishResponse(Transaction& transaction)
     {
+        const auto requestClass = ClassifyRequest(transaction.request.opcode);
+        const FlowState& flow = flows.at(transaction.handle);
+        if ((requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero) &&
+            (!transaction.Complete(COMPLETE_WRITE_DATA) || !flow.directoryCommitted ||
+             !flow.dbidEmitted || !flow.compEmitted))
+        {
+            transaction.phase = transaction.Complete(COMPLETE_WRITE_DATA) ? Phase::Action : Phase::WaitWriteData;
+            transaction.readyTime = time;
+            return;
+        }
         transaction.Mark(COMPLETE_RESPONSE);
-        transaction.wait = RequiresCompAck(transaction.request) && !transaction.Complete(COMPLETE_COMPACK)
+        transaction.wait = RequiresTransactionCompAck(transaction) && !transaction.Complete(COMPLETE_COMPACK)
             ? WaitReason::CompAck : WaitReason::None;
         transaction.phase = transaction.wait == WaitReason::CompAck ? Phase::WaitCompAck : Phase::Commit;
         transaction.readyTime = time;
+    }
+
+    bool Core::Impl::RequiresTransactionCompAck(const Transaction& transaction) const
+    {
+        if (ClassifyRequest(transaction.request.opcode) == RequestClass::WriteEvictOrEvict &&
+            flows.at(transaction.handle).evictOrEvictNoData)
+            return true;
+        return RequiresCompAck(transaction.request);
     }
 
 }

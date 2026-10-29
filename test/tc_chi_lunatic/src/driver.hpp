@@ -74,7 +74,9 @@ namespace LunaticTest {
             Until([&] { return static_cast<bool>(node.PeekTXRSP()); });
             auto flit = node.PopTXRSP();
             LUNATIC_CHECK(flit);
-            LUNATIC_CHECK(flit->Opcode() == opcode);
+            if (flit->Opcode() != opcode)
+                throw std::runtime_error("unexpected response opcode " + std::to_string(uint16_t(flit->Opcode())) +
+                    " expected " + std::to_string(opcode));
             return *flit;
         }
 

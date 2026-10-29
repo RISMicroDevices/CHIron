@@ -33,6 +33,11 @@ namespace CHI::Lunatic {
             case RequestClass::MakeReadUnique:
                 PlanReadSnoops(transaction);
                 return;
+            case RequestClass::ImmediateWrite:
+            case RequestClass::WriteUniqueZero:
+                ResolveImmediateWrite(transaction);
+                return;
+            case RequestClass::WriteEvictOrEvict:
             case RequestClass::CopybackWrite:
                 flow.expectedBeatMask = CopybackMask(transaction.request, options);
                 pipeline.Advance(transaction, Phase::Action, time);
@@ -173,6 +178,13 @@ namespace CHI::Lunatic {
                 transaction.readyTime = time;
                 return;
             }
+            case RequestClass::ImmediateWrite:
+            case RequestClass::WriteUniqueZero:
+                ActionImmediateWrite(transaction);
+                return;
+            case RequestClass::WriteEvictOrEvict:
+                ActionEvictOrEvict(transaction);
+                return;
             case RequestClass::MakeUnique:
                 if (!PrepareHomeCommit(transaction))
                 {
