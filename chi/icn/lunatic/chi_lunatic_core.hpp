@@ -58,6 +58,8 @@ namespace CHI::Lunatic {
         uint8_t                    responseForm = 0;
         bool                       compEmitted = false;
         bool                       dbidEmitted = false;
+        bool                       stashDoneSent = false;
+        bool                       stashDoneEmitted = false;
         bool                       evictOrEvictNoData = false;
         bool                       mergeImmediateHome = false;
         bool                       backendCompReceived = false;
@@ -225,10 +227,13 @@ namespace CHI::Lunatic {
         void ActionImmediateWrite(Transaction& transaction);
         void QueueImmediateResponse(Transaction& transaction);
         void ActionEvictOrEvict(Transaction& transaction);
+        void ResolveStash(Transaction& transaction);
+        void ActionStash(Transaction& transaction);
         void ReturnRead(Transaction& transaction);
         void QueueDBID(Transaction& transaction);
         void QueueComp(Transaction& transaction, bool withDBID = false, uint8_t resp = 0,
                        uint8_t respErr = 0);
+        void QueueStashDone(Transaction& transaction, bool withComp = false);
         void QueueReadReceipt(Transaction& transaction);
         void QueueRetryCredit(size_t index);
         void FinishResponse(Transaction& transaction);
@@ -247,7 +252,7 @@ namespace CHI::Lunatic {
                        const ByteEnables& enables);
         bool FetchBaseline(Transaction& transaction);
 
-        uint16_t   SnoopOpcode(const Transaction& transaction, const FlowState& flow) const;
+        uint16_t   SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const;
         void       PlanReadSnoops(Transaction& transaction);
         void       PlanCMOSnoops(Transaction& transaction);
         bool       EmitSnoops(Transaction& transaction);
@@ -258,7 +263,7 @@ namespace CHI::Lunatic {
         CacheState DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp,
                                     bool partial = false) const;
         bool       ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp,
-                                         bool withData, bool partial = false) const;
+                                         bool withData, bool partial = false, uint8_t dataPull = 0) const;
 
         bool      PrepareHomeCommit(Transaction& transaction);
         bool      PrepareSnoopFilterCapacity(Transaction& transaction);

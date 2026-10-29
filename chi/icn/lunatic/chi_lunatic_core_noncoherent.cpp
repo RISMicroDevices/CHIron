@@ -93,7 +93,10 @@ namespace CHI::Lunatic {
     {
         namespace DAT = CHI::Eb::Opcodes::DAT;
         FlowState& flow = flows.at(transaction.handle);
-        if (transaction.phase != Phase::WaitWriteData)
+        const auto requestClass = ClassifyRequest(transaction.request.opcode);
+        const bool actionWrite = transaction.phase == Phase::Action && flow.dbidEmitted &&
+            (requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ImmediateWrite);
+        if (transaction.phase != Phase::WaitWriteData && !actionWrite)
             return false;
         if (IsCopybackRequest(transaction.request.opcode))
         {
@@ -104,12 +107,12 @@ namespace CHI::Lunatic {
             else if (flow.writeResp != flit.resp)
                 return false;
         }
-        else if ((ClassifyRequest(transaction.request.opcode) != RequestClass::NonCoherentWrite &&
-                  ClassifyRequest(transaction.request.opcode) != RequestClass::ImmediateWrite) ||
+        else if ((requestClass != RequestClass::NonCoherentWrite && requestClass != RequestClass::ImmediateWrite) ||
                  (flit.opcode != DAT::NonCopyBackWrData && flit.opcode != DAT::NCBWrDataCompAck &&
                   flit.opcode != DAT::WriteDataCancel))
             return false;
-        if (flit.txnId != transaction.dbid)
+        if (flit.txnId != transaction.dbid ||
+            (flit.opcode == DAT::NCBWrDataCompAck && !transaction.request.expCompAck))
             return false;
 
         const size_t bytes = BytesPerBeat(options);
@@ -137,8 +140,8 @@ namespace CHI::Lunatic {
             if (flit.byteEnables[index])
                 transaction.data[offset + index] = flit.bytes[index];
             transaction.byteEnables[offset + index] = flit.byteEnables[index];
-            if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite)
-                flow.validBytes[offset + index] = flit.byteEnables[index];
+            if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite && flit.byteEnables[index])
+                flow.validBytes[offset + index] = 1;
             transaction.dataCheck[offset + index] = flit.dataCheck[index];
         }
         for (size_t lane = 0; lane < bytes / 8; ++lane)

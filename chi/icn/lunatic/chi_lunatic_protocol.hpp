@@ -34,6 +34,7 @@ namespace CHI::Lunatic {
     bool         IsCMORequest(uint16_t opcode) noexcept;
     bool         IsAtomicRequest(uint16_t opcode) noexcept;
     bool         IsStashRequest(uint16_t opcode) noexcept;
+    bool         IsSeparatedStashRequest(uint16_t opcode) noexcept;
     bool         RequiresCompAck(const Request& request) noexcept;
     uint64_t     TransferBeatMask(const Request& request, const Options& options) noexcept;
 

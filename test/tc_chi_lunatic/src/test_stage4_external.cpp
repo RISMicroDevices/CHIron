@@ -485,6 +485,35 @@ LUNATIC_TEST(Stage5ExternalWriteUniquePartial)
     LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
 }
 
+LUNATIC_TEST(Stage5ExternalWriteUniqueStash)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    CheckedDriver<Config256> driver(options);
+    BackendModel<Config256> backend;
+    const LineKey line = LineKey::FromAddress(0x43200, false);
+    const LineData expected = ExternalData(141);
+    backend.Write(line, ExternalData(9));
+
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniqueFullStash, 4, 1, line.address);
+    request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+    request.ReturnNID() = 5;
+    request.StashNIDValid() = 1;
+    request.StashLPIDValid() = 1;
+    request.StashLPID() = 3;
+    driver.PushRequest(request);
+    auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash);
+    LUNATIC_CHECK(snoop.target == 5 && snoop.flit.StashLPID() == 3);
+    driver.SnoopResponse(5, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
+    const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+    driver.WriteData(4, 1, dbid, expected, ExternalEnables(), CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
+    LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);
+    backend.Run(driver.driver);
+    LUNATIC_CHECK(backend.Read(line) == expected);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 5) == CacheState::I);
+}
+
 LUNATIC_TEST(Stage5ExternalWriteUniqueZero)
 {
     Options options;

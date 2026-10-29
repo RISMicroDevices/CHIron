@@ -87,16 +87,24 @@ namespace CHI::Lunatic {
                 Error(INVALID_TRANSACTION, "unmatched CompAck");
                 return;
             }
+            const auto requestClass = ClassifyRequest(transaction->request.opcode);
+            const bool responseComplete = transaction->phase == Phase::WaitCompAck && transaction->Complete(COMPLETE_RESPONSE);
+            const bool earlyWriteAck = (requestClass == RequestClass::NonCoherentWrite ||
+                requestClass == RequestClass::ImmediateWrite) && flows.at(transaction->handle).dbidEmitted &&
+                !transaction->Complete(COMPLETE_RESPONSE);
             if (!RequiresTransactionCompAck(*transaction) || transaction->Complete(COMPLETE_COMPACK) ||
-                transaction->phase != Phase::WaitCompAck || !transaction->Complete(COMPLETE_RESPONSE))
+                (!responseComplete && !earlyWriteAck))
             {
                 Error(transaction->handle, "unexpected or early CompAck");
                 return;
             }
             transaction->Mark(COMPLETE_COMPACK);
-            transaction->phase = Phase::Commit;
-            transaction->readyTime = time;
-            transaction->wait = WaitReason::None;
+            if (responseComplete)
+            {
+                transaction->phase = Phase::Commit;
+                transaction->readyTime = time;
+                transaction->wait = WaitReason::None;
+            }
             return;
         }
 
@@ -240,8 +248,15 @@ namespace CHI::Lunatic {
                 pipeline.Advance(transaction, Phase::Decode, time);
                 return;
             case Phase::Decode:
+            {
+                const auto requestClass = ClassifyRequest(transaction.request.opcode);
+                const bool invalidStash = (requestClass == RequestClass::Stash &&
+                    (transaction.request.size != 6 || transaction.request.order != 0 || transaction.request.expCompAck)) ||
+                    (IsStashRequest(transaction.request.opcode) && !transaction.request.stashNidValid) ||
+                    (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteUniqueFullStash &&
+                     transaction.request.size != 6);
                 if (!IsSupportedRequest(transaction.request.opcode) || transaction.request.size > 6 ||
-                    (ClassifyRequest(transaction.request.opcode) == RequestClass::ZeroWrite && transaction.request.size != 6))
+                    (requestClass == RequestClass::ZeroWrite && transaction.request.size != 6) || invalidStash)
                 {
                     Deny(transaction.request, "unsupported request opcode or transfer geometry");
                     transaction.canceled = true;
@@ -251,6 +266,7 @@ namespace CHI::Lunatic {
                 }
                 pipeline.Advance(transaction, Phase::Admit, time);
                 return;
+            }
             case Phase::Admit:
                 if (!tracker.BindDBID(transaction.handle, transaction.handle))
                 {
@@ -420,6 +436,19 @@ namespace CHI::Lunatic {
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::ReadReceipt)
         {
             flows.at(transaction->handle).readReceiptEmitted = true;
+            return;
+        }
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::StashDone)
+        {
+            flows.at(transaction->handle).stashDoneEmitted = true;
+            FinishResponse(*transaction);
+            return;
+        }
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompStashDone)
+        {
+            flows.at(transaction->handle).compEmitted = true;
+            flows.at(transaction->handle).stashDoneEmitted = true;
+            FinishResponse(*transaction);
             return;
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::DBIDResp)

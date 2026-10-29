@@ -15,14 +15,22 @@ namespace CHI::Lunatic {
             flow.validBytes.fill(1);
             transaction.Mark(COMPLETE_WRITE_DATA);
         }
-        else
+        else if (!transaction.homeHit)
             flow.validBytes.fill(0);
 
+        bool stashTargetPlanned = false;
         for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
         {
             if (target != transaction.request.source)
+            {
                 transaction.snoopTargets.push_back(target);
+                stashTargetPlanned |= IsStashRequest(transaction.request.opcode) && target == transaction.request.returnNid;
+            }
         }
+        if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite &&
+            IsStashRequest(transaction.request.opcode) && transaction.request.stashNidValid &&
+            transaction.request.returnNid != transaction.request.source && !stashTargetPlanned)
+            transaction.snoopTargets.push_back(transaction.request.returnNid);
         transaction.pendingSnoops.clear();
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;

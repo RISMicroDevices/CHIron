@@ -48,6 +48,9 @@ namespace CHI::Lunatic {
             case RequestClass::CMO:
                 PlanCMOSnoops(transaction);
                 return;
+            case RequestClass::Stash:
+                ResolveStash(transaction);
+                return;
             default:
                 Error(transaction.handle, "invalid coherent request class");
                 transaction.canceled = true;
@@ -184,6 +187,9 @@ namespace CHI::Lunatic {
                 return;
             case RequestClass::WriteEvictOrEvict:
                 ActionEvictOrEvict(transaction);
+                return;
+            case RequestClass::Stash:
+                ActionStash(transaction);
                 return;
             case RequestClass::MakeUnique:
                 if (!PrepareHomeCommit(transaction))

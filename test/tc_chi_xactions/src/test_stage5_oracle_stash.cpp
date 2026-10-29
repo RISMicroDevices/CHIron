@@ -14,9 +14,7 @@ namespace {
         request.StashGroupID() = 0x12;
         XACT_ACCEPT(fixture.joint.NextTXREQ(fixture.global, 1, request));
 
-        auto response = Response(2, 4, opcode, 1);
-        if (opcode == Opcodes::RSP::StashDone)
-            response.TxnID() = 0;
+        auto response = Response(2, 4, opcode, 0);
         response.StashGroupID() = 0x13;
         XACT_CHECK(fixture.joint.NextRXRSP(fixture.global, 2, response) != XactDenial::ACCEPTED);
     }

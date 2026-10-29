@@ -4,7 +4,7 @@
 
 namespace CHI::Lunatic {
 
-    uint16_t Core::Impl::SnoopOpcode(const Transaction& transaction, const FlowState& flow) const
+    uint16_t Core::Impl::SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const
     {
         namespace REQ = CHI::Eb::Opcodes::REQ;
         namespace SNP = CHI::Eb::Opcodes::SNP;
@@ -30,6 +30,13 @@ namespace CHI::Lunatic {
             case RequestClass::MakeUnique: return SNP::SnpUnique;
             case RequestClass::MakeReadUnique: return SNP::SnpCleanInvalid;
             case RequestClass::ImmediateWrite:
+                if (target == transaction.request.returnNid &&
+                    transaction.request.opcode == REQ::WriteUniquePtlStash)
+                    return SNP::SnpUniqueStash;
+                if (target == transaction.request.returnNid &&
+                    transaction.request.opcode == REQ::WriteUniqueFullStash)
+                    return SNP::SnpMakeInvalidStash;
+                return SNP::SnpUnique;
             case RequestClass::WriteUniqueZero: return SNP::SnpUnique;
             case RequestClass::CMO:
                 if (transaction.request.opcode == REQ::CleanShared)
@@ -37,6 +44,11 @@ namespace CHI::Lunatic {
                 if (transaction.request.opcode == REQ::CleanInvalid)
                     return SNP::SnpCleanInvalid;
                 return SNP::SnpMakeInvalid;
+            case RequestClass::Stash:
+                if (target != transaction.request.returnNid)
+                    return SNP::SnpUnique;
+                return transaction.request.opcode == REQ::StashOnceUnique ||
+                    transaction.request.opcode == REQ::StashOnceSepUnique ? SNP::SnpStashUnique : SNP::SnpStashShared;
             default: return SNP::SnpUnique;
         }
     }
@@ -143,14 +155,20 @@ namespace CHI::Lunatic {
         snoop.txnId = transaction.handle * options.snoopLimit + (index % options.snoopLimit);
         snoop.address = flow.snoopLine.address;
         snoop.nonSecure = flow.snoopLine.nonSecure;
-        snoop.opcode = SnoopOpcode(transaction, flow);
+        snoop.opcode = SnoopOpcode(transaction, flow, target);
         snoop.qos = transaction.request.qos;
         snoop.traceTag = transaction.request.traceTag;
+        snoop.stashLpid = IsStashRequest(transaction.request.opcode) ? transaction.request.stashLpid : 0;
+        snoop.stashLpidValid = IsStashRequest(transaction.request.opcode) && transaction.request.stashLpidValid;
         snoop.doNotGoToSD = options.doNotGoToSD ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpCleanShared ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid ||
-            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid;
+            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid ||
+            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUniqueStash ||
+            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash ||
+            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
+            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
         snoop.retToSrc = snoop.opcode == CHI::Eb::Opcodes::SNP::SnpShared ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpOnce || snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique;
 
@@ -179,7 +197,7 @@ namespace CHI::Lunatic {
 
     void Core::Impl::ProcessSnoopRSP(Transaction& transaction, const Response& flit)
     {
-        if (!ValidateSnoopResponse(transaction, flit.source, flit.resp, false))
+        if (!ValidateSnoopResponse(transaction, flit.source, flit.resp, false, false, flit.fwdState))
             Error(transaction.handle, "illegal snoop response");
         CompleteSnoopTarget(transaction, flit.source, flit.resp, false);
     }
@@ -208,7 +226,8 @@ namespace CHI::Lunatic {
             return;
         }
         flow.snoopResponses[flit.source] = flit.resp;
-        if (!ValidateSnoopResponse(transaction, flit.source, flit.resp, true, flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl))
+        if (!ValidateSnoopResponse(transaction, flit.source, flit.resp, true,
+            flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl, flit.dataSource))
             Error(transaction.handle, "illegal snoop data response");
 
         const CacheState initial = snoopFilter.State(flow.snoopLine, flit.source);
@@ -266,27 +285,43 @@ namespace CHI::Lunatic {
             CompleteSnoopTarget(transaction, flit.source, flit.resp, true, flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl);
     }
 
-    bool Core::Impl::ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp, bool withData, bool partial) const
+    bool Core::Impl::ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp,
+                                           bool withData, bool partial, uint8_t dataPull) const
     {
         const FlowState& flow = flows.at(transaction.handle);
         if (std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target) == transaction.pendingSnoops.end())
             return false;
+        if (dataPull != 0)
+            return false;
         const CacheState initial = snoopFilter.State(flow.snoopLine, target);
-        const uint16_t opcode = SnoopOpcode(transaction, flow);
+        const uint16_t opcode = SnoopOpcode(transaction, flow, target);
         const CacheState final = DecodeSnoopState(transaction, target, resp, partial);
         const bool passDirty = (resp & CHI::Eb::Resps::PassDirty) != 0;
+        const bool stashRead = opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
+            opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
+        if (stashRead)
+        {
+            if (withData || partial || passDirty)
+                return false;
+            if (final == CacheState::I)
+                return true;
+            return final == initial || (initial == CacheState::UDP && final == CacheState::UD);
+        }
         if (passDirty && !IsDirty(initial))
             return false;
         if (options.doNotGoToSD && final == CacheState::SD && opcode != CHI::Eb::Opcodes::SNP::SnpOnce)
             return false;
-        if (opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid)
+        if (opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid ||
+            opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash)
             return !withData && final == CacheState::I;
-        if ((opcode == CHI::Eb::Opcodes::SNP::SnpUnique || opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid) &&
-            final != CacheState::I)
+        const bool invalidateWithData = opcode == CHI::Eb::Opcodes::SNP::SnpUnique ||
+            opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid || opcode == CHI::Eb::Opcodes::SNP::SnpUniqueStash;
+        if (invalidateWithData && final != CacheState::I)
             return false;
-        if (IsDirty(initial) && (opcode == CHI::Eb::Opcodes::SNP::SnpUnique || opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid))
+        if (IsDirty(initial) && invalidateWithData)
             return withData && passDirty;
-        if (IsDirty(initial) && opcode != CHI::Eb::Opcodes::SNP::SnpMakeInvalid && !withData)
+        if (IsDirty(initial) && opcode != CHI::Eb::Opcodes::SNP::SnpMakeInvalid &&
+            opcode != CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash && !withData)
             return false;
         return true;
     }
@@ -295,7 +330,9 @@ namespace CHI::Lunatic {
     {
         const FlowState& flow = flows.at(transaction.handle);
         const CacheState initial = snoopFilter.State(flow.snoopLine, target);
-        const uint16_t opcode = SnoopOpcode(transaction, flow);
+        const uint16_t opcode = SnoopOpcode(transaction, flow, target);
+        if (opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique || opcode == CHI::Eb::Opcodes::SNP::SnpStashShared)
+            return initial;
         switch (resp & 0b011)
         {
             case 0b000: return CacheState::I;

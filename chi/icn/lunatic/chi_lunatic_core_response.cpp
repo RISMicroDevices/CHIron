@@ -57,7 +57,7 @@ namespace CHI::Lunatic {
         {
             flow.compSent = true;
             if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite &&
-                !transaction.Complete(COMPLETE_WRITE_DATA))
+                !transaction.canceled && !transaction.Complete(COMPLETE_WRITE_DATA))
             {
                 transaction.phase = Phase::WaitWriteData;
                 transaction.wait = WaitReason::WriteData;
@@ -155,11 +155,21 @@ namespace CHI::Lunatic {
     {
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         const FlowState& flow = flows.at(transaction.handle);
-        if ((requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero) &&
+        if (!transaction.canceled &&
+            (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero) &&
             (!transaction.Complete(COMPLETE_WRITE_DATA) || !flow.directoryCommitted ||
              !flow.dbidEmitted || !flow.compEmitted))
         {
-            transaction.phase = transaction.Complete(COMPLETE_WRITE_DATA) ? Phase::Action : Phase::WaitWriteData;
+            const bool responseQueueIncomplete = !flow.dbidSent || !flow.compSent;
+            transaction.phase = responseQueueIncomplete || transaction.Complete(COMPLETE_WRITE_DATA)
+                ? Phase::Action : Phase::WaitWriteData;
+            transaction.readyTime = time;
+            return;
+        }
+        if (!transaction.canceled && requestClass == RequestClass::Stash &&
+            IsSeparatedStashRequest(transaction.request.opcode) && (!flow.compEmitted || !flow.stashDoneEmitted))
+        {
+            transaction.phase = Phase::Action;
             transaction.readyTime = time;
             return;
         }
@@ -172,6 +182,8 @@ namespace CHI::Lunatic {
 
     bool Core::Impl::RequiresTransactionCompAck(const Transaction& transaction) const
     {
+        if (transaction.canceled)
+            return false;
         if (ClassifyRequest(transaction.request.opcode) == RequestClass::WriteEvictOrEvict &&
             flows.at(transaction.handle).evictOrEvictNoData)
             return true;

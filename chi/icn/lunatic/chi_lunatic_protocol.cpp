@@ -71,6 +71,8 @@ namespace CHI::Lunatic {
             case REQ::WriteNoSnpZero:
             case REQ::WriteUniquePtl:
             case REQ::WriteUniqueFull:
+            case REQ::WriteUniquePtlStash:
+            case REQ::WriteUniqueFullStash:
             case REQ::WriteUniqueZero:
             case REQ::WriteEvictOrEvict:
             case REQ::WriteBackPtl:
@@ -81,6 +83,10 @@ namespace CHI::Lunatic {
             case REQ::CleanShared:
             case REQ::CleanInvalid:
             case REQ::MakeInvalid:
+            case REQ::StashOnceUnique:
+            case REQ::StashOnceShared:
+            case REQ::StashOnceSepUnique:
+            case REQ::StashOnceSepShared:
                 return true;
             default:
                 return false;
@@ -138,6 +144,12 @@ namespace CHI::Lunatic {
         namespace REQ = CHI::Eb::Opcodes::REQ;
         return ClassifyRequest(opcode) == RequestClass::Stash || opcode == REQ::WriteUniquePtlStash ||
                opcode == REQ::WriteUniqueFullStash;
+    }
+
+    bool IsSeparatedStashRequest(uint16_t opcode) noexcept
+    {
+        namespace REQ = CHI::Eb::Opcodes::REQ;
+        return opcode == REQ::StashOnceSepUnique || opcode == REQ::StashOnceSepShared;
     }
 
     bool RequiresCompAck(const Request& request) noexcept
