@@ -26,7 +26,8 @@ namespace CHI::Lunatic {
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         if ((requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeUnique ||
              requestClass == RequestClass::MakeReadUnique || requestClass == RequestClass::CopybackWrite ||
-             requestClass == RequestClass::WriteEvictOrEvict) && !PrepareSnoopFilterCapacity(transaction))
+             requestClass == RequestClass::WriteEvictOrEvict || requestClass == RequestClass::CleanUnique) &&
+            !PrepareSnoopFilterCapacity(transaction))
             return false;
 
         bool committed = false;
@@ -46,7 +47,11 @@ namespace CHI::Lunatic {
             case RequestClass::WriteUniqueZero:
                 committed = CommitImmediateWrite(transaction);
                 break;
+            case RequestClass::CleanUnique:
+                committed = CommitCleanUnique(transaction);
+                break;
             case RequestClass::CMO:
+            case RequestClass::Persistence:
                 committed = CommitCMO(transaction);
                 break;
             default:
@@ -241,11 +246,25 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         const LineKey line = transaction.request.Line();
-        if (options.backend == BackendKind::CHI && flow.snoopDataPartial && !transaction.homeHit && !FetchBaseline(transaction))
-            return false;
+        if (flow.snoopDataPartial && !transaction.homeHit)
+        {
+            if (options.backend == BackendKind::CHI)
+            {
+                if (!FetchBaseline(transaction))
+                    return false;
+            }
+            else
+            {
+                const LineData baseline = memory.Read(line);
+                for (size_t index = 0; index < LINE_SIZE; ++index)
+                    if (!flow.snoopValidBytes[index])
+                        transaction.data[index] = baseline[index];
+            }
+        }
         HomeLine* home = directory.Find(line);
 
-        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanShared)
+        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanShared ||
+            ClassifyRequest(transaction.request.opcode) == RequestClass::Persistence)
         {
             flow.requesterFinal = snoopFilter.State(line, transaction.request.source);
             if (home)

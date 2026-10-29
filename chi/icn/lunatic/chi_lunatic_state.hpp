@@ -8,6 +8,7 @@ namespace CHI::Lunatic {
         I,
         SC,
         UC,
+        UCE,
         SD,
         UD,
         UDP

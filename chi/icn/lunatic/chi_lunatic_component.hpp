@@ -196,9 +196,10 @@ namespace CHI::Lunatic {
             flit.MemAttr() = value.memAttr;
             flit.SnpAttr() = value.snpAttr;
             flit.ExpCompAck() = value.expCompAck;
-            if (value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersist ||
-                value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+            if (value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
                 flit.PGroupID() = value.pGroupId;
+            else if (value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersist)
+                flit.PGroupID() = 0;
             else if (value.opcode == CHI::Eb::Opcodes::REQ::StashOnceSepUnique ||
                      value.opcode == CHI::Eb::Opcodes::REQ::StashOnceSepShared)
                 flit.StashGroupID() = value.stashGroupId;

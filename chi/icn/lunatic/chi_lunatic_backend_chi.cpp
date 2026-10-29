@@ -251,7 +251,9 @@ namespace CHI::Lunatic {
 
         if (IsCMORequest(transaction.request.opcode) && !flow.spillPending)
         {
-            if (flit.opcode != RSP::Comp)
+            const bool separatedPersistence = transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
+            if ((separatedPersistence && (flit.opcode != RSP::CompPersist || flit.pGroupId != transaction.request.pGroupId)) ||
+                (!separatedPersistence && flit.opcode != RSP::Comp))
                 return false;
             flow.backendCompReceived = true;
             flow.backendPhase = BackendPhase::Done;

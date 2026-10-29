@@ -255,8 +255,15 @@ namespace CHI::Lunatic {
                     (IsStashRequest(transaction.request.opcode) && !transaction.request.stashNidValid) ||
                     (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteUniqueFullStash &&
                      transaction.request.size != 6);
+                const bool invalidCleanUnique = requestClass == RequestClass::CleanUnique &&
+                    (transaction.request.size != 6 || !transaction.request.expCompAck);
+                const bool invalidPersistence = requestClass == RequestClass::Persistence &&
+                    (transaction.request.size != 6 || transaction.request.expCompAck ||
+                     (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersist &&
+                      transaction.request.pGroupId != 0));
                 if (!IsSupportedRequest(transaction.request.opcode) || transaction.request.size > 6 ||
-                    (requestClass == RequestClass::ZeroWrite && transaction.request.size != 6) || invalidStash)
+                    (requestClass == RequestClass::ZeroWrite && transaction.request.size != 6) || invalidStash ||
+                    invalidCleanUnique || invalidPersistence)
                 {
                     Deny(transaction.request, "unsupported request opcode or transfer geometry");
                     transaction.canceled = true;
@@ -459,6 +466,7 @@ namespace CHI::Lunatic {
                 FinishResponse(*transaction);
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp ||
+            pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompPersist ||
             pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
         {
             flows.at(transaction->handle).compEmitted = true;
@@ -474,6 +482,7 @@ namespace CHI::Lunatic {
             return;
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp ||
+            pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompPersist ||
             pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
             FinishResponse(*transaction);
     }

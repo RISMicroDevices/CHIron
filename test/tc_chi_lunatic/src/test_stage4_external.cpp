@@ -25,6 +25,7 @@ namespace {
         using Base = Driver<config>;
 
         std::map<LineKey, LineData> lines;
+        std::vector<uint16_t>       opcodes;
 
         void SendRead(Base& driver, const typename Base::REQ& request)
         {
@@ -94,12 +95,15 @@ namespace {
 
         void Write(const LineKey& line, const LineData& data) { lines[line] = data; }
 
+        const std::vector<uint16_t>& Opcodes() const { return opcodes; }
+
         void Step(Base& driver)
         {
             if (!driver.node.PeekTXREQ())
                 return;
             auto request = driver.node.PopTXREQ();
             LUNATIC_CHECK(request);
+            opcodes.push_back(request->Opcode());
             if (request->Opcode() == CHI::Eb::Opcodes::REQ::ReadNoSnp)
             {
                 SendRead(driver, *request);
@@ -119,6 +123,22 @@ namespace {
                 response.TgtID() = 2;
                 response.TxnID() = request->TxnID();
                 response.Opcode() = CHI::Eb::Opcodes::RSP::CompDBIDResp;
+                LUNATIC_CHECK(driver.node.PushRXRSP(response));
+                driver.Tick();
+                return;
+            }
+            if (request->Opcode() == CHI::Eb::Opcodes::REQ::CleanSharedPersist ||
+                request->Opcode() == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+            {
+                const bool separated = request->Opcode() == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
+                LUNATIC_CHECK(separated || request->PGroupID() == 0);
+                typename Base::RSP response{};
+                response.SrcID() = 6;
+                response.TgtID() = 2;
+                response.TxnID() = request->TxnID();
+                response.Opcode() = separated ? CHI::Eb::Opcodes::RSP::CompPersist : CHI::Eb::Opcodes::RSP::Comp;
+                if (separated)
+                    response.PGroupID() = request->PGroupID();
                 LUNATIC_CHECK(driver.node.PushRXRSP(response));
                 driver.Tick();
                 return;
@@ -545,4 +565,137 @@ LUNATIC_TEST(Stage5ExternalWriteUniqueZero)
         LUNATIC_CHECK(backend.Read(line) == LineData{});
         LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
     }
+}
+
+namespace {
+
+    void RunExternalPersistenceFields(uint16_t opcode)
+    {
+        Options options;
+        options.backend = BackendKind::CHI;
+        options.subordinateId = 6;
+        Driver<Config256> driver(options);
+        const bool separated = opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
+        const uint8_t group = separated ? 0x68 : 0;
+        auto request = driver.Request(opcode, 5, 50, 0x4c000);
+        request.PGroupID() = group;
+        request.Deep() = 1;
+        LUNATIC_CHECK(driver.node.PushRXREQ(request));
+
+        auto downstream = driver.NextREQ(opcode);
+        LUNATIC_CHECK(downstream.SrcID() == 2 && downstream.TgtID() == 6);
+        LUNATIC_CHECK(downstream.PGroupID() == group && downstream.Deep() == 1);
+        if (separated)
+        {
+            LUNATIC_CHECK(downstream.ReturnNID() == 5);
+            LUNATIC_CHECK(downstream.ReturnTxnID() == 0);
+        }
+        LUNATIC_CHECK(!driver.node.PeekTXRSP());
+
+        Driver<Config256>::RSP response{};
+        response.SrcID() = 6;
+        response.TgtID() = 2;
+        response.TxnID() = downstream.TxnID();
+        response.Opcode() = separated ? CHI::Eb::Opcodes::RSP::CompPersist : CHI::Eb::Opcodes::RSP::Comp;
+        if (separated)
+            response.PGroupID() = group;
+        LUNATIC_CHECK(driver.node.PushRXRSP(response));
+        driver.Tick();
+        auto upstream = driver.NextRSP(response.Opcode());
+        LUNATIC_CHECK(upstream.TxnID() == 50);
+        if (separated)
+            LUNATIC_CHECK(upstream.PGroupID() == group);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.node.GetErrors().empty());
+    }
+
+}
+
+LUNATIC_TEST(Stage5ExternalPersistenceFields)
+{
+    RunExternalPersistenceFields(CHI::Eb::Opcodes::REQ::CleanSharedPersist);
+    RunExternalPersistenceFields(CHI::Eb::Opcodes::REQ::CleanSharedPersistSep);
+}
+
+LUNATIC_TEST(Stage5ExternalPersistenceRejectsWrongGroup)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    Driver<Config256> driver(options);
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::CleanSharedPersistSep, 5, 51, 0x4c000);
+    request.PGroupID() = 0x69;
+    request.Deep() = 1;
+    LUNATIC_CHECK(driver.node.PushRXREQ(request));
+    auto downstream = driver.NextREQ(CHI::Eb::Opcodes::REQ::CleanSharedPersistSep);
+    Driver<Config256>::RSP response{};
+    response.SrcID() = 6;
+    response.TgtID() = 2;
+    response.TxnID() = downstream.TxnID();
+    response.Opcode() = CHI::Eb::Opcodes::RSP::CompPersist;
+    response.PGroupID() = 0x6a;
+    LUNATIC_CHECK(driver.node.PushRXRSP(response));
+    driver.Tick();
+    LUNATIC_CHECK(!driver.node.GetErrors().empty());
+    LUNATIC_CHECK(!driver.node.PeekTXRSP());
+}
+
+LUNATIC_TEST(Stage5ExternalDirtyPersistenceSpillsFirst)
+{
+    Options options;
+    options.policy = PolicyKind::NINE;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    CheckedDriver<Config256> driver(options);
+    BackendModel<Config256> backend;
+    const LineKey line = LineKey::FromAddress(0x4c100, false);
+    const LineData data = ExternalData(53);
+    ExternalWriteback(driver, line, data);
+    LUNATIC_CHECK(ExternalReadData(driver, backend, 6, 2, line.address, CHI::Eb::Opcodes::REQ::ReadUnique) == data);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::UD);
+
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::CleanSharedPersistSep, 5, 3, line.address);
+    request.PGroupID() = 0x6b;
+    request.Deep() = 1;
+    driver.PushRequest(request);
+    auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanShared);
+    driver.SnoopData(6, snoop.flit.TxnID(), data, CHI::Eb::Resps::SnpRespData_I_PD);
+    auto response = ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::CompPersist);
+    LUNATIC_CHECK(response.TxnID() == 3 && response.PGroupID() == 0x6b);
+    backend.Run(driver.driver);
+    LUNATIC_CHECK(backend.Read(line) == data);
+    LUNATIC_CHECK(backend.Opcodes().size() == 2);
+    LUNATIC_CHECK(backend.Opcodes()[0] == CHI::Eb::Opcodes::REQ::WriteNoSnpFull);
+    LUNATIC_CHECK(backend.Opcodes()[1] == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 5) == CacheState::I);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::I);
+}
+
+LUNATIC_TEST(Stage5ExternalCleanUniqueWritesBackWithoutForwarding)
+{
+    Options options;
+    options.policy = PolicyKind::NINE;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    CheckedDriver<Config256> driver(options);
+    BackendModel<Config256> backend;
+    const LineKey line = LineKey::FromAddress(0x4c200, false);
+    const LineData data = ExternalData(79);
+    ExternalWriteback(driver, line, data);
+    LUNATIC_CHECK(ExternalReadData(driver, backend, 6, 2, line.address, CHI::Eb::Opcodes::REQ::ReadUnique) == data);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::UD);
+
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::CleanUnique, 5, 4, line.address, true));
+    auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
+    LUNATIC_CHECK(snoop.flit.RetToSrc() == 0);
+    driver.SnoopData(6, snoop.flit.TxnID(), data, CHI::Eb::Resps::SnpRespData_I_PD);
+    auto comp = ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp);
+    LUNATIC_CHECK(comp.TxnID() == 4 && comp.Resp() == CHI::Eb::Resps::Comp_UC);
+    driver.CompAck(5, comp.DBID());
+    backend.Run(driver.driver);
+    LUNATIC_CHECK(backend.Read(line) == data);
+    LUNATIC_CHECK(backend.Opcodes().size() == 1);
+    LUNATIC_CHECK(backend.Opcodes()[0] == CHI::Eb::Opcodes::REQ::WriteNoSnpFull);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 5) == CacheState::UCE);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::I);
 }

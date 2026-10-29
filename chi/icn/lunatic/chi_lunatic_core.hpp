@@ -229,11 +229,13 @@ namespace CHI::Lunatic {
         void ActionEvictOrEvict(Transaction& transaction);
         void ResolveStash(Transaction& transaction);
         void ActionStash(Transaction& transaction);
+        void ActionPersistence(Transaction& transaction);
         void ReturnRead(Transaction& transaction);
         void QueueDBID(Transaction& transaction);
         void QueueComp(Transaction& transaction, bool withDBID = false, uint8_t resp = 0,
                        uint8_t respErr = 0);
         void QueueStashDone(Transaction& transaction, bool withComp = false);
+        void QueueCompPersist(Transaction& transaction);
         void QueueReadReceipt(Transaction& transaction);
         void QueueRetryCredit(size_t index);
         void FinishResponse(Transaction& transaction);
@@ -272,6 +274,7 @@ namespace CHI::Lunatic {
         bool      CommitReadDirectory(Transaction& transaction);
         bool      CommitCopyback(Transaction& transaction);
         bool      CommitImmediateWrite(Transaction& transaction);
+        bool      CommitCleanUnique(Transaction& transaction);
         bool      CommitCMO(Transaction& transaction);
         HomeLine& InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty,
                               Time age);

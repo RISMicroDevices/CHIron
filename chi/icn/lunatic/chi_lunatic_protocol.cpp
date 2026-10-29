@@ -80,6 +80,9 @@ namespace CHI::Lunatic {
             case REQ::WriteCleanFull:
             case REQ::WriteEvictFull:
             case REQ::Evict:
+            case REQ::CleanUnique:
+            case REQ::CleanSharedPersist:
+            case REQ::CleanSharedPersistSep:
             case REQ::CleanShared:
             case REQ::CleanInvalid:
             case REQ::MakeInvalid:

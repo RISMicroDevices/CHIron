@@ -38,6 +38,8 @@ namespace CHI::Lunatic {
                     return SNP::SnpMakeInvalidStash;
                 return SNP::SnpUnique;
             case RequestClass::WriteUniqueZero: return SNP::SnpUnique;
+            case RequestClass::CleanUnique: return SNP::SnpUnique;
+            case RequestClass::Persistence: return SNP::SnpCleanShared;
             case RequestClass::CMO:
                 if (transaction.request.opcode == REQ::CleanShared)
                     return SNP::SnpCleanShared;
@@ -124,7 +126,9 @@ namespace CHI::Lunatic {
             if (target == transaction.request.source)
                 continue;
             const CacheState state = snoopFilter.State(transaction.request.Line(), target);
-            if (transaction.request.opcode != CHI::Eb::Opcodes::REQ::CleanShared || IsDirty(state))
+            const bool cleanShared = transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanShared ||
+                ClassifyRequest(transaction.request.opcode) == RequestClass::Persistence;
+            if (!cleanShared || IsDirty(state) || !options.preciseSnoopFilter)
                 transaction.snoopTargets.push_back(target);
         }
         transaction.pendingSnoops.clear();
@@ -169,8 +173,9 @@ namespace CHI::Lunatic {
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
-        snoop.retToSrc = snoop.opcode == CHI::Eb::Opcodes::SNP::SnpShared ||
-            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpOnce || snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique;
+        snoop.retToSrc = !IsCMORequest(transaction.request.opcode) &&
+            (snoop.opcode == CHI::Eb::Opcodes::SNP::SnpShared ||
+             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpOnce || snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique);
 
         if (tracker.FindSnoop(target, snoop.txnId))
         {
@@ -309,6 +314,12 @@ namespace CHI::Lunatic {
         }
         if (passDirty && !IsDirty(initial))
             return false;
+        if (opcode == CHI::Eb::Opcodes::SNP::SnpCleanShared)
+        {
+            if (IsDirty(final) || (initial == CacheState::UCE && final != CacheState::I))
+                return false;
+            return !IsDirty(initial) || (withData && passDirty);
+        }
         if (options.doNotGoToSD && final == CacheState::SD && opcode != CHI::Eb::Opcodes::SNP::SnpOnce)
             return false;
         if (opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid ||

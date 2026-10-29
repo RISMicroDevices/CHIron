@@ -46,6 +46,8 @@ namespace CHI::Lunatic {
                 pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case RequestClass::CMO:
+            case RequestClass::CleanUnique:
+            case RequestClass::Persistence:
                 PlanCMOSnoops(transaction);
                 return;
             case RequestClass::Stash:
@@ -226,6 +228,25 @@ namespace CHI::Lunatic {
             case RequestClass::Evict:
                 EvictRequester(transaction);
                 QueueComp(transaction, false, CHI::Eb::Resps::Comp_I);
+                return;
+            case RequestClass::CleanUnique:
+                if (snoopFilter.State(transaction.request.Line(), transaction.request.source) == CacheState::UDP)
+                {
+                    Error(transaction.handle, "CleanUnique requester UDP is unsupported");
+                    transaction.canceled = true;
+                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC, 0b10);
+                    return;
+                }
+                if (!PrepareHomeCommit(transaction))
+                {
+                    transaction.phase = Phase::Action;
+                    transaction.readyTime = time;
+                    return;
+                }
+                QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC);
+                return;
+            case RequestClass::Persistence:
+                ActionPersistence(transaction);
                 return;
             case RequestClass::CMO:
                 if (!PrepareHomeCommit(transaction))
