@@ -13,9 +13,22 @@ namespace CHI::Lunatic {
         switch (ClassifyRequest(transaction.request.opcode))
         {
             case RequestClass::CoherentRead:
-                return transaction.request.opcode == REQ::ReadUnique ? SNP::SnpUnique : SNP::SnpShared;
-            case RequestClass::ReadOnce: return SNP::SnpOnce;
+                if (transaction.request.opcode == REQ::ReadUnique)
+                    return SNP::SnpUnique;
+                if (transaction.request.opcode == REQ::ReadClean)
+                    return SNP::SnpClean;
+                if (transaction.request.opcode == REQ::ReadNotSharedDirty)
+                    return SNP::SnpNotSharedDirty;
+                if (transaction.request.opcode == REQ::ReadPreferUnique)
+                    return SNP::SnpPreferUnique;
+                return SNP::SnpShared;
+            case RequestClass::ReadOnce:
+                if (transaction.request.opcode == REQ::ReadOnceCleanInvalid ||
+                    transaction.request.opcode == REQ::ReadOnceMakeInvalid)
+                    return SNP::SnpUnique;
+                return SNP::SnpOnce;
             case RequestClass::MakeUnique: return SNP::SnpUnique;
+            case RequestClass::MakeReadUnique: return SNP::SnpCleanInvalid;
             case RequestClass::CMO:
                 if (transaction.request.opcode == REQ::CleanShared)
                     return SNP::SnpCleanShared;
@@ -29,15 +42,32 @@ namespace CHI::Lunatic {
     void Core::Impl::PlanReadSnoops(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (!transaction.request.snpAttr &&
+            (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
+             transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid))
+        {
+            if (transaction.homeHit)
+                pipeline.Advance(transaction, Phase::Action, time);
+            else
+                StartMemoryRead(transaction);
+            return;
+        }
         std::vector<NodeId> candidates;
         for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
         {
             if (target == transaction.request.source)
                 continue;
             const CacheState state = snoopFilter.State(transaction.request.Line(), target);
+            const auto requestClass = ClassifyRequest(transaction.request.opcode);
             const bool needsUnique = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique ||
-                                     ClassifyRequest(transaction.request.opcode) == RequestClass::MakeUnique;
-            const bool needsDowngrade = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadShared && IsUnique(state);
+                                     transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
+                                     transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid ||
+                                     requestClass == RequestClass::MakeUnique || requestClass == RequestClass::MakeReadUnique;
+            const bool needsDowngrade = IsUnique(state) &&
+                (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadShared ||
+                 transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadClean ||
+                 transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty ||
+                 transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadPreferUnique);
             if (needsUnique || needsDowngrade || IsDirty(state))
                 candidates.push_back(target);
         }

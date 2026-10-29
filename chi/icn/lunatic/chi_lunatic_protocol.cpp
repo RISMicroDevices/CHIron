@@ -59,7 +59,13 @@ namespace CHI::Lunatic {
             case REQ::ReadOnce:
             case REQ::ReadShared:
             case REQ::ReadUnique:
+            case REQ::ReadClean:
+            case REQ::ReadNotSharedDirty:
+            case REQ::ReadPreferUnique:
             case REQ::MakeUnique:
+            case REQ::MakeReadUnique:
+            case REQ::ReadOnceCleanInvalid:
+            case REQ::ReadOnceMakeInvalid:
             case REQ::WriteNoSnpPtl:
             case REQ::WriteNoSnpFull:
             case REQ::WriteNoSnpZero:

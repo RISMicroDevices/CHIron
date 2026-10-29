@@ -25,7 +25,8 @@ namespace CHI::Lunatic {
 
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         if ((requestClass == RequestClass::CoherentRead || requestClass == RequestClass::MakeUnique ||
-             requestClass == RequestClass::CopybackWrite) && !PrepareSnoopFilterCapacity(transaction))
+             requestClass == RequestClass::MakeReadUnique || requestClass == RequestClass::CopybackWrite) &&
+            !PrepareSnoopFilterCapacity(transaction))
             return false;
 
         bool committed = false;
@@ -34,6 +35,7 @@ namespace CHI::Lunatic {
             case RequestClass::ReadOnce:
             case RequestClass::CoherentRead:
             case RequestClass::MakeUnique:
+            case RequestClass::MakeReadUnique:
                 committed = CommitReadDirectory(transaction);
                 break;
             case RequestClass::CopybackWrite:
@@ -88,14 +90,34 @@ namespace CHI::Lunatic {
         {
             case RequestClass::CoherentRead:
                 if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique)
-                    flow.requesterFinal = partialDirtyLine && (flow.dataDirty || flow.passDirty || flow.homeDirty)
+                    flow.requesterFinal = partialDirtyLine && (flow.dataDirty || flow.passDirty || flow.homeDirty || flow.requesterWasDirty)
                         ? CacheState::UDP
-                        : flow.dataDirty || flow.passDirty || flow.homeDirty ? CacheState::UD : CacheState::UC;
+                        : flow.dataDirty || flow.passDirty || flow.homeDirty || flow.requesterWasDirty ? CacheState::UD : CacheState::UC;
+                else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty ||
+                         transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadPreferUnique)
+                    flow.requesterFinal = CacheState::SC;
+                else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadClean)
+                    flow.requesterFinal = CacheState::SC;
                 else if (flow.passDirty)
                     flow.requesterFinal = otherSharers ? CacheState::SD : CacheState::UD;
                 else
                     flow.requesterFinal = CacheState::SC;
                 break;
+            case RequestClass::MakeReadUnique:
+            {
+                const CacheState responseState = snoopFilter.State(line, transaction.request.source);
+                if (responseState == CacheState::SD)
+                    flow.requesterFinal = CacheState::UD;
+                else if (responseState == CacheState::SC)
+                    flow.requesterFinal = CacheState::UC;
+                else if (IsValid(responseState))
+                    flow.requesterFinal = IsDirty(responseState) ? CacheState::UD : CacheState::UC;
+                else
+                    flow.requesterFinal = partialDirtyLine && (flow.dataDirty || flow.passDirty || flow.homeDirty)
+                        ? CacheState::UDP
+                        : flow.dataDirty || flow.passDirty || flow.homeDirty ? CacheState::UD : CacheState::UC;
+                break;
+            }
             case RequestClass::MakeUnique:
                 flow.requesterFinal = CacheState::UD;
                 break;
@@ -129,11 +151,23 @@ namespace CHI::Lunatic {
                 directory.Invalidate(directory.SetIndex(line), *way);
         }
 
-        if (options.policy == PolicyKind::Exclusive && !decision.allocateHome && !decision.retainHome &&
+        const bool invalidatingRead = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
+            transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid;
+        if (invalidatingRead && (flow.homeDirty || flow.dataDirty))
+        {
+            if (!WriteLine(transaction, line, transaction.data, FullEnables()))
+                return false;
+            if (HomeLine* home = directory.Find(line))
+                home->dirty = false;
+        }
+        else if (options.policy == PolicyKind::Exclusive && !decision.allocateHome && !decision.retainHome &&
             (flow.homeDirty || flow.dataDirty) && !WriteLine(transaction, line, transaction.data, FullEnables()))
             return false;
 
-        if (ClassifyRequest(transaction.request.opcode) != RequestClass::ReadOnce)
+        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
+            transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid)
+            snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
+        else if (ClassifyRequest(transaction.request.opcode) != RequestClass::ReadOnce)
             snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
         return true;
     }

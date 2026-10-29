@@ -157,7 +157,14 @@ namespace {
     LineData ExternalReadData(CheckedDriver<Config256>& driver, BackendModel& backend, NodeId source,
                                                          TransactionId txnId, uint64_t address, uint16_t opcode)
     {
-        driver.PushRequest(driver.Request(opcode, source, txnId, address, true));
+        auto request = driver.Request(opcode, source, txnId, address, true);
+        if (opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
+            opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid)
+        {
+            request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+            request.SnpAttr() = 1;
+        }
+        driver.PushRequest(request);
         LineData result{};
         DataBufferId dbid = 0;
         for (size_t beat = 0; beat < 2; ++beat)
@@ -368,4 +375,37 @@ LUNATIC_TEST(Stage4ExternalPartialVictimBaselineAndMaskIsolation)
     LUNATIC_CHECK(driver.ReadData(7, 13, b.address, CHI::Eb::Opcodes::REQ::ReadUnique) == dataB);
     LUNATIC_CHECK(driver.driver.node.InspectRequester(b, 7) == CacheState::UD);
     LUNATIC_CHECK(driver.driver.node.InspectHome(b).valid);
+}
+
+LUNATIC_TEST(Stage5ExternalReadVariants)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    CheckedDriver<Config256> driver(options);
+    BackendModel backend;
+    const LineKey line = LineKey::FromAddress(0x32000, false);
+    const LineData expected = ExternalData(67);
+    backend.Write(line, expected);
+
+    struct Variant {
+        uint16_t   opcode;
+        CacheState final;
+    };
+    const Variant variants[] = {
+        { CHI::Eb::Opcodes::REQ::ReadClean, CacheState::SC },
+        { CHI::Eb::Opcodes::REQ::ReadNotSharedDirty, CacheState::SC },
+        { CHI::Eb::Opcodes::REQ::ReadPreferUnique, CacheState::SC },
+        { CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid, CacheState::I },
+        { CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid, CacheState::I },
+        { CHI::Eb::Opcodes::REQ::MakeReadUnique, CacheState::UC }
+    };
+
+    TransactionId txnId = 20;
+    for (const Variant& variant : variants)
+    {
+        LUNATIC_CHECK(ExternalReadData(driver, backend, 5, txnId++, line.address, variant.opcode) == expected);
+        backend.Run(driver.driver);
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 5) == variant.final);
+    }
 }

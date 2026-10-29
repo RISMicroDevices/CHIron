@@ -30,6 +30,7 @@ namespace CHI::Lunatic {
             case RequestClass::ReadOnce:
             case RequestClass::CoherentRead:
             case RequestClass::MakeUnique:
+            case RequestClass::MakeReadUnique:
                 PlanReadSnoops(transaction);
                 return;
             case RequestClass::CopybackWrite:
@@ -124,6 +125,10 @@ namespace CHI::Lunatic {
                 if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique)
                     transaction.responseResp = flow.requesterFinal == CacheState::UD || flow.requesterFinal == CacheState::UDP
                         ? CHI::Eb::Resps::CompData_UD_PD : CHI::Eb::Resps::CompData_UC;
+                else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty ||
+                         transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadPreferUnique ||
+                         transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadClean)
+                    transaction.responseResp = CHI::Eb::Resps::CompData_SC;
                 else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadShared)
                 {
                     transaction.responseResp = flow.requesterFinal == CacheState::UD || flow.requesterFinal == CacheState::UDP
@@ -131,12 +136,43 @@ namespace CHI::Lunatic {
                         : flow.requesterFinal == CacheState::SD
                             ? CHI::Eb::Resps::CompData_SD_PD : CHI::Eb::Resps::CompData_SC;
                 }
+                else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
+                         transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid)
+                    transaction.responseResp = CHI::Eb::Resps::CompData_I;
                 else
                     transaction.responseResp = CHI::Eb::Resps::CompData_UC;
                 transaction.sentBeats = 0;
                 transaction.phase = Phase::Return;
                 transaction.readyTime = time;
                 return;
+            case RequestClass::MakeReadUnique:
+            {
+                const CacheState responseState = snoopFilter.State(transaction.request.Line(), transaction.request.source);
+                if (!transaction.Complete(COMPLETE_MEMORY) && !transaction.homeHit && !IsValid(responseState) &&
+                    (!flow.snoopDataValid || flow.snoopDataPartial))
+                {
+                    StartMemoryRead(transaction);
+                    return;
+                }
+                if (!PrepareHomeCommit(transaction))
+                {
+                    transaction.phase = Phase::Action;
+                    transaction.readyTime = time;
+                    return;
+                }
+                if (responseState == CacheState::SC || responseState == CacheState::SD)
+                {
+                    QueueComp(transaction, false,
+                        responseState == CacheState::SD ? CHI::Eb::Resps::Comp_UD_PD : CHI::Eb::Resps::Comp_UC);
+                    return;
+                }
+                transaction.responseResp = flow.requesterFinal == CacheState::UD || flow.requesterFinal == CacheState::UDP
+                    ? CHI::Eb::Resps::CompData_UD_PD : CHI::Eb::Resps::CompData_UC;
+                transaction.sentBeats = 0;
+                transaction.phase = Phase::Return;
+                transaction.readyTime = time;
+                return;
+            }
             case RequestClass::MakeUnique:
                 if (!PrepareHomeCommit(transaction))
                 {
