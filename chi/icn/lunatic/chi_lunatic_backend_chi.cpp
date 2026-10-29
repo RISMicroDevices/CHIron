@@ -249,6 +249,9 @@ namespace CHI::Lunatic {
         if (flit.opcode == RSP::ReadReceipt)
             return IsReadRequest(transaction.request.opcode) && transaction.request.order != 0;
 
+        if (IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
+            return HandleAtomicBackendRSP(transaction, flit);
+
         if (IsCMORequest(transaction.request.opcode) && !flow.spillPending)
         {
             const bool separatedPersistence = transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
@@ -329,6 +332,8 @@ namespace CHI::Lunatic {
     bool Core::Impl::HandleBackendDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
+            return HandleAtomicBackendDAT(transaction, flit);
         if (!transaction.memoryRequired || flow.memoryWrite ||
             (!IsReadRequest(transaction.request.opcode) && !flow.baselineFetch))
             return false;

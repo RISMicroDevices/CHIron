@@ -70,7 +70,10 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.backendPhase == BackendPhase::SendData)
         {
-            AdvanceBackendWrite(transaction);
+            if (IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
+                AdvanceAtomicBackendDAT(transaction);
+            else
+                AdvanceBackendWrite(transaction);
             return;
         }
 

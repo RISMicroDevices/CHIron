@@ -45,6 +45,11 @@ namespace CHI::Lunatic {
             QueueDBID(transaction);
             return;
         }
+        if (options.backend == BackendKind::CHI)
+        {
+            ActionAtomicBackend(transaction);
+            return;
+        }
         if (!transaction.Complete(COMPLETE_MEMORY))
         {
             StartMemoryRead(transaction);

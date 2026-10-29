@@ -35,6 +35,7 @@ namespace CHI::Lunatic {
         bool            returnSent = false;
         bool            returnEmitted = false;
         bool            backendResultReceived = false;
+        bool            backendDirtyCommitted = false;
     };
 
     struct FlowState {
@@ -260,6 +261,12 @@ namespace CHI::Lunatic {
         void StartMemoryRead(Transaction& transaction);
         void StartBackendWrite(Transaction& transaction);
         void AdvanceBackendWrite(Transaction& transaction);
+        void ActionAtomicBackend(Transaction& transaction);
+        bool PrepareAtomicBackend(Transaction& transaction);
+        void StartAtomicBackend(Transaction& transaction);
+        void AdvanceAtomicBackendDAT(Transaction& transaction);
+        bool HandleAtomicBackendRSP(Transaction& transaction, const Response& flit);
+        bool HandleAtomicBackendDAT(Transaction& transaction, const Data& flit);
         bool HandleBackendRSP(Transaction& transaction, const Response& flit);
         bool HandleBackendDAT(Transaction& transaction, const Data& flit);
         bool HandleWriteDAT(Transaction& transaction, const Data& flit);

@@ -504,6 +504,24 @@ namespace CHI::Lunatic {
             if (pending.last)
             {
                 flow.backendDataEmitted = true;
+                if (IsAtomicRequest(transaction->request.opcode) && !flow.spillPending)
+                {
+                    const bool store = CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction->request.opcode);
+                    const bool complete = store ? flow.backendCompReceived : flow.atomic.backendResultReceived;
+                    if (complete)
+                    {
+                        flow.backendPhase = BackendPhase::Done;
+                        tracker.UnbindMemory(options.subordinateId, transaction->handle);
+                        transaction->phase = Phase::Action;
+                        transaction->readyTime = time;
+                    }
+                    else
+                    {
+                        flow.backendPhase = BackendPhase::WaitComp;
+                        transaction->phase = Phase::WaitMemory;
+                    }
+                    return;
+                }
                 if (flow.backendCompReceived)
                 {
                     flow.backendPhase = BackendPhase::Done;
