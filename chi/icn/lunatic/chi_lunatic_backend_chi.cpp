@@ -134,8 +134,12 @@ namespace CHI::Lunatic {
         request.expCompAck = false;
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         if (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteEvictOrEvict)
-            request.opcode = request.size == 6 ? CHI::Eb::Opcodes::REQ::WriteNoSnpFull
-                : CHI::Eb::Opcodes::REQ::WriteNoSnpPtl;
+        {
+            const bool full = requestClass == RequestClass::WriteEvictOrEvict ||
+                transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteUniqueFull ||
+                transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteUniqueFullStash;
+            request.opcode = full ? CHI::Eb::Opcodes::REQ::WriteNoSnpFull : CHI::Eb::Opcodes::REQ::WriteNoSnpPtl;
+        }
         else if (requestClass == RequestClass::WriteUniqueZero)
             request.opcode = CHI::Eb::Opcodes::REQ::WriteNoSnpZero;
         if (flow.spillPending)

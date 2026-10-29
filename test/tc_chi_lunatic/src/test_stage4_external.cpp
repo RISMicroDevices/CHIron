@@ -64,6 +64,8 @@ namespace {
                 LUNATIC_CHECK(data.TgtID() == 6);
                 LUNATIC_CHECK(data.TxnID() == request.TxnID());
                 LUNATIC_CHECK(data.DBID() == response.DBID());
+                if (request.Opcode() == CHI::Eb::Opcodes::REQ::WriteNoSnpFull)
+                    LUNATIC_CHECK(uint64_t(data.BE()) == 0xffffffffull);
                 const size_t offset = size_t(data.DataID()) * 16;
                 for (size_t index = 0; index < 32; ++index)
                 {
@@ -430,6 +432,35 @@ LUNATIC_TEST(Stage5ExternalWriteUnique)
     driver.WriteData(4, 1, dbid, expected, ExternalEnables(), CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
     LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);
     backend.Run(driver.driver);
+    LUNATIC_CHECK(backend.Read(line) == expected);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
+}
+
+LUNATIC_TEST(Stage5ExternalWriteUniquePartial)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    CheckedDriver<Config256> driver(options);
+    BackendModel backend;
+    const LineKey line = LineKey::FromAddress(0x43100, false);
+    const LineData initial = ExternalData(11);
+    const LineData update = ExternalData(171);
+    backend.Write(line, initial);
+
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniquePtl, 4, 1, line.address);
+    request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+    driver.PushRequest(request);
+    const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+    ByteEnables enables{};
+    for (size_t index = 9; index < 43; ++index)
+        enables[index] = 1;
+    driver.WriteData(4, 1, dbid, update, enables, CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
+    LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);
+    backend.Run(driver.driver);
+    LineData expected = initial;
+    for (size_t index = 9; index < 43; ++index)
+        expected[index] = update[index];
     LUNATIC_CHECK(backend.Read(line) == expected);
     LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
 }
