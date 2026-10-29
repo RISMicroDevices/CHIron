@@ -18,7 +18,7 @@ TCPtResp* TCPtResp::ForkREQ(std::string title, Flits::REQ<config>::opcode_t opco
     forked->req.SrcID() = 4; // from #4 RN-F
     forked->req.TxnID() = 2;
     forked->req.Opcode() = opcode;
-    forked->req.Size() = Sizes::B64;
+    forked->req.Size() = (Opcodes::REQ::AtomicStore::Is(opcode) || Opcodes::REQ::AtomicLoad::Is(opcode) || opcode == Opcodes::REQ::AtomicSwap || opcode == Opcodes::REQ::AtomicCompare) ? Sizes::B8 : Sizes::B64;
     forked->req.AllowRetry() = 1;
     forked->req.Addr() = 0;
     forked->req.ExpCompAck() = 1;
@@ -125,6 +125,10 @@ Flits::DAT<config> TCPtResp::GenCompData() const noexcept
 {
     Flits::DAT<config> rxdat = GenFlitRXDAT();
     rxdat.Opcode() = Opcodes::DAT::CompData;
+    if (req.Opcode() == Opcodes::REQ::AtomicCompare)
+        rxdat.BE() = 0xF;
+    else if (Opcodes::REQ::AtomicStore::Is(req.Opcode()) || Opcodes::REQ::AtomicLoad::Is(req.Opcode()) || req.Opcode() == Opcodes::REQ::AtomicSwap)
+        rxdat.BE() = 0xFF;
     return rxdat;
 }
 
@@ -186,6 +190,8 @@ Flits::DAT<config> TCPtResp::GenNonCopyBackWrData() const noexcept
     Flits::DAT<config> txdat = GenFlitTXDAT();
     txdat.TxnID() = 0;
     txdat.Opcode() = Opcodes::DAT::NonCopyBackWrData;
+    if (Opcodes::REQ::AtomicStore::Is(req.Opcode()) || Opcodes::REQ::AtomicLoad::Is(req.Opcode()) || req.Opcode() == Opcodes::REQ::AtomicSwap || req.Opcode() == Opcodes::REQ::AtomicCompare)
+        txdat.BE() = 0xFF;
     return txdat;
 }
 

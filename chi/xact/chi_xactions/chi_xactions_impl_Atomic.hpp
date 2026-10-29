@@ -43,6 +43,9 @@ namespace CHI {
             virtual bool                    IsDBIDOverlappable(const Global<config>& glbl) const noexcept override;
 
         protected:
+            XactDenialEnum                  CheckREQFields() const noexcept;
+            XactDenialEnum                  CheckDATFields(const FiredResponseFlit<config>& datFlit) const noexcept;
+
             virtual const FiredResponseFlit<config>*  
                                             GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept override;
             virtual std::optional<typename Flits::REQ<config>::tgtid_t>
@@ -116,6 +119,10 @@ namespace /*CHI::*/Xact {
             return;
         }
 
+        this->firstDenial = CheckREQFields();
+        if (this->firstDenial != XactDenial::ACCEPTED)
+            return;
+
         //
         if (glbl.CHECK_FIELD_MAPPING.enable)
         {
@@ -123,6 +130,97 @@ namespace /*CHI::*/Xact {
             if (this->firstDenial != XactDenial::ACCEPTED)
                 return;
         }
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum XactionAtomic<config>::CheckREQFields() const noexcept
+    {
+        const auto& req = this->first.flit.req;
+        const bool isCompare = req.Opcode() == Opcodes::REQ::AtomicCompare;
+
+        if (isCompare)
+        {
+            if (req.Size() < Sizes::B2 || req.Size() > Sizes::B32)
+                return XactDenial::DENIED_REQ_FIELD_SIZE;
+        }
+        else if (req.Size() > Sizes::B8)
+            return XactDenial::DENIED_REQ_FIELD_SIZE;
+
+        const uint64_t alignment = uint64_t{1} << (isCompare ? req.Size() - 1 : req.Size());
+        if ((static_cast<uint64_t>(req.Addr()) & (alignment - 1)) != 0)
+            return XactDenial::DENIED_REQ_FIELD_ADDR;
+
+        return XactDenial::ACCEPTED;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum XactionAtomic<config>::CheckDATFields(const FiredResponseFlit<config>& datFlit) const noexcept
+    {
+        const auto& req = this->first.flit.req;
+        const auto& dat = datFlit.flit.dat;
+        const bool isCompare = req.Opcode() == Opcodes::REQ::AtomicCompare;
+        const bool isWriteData = dat.Opcode() == Opcodes::DAT::NonCopyBackWrData;
+
+        uint64_t dataAddress = req.Addr();
+        uint64_t dataSize = uint64_t{1} << req.Size();
+
+        if (isCompare)
+        {
+            if (isWriteData)
+            {
+                if ((dataAddress & (dataSize - 1)) != 0)
+                    dataAddress -= dataSize / 2;
+            }
+            else
+                dataSize /= 2;
+        }
+
+        if (dat.CCID() != ((static_cast<uint64_t>(req.Addr()) >> 4) & 0x3))
+            return XactDenial::DENIED_DAT_FIELD_CCID;
+
+        constexpr uint64_t packetSize = config::dataWidth / 8;
+        const uint64_t packetOffset = static_cast<uint64_t>(dat.DataID()) * 16;
+        const uint64_t windowOffset = dataAddress & 0x3f;
+
+        if (dataSize <= 16)
+        {
+            if (dat.DataID() != ((dataAddress >> 4) & 0x3))
+                return XactDenial::DENIED_DAT_FIELD_DATAID;
+        }
+        else
+        {
+            constexpr uint64_t dataIdsPerPacket = packetSize / 16;
+            const uint64_t firstDataID = (windowOffset / packetSize) * dataIdsPerPacket;
+            const uint64_t lastDataID = ((windowOffset + dataSize - 1) / packetSize) * dataIdsPerPacket;
+            if (dat.DataID() != firstDataID && dat.DataID() != lastDataID)
+                return XactDenial::DENIED_DAT_FIELD_DATAID;
+        }
+
+        if (windowOffset >= packetOffset + packetSize
+         || windowOffset + dataSize <= packetOffset)
+            return XactDenial::DENIED_DAT_FIELD_DATAID;
+
+        uint64_t expectedBE = 0;
+
+        for (uint64_t byte = 0; byte < packetSize; byte++)
+        {
+            const uint64_t byteOffset = packetOffset + byte;
+            if (byteOffset >= windowOffset && byteOffset < windowOffset + dataSize)
+                expectedBE |= uint64_t{1} << byte;
+        }
+
+        if (dat.BE() != static_cast<typename Flits::DAT<config>::be_t>(expectedBE))
+            return XactDenial::DENIED_DAT_FIELD_BE;
+
+        for (uint64_t byte = 0; byte < packetSize; byte++)
+        {
+            const uint64_t mask = uint64_t{1} << byte;
+            const uint64_t value = dat.Data()[byte / 8] >> ((byte % 8) * 8);
+            if (!(expectedBE & mask) && (value & 0xff))
+                return XactDenial::DENIED_DAT_FIELD_DATA;
+        }
+
+        return XactDenial::ACCEPTED;
     }
 
     template<FlitConfigurationConcept config>
@@ -140,20 +238,24 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline bool XactionAtomic<config>::IsResponseComplete(const Global<config>& glbl) const noexcept
     {
+        bool gotDBIDResponse = this->HasRSP({ Opcodes::RSP::DBIDResp });
+#ifdef CHI_ISSUE_EB_ENABLE
+        gotDBIDResponse = gotDBIDResponse || this->HasRSP({ Opcodes::RSP::DBIDRespOrd });
+#endif
+
         /* AtomicStore */
         if (Opcodes::REQ::AtomicStore::Is(this->first.flit.req.Opcode()))
         {
             if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
                 return true;
 
-            if (this->HasRSP({ Opcodes::RSP::DBIDResp, Opcodes::RSP::DBIDRespOrd })
-             && this->HasRSP({ Opcodes::RSP::Comp }))
+            if (gotDBIDResponse && this->HasRSP({ Opcodes::RSP::Comp }))
                 return true;
         }
         /* AtomicLoad/Swap/Compare */
         else
         {
-            if (this->HasRSP({ Opcodes::RSP::DBIDResp, Opcodes::RSP::DBIDRespOrd }))
+            if (gotDBIDResponse)
                 return true;
         }
 
@@ -163,10 +265,44 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline bool XactionAtomic<config>::IsRNDataComplete(const Global<config>& glbl) const noexcept
     {
-        if (this->HasDAT({ Opcodes::DAT::NonCopyBackWrData }))
-            return true;
+        const bool useFullDataID = config::dataWidth == 128
+            && this->first.flit.req.Opcode() == Opcodes::REQ::AtomicCompare
+            && this->first.flit.req.Size() == Sizes::B32;
 
-        return false;
+        std::bitset<4> completeDataIDMask;
+        if (useFullDataID)
+        {
+            completeDataIDMask = details::GetDataIDCompleteMask<config>(Sizes::B64);
+            const unsigned int windowDataID = (static_cast<uint64_t>(this->first.flit.req.Addr()) >> 4) & 0x2;
+            for (unsigned int dataID = 0; dataID < 4; dataID++)
+                if ((dataID & 0x2) != windowDataID)
+                    completeDataIDMask.reset(dataID);
+        }
+        else
+            completeDataIDMask = details::GetDataIDCompleteMask<config>(this->first.flit.req.Size());
+
+        std::bitset<4> collectedDataID;
+
+        size_t index = 0;
+        for (auto iter = this->subsequence.begin(); iter != this->subsequence.end(); iter++, index++)
+        {
+            if (this->subsequenceKeys[index].IsDenied())
+                continue;
+
+            if (!iter->IsFromRequester(glbl) || !iter->IsDAT())
+                continue;
+
+            if (iter->flit.dat.Opcode() == Opcodes::DAT::NonCopyBackWrData)
+            {
+                if (useFullDataID)
+                    collectedDataID |= details::CollectDataID<config>(Sizes::B64, iter->flit.dat.DataID());
+                else
+                    collectedDataID |= details::CollectDataID<config>(
+                        this->first.flit.req.Size(), iter->flit.dat.DataID());
+            }
+        }
+
+        return (completeDataIDMask & ~collectedDataID).none();
     }
 
     template<FlitConfigurationConcept config>
@@ -225,8 +361,14 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline const FiredResponseFlit<config>* XactionAtomic<config>::GetPrimaryTgtIDSourceNonREQ(const Global<config>& glbl) const noexcept
     {
-        return this->GetFirstRSP(
-            { Opcodes::RSP::DBIDResp, Opcodes::RSP::DBIDRespOrd, Opcodes::RSP::Comp, Opcodes::RSP::CompDBIDResp });
+        return this->GetFirstRSP({
+            Opcodes::RSP::DBIDResp,
+#ifdef CHI_ISSUE_EB_ENABLE
+            Opcodes::RSP::DBIDRespOrd,
+#endif
+            Opcodes::RSP::Comp,
+            Opcodes::RSP::CompDBIDResp
+        });
     }
 
     template<FlitConfigurationConcept config>
@@ -321,32 +463,25 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
+            bool gotDBIDResponse = this->HasRSP({ Opcodes::RSP::DBIDResp });
+#ifdef CHI_ISSUE_EB_ENABLE
+            gotDBIDResponse = gotDBIDResponse || this->HasRSP({ Opcodes::RSP::DBIDRespOrd });
+#endif
+            if (gotDBIDResponse)
+                return XactDenial::DENIED_DBIDRESP_AFTER_DBIDRESP;
+
+            if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
+                return XactDenial::DENIED_DBIDRESP_AFTER_COMPDBIDRESP;
+
             const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
 
             if (optDBIDSource)
             {
-                if (this->HasRSP({ Opcodes::RSP::DBIDResp, Opcodes::RSP::DBIDRespOrd }))
-                    return XactDenial::DENIED_DBIDRESP_AFTER_DBIDRESP;
+                assert(!optDBIDSource->IsRSP() && optDBIDSource->flit.dat.Opcode() == Opcodes::DAT::CompData &&
+                    "DBID source on RXDAT must be CompData in Atomic transactions");
 
-                if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
-                    return XactDenial::DENIED_DBIDRESP_AFTER_COMPDBIDRESP;
-                
-                if (optDBIDSource->IsRSP())
-                {
-                    assert(optDBIDSource->flit.rsp.Opcode() == Opcodes::RSP::Comp &&
-                        "DBID source on RXRSP must be Comp in Atomic transactions");
-
-                    if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
-                        return XactDenial::DENIED_RSP_DBID_MISMATCH;
-                }
-                else
-                {
-                    assert(optDBIDSource->flit.dat.Opcode() == Opcodes::DAT::CompData &&
-                        "DBID source on RXDAT must be CompData in Atomic transactions");
-
-                    if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.dat.DBID())
-                        return XactDenial::DENIED_RSP_DBID_MISMATCH;
-                }
+                if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.dat.DBID())
+                    return XactDenial::DENIED_RSP_DBID_MISMATCH;
             }
             else
                 firstDBID = true;
@@ -378,26 +513,11 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
-            const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
+            if (this->HasRSP({ Opcodes::RSP::Comp }))
+                return XactDenial::DENIED_COMP_AFTER_COMP;
 
-            if (optDBIDSource)
-            {
-                assert(optDBIDSource->IsRSP() &&
-                    "DBID never comes from DAT channel in AtomicStore Atomic transactions");
-
-                if (this->HasRSP({ Opcodes::RSP::Comp }))
-                    return XactDenial::DENIED_COMP_AFTER_COMP;
-
-                if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
-                    return XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP;
-
-                if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
-                    return XactDenial::DENIED_RSP_DBID_MISMATCH;
-            }
-            else
-                firstDBID = true;
-
-            hasDBID = true;
+            if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
+                return XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP;
 
             //
             if (glbl.CHECK_FIELD_MAPPING.enable)
@@ -424,28 +544,20 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
-            const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
+            if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
+                return XactDenial::DENIED_COMPDBIDRESP_AFTER_COMPDBIDRESP;
 
-            if (optDBIDSource)
-            {
-                assert(optDBIDSource->IsRSP() &&
-                    "DBID never comes from DAT channel in AtomicStore Atomic transactions");
+            if (this->HasRSP({ Opcodes::RSP::Comp }))
+                return XactDenial::DENIED_COMPDBIDRESP_AFTER_COMP;
 
-                if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
-                    return XactDenial::DENIED_COMPDBIDRESP_AFTER_COMPDBIDRESP;
+            bool gotDBIDResponse = this->HasRSP({ Opcodes::RSP::DBIDResp });
+#ifdef CHI_ISSUE_EB_ENABLE
+            gotDBIDResponse = gotDBIDResponse || this->HasRSP({ Opcodes::RSP::DBIDRespOrd });
+#endif
+            if (gotDBIDResponse)
+                return XactDenial::DENIED_COMPDBIDRESP_AFTER_DBIDRESP;
 
-                if (this->HasRSP({ Opcodes::RSP::Comp }))
-                    return XactDenial::DENIED_COMPDBIDRESP_AFTER_COMP;
-    
-                if (this->HasRSP({ Opcodes::RSP::DBIDResp, Opcodes::RSP::DBIDRespOrd }))
-                    return XactDenial::DENIED_COMPDBIDRESP_AFTER_DBIDRESP;
-
-                if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
-                    return XactDenial::DENIED_RSP_DBID_MISMATCH;
-            }
-            else
-                firstDBID = true;
-
+            firstDBID = true;
             hasDBID = true;
 
             //
@@ -483,15 +595,19 @@ namespace /*CHI::*/Xact {
             {
                 optDBIDSource = this->GetLastDBIDSourceRSP({
                     Opcodes::RSP::DBIDResp,
+#ifdef CHI_ISSUE_EB_ENABLE
                     Opcodes::RSP::DBIDRespOrd,
+#endif
                     Opcodes::RSP::CompDBIDResp
                 });
             }
             else
             {
                 optDBIDSource = this->GetLastDBIDSourceRSP({
-                    Opcodes::RSP::DBIDResp,
-                    Opcodes::RSP::DBIDRespOrd
+                    Opcodes::RSP::DBIDResp
+#ifdef CHI_ISSUE_EB_ENABLE
+                    , Opcodes::RSP::DBIDRespOrd
+#endif
                 });
             }
 
@@ -504,8 +620,20 @@ namespace /*CHI::*/Xact {
             if (datFlit.flit.dat.TxnID() != optDBIDSource->flit.rsp.DBID())
                 return XactDenial::DENIED_DAT_TXNID_MISMATCHING_DBID;
 
-            if (this->HasDAT({ Opcodes::DAT::NonCopyBackWrData }))
-                return XactDenial::DENIED_NCBWRDATA_AFTER_NCBWRDATA;
+            XactDenialEnum denial = CheckDATFields(datFlit);
+            if (denial != XactDenial::ACCEPTED)
+                return denial;
+
+            bool nextDataID;
+            if (config::dataWidth == 128
+             && this->first.flit.req.Opcode() == Opcodes::REQ::AtomicCompare
+             && this->first.flit.req.Size() == Sizes::B32)
+                nextDataID = this->NextDataID(Sizes::B64, datFlit, { Opcodes::DAT::NonCopyBackWrData });
+            else
+                nextDataID = this->NextREQDataID(datFlit, { Opcodes::DAT::NonCopyBackWrData });
+
+            if (!nextDataID)
+                return XactDenial::DENIED_DUPLICATED_DATAID;
 
             //
             if (glbl.CHECK_FIELD_MAPPING.enable)
@@ -534,6 +662,10 @@ namespace /*CHI::*/Xact {
 
             if (this->HasDAT({ Opcodes::DAT::CompData }))
                 return XactDenial::DENIED_COMPDATA_AFTER_COMPDATA;
+
+            XactDenialEnum denial = CheckDATFields(datFlit);
+            if (denial != XactDenial::ACCEPTED)
+                return denial;
 
             auto optDBID = this->GetDBID();
             if (optDBID)
