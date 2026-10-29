@@ -5,91 +5,91 @@ using namespace LunaticTest;
 
 namespace {
 
-LineData RemedData(uint8_t seed)
-{
-    LineData data{};
-    for (size_t index = 0; index < data.size(); ++index)
-        data[index] = uint8_t(seed + index * 3);
-    return data;
-}
-
-ByteEnables RemedEnables()
-{
-    ByteEnables enables{};
-    enables.fill(1);
-    return enables;
-}
-
-void RemedWriteback(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
-                    const LineKey& line, const LineData& data, uint8_t resp = CHI::Eb::Resps::CopyBackWrData_UD_PD,
-                    uint16_t opcode = CHI::Eb::Opcodes::REQ::WriteBackFull)
-{
-    driver.PushRequest(driver.Request(opcode, source, txnId, line.address));
-    auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
-    driver.WriteData(source, txnId, dbid.DBID(), data, RemedEnables(), CHI::Eb::Opcodes::DAT::CopyBackWrData, resp);
-    driver.Quiesce();
-}
-
-LineData RemedReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
-                      uint8_t resp, bool acknowledge = false)
-{
-    LineData result{};
-    DatabaseId dbid = 0;
-    for (size_t beat = 0; beat < 2; ++beat)
+    LineData                            RemedData(uint8_t seed)
     {
-        auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
-        LUNATIC_CHECK(data.Resp() == resp);
-        dbid = data.DBID();
-        const size_t offset = size_t(data.DataID()) * 16;
-        for (size_t index = 0; index < 32; ++index)
-            result[offset + index] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
+        LineData data{};
+        for (size_t index = 0; index < data.size(); ++index)
+            data[index] = uint8_t(seed + index * 3);
+        return data;
     }
-    if (acknowledge)
-        driver.CompAck(source, dbid);
-    return result;
-}
 
-void ReadOnceDirtyPolicy(PolicyKind policy)
-{
-    Options options;
-    options.policy = policy;
-    options.slcSets = 1;
-    options.slcWays = 1;
-    CheckedDriver<Config256> driver(options);
-    const LineKey line = LineKey::FromAddress(0x15000, false);
-    const LineKey other = LineKey::FromAddress(0x15040, false);
-    const LineData data = RemedData(71);
-    RemedWriteback(driver, 4, 91, line, data);
-    LUNATIC_CHECK(driver.ReadData(5, 92, line.address, CHI::Eb::Opcodes::REQ::ReadUnique) == data);
-    driver.Quiesce();
+    ByteEnables                         RemedEnables()
+    {
+        ByteEnables enables{};
+        enables.fill(1);
+        return enables;
+    }
 
-    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadOnce, 6, 93, line.address));
-    auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpOnce);
-    driver.SnoopData(5, snoop.flit.TxnID(), data, CHI::Eb::Resps::SnpRespData_I_PD);
-    LUNATIC_CHECK(RemedReceive(driver, 6, 93, CHI::Eb::Resps::CompData_UC) == data);
-    driver.Quiesce();
-    LUNATIC_CHECK(driver.driver.node.InspectHome(line).dirty);
+    void                                RemedWriteback(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
+                                                       const LineKey& line, const LineData& data, uint8_t resp = CHI::Eb::Resps::CopyBackWrData_UD_PD,
+                                                       uint16_t opcode = CHI::Eb::Opcodes::REQ::WriteBackFull)
+    {
+        driver.PushRequest(driver.Request(opcode, source, txnId, line.address));
+        auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
+        driver.WriteData(source, txnId, dbid.DBID(), data, RemedEnables(), CHI::Eb::Opcodes::DAT::CopyBackWrData, resp);
+        driver.Quiesce();
+    }
 
-    RemedWriteback(driver, 7, 94, other, RemedData(99));
-    LUNATIC_CHECK(driver.driver.node.GetMemory().Read(line) == data);
-}
+    LineData                            RemedReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
+                                                     uint8_t resp, bool acknowledge = false)
+    {
+        LineData result{};
+        DatabaseId dbid = 0;
+        for (size_t beat = 0; beat < 2; ++beat)
+        {
+            auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+            LUNATIC_CHECK(data.Resp() == resp);
+            dbid = data.DBID();
+            const size_t offset = size_t(data.DataID()) * 16;
+            for (size_t index = 0; index < 32; ++index)
+                result[offset + index] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
+        }
+        if (acknowledge)
+            driver.CompAck(source, dbid);
+        return result;
+    }
 
-template<typename config>
-void SublineReadGeometry()
-{
-    Driver<config> driver;
-    const LineKey line = LineKey::FromAddress(0x16000, false);
-    const LineData data = RemedData(103);
-    driver.node.GetMemory().WriteFull(line, data);
-    auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 100, line.address + 0x30);
-    request.Size() = 4;
-    LUNATIC_CHECK(driver.node.PushRXREQ(request));
-    auto response = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
-    LUNATIC_CHECK(response.DataID() == (config::dataWidth == 512 ? 0 : 3));
-    LUNATIC_CHECK(response.CCID() == 3);
-    driver.Quiesce();
-    LUNATIC_CHECK(!driver.node.PeekTXDAT());
-}
+    void                                ReadOnceDirtyPolicy(PolicyKind policy)
+    {
+        Options options;
+        options.policy = policy;
+        options.slcSets = 1;
+        options.slcWays = 1;
+        CheckedDriver<Config256> driver(options);
+        const LineKey line = LineKey::FromAddress(0x15000, false);
+        const LineKey other = LineKey::FromAddress(0x15040, false);
+        const LineData data = RemedData(71);
+        RemedWriteback(driver, 4, 91, line, data);
+        LUNATIC_CHECK(driver.ReadData(5, 92, line.address, CHI::Eb::Opcodes::REQ::ReadUnique) == data);
+        driver.Quiesce();
+
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadOnce, 6, 93, line.address));
+        auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpOnce);
+        driver.SnoopData(5, snoop.flit.TxnID(), data, CHI::Eb::Resps::SnpRespData_I_PD);
+        LUNATIC_CHECK(RemedReceive(driver, 6, 93, CHI::Eb::Resps::CompData_UC) == data);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.driver.node.InspectHome(line).dirty);
+
+        RemedWriteback(driver, 7, 94, other, RemedData(99));
+        LUNATIC_CHECK(driver.driver.node.GetMemory().Read(line) == data);
+    }
+
+    template<typename config>
+    void                                SublineReadGeometry()
+    {
+        Driver<config> driver;
+        const LineKey line = LineKey::FromAddress(0x16000, false);
+        const LineData data = RemedData(103);
+        driver.node.GetMemory().WriteFull(line, data);
+        auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 100, line.address + 0x30);
+        request.Size() = 4;
+        LUNATIC_CHECK(driver.node.PushRXREQ(request));
+        auto response = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+        LUNATIC_CHECK(response.DataID() == (config::dataWidth == 512 ? 0 : 3));
+        LUNATIC_CHECK(response.CCID() == 3);
+        driver.Quiesce();
+        LUNATIC_CHECK(!driver.node.PeekTXDAT());
+    }
 
 }
 

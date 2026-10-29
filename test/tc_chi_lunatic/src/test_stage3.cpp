@@ -5,49 +5,49 @@ using namespace LunaticTest;
 
 namespace {
 
-LineData Pattern(uint8_t seed)
-{
-    LineData data{};
-    for (size_t index = 0; index < data.size(); ++index)
-        data[index] = uint8_t(seed + index * 13);
-    return data;
-}
-
-template<typename config>
-void ReadGeometry()
-{
-    Driver<config> driver;
-    const LineKey line = LineKey::FromAddress(0x2000, false);
-    const LineData expected = Pattern(7);
-    driver.node.GetMemory().WriteFull(line, expected);
-    LUNATIC_CHECK(driver.ReadData(4, 1, line.address, CHI::Eb::Opcodes::REQ::ReadNoSnp) == expected);
-    driver.Quiesce();
-    LUNATIC_CHECK(driver.ReadData(4, 2, line.address, CHI::Eb::Opcodes::REQ::ReadOnce, true) == expected);
-    driver.Quiesce();
-    LUNATIC_CHECK(driver.node.GetErrors().empty());
-}
-
-template<typename config>
-void SendBackendReadData(Driver<config>& driver, TransactionId txnId, const LineData& line)
-{
-    constexpr size_t bytes = config::dataWidth / 8;
-    for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
+    LineData                            Pattern(uint8_t seed)
     {
-        typename Driver<config>::DAT data{};
-        data.SrcID() = 6;
-        data.TgtID() = 2;
-        data.HomeNID() = 2;
-        data.TxnID() = txnId;
-        data.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
-        data.Resp() = CHI::Eb::Resps::CompData_I;
-        data.DataID() = beat * bytes / 16;
-        data.CCID() = (beat * bytes / 16) % 2;
-        for (size_t index = 0; index < bytes; ++index)
-            data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);
-        LUNATIC_CHECK(driver.node.PushRXDAT(data));
+        LineData data{};
+        for (size_t index = 0; index < data.size(); ++index)
+            data[index] = uint8_t(seed + index * 13);
+        return data;
     }
-    driver.Tick();
-}
+
+    template<typename config>
+    void                                ReadGeometry()
+    {
+        Driver<config> driver;
+        const LineKey line = LineKey::FromAddress(0x2000, false);
+        const LineData expected = Pattern(7);
+        driver.node.GetMemory().WriteFull(line, expected);
+        LUNATIC_CHECK(driver.ReadData(4, 1, line.address, CHI::Eb::Opcodes::REQ::ReadNoSnp) == expected);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.ReadData(4, 2, line.address, CHI::Eb::Opcodes::REQ::ReadOnce, true) == expected);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.node.GetErrors().empty());
+    }
+
+    template<typename config>
+    void                                SendBackendReadData(Driver<config>& driver, TransactionId txnId, const LineData& line)
+    {
+        constexpr size_t bytes = config::dataWidth / 8;
+        for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
+        {
+            typename Driver<config>::DAT data{};
+            data.SrcID() = 6;
+            data.TgtID() = 2;
+            data.HomeNID() = 2;
+            data.TxnID() = txnId;
+            data.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+            data.Resp() = CHI::Eb::Resps::CompData_I;
+            data.DataID() = beat * bytes / 16;
+            data.CCID() = (beat * bytes / 16) % 2;
+            for (size_t index = 0; index < bytes; ++index)
+                data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);
+            LUNATIC_CHECK(driver.node.PushRXDAT(data));
+        }
+        driver.Tick();
+    }
 
 }
 

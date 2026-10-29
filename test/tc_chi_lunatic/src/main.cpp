@@ -2,18 +2,21 @@
 
 int main(int argc, char** argv)
 {
-    const std::string filter = argc > 1 ? argv[1] : "";
-    size_t failures = 0;
-    size_t executed = 0;
+    const std::string               filter = argc > 1 ? argv[1] : "";
+    size_t                          failures = 0;
+    size_t                          executed = 0;
     for (const auto& test : LunaticTest::Registry())
     {
         if (!filter.empty() && test.name.find(filter) == std::string::npos)
             continue;
         ++executed;
-        try {
+        try
+        {
             test.run();
             std::cout << "[PASS] " << test.name << '\n';
-        } catch (const std::exception& error) {
+        }
+        catch (const std::exception& error)
+        {
             ++failures;
             std::cerr << "[FAIL] " << test.name << ": " << error.what() << '\n';
         }

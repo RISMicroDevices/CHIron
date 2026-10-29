@@ -5,26 +5,26 @@ using namespace LunaticTest;
 
 namespace {
 
-LineData RolloverData()
-{
-    LineData data{};
-    for (size_t index = 0; index < data.size(); ++index)
-        data[index] = uint8_t(index * 9 + 5);
-    return data;
-}
-
-void RolloverReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
-                     uint8_t expectedResp = CHI::Eb::Resps::CompData_UC)
-{
-    DatabaseId dbid = 0;
-    for (size_t beat = 0; beat < 2; ++beat)
+    LineData                            RolloverData()
     {
-        auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
-        LUNATIC_CHECK(data.Resp() == expectedResp);
-        dbid = data.DBID();
+        LineData data{};
+        for (size_t index = 0; index < data.size(); ++index)
+            data[index] = uint8_t(index * 9 + 5);
+        return data;
     }
-    driver.CompAck(source, dbid);
-}
+
+    void                                RolloverReceive(CheckedDriver<Config256>& driver, NodeId source, TransactionId txnId,
+                                                        uint8_t expectedResp = CHI::Eb::Resps::CompData_UC)
+    {
+        DatabaseId dbid = 0;
+        for (size_t beat = 0; beat < 2; ++beat)
+        {
+            auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+            LUNATIC_CHECK(data.Resp() == expectedResp);
+            dbid = data.DBID();
+        }
+        driver.CompAck(source, dbid);
+    }
 
 }
 

@@ -2,9 +2,9 @@
 
 namespace CHI::Lunatic {
 
-Transaction::Transaction(TransactionHandle handle, const Request& request, Time actionAge)
-    : handle(handle), request(request), actionAge(actionAge)
-{
-}
+    Transaction::Transaction(TransactionHandle handle, const Request& request, Time actionAge)
+        : handle(handle), request(request), actionAge(actionAge)
+    {
+    }
 
 }

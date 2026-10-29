@@ -6,8 +6,8 @@ using namespace LunaticTest;
 LUNATIC_TEST(Stage2CHIronRNOracleReadShared)
 {
     using Node = HomeNode<Config256>;
-    RNOracle<Config256> oracle(2, 4);
-    Node::REQFlit request{};
+    RNOracle<Config256>             oracle(2, 4);
+    Node::REQFlit                   request{};
     request.SrcID() = 4;
     request.TgtID() = 2;
     request.TxnID() = 7;
@@ -20,7 +20,7 @@ LUNATIC_TEST(Stage2CHIronRNOracleReadShared)
     request.SnpAttr() = 1;
     oracle.Request(0, request);
 
-    Node::DATFlit data{};
+    Node::DATFlit                   data{};
     data.SrcID() = 2;
     data.TgtID() = 4;
     data.HomeNID() = 2;

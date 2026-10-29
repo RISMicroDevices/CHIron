@@ -12,7 +12,7 @@ static_assert(CHI::Eb::Flits::DAT<Config256>::TXNID_RANGE.second == CHI::Eb::Fli
 
 LUNATIC_TEST(Stage1Geometry)
 {
-    Options options;
+    Options                         options;
     LUNATIC_CHECK(BytesPerBeat(options) == 32);
     LUNATIC_CHECK(BeatsPerLine(options) == 2);
     options.dataWidth = 128;
@@ -23,7 +23,7 @@ LUNATIC_TEST(Stage1Geometry)
 
 LUNATIC_TEST(Stage1RejectsInvalidOptions)
 {
-    Options options;
+    Options                         options;
     options.inputQueueLimit = 0;
     CheckThrows([&] { ValidateOptions(options); });
     options = {};
@@ -45,24 +45,24 @@ LUNATIC_TEST(Stage1RejectsInvalidOptions)
 
 LUNATIC_TEST(Stage1RejectsFlitGeometryMismatch)
 {
-    Options options;
+    Options                         options;
     options.dataWidth = 128;
     CheckThrows([&] { HomeNode<Config256> node(2, options); });
 }
 
 LUNATIC_TEST(Stage1BoundedAcceptanceAndReset)
 {
-    auto events = std::make_shared<EventHub>();
-    size_t accepted = 0;
+    auto                            events = std::make_shared<EventHub>();
+    size_t                          accepted = 0;
     events->Register("accepted", 0, [&](const Event& event) {
         if (event.kind == EventKind::AcceptedRXREQ)
             ++accepted;
     });
 
-    Options options;
+    Options                         options;
     options.inputQueueLimit = 1;
-    HomeNode<Config256> node(2, options, events);
-    HomeNode<Config256>::REQFlit req{};
+    HomeNode<Config256>             node(2, options, events);
+    HomeNode<Config256>::REQFlit    req{};
     req.SrcID() = 4;
     req.TgtID() = 2;
     req.TxnID() = 9;
@@ -87,8 +87,8 @@ LUNATIC_TEST(Stage1BoundedAcceptanceAndReset)
 
 LUNATIC_TEST(Stage1EventPriorityAndReentry)
 {
-    auto events = std::make_shared<EventHub>();
-    std::vector<int> order;
+    auto                            events = std::make_shared<EventHub>();
+    std::vector<int>                order;
     events->Register("late", 10, [&](const Event&) { order.push_back(10); });
     events->Register("early", -10, [&](const Event&) {
         order.push_back(-10);
@@ -96,7 +96,7 @@ LUNATIC_TEST(Stage1EventPriorityAndReentry)
     });
     events->Register("middle", 0, [&](const Event&) { order.push_back(0); });
 
-    Event event;
+    Event                           event;
     event.kind = EventKind::Reset;
     events->Publish(event);
     LUNATIC_CHECK(events->Pending() == 1);
@@ -108,8 +108,8 @@ LUNATIC_TEST(Stage1EventPriorityAndReentry)
 
 LUNATIC_TEST(Stage1PureEmptyPeek)
 {
-    HomeNode<Config256> node(2);
-    auto events = node.GetEvents();
+    HomeNode<Config256>             node(2);
+    auto                            events = node.GetEvents();
     LUNATIC_CHECK(!node.PeekTXREQ());
     LUNATIC_CHECK(!node.PeekTXRSP());
     LUNATIC_CHECK(!node.PeekTXDAT());
@@ -124,15 +124,15 @@ LUNATIC_TEST(Stage1PureEmptyPeek)
 
 LUNATIC_TEST(Stage1FacadeForms)
 {
-    Options options128;
+    Options                         options128;
     options128.dataWidth = 128;
-    HomeNode<Config128> narrow(2, options128);
-    Options options512;
+    HomeNode<Config128>             narrow(2, options128);
+    Options                         options512;
     options512.dataWidth = 512;
-    Bridge<Config512> wide(2, options512);
-    Interconnect<Config256> interconnect(2);
+    Bridge<Config512>               wide(2, options512);
+    Interconnect<Config256>         interconnect(2);
 
-    HomeNode<Config256>::REQFlit req{};
+    HomeNode<Config256>::REQFlit    req{};
     req.SrcID() = 4;
     req.TgtID() = 2;
     req.Opcode() = CHI::Eb::Opcodes::REQ::ReadNoSnp;

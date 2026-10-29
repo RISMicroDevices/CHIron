@@ -7,13 +7,13 @@ using namespace LunaticTest;
 
 LUNATIC_TEST(Stage2PipelineEligibilityAndLatency)
 {
-    Options options;
+    Options                         options;
     options.tagLatency = 2;
     options.dataLatency = 3;
-    VirtualPipeline pipeline(options);
-    Request request;
+    VirtualPipeline                 pipeline(options);
+    Request                         request;
     request.opcode = CHI::Eb::Opcodes::REQ::ReadShared;
-    Transaction transaction(1, request, 0);
+    Transaction                     transaction(1, request, 0);
 
     LUNATIC_CHECK(pipeline.Eligible(transaction, 0));
     LUNATIC_CHECK(pipeline.Advance(transaction, Phase::Lookup, 1) == 3);
@@ -25,10 +25,10 @@ LUNATIC_TEST(Stage2PipelineEligibilityAndLatency)
 
 LUNATIC_TEST(Stage2PipelinePortContention)
 {
-    Options options;
+    Options                         options;
     options.tagLatency = 2;
     options.dataLatency = 2;
-    VirtualPipeline pipeline(options);
+    VirtualPipeline                 pipeline(options);
     LUNATIC_CHECK(pipeline.ScheduleTag(0) == 2);
     LUNATIC_CHECK(pipeline.ScheduleTag(0) == 3);
     LUNATIC_CHECK(pipeline.ScheduleTag(5) == 7);
@@ -48,7 +48,7 @@ LUNATIC_TEST(Stage2ProtocolClassification)
     LUNATIC_CHECK(IsCMORequest(REQ::MakeInvalid));
     LUNATIC_CHECK(!IsSupportedRequest(REQ::AtomicSwap));
 
-    Request request;
+    Request                         request;
     request.opcode = REQ::ReadShared;
     LUNATIC_CHECK(RequiresCompAck(request));
     request.opcode = REQ::ReadNoSnp;
