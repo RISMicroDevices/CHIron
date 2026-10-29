@@ -309,9 +309,18 @@ namespace CHI::Lunatic {
         {
             if (withData || partial || passDirty)
                 return false;
-            if (final == CacheState::I)
+            if (resp == CHI::Eb::Resps::SnpResp_I)
                 return true;
-            return final == initial || (initial == CacheState::UDP && final == CacheState::UD);
+            switch (initial)
+            {
+                case CacheState::UC:
+                case CacheState::UCE: return resp == CHI::Eb::Resps::SnpResp_UC;
+                case CacheState::UD:
+                case CacheState::UDP: return resp == CHI::Eb::Resps::SnpResp_UD;
+                case CacheState::SC: return resp == CHI::Eb::Resps::SnpResp_SC;
+                case CacheState::SD: return resp == CHI::Eb::Resps::SnpResp_SD;
+                default: return false;
+            }
         }
         if (passDirty && !IsDirty(initial))
             return false;
@@ -325,9 +334,25 @@ namespace CHI::Lunatic {
             return false;
         if (opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid ||
             opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash)
-            return !withData && final == CacheState::I;
+            return !withData && resp == CHI::Eb::Resps::SnpResp_I;
+        if (opcode == CHI::Eb::Opcodes::SNP::SnpUniqueStash)
+        {
+            if (final != CacheState::I)
+                return false;
+            switch (initial)
+            {
+                case CacheState::I:
+                case CacheState::UCE: return !withData;
+                case CacheState::UC:
+                case CacheState::SC: return !partial && !passDirty;
+                case CacheState::UD:
+                case CacheState::SD: return withData && !partial && passDirty;
+                case CacheState::UDP: return withData && partial && passDirty;
+                default: return false;
+            }
+        }
         const bool invalidateWithData = opcode == CHI::Eb::Opcodes::SNP::SnpUnique ||
-            opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid || opcode == CHI::Eb::Opcodes::SNP::SnpUniqueStash;
+            opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid;
         if (invalidateWithData && final != CacheState::I)
             return false;
         if (IsDirty(initial) && invalidateWithData)

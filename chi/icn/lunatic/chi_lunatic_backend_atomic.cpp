@@ -53,12 +53,16 @@ namespace CHI::Lunatic {
         request.source = nodeId;
         request.target = options.subordinateId;
         request.txnId = transaction.handle;
-        request.allowRetry = false;
+        request.returnNid = nodeId;
+        request.returnTxnId = transaction.handle;
+        request.allowRetry = true;
         request.expCompAck = false;
         request.order = 0;
         request.snpAttr = 0;
         request.snoopMe = false;
         request.doDwt = false;
+        request.stashNidValid = false;
+        request.stashLpidValid = false;
         request.likelyShared = false;
         request.memAttr &= ~CHI::Eb::MemAttrs::EWA;
         if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
@@ -157,9 +161,9 @@ namespace CHI::Lunatic {
         Data data;
         data.source = nodeId;
         data.target = options.subordinateId;
-        data.homeNid = nodeId;
-        data.txnId = transaction.handle;
-        data.dbid = flow.backendDBID;
+        data.homeNid = 0;
+        data.txnId = flow.backendDBID;
+        data.dbid = 0;
         data.opcode = CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
         data.dataId = offset / 16;
         data.ccid = (transaction.request.address >> 4) & 3;

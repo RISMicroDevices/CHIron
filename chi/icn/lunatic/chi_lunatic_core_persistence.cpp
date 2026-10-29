@@ -18,11 +18,17 @@ namespace CHI::Lunatic {
             request.source = nodeId;
             request.target = options.subordinateId;
             request.txnId = transaction.handle;
-            request.allowRetry = false;
+            request.returnNid = 0;
+            request.returnTxnId = 0;
+            request.allowRetry = true;
             request.expCompAck = false;
+            request.snpAttr = 0;
+            request.doDwt = false;
+            request.stashNidValid = false;
+            request.stashLpidValid = false;
             if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
             {
-                request.returnNid = transaction.request.source;
+                request.returnNid = nodeId;
                 request.returnTxnId = 0;
             }
             else

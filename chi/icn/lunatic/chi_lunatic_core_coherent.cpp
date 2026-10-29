@@ -270,8 +270,14 @@ namespace CHI::Lunatic {
                     request.source = nodeId;
                     request.target = options.subordinateId;
                     request.txnId = transaction.handle;
-                    request.allowRetry = false;
+                    request.returnNid = 0;
+                    request.returnTxnId = 0;
+                    request.allowRetry = true;
                     request.expCompAck = false;
+                    request.snpAttr = 0;
+                    request.doDwt = false;
+                    request.stashNidValid = false;
+                    request.stashLpidValid = false;
                     if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
                     {
                         transaction.readyTime = time;

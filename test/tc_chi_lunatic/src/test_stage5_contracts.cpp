@@ -76,16 +76,16 @@ LUNATIC_TEST(Stage5ContractRequestFieldsRoundTrip)
         downstream = node.PopTXREQ();
     }
     LUNATIC_CHECK(downstream);
-    LUNATIC_CHECK(downstream->ReturnNID() == 11);
-    LUNATIC_CHECK(downstream->StashNID() == 11);
-    LUNATIC_CHECK(downstream->ReturnTxnID() == request.ReturnTxnID());
-    LUNATIC_CHECK(downstream->PGroupID() == 0x81);
-    LUNATIC_CHECK(downstream->StashGroupID() == 0x81);
-    LUNATIC_CHECK(downstream->StashNIDValid() == 1);
-    LUNATIC_CHECK(downstream->StashLPIDValid() == 1);
-    LUNATIC_CHECK(downstream->StashLPID() == 0x1d);
-    LUNATIC_CHECK(downstream->Endian() == 1);
-    LUNATIC_CHECK(downstream->Deep() == 1);
-    LUNATIC_CHECK(downstream->DoDWT() == 1);
+    LUNATIC_CHECK(downstream->ReturnNID() == 2);
+    LUNATIC_CHECK(downstream->StashNID() == 2);
+    LUNATIC_CHECK(downstream->ReturnTxnID() == downstream->TxnID());
+    LUNATIC_CHECK(downstream->PGroupID() == 0);
+    LUNATIC_CHECK(downstream->StashGroupID() == 0);
+    LUNATIC_CHECK(downstream->StashNIDValid() == 0);
+    LUNATIC_CHECK(downstream->StashLPIDValid() == 0);
+    LUNATIC_CHECK(downstream->StashLPID() == 0);
+    LUNATIC_CHECK(downstream->Endian() == 0);
+    LUNATIC_CHECK(downstream->Deep() == 0);
+    LUNATIC_CHECK(downstream->DoDWT() == 0);
     LUNATIC_CHECK(downstream->SnoopMe() == 1);
 }

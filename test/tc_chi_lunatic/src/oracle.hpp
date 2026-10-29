@@ -109,12 +109,26 @@ namespace LunaticTest {
 
         void Data(uint64_t time, const CHI::Eb::Flits::DAT<config>& flit)
         {
-            Accept(joint.NextTXDAT(global, time, flit));
+            const auto denial = joint.NextTXDAT(global, time, flit);
+            if (denial != CHI::Eb::Xact::XactDenial::ACCEPTED)
+                throw std::runtime_error(std::string("CHIron SN TXDAT denial: ") + denial->name +
+                    " src=" + std::to_string(uint16_t(flit.SrcID())) +
+                    " tgt=" + std::to_string(uint16_t(flit.TgtID())) +
+                    " txn=" + std::to_string(uint16_t(flit.TxnID())) +
+                    " dbid=" + std::to_string(uint16_t(flit.DBID())) +
+                    " home=" + std::to_string(uint16_t(flit.HomeNID())));
         }
 
         void WriteData(uint64_t time, const CHI::Eb::Flits::DAT<config>& flit)
         {
-            Accept(joint.NextRXDAT(global, time, flit));
+            const auto denial = joint.NextRXDAT(global, time, flit);
+            if (denial != CHI::Eb::Xact::XactDenial::ACCEPTED)
+                throw std::runtime_error(std::string("CHIron SN RXDAT denial: ") + denial->name +
+                    " src=" + std::to_string(uint16_t(flit.SrcID())) +
+                    " tgt=" + std::to_string(uint16_t(flit.TgtID())) +
+                    " txn=" + std::to_string(uint16_t(flit.TxnID())) +
+                    " dbid=" + std::to_string(uint16_t(flit.DBID())) +
+                    " home=" + std::to_string(uint16_t(flit.HomeNID())));
         }
 
         bool HasInflight() const noexcept { return joint.HasInflight(); }

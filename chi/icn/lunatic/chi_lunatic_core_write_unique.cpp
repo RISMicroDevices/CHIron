@@ -170,6 +170,28 @@ namespace CHI::Lunatic {
         flow.mergeImmediateHome = decision.mergeCopyback &&
             (decision.allocateHome || decision.retainHome || transaction.homeHit);
 
+        if (flow.mergeImmediateHome && !transaction.homeHit)
+        {
+            bool baselineRequired = false;
+            for (uint8_t valid : flow.validBytes)
+                baselineRequired |= !valid;
+            if (baselineRequired)
+            {
+                if (options.backend == BackendKind::CHI)
+                {
+                    if (!FetchBaseline(transaction))
+                        return false;
+                }
+                else
+                {
+                    const LineData baseline = memory.Read(line);
+                    for (size_t index = 0; index < LINE_SIZE; ++index)
+                        if (!flow.validBytes[index])
+                            transaction.data[index] = baseline[index];
+                }
+            }
+        }
+
         if (flow.mergeImmediateHome && decision.allocateHome && !transaction.homeHit && !PrepareVictim(transaction))
             return false;
 

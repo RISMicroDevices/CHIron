@@ -183,8 +183,6 @@ namespace CHI::Lunatic {
             flit.SrcID() = value.source;
             flit.TxnID() = value.txnId;
             flit.ReturnNID() = value.returnNid;
-            flit.StashNID() = value.returnNid;
-            flit.ReturnTxnID() = value.returnTxnId;
             flit.Opcode() = value.opcode;
             flit.Size() = value.size;
             flit.Addr() = value.address;
@@ -196,23 +194,25 @@ namespace CHI::Lunatic {
             flit.MemAttr() = value.memAttr;
             flit.SnpAttr() = value.snpAttr;
             flit.ExpCompAck() = value.expCompAck;
+            const bool stash = IsStashRequest(value.opcode);
+            if (stash)
+            {
+                flit.StashLPIDValid() = value.stashLpidValid;
+                flit.StashLPID() = value.stashLpid;
+                flit.StashNIDValid() = value.stashNidValid;
+            }
+            else
+                flit.ReturnTxnID() = value.returnTxnId;
             if (value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
                 flit.PGroupID() = value.pGroupId;
-            else if (value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersist)
-                flit.PGroupID() = 0;
             else if (value.opcode == CHI::Eb::Opcodes::REQ::StashOnceSepUnique ||
                      value.opcode == CHI::Eb::Opcodes::REQ::StashOnceSepShared)
                 flit.StashGroupID() = value.stashGroupId;
-            else
-            {
-                flit.PGroupID() = value.pGroupId;
-                flit.StashGroupID() = value.stashGroupId;
-            }
-            flit.StashNIDValid() = value.stashNidValid;
-            flit.StashLPIDValid() = value.stashLpidValid;
-            flit.StashLPID() = value.stashLpid;
-            flit.Endian() = value.endian;
-            flit.Deep() = value.deep;
+            if (IsAtomicRequest(value.opcode))
+                flit.Endian() = value.endian;
+            else if (value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersist ||
+                     value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+                flit.Deep() = value.deep;
             flit.DoDWT() = value.doDwt;
             flit.SnoopMe() = value.snoopMe;
             flit.TraceTag() = value.traceTag;

@@ -28,6 +28,7 @@ namespace {
 
         std::map<LineKey, LineData> lines;
         std::vector<uint16_t>       opcodes;
+        SNOracle<config>            oracle{ 2, 6 };
 
         void SendRead(Base& driver, const typename Base::REQ& request)
         {
@@ -47,6 +48,7 @@ namespace {
                 response.CCID() = (request.Addr() >> 4) & 3;
                 for (size_t index = 0; index < bytes; ++index)
                     response.Data()[index / 8] |= uint64_t(data[beat * bytes + index]) << ((index % 8) * 8);
+                oracle.Data(driver.now, response);
                 LUNATIC_CHECK(driver.node.PushRXDAT(response));
             }
             driver.Tick();
@@ -62,6 +64,7 @@ namespace {
             response.TxnID() = request.TxnID();
             response.DBID() = 77;
             response.Opcode() = CHI::Eb::Opcodes::RSP::DBIDResp;
+            oracle.Response(driver.now, response);
             LUNATIC_CHECK(driver.node.PushRXRSP(response));
             driver.Tick();
 
@@ -70,9 +73,10 @@ namespace {
             for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
             {
                 auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
+                oracle.WriteData(driver.now, data);
                 LUNATIC_CHECK(data.TgtID() == 6);
-                LUNATIC_CHECK(data.TxnID() == request.TxnID());
-                LUNATIC_CHECK(data.DBID() == response.DBID());
+                LUNATIC_CHECK(data.TxnID() == response.DBID());
+                LUNATIC_CHECK(data.DBID() == 0);
                 if (request.Opcode() == CHI::Eb::Opcodes::REQ::WriteNoSnpFull)
                     LUNATIC_CHECK(uint64_t(data.BE()) == fullEnables);
                 const size_t offset = size_t(data.DataID()) * 16;
@@ -84,6 +88,7 @@ namespace {
             }
             lines[line] = update;
             response.Opcode() = CHI::Eb::Opcodes::RSP::Comp;
+            oracle.Response(driver.now, response);
             LUNATIC_CHECK(driver.node.PushRXRSP(response));
             driver.Tick();
         }
@@ -112,12 +117,14 @@ namespace {
                 response.DBID() = 99;
                 response.Resp() = CHI::Eb::Resps::Comp_I;
                 response.Opcode() = CHI::Eb::Opcodes::RSP::Comp;
+                oracle.Response(driver.now, response);
                 LUNATIC_CHECK(driver.node.PushRXRSP(response));
                 driver.Tick();
             }
             response.DBID() = 77;
             response.Opcode() = store && form == 2 ? CHI::Eb::Opcodes::RSP::CompDBIDResp
                 : CHI::Eb::Opcodes::RSP::DBIDResp;
+            oracle.Response(driver.now, response);
             LUNATIC_CHECK(driver.node.PushRXRSP(response));
             driver.Tick();
 
@@ -140,6 +147,7 @@ namespace {
                     result.Data()[(address - offset + index) / 8] |=
                         uint64_t(oldLine[address + index]) << (((address - offset + index) % 8) * 8);
                 }
+                oracle.Data(driver.now, result);
                 LUNATIC_CHECK(driver.node.PushRXDAT(result));
                 driver.Tick();
             };
@@ -154,7 +162,8 @@ namespace {
             while ((received & expected) != expected)
             {
                 auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
-                LUNATIC_CHECK(data.TgtID() == 6 && data.TxnID() == request.TxnID() && data.DBID() == 77);
+                oracle.WriteData(driver.now, data);
+                LUNATIC_CHECK(data.TgtID() == 6 && data.TxnID() == 77 && data.DBID() == 0);
                 LUNATIC_CHECK(data.CCID() == ((request.Addr() >> 4) & 3));
                 const size_t offset = size_t(data.DataID()) * 16;
                 LUNATIC_CHECK(offset + bytes <= LINE_SIZE && offset % bytes == 0);
@@ -181,6 +190,7 @@ namespace {
             {
                 response.Resp() = CHI::Eb::Resps::Comp_I;
                 response.Opcode() = CHI::Eb::Opcodes::RSP::Comp;
+                oracle.Response(driver.now, response);
                 LUNATIC_CHECK(driver.node.PushRXRSP(response));
                 driver.Tick();
             }
@@ -205,6 +215,7 @@ namespace {
                 return;
             auto request = driver.node.PopTXREQ();
             LUNATIC_CHECK(request);
+            oracle.Request(driver.now, *request);
             opcodes.push_back(request->Opcode());
             if (IsAtomicRequest(request->Opcode()))
             {
@@ -233,6 +244,7 @@ namespace {
                 response.TgtID() = 2;
                 response.TxnID() = request->TxnID();
                 response.Opcode() = CHI::Eb::Opcodes::RSP::CompDBIDResp;
+                oracle.Response(driver.now, response);
                 LUNATIC_CHECK(driver.node.PushRXRSP(response));
                 driver.Tick();
                 return;
@@ -249,6 +261,7 @@ namespace {
                 response.Opcode() = separated ? CHI::Eb::Opcodes::RSP::CompPersist : CHI::Eb::Opcodes::RSP::Comp;
                 if (separated)
                     response.PGroupID() = request->PGroupID();
+                oracle.Response(driver.now, response);
                 LUNATIC_CHECK(driver.node.PushRXRSP(response));
                 driver.Tick();
                 return;
@@ -262,6 +275,7 @@ namespace {
                 response.TgtID() = 2;
                 response.TxnID() = request->TxnID();
                 response.Opcode() = CHI::Eb::Opcodes::RSP::Comp;
+                oracle.Response(driver.now, response);
                 LUNATIC_CHECK(driver.node.PushRXRSP(response));
                 driver.Tick();
                 return;
@@ -275,7 +289,10 @@ namespace {
             {
                 Step(driver);
                 if (driver.node.Drain())
+                {
+                    LUNATIC_CHECK(!oracle.HasInflight());
                     return;
+                }
                 driver.Tick();
             }
             throw std::runtime_error("external backend failed to drain");
@@ -615,6 +632,35 @@ LUNATIC_TEST(Stage5ExternalWriteUniquePartial)
     LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
 }
 
+LUNATIC_TEST(Stage5ExternalWriteUniquePartialAllocationBaseline)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    CheckedDriver<Config256> driver(options);
+    BackendModel<Config256> backend;
+    const LineKey line = LineKey::FromAddress(0x43140, false);
+    const LineData initial = ExternalData(11);
+    const LineData update = ExternalData(171);
+    backend.Write(line, initial);
+
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniquePtl, 4, 1, line.address);
+    driver.PushRequest(request);
+    const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+    ByteEnables enables{};
+    for (size_t index = 9; index < 43; ++index)
+        enables[index] = 1;
+    driver.WriteData(4, 1, dbid, update, enables, CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
+    LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);
+    backend.Run(driver.driver);
+    driver.Quiesce();
+    LineData expected = initial;
+    for (size_t index = 9; index < 43; ++index)
+        expected[index] = update[index];
+    LUNATIC_CHECK(driver.driver.node.InspectHome(line).data == expected);
+    LUNATIC_CHECK(backend.Read(line) == initial);
+}
+
 LUNATIC_TEST(Stage5ExternalWriteUniqueStash)
 {
     Options options;
@@ -697,7 +743,7 @@ namespace {
         LUNATIC_CHECK(downstream.PGroupID() == group && downstream.Deep() == 1);
         if (separated)
         {
-            LUNATIC_CHECK(downstream.ReturnNID() == 5);
+            LUNATIC_CHECK(downstream.ReturnNID() == 2);
             LUNATIC_CHECK(downstream.ReturnTxnID() == 0);
         }
         LUNATIC_CHECK(!driver.node.PeekTXRSP());

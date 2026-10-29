@@ -44,6 +44,8 @@ namespace CHI::Lunatic {
         request.source = nodeId;
         request.target = options.subordinateId;
         request.txnId = transaction.handle;
+        request.returnNid = nodeId;
+        request.returnTxnId = transaction.handle;
         request.opcode = CHI::Eb::Opcodes::REQ::ReadNoSnp;
         if (flow.victimPending && flow.victimDataPartial)
         {
@@ -51,8 +53,12 @@ namespace CHI::Lunatic {
             request.nonSecure = flow.victimLine.nonSecure;
         }
         request.memAttr &= ~CHI::Eb::MemAttrs::EWA;
-        request.allowRetry = false;
+        request.allowRetry = true;
         request.expCompAck = false;
+        request.snpAttr = 0;
+        request.doDwt = false;
+        request.stashNidValid = false;
+        request.stashLpidValid = false;
         if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
         {
             transaction.readyTime = time;
@@ -130,8 +136,14 @@ namespace CHI::Lunatic {
         request.source = nodeId;
         request.target = options.subordinateId;
         request.txnId = transaction.handle;
-        request.allowRetry = false;
+        request.returnNid = nodeId;
+        request.returnTxnId = 0;
+        request.allowRetry = true;
         request.expCompAck = false;
+        request.snpAttr = 0;
+        request.doDwt = false;
+        request.stashNidValid = false;
+        request.stashLpidValid = false;
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         if (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteEvictOrEvict)
         {
@@ -201,9 +213,9 @@ namespace CHI::Lunatic {
         Data data;
         data.source = nodeId;
         data.target = options.subordinateId;
-        data.homeNid = nodeId;
-        data.txnId = transaction.handle;
-        data.dbid = flow.backendDBID;
+        data.homeNid = 0;
+        data.txnId = flow.backendDBID;
+        data.dbid = 0;
         data.opcode = CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
         data.dataId = offset / 16;
         data.ccid = flow.spillPending ? (flow.spillLine.address >> 4) & 3 : (transaction.request.address >> 4) & 3;
@@ -349,11 +361,14 @@ namespace CHI::Lunatic {
             return false;
 
         const bool victimBaseline = flow.baselineFetch && flow.victimPending && flow.victimDataPartial;
+        const auto requestClass = ClassifyRequest(transaction.request.opcode);
+        const bool immediateBaseline = requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero;
         LineData& destination = victimBaseline ? flow.victimData : transaction.data;
         for (size_t index = 0; index < bytes; ++index)
         {
             const bool preserve = flow.baselineFetch &&
                 (victimBaseline ? flow.victimValidBytes[offset + index]
+                                : immediateBaseline ? flow.validBytes[offset + index]
                                 : flow.snoopDataPartial ? flow.snoopValidBytes[offset + index]
                                 : IsCopybackRequest(transaction.request.opcode) && transaction.byteEnables[offset + index]);
             if (!preserve)
