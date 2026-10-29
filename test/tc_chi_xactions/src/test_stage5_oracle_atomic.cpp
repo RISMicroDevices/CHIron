@@ -194,7 +194,7 @@ XACT_TEST(Stage5OracleAtomicRejectsDataOutsideByteEnables)
     XACT_CHECK(fixture.joint.NextTXDAT(fixture.global, 3, data) != XactDenial::ACCEPTED);
 }
 
-XACT_TEST(Stage5OracleAtomicRejectsInvalidReturnByteEnables)
+XACT_TEST(Stage5OracleAtomicAcceptsArbitraryReturnByteEnables)
 {
     RNFixture fixture;
     auto request = AtomicRequest(Opcodes::REQ::AtomicLoad::ADD, 3);
@@ -213,7 +213,9 @@ XACT_TEST(Stage5OracleAtomicRejectsInvalidReturnByteEnables)
     result.CCID() = 1;
     result.Resp() = Resps::CompData_I;
     result.BE() = 0;
-    XACT_CHECK(fixture.joint.NextRXDAT(fixture.global, 4, result) != XactDenial::ACCEPTED);
+    result.Data()[0] = 0xdeadbeef;
+    XACT_CHECK(fixture.joint.NextRXDAT(fixture.global, 4, result) == XactDenial::ACCEPTED);
+    XACT_CHECK(!fixture.joint.HasInflight());
 }
 
 XACT_TEST(Stage5OracleAtomicAcceptsValidReturnByteEnables)
@@ -236,5 +238,33 @@ XACT_TEST(Stage5OracleAtomicAcceptsValidReturnByteEnables)
     result.Resp() = Resps::CompData_I;
     result.BE() = 0xff00;
     XACT_CHECK(fixture.joint.NextRXDAT(fixture.global, 4, result) == XactDenial::ACCEPTED);
+    XACT_CHECK(!fixture.joint.HasInflight());
+}
+
+XACT_TEST(Stage5OracleHomeAtomicAcceptsArbitraryReturnByteEnables)
+{
+    SNFixture fixture;
+    auto request = AtomicRequest(Opcodes::REQ::AtomicLoad::ADD, 3);
+    request.SrcID() = 2;
+    request.TgtID() = 6;
+    request.Addr() = 0x10018;
+    request.Order() = 0;
+    request.SnpAttr() = 0;
+    XACT_CHECK(fixture.joint.NextRXREQ(fixture.global, 1, request) == XactDenial::ACCEPTED);
+    const auto dbid = Response(6, 2, Opcodes::RSP::DBIDResp, 1, 41);
+    XACT_CHECK(fixture.joint.NextTXRSP(fixture.global, 2, dbid) == XactDenial::ACCEPTED);
+
+    auto data = Data(2, 6, Opcodes::DAT::NonCopyBackWrData, 41, 1);
+    data.CCID() = 1;
+    data.BE() = 0xff00;
+    XACT_ACCEPT(fixture.joint.NextRXDAT(fixture.global, 3, data));
+
+    auto result = Data(6, 2, Opcodes::DAT::CompData, 1, 1, 41);
+    result.HomeNID() = 2;
+    result.CCID() = 1;
+    result.Resp() = Resps::CompData_I;
+    result.BE() = 0;
+    result.Data()[0] = 0xdeadbeef;
+    XACT_CHECK(fixture.joint.NextTXDAT(fixture.global, 4, result) == XactDenial::ACCEPTED);
     XACT_CHECK(!fixture.joint.HasInflight());
 }

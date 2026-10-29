@@ -215,6 +215,9 @@ namespace /*CHI::*/Xact {
          || windowOffset + dataSize <= packetOffset)
             return XactDenial::DENIED_DAT_FIELD_DATAID;
 
+        if (dat.Opcode() == Opcodes::DAT::CompData)
+            return XactDenial::ACCEPTED;
+
         uint64_t expectedBE = 0;
 
         for (uint64_t byte = 0; byte < packetSize; byte++)

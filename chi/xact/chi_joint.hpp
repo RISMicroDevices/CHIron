@@ -3483,7 +3483,8 @@ namespace /*CHI::*/Xact {
         if (denial != XactDenial::ACCEPTED)
             return this->ResponseDeniedByXaction(denial, firedDatFlit, xaction);
 
-        assert(!hasDBID && !firstDBID && "TXDAT never generates DBID on SN-F");
+        assert(!firstDBID && "TXDAT never generates DBID on SN-F");
+        (void)hasDBID;
 
         assert(xaction->GetFirst().IsREQ() && "no SNP for SN-F");
 
@@ -3507,7 +3508,8 @@ namespace /*CHI::*/Xact {
         {
             // remove related DBID mapping
             const FiredResponseFlit<config>* xactionDBIDSource =
-                xaction->GetDBIDSource();
+                xaction->GetLastDBIDSourceRSP({ Opcodes::RSP::DBIDResp, Opcodes::RSP::DBIDRespOrd,
+                    Opcodes::RSP::CompDBIDResp });
 
             if (xactionDBIDSource)
             {
