@@ -609,6 +609,13 @@ namespace CHI {
             static std::shared_ptr<Xaction<config>> ConstructHomeDataless(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
             static std::shared_ptr<Xaction<config>> ConstructHomeAtomic(const Global<config>&, const FiredRequestFlit<config>&, std::shared_ptr<Xaction<config>>) noexcept;
 
+            static bool     IsNonStoreAtomic(const Xaction<config>& xaction) noexcept;
+            static bool     IsLegalDBIDSource(
+                const Xaction<config>& xaction, const FiredResponseFlit<config>& source) noexcept;
+            static void     GetDBIDKeys(
+                const FiredResponseFlit<config>& source, rxreqdbid_t& keyDBID,
+                rxreqdbidovlp_t& keyDBIDOvlp) noexcept;
+
         public:
             SNFJoint() noexcept;
 
@@ -3078,6 +3085,54 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
+    inline bool SNFJoint<config>::IsNonStoreAtomic(const Xaction<config>& xaction) noexcept
+    {
+        const auto& request = xaction.GetFirst().flit.req;
+        return Opcodes::REQ::AtomicLoad::Is(request.Opcode())
+            || request.Opcode() == Opcodes::REQ::AtomicSwap
+            || request.Opcode() == Opcodes::REQ::AtomicCompare;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline bool SNFJoint<config>::IsLegalDBIDSource(
+        const Xaction<config>& xaction, const FiredResponseFlit<config>& source) noexcept
+    {
+        if (source.IsRSP())
+            return true;
+        return IsNonStoreAtomic(xaction) && source.IsDAT()
+            && source.flit.dat.Opcode() == Opcodes::DAT::CompData;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void SNFJoint<config>::GetDBIDKeys(
+        const FiredResponseFlit<config>& source, rxreqdbid_t& keyDBID,
+        rxreqdbidovlp_t& keyDBIDOvlp) noexcept
+    {
+        keyDBID.value = 0;
+        keyDBIDOvlp.value = 0;
+        if (source.IsRSP())
+        {
+            keyDBID.id.db = source.flit.rsp.DBID();
+            keyDBID.id.src = source.flit.rsp.SrcID();
+            keyDBID.id.tgt = source.flit.rsp.TgtID();
+            keyDBIDOvlp.id.db = source.flit.rsp.DBID();
+            keyDBIDOvlp.id.src = source.flit.rsp.SrcID();
+            keyDBIDOvlp.id.tgt = source.flit.rsp.TgtID();
+            keyDBIDOvlp.id.txn = source.flit.rsp.TxnID();
+        }
+        else
+        {
+            keyDBID.id.db = source.flit.dat.DBID();
+            keyDBID.id.src = source.flit.dat.SrcID();
+            keyDBID.id.tgt = source.flit.dat.TgtID();
+            keyDBIDOvlp.id.db = source.flit.dat.DBID();
+            keyDBIDOvlp.id.src = source.flit.dat.SrcID();
+            keyDBIDOvlp.id.tgt = source.flit.dat.TgtID();
+            keyDBIDOvlp.id.txn = source.flit.dat.TxnID();
+        }
+    }
+
+    template<FlitConfigurationConcept config>
     inline XactDenialEnum SNFJoint<config>::NextRXREQ(
         const Global<config>&             glbl,
         uint64_t                           time,
@@ -3347,29 +3402,21 @@ namespace /*CHI::*/Xact {
 
             if (xactionDBIDSource)
             {
-                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+                assert(IsLegalDBIDSource(*xaction, *xactionDBIDSource)
+                    && "Invalid DBID source on SN-F");
 
                 // event on DBID free
                 this->FireXactionDBIDFree(xaction);
 
                 // check overlappable DBID mapping first
                 rxreqdbidovlp_t keyDBIDOvlp;
-                keyDBIDOvlp.value   = 0;
-                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
-                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                rxreqdbid_t keyDBID;
+                GetDBIDKeys(*xactionDBIDSource, keyDBID, keyDBIDOvlp);
 
                 if (!rxDBIDOverlappableTransactions.erase(keyDBIDOvlp))
                 {
                     // erase normal DBID mapping
                     // only when overlappable DBID mapping absent
-
-                    rxreqdbid_t keyDBID;
-                    keyDBID.value   = 0;
-                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
 
                     // check TxnID for non-overlappable DBID on DBID complete
                     auto xactionDBIDIter = rxDBIDTransactions.find(keyDBID);
@@ -3391,26 +3438,18 @@ namespace /*CHI::*/Xact {
 
             if (xactionDBIDSource)
             {
-                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+                assert(IsLegalDBIDSource(*xaction, *xactionDBIDSource)
+                    && "Invalid DBID source on SN-F");
 
                 // check overlappable DBID mapping
                 rxreqdbidovlp_t keyDBIDOvlp;
-                keyDBIDOvlp.value   = 0;
-                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
-                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                rxreqdbid_t keyDBID;
+                GetDBIDKeys(*xactionDBIDSource, keyDBID, keyDBIDOvlp);
 
                 // move on absent
                 if (rxDBIDOverlappableTransactions.find(keyDBIDOvlp) == rxDBIDOverlappableTransactions.end())
                 {
                     // erase normal DBID mapping
-                    rxreqdbid_t keyDBID;
-                    keyDBID.value   = 0;
-                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
-
                     rxDBIDTransactions.erase(keyDBID);
 
                     // set overlappable DBID mapping
@@ -3454,6 +3493,7 @@ namespace /*CHI::*/Xact {
 
         // DMT or Home Read
         rxreqid_t key;
+        key.value   = 0;
         if (firedDatFlit.IsToRequester(glbl))
         {
             // DMT
@@ -3483,8 +3523,29 @@ namespace /*CHI::*/Xact {
         if (denial != XactDenial::ACCEPTED)
             return this->ResponseDeniedByXaction(denial, firedDatFlit, xaction);
 
-        assert(!firstDBID && "TXDAT never generates DBID on SN-F");
-        (void)hasDBID;
+        const bool nonStoreAtomic = IsNonStoreAtomic(*xaction);
+        assert((!firstDBID || nonStoreAtomic)
+            && "TXDAT generates DBID only for non-store atomics on SN-F");
+
+        if (hasDBID && firstDBID && nonStoreAtomic)
+        {
+            rxreqdbid_t keyDBID;
+            keyDBID.value   = 0;
+            keyDBID.id.src  = datFlit.SrcID();
+            keyDBID.id.tgt  = datFlit.TgtID();
+            keyDBID.id.db   = datFlit.DBID();
+
+            if (rxDBIDTransactions.contains(keyDBID))
+            {
+                xaction->SetLastDenial(XactDenial::DENIED_DAT_DBID_IN_USE);
+                return this->ResponseDeniedByJoint(XactDenial::DENIED_DAT_DBID_IN_USE,
+                    firedDatFlit, rxDBIDTransactions[keyDBID]);
+            }
+
+            rxDBIDTransactions[keyDBID] = xaction;
+
+            this->FireXactionDBIDAllocation(xaction);
+        }
 
         assert(xaction->GetFirst().IsREQ() && "no SNP for SN-F");
 
@@ -3508,34 +3569,25 @@ namespace /*CHI::*/Xact {
         {
             // remove related DBID mapping
             const FiredResponseFlit<config>* xactionDBIDSource =
-                xaction->GetLastDBIDSourceRSP({ Opcodes::RSP::DBIDResp, Opcodes::RSP::DBIDRespOrd,
-                    Opcodes::RSP::CompDBIDResp });
+                xaction->GetDBIDSource();
 
             if (xactionDBIDSource)
             {
-                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+                assert(IsLegalDBIDSource(*xaction, *xactionDBIDSource)
+                    && "Invalid DBID source on SN-F");
 
                 // event on DBID free
                 this->FireXactionDBIDFree(xaction);
 
                 // check overlappable DBID mapping first
                 rxreqdbidovlp_t keyDBIDOvlp;
-                keyDBIDOvlp.value   = 0;
-                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
-                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                rxreqdbid_t keyDBID;
+                GetDBIDKeys(*xactionDBIDSource, keyDBID, keyDBIDOvlp);
 
                 if (!rxDBIDOverlappableTransactions.erase(keyDBIDOvlp))
                 {
                     // erase normal DBID mapping
                     // only when overlappable DBID mapping absent
-
-                    rxreqdbid_t keyDBID;
-                    keyDBID.value   = 0;
-                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
 
                     // check TxnID for non-overlappable DBID on DBID complete
                     auto xactionDBIDIter = rxDBIDTransactions.find(keyDBID);
@@ -3557,26 +3609,18 @@ namespace /*CHI::*/Xact {
 
             if (xactionDBIDSource)
             {
-                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+                assert(IsLegalDBIDSource(*xaction, *xactionDBIDSource)
+                    && "Invalid DBID source on SN-F");
 
                 // check overlappable DBID mapping
                 rxreqdbidovlp_t keyDBIDOvlp;
-                keyDBIDOvlp.value   = 0;
-                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
-                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                rxreqdbid_t keyDBID;
+                GetDBIDKeys(*xactionDBIDSource, keyDBID, keyDBIDOvlp);
 
                 // move on absent
                 if (rxDBIDOverlappableTransactions.find(keyDBIDOvlp) == rxDBIDOverlappableTransactions.end())
                 {
                     // erase normal DBID mapping
-                    rxreqdbid_t keyDBID;
-                    keyDBID.value   = 0;
-                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
-
                     rxDBIDTransactions.erase(keyDBID);
 
                     // set overlappable DBID mapping
@@ -3642,29 +3686,21 @@ namespace /*CHI::*/Xact {
 
             if (xactionDBIDSource)
             {
-                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+                assert(IsLegalDBIDSource(*xaction, *xactionDBIDSource)
+                    && "Invalid DBID source on SN-F");
 
                 // event on DBID free
                 this->FireXactionDBIDFree(xaction);
 
                 // check overlappable DBID mapping first
                 rxreqdbidovlp_t keyDBIDOvlp;
-                keyDBIDOvlp.value   = 0;
-                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
-                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                rxreqdbid_t keyDBID;
+                GetDBIDKeys(*xactionDBIDSource, keyDBID, keyDBIDOvlp);
 
                 if (!rxDBIDOverlappableTransactions.erase(keyDBIDOvlp))
                 {
                     // erase normal DBID mapping
                     // only when overlappable DBID mapping absent
-
-                    rxreqdbid_t keyDBID;
-                    keyDBID.value   = 0;
-                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
 
                     // check TxnID for non-overlappable DBID on DBID complete
                     auto xactionDBIDIter = rxDBIDTransactions.find(keyDBID);
@@ -3686,26 +3722,18 @@ namespace /*CHI::*/Xact {
 
             if (xactionDBIDSource)
             {
-                assert(xactionDBIDSource->IsRSP() && "TXDAT never generates DBID on SN-F");
+                assert(IsLegalDBIDSource(*xaction, *xactionDBIDSource)
+                    && "Invalid DBID source on SN-F");
 
                 // check overlappable DBID maping
                 rxreqdbidovlp_t keyDBIDOvlp;
-                keyDBIDOvlp.value   = 0;
-                keyDBIDOvlp.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                keyDBIDOvlp.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                keyDBIDOvlp.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
-                keyDBIDOvlp.id.txn  = xactionDBIDSource->flit.rsp.TxnID();
+                rxreqdbid_t keyDBID;
+                GetDBIDKeys(*xactionDBIDSource, keyDBID, keyDBIDOvlp);
 
                 // move on absent
                 if (rxDBIDOverlappableTransactions.find(keyDBIDOvlp) == rxDBIDOverlappableTransactions.end())
                 {
                     // erase normal DBID maping
-                    rxreqdbid_t keyDBID;
-                    keyDBID.value   = 0;
-                    keyDBID.id.db   = xactionDBIDSource->flit.rsp.DBID();
-                    keyDBID.id.src  = xactionDBIDSource->flit.rsp.SrcID();
-                    keyDBID.id.tgt  = xactionDBIDSource->flit.rsp.TgtID();
-
                     rxDBIDTransactions.erase(keyDBID);
 
                     // set overlappable DBID mapping

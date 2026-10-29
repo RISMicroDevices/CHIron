@@ -19,6 +19,58 @@ namespace {
         XACT_CHECK(!fixture.joint.HasInflight());
     }
 
+    enum class HomeAtomicResponseOrder {
+        CompDataFirst,
+        CompDataBeforeWriteData,
+        CompDataAfterWriteData
+    };
+
+    void RunHomeAtomicResponseOrder(HomeAtomicResponseOrder order)
+    {
+        SNFixture fixture;
+        auto request = AtomicRequest(Opcodes::REQ::AtomicLoad::ADD);
+        request.SrcID() = 2;
+        request.TgtID() = 6;
+        request.ReturnNID() = 2;
+        request.ReturnTxnID() = 1;
+        request.Order() = 0;
+        request.SnpAttr() = 0;
+        XACT_ACCEPT(fixture.joint.NextRXREQ(fixture.global, 1, request));
+
+        const auto dbid = Response(6, 2, Opcodes::RSP::DBIDResp, 1, 41);
+        auto result = Data(6, 2, Opcodes::DAT::CompData, 1, 0, 41);
+        result.HomeNID() = 2;
+        result.Resp() = Resps::CompData_I;
+        result.BE() = 0xff;
+        auto operands = Data(2, 6, Opcodes::DAT::NonCopyBackWrData, 41, 0);
+        operands.BE() = 0xff;
+
+        if (order == HomeAtomicResponseOrder::CompDataFirst)
+            XACT_ACCEPT(fixture.joint.NextTXDAT(fixture.global, 2, result));
+        XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 3, dbid));
+        if (order == HomeAtomicResponseOrder::CompDataBeforeWriteData)
+            XACT_ACCEPT(fixture.joint.NextTXDAT(fixture.global, 4, result));
+        XACT_ACCEPT(fixture.joint.NextRXDAT(fixture.global, 5, operands));
+        if (order == HomeAtomicResponseOrder::CompDataAfterWriteData)
+            XACT_ACCEPT(fixture.joint.NextTXDAT(fixture.global, 6, result));
+        XACT_CHECK(!fixture.joint.HasInflight());
+    }
+
+}
+
+XACT_TEST(Stage5OracleHomeAtomicCompDataBeforeDBID)
+{
+    RunHomeAtomicResponseOrder(HomeAtomicResponseOrder::CompDataFirst);
+}
+
+XACT_TEST(Stage5OracleHomeAtomicCompDataAfterDBIDBeforeWriteData)
+{
+    RunHomeAtomicResponseOrder(HomeAtomicResponseOrder::CompDataBeforeWriteData);
+}
+
+XACT_TEST(Stage5OracleHomeAtomicCompDataAfterWriteData)
+{
+    RunHomeAtomicResponseOrder(HomeAtomicResponseOrder::CompDataAfterWriteData);
 }
 
 XACT_TEST(Stage5OracleAtomicStoreSeparateResponsesMayUseDifferentDBIDs)
