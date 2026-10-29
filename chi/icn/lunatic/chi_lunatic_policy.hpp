@@ -16,6 +16,7 @@ namespace CHI::Lunatic {
         bool    requesterDirty = false;
         bool    requesterRetains = false;
         bool    evictionHasData = false;
+        bool    allocationHint = false;
     };
 
     struct PolicyDecision {
@@ -24,6 +25,7 @@ namespace CHI::Lunatic {
         bool removeHome = false;
         bool mergeCopyback = false;
         bool backInvalidate = false;
+        bool requestData = false;
     };
 
     class CachePolicy {
@@ -33,6 +35,8 @@ namespace CHI::Lunatic {
         virtual PolicyKind     Kind() const noexcept = 0;
         virtual PolicyDecision OnRNFill(const PolicyContext& context) const = 0;
         virtual PolicyDecision OnRNEviction(const PolicyContext& context) const = 0;
+        virtual PolicyDecision OnImmediateWrite(const PolicyContext& context) const = 0;
+        virtual PolicyDecision OnEvictOrEvict(const PolicyContext& context) const = 0;
         virtual PolicyDecision OnHomeAllocation(const PolicyContext& context) const = 0;
         virtual PolicyDecision OnHomeEviction(const PolicyContext& context) const = 0;
         virtual PolicyDecision OnCopyback(const PolicyContext& context) const = 0;

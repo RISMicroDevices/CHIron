@@ -27,6 +27,29 @@ namespace CHI::Lunatic {
             return decision;
         }
 
+        PolicyDecision MergeImmediateWrite(const PolicyContext& context)
+        {
+            PolicyDecision decision;
+            decision.allocateHome = !context.homeValid && context.allocationHint;
+            decision.retainHome = context.homeValid;
+            decision.mergeCopyback = true;
+            return decision;
+        }
+
+        PolicyDecision DecideEvictOrEvict(const CachePolicy& policy, const PolicyContext& context)
+        {
+            if (!context.requesterValid || (!context.requesterDirty && context.homeValid))
+            {
+                PolicyDecision decision;
+                decision.retainHome = context.homeValid;
+                return decision;
+            }
+
+            PolicyDecision decision = policy.OnCopyback(context);
+            decision.requestData = true;
+            return decision;
+        }
+
         class NinePolicy final : public CachePolicy {
         public:
             PolicyKind Kind() const noexcept override { return PolicyKind::NINE; }
@@ -43,6 +66,16 @@ namespace CHI::Lunatic {
                 decision.retainHome = context.homeValid;
                 decision.mergeCopyback = context.evictionHasData;
                 return decision;
+            }
+
+            PolicyDecision OnImmediateWrite(const PolicyContext& context) const override
+            {
+                return MergeImmediateWrite(context);
+            }
+
+            PolicyDecision OnEvictOrEvict(const PolicyContext& context) const override
+            {
+                return DecideEvictOrEvict(*this, context);
             }
 
             PolicyDecision OnHomeAllocation(const PolicyContext& context) const override
@@ -77,6 +110,16 @@ namespace CHI::Lunatic {
             PolicyDecision OnRNEviction(const PolicyContext& context) const override
             {
                 return MergeEviction(context);
+            }
+
+            PolicyDecision OnImmediateWrite(const PolicyContext& context) const override
+            {
+                return MergeImmediateWrite(context);
+            }
+
+            PolicyDecision OnEvictOrEvict(const PolicyContext& context) const override
+            {
+                return DecideEvictOrEvict(*this, context);
             }
 
             PolicyDecision OnHomeAllocation(const PolicyContext& context) const override
@@ -124,6 +167,16 @@ namespace CHI::Lunatic {
                 decision.retainHome = context.homeValid;
                 decision.mergeCopyback = context.evictionHasData;
                 return decision;
+            }
+
+            PolicyDecision OnImmediateWrite(const PolicyContext& context) const override
+            {
+                return MergeImmediateWrite(context);
+            }
+
+            PolicyDecision OnEvictOrEvict(const PolicyContext& context) const override
+            {
+                return DecideEvictOrEvict(*this, context);
             }
 
             PolicyDecision OnHomeAllocation(const PolicyContext& context) const override

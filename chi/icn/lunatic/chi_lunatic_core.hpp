@@ -237,6 +237,7 @@ namespace CHI::Lunatic {
                        const ByteEnables& enables);
         bool FetchBaseline(Transaction& transaction);
 
+        uint16_t   SnoopOpcode(const Transaction& transaction, const FlowState& flow) const;
         void       PlanReadSnoops(Transaction& transaction);
         void       PlanCMOSnoops(Transaction& transaction);
         bool       EmitSnoops(Transaction& transaction);
