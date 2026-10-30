@@ -7,6 +7,7 @@
 #include <functional>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 #include <deque>
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <cassert>
 
 #include "../../xact/cchi_joint.hpp"
 #include "../../xact/cchi_xact_state.hpp"
@@ -445,6 +447,160 @@ namespace CCHI::Taurus {
         size_t                                  prefetchQueueLimit;
         size_t                                  cmoQueueLimit;
 
+        // Number of whole cache lines in each in-flight state. These are not
+        // transaction/beat counts: pending-to-active transitions do not change
+        // them, and a line leaves a count only when every condition covered by
+        // the corresponding Is*InFlight predicate has cleared.
+        size_t                                  inFlightEVT = 0;
+        size_t                                  inFlightREQ = 0;
+        size_t                                  inFlightSNP = 0;
+
+        enum class InFlightClass { EVT, REQ, SNP };
+
+        struct InFlightState {
+            bool evt;
+            bool req;
+            bool snp;
+        };
+
+        InFlightState ReadInFlight(const CacheLine& cacheLine) const noexcept
+        {
+            return { cacheLine.IsEVTInFlight(glbl),
+                     cacheLine.IsREQInFlight(glbl),
+                     cacheLine.IsSNPInFlight(glbl) };
+        }
+
+        bool ReadInFlight(InFlightClass type, const CacheLine& cacheLine) const noexcept
+        {
+            return type == InFlightClass::EVT ? cacheLine.IsEVTInFlight(glbl)
+                 : type == InFlightClass::REQ ? cacheLine.IsREQInFlight(glbl)
+                                              : cacheLine.IsSNPInFlight(glbl);
+        }
+
+        std::unordered_set<uint64_t>& Workset(InFlightClass type) noexcept
+        {
+            return type == InFlightClass::EVT ? worksetEVT
+                 : type == InFlightClass::REQ ? worksetREQ : worksetSNP;
+        }
+
+        std::vector<uint64_t>& Worklist(InFlightClass type) noexcept
+        {
+            return type == InFlightClass::EVT ? worklistEVT
+                 : type == InFlightClass::REQ ? worklistREQ : worklistSNP;
+        }
+
+        void TrackWorklist(InFlightClass type, uint64_t key,
+                           bool before, bool after) noexcept
+        {
+            if (before == after)
+                return;
+
+            auto& set = Workset(type);
+            if (after) {
+                auto& list = Worklist(type);
+                if (set.insert(key).second
+                 && std::find(list.begin(), list.end(), key) == list.end())
+                    list.push_back(key);
+            }
+            else
+                set.erase(key);
+        }
+
+        void TrackReap(const CacheLine& cacheLine) noexcept
+        {
+            const uint64_t key = LineKey(cacheLine.GetPA());
+            const bool candidate = cacheLine.state == CacheState::Invalid
+                                && !cacheLine.IsEVTInFlight(glbl)
+                                && !cacheLine.IsSNPInFlight(glbl)
+                                && !cacheLine.IsREQInFlight(glbl);
+            if (candidate) {
+                if (reapSet.insert(key).second
+                 && std::find(reapList.begin(), reapList.end(), key) == reapList.end())
+                    reapList.push_back(key);
+            }
+            else
+                reapSet.erase(key);
+        }
+
+        void ApplyInFlightDelta(const CacheLine& cacheLine,
+                                InFlightClass type,
+                                bool before, bool after) noexcept
+        {
+            if (before != after) {
+                size_t& count = type == InFlightClass::EVT ? inFlightEVT
+                              : type == InFlightClass::REQ ? inFlightREQ : inFlightSNP;
+                if (after)
+                    ++count;
+                else {
+                    assert(count > 0);
+                    --count;
+                }
+                TrackWorklist(type, LineKey(cacheLine.GetPA()), before, after);
+            }
+        }
+
+        void ApplyInFlightDelta(const CacheLine& cacheLine,
+                                const InFlightState& before,
+                                const InFlightState& after) noexcept
+        {
+            ApplyInFlightDelta(cacheLine, InFlightClass::EVT, before.evt, after.evt);
+            ApplyInFlightDelta(cacheLine, InFlightClass::REQ, before.req, after.req);
+            ApplyInFlightDelta(cacheLine, InFlightClass::SNP, before.snp, after.snp);
+            TrackReap(cacheLine);
+        }
+
+        // Capture all three predicates at a mutation boundary and reconcile
+        // them at scope exit (including early returns). Pend* helpers are
+        // deliberately not guarded: their outer Do*/Tick* method owns the
+        // update, preventing nested double increments/decrements.
+        class InFlightUpdate {
+        private:
+            UpstreamNode<config>& node;
+            CacheLine& cacheLine;
+            InFlightState before;
+
+        public:
+            InFlightUpdate(UpstreamNode<config>& node,
+                           CacheLine& cacheLine) noexcept
+                : node(node), cacheLine(cacheLine),
+                  before(node.ReadInFlight(cacheLine))
+            { }
+
+            InFlightUpdate(const InFlightUpdate&) = delete;
+            InFlightUpdate& operator=(const InFlightUpdate&) = delete;
+
+            ~InFlightUpdate() noexcept
+            { node.ApplyInFlightDelta(cacheLine, before, node.ReadInFlight(cacheLine)); }
+        };
+
+        // A mutation boundary that can only change one transaction class need
+        // not evaluate the other two predicates.
+        class InFlightClassUpdate {
+        private:
+            UpstreamNode<config>& node;
+            CacheLine& cacheLine;
+            InFlightClass type;
+            bool before;
+
+        public:
+            InFlightClassUpdate(UpstreamNode<config>& node,
+                                CacheLine& cacheLine,
+                                InFlightClass type) noexcept
+                : node(node), cacheLine(cacheLine), type(type),
+                  before(node.ReadInFlight(type, cacheLine))
+            { }
+
+            InFlightClassUpdate(const InFlightClassUpdate&) = delete;
+            InFlightClassUpdate& operator=(const InFlightClassUpdate&) = delete;
+
+            ~InFlightClassUpdate() noexcept
+            {
+                node.ApplyInFlightDelta(cacheLine, type, before,
+                                        node.ReadInFlight(type, cacheLine));
+                node.TrackReap(cacheLine);
+            }
+        };
+
     protected:
         Xact::Joint<config>                     joint;
 
@@ -452,6 +608,21 @@ namespace CCHI::Taurus {
 
         std::unordered_map<uint64_t, std::shared_ptr<CacheLine>>
                                                 cacheable;
+
+        // Active-line indexes. Sets hold current membership; vectors may also
+        // contain stale keys until the corresponding bounded Tick pass ends.
+        std::unordered_set<uint64_t>             worksetEVT;
+        std::unordered_set<uint64_t>             worksetREQ;
+        std::unordered_set<uint64_t>             worksetSNP;
+        std::vector<uint64_t>                    worklistEVT;
+        std::vector<uint64_t>                    worklistREQ;
+        std::vector<uint64_t>                    worklistSNP;
+        std::unordered_set<uint64_t>             reapSet;
+        std::vector<uint64_t>                    reapList;
+
+        // Called immediately before a cache-line record leaves 'cacheable'.
+        // The callback must not call back into this node.
+        std::function<void(uint64_t)>             cacheLineReapCallback;
 
         std::unordered_map<uint64_t, std::shared_ptr<Xact::Xaction<config>>>
                                                 noncacheable;
@@ -553,6 +724,9 @@ namespace CCHI::Taurus {
         // the returned handle must not be used after this node is destroyed -
         // see the lifetime contract on CacheLine::owner
         std::shared_ptr<CacheLine>              GetCacheLine(uint64_t PA) const noexcept;
+        size_t                                  GetInFlightEVTCount() const noexcept;
+
+        void                                    SetCacheLineReapCallback(std::function<void(uint64_t)> callback) noexcept;
 
     protected:
         void                                    SetCacheLine(std::shared_ptr<CacheLine> cacheLine) noexcept;
@@ -783,39 +957,27 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
+    inline size_t UpstreamNode<config>::GetInFlightEVTCount() const noexcept
+    {
+        return CountInFlightEVT();
+    }
+
+    template<FlitConfigurationConcept config>
     inline size_t UpstreamNode<config>::CountInFlightEVT() const noexcept
     {
-        size_t count = 0;
-
-        for (const auto& [PA, cacheLine] : cacheable)
-            if (cacheLine->IsEVTInFlight(glbl))
-                count++;
-
-        return count;
+        return inFlightEVT;
     }
 
     template<FlitConfigurationConcept config>
     inline size_t UpstreamNode<config>::CountInFlightSNP() const noexcept
     {
-        size_t count = 0;
-
-        for (const auto& [PA, cacheLine] : cacheable)
-            if (cacheLine->IsSNPInFlight(glbl))
-                count++;
-
-        return count;
+        return inFlightSNP;
     }
 
     template<FlitConfigurationConcept config>
     inline size_t UpstreamNode<config>::CountInFlightREQ() const noexcept
     {
-        size_t count = 0;
-
-        for (const auto& [PA, cacheLine] : cacheable)
-            if (cacheLine->IsREQInFlight(glbl))
-                count++;
-
-        return count;
+        return inFlightREQ;
     }
 
     template<FlitConfigurationConcept config>
@@ -897,11 +1059,27 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
+    inline void UpstreamNode<config>::SetCacheLineReapCallback(std::function<void(uint64_t)> callback) noexcept
+    {
+        cacheLineReapCallback = std::move(callback);
+    }
+
+    template<FlitConfigurationConcept config>
     inline void UpstreamNode<config>::SetCacheLine(std::shared_ptr<CacheLine> cacheLine) noexcept
     {
         // key by the line's own normalized PA (never a caller-supplied
         // argument): the map key and the line can never disagree
-        cacheable[LineKey(cacheLine->PA)] = cacheLine;
+        const uint64_t key = LineKey(cacheLine->PA);
+        auto it = cacheable.find(key);
+        if (it != cacheable.end()) {
+            ApplyInFlightDelta(*it->second, ReadInFlight(*it->second), InFlightState{});
+            if (cacheLineReapCallback)
+                cacheLineReapCallback(it->second->GetPA());
+            cacheable.erase(it);
+        }
+
+        cacheable[key] = cacheLine;
+        ApplyInFlightDelta(*cacheLine, InFlightState{}, ReadInFlight(*cacheLine));
     }
 
     template<FlitConfigurationConcept config>
@@ -1285,6 +1463,8 @@ namespace CCHI::Taurus {
             SetCacheLine(cacheLine);
         }
 
+        InFlightUpdate inFlightUpdate(*this, *cacheLine);
+
         //
         if (CountInFlightREQ() >= xactionLimitREQ)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_REQ_LIMIT_EXCEEDED);
@@ -1410,6 +1590,8 @@ namespace CCHI::Taurus {
             cacheLine = std::make_shared<CacheLine>(this, PA);
             SetCacheLine(cacheLine);
         }
+
+        InFlightUpdate inFlightUpdate(*this, *cacheLine);
 
         //
         if (CountInFlightREQ() >= xactionLimitREQ)
@@ -1540,6 +1722,8 @@ namespace CCHI::Taurus {
             SetCacheLine(cacheLine);
         }
 
+        InFlightUpdate inFlightUpdate(*this, *cacheLine);
+
         //
         if (CountInFlightREQ() >= xactionLimitREQ)
             return std::make_shared<FutureNow<GrantedEvent>>(Denial::REJECTED_TAURUS_REQ_LIMIT_EXCEEDED);
@@ -1654,6 +1838,8 @@ namespace CCHI::Taurus {
 
         if (IsEVTInFlight(*cacheLine))
             return std::make_shared<FutureNow<EvictedEvent>>(Denial::REJECTED_TAURUS_PA_EVT_BUSY);
+
+        InFlightUpdate inFlightUpdate(*this, *cacheLine);
 
         //
         if (CountInFlightEVT() >= xactionLimitEVT)
@@ -2047,28 +2233,53 @@ namespace CCHI::Taurus {
         TickSNP();
         TickREQ();
 
-        for (auto it = cacheable.begin(); it != cacheable.end();)
+        const size_t reapCount = reapList.size();
+        for (size_t index = 0; index < reapCount; ++index)
         {
-            CacheLine& cacheLine = *it->second;
-
-            if (cacheLine.state == CacheState::Invalid
-             && !cacheLine.IsEVTInFlight(glbl)
-             && !cacheLine.IsSNPInFlight(glbl)
-             && !cacheLine.IsREQInFlight(glbl))
-            {
-                it = cacheable.erase(it);
+            const uint64_t key = reapList[index];
+            auto it = cacheable.find(key);
+            if (it == cacheable.end()) {
+                reapSet.erase(key);
+                continue;
             }
-            else
-                ++it;
+
+            CacheLine& cacheLine = *it->second;
+            const bool candidate = cacheLine.state == CacheState::Invalid
+                                && !cacheLine.IsEVTInFlight(glbl)
+                                && !cacheLine.IsSNPInFlight(glbl)
+                                && !cacheLine.IsREQInFlight(glbl);
+            if (!candidate) {
+                reapSet.erase(key);
+                continue;
+            }
+
+            if (cacheLineReapCallback)
+                cacheLineReapCallback(cacheLine.GetPA());
+            reapSet.erase(key);
+            cacheable.erase(it);
         }
+
+        reapList.erase(std::remove_if(reapList.begin(), reapList.end(),
+            [this](uint64_t key) { return !reapSet.contains(key); }), reapList.end());
     }
 
     template<FlitConfigurationConcept config>
     inline void UpstreamNode<config>::TickEVT() noexcept
     {
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
+        if (inFlightEVT == 0)
+            return;
+
+        const size_t workCount = worklistEVT.size();
+        for (size_t index = 0; index < workCount; ++index)
         {
+            auto it = cacheable.find(worklistEVT[index]);
+            if (it == cacheable.end())
+                continue;
+
             CacheLine& cacheLine = *it->second;
+            if (!cacheLine.IsEVTInFlight(glbl))
+                continue;
+            InFlightClassUpdate inFlightUpdate(*this, cacheLine, InFlightClass::EVT);
 
             if (cacheLine.pendingEVTHazardTXEVT)
             {
@@ -2305,14 +2516,28 @@ namespace CCHI::Taurus {
                 }
             }
         }
+
+        worklistEVT.erase(std::remove_if(worklistEVT.begin(), worklistEVT.end(),
+            [this](uint64_t key) { return !worksetEVT.contains(key); }), worklistEVT.end());
     }
 
     template<FlitConfigurationConcept config>
     inline void UpstreamNode<config>::TickSNP() noexcept
     {
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
+        if (inFlightSNP == 0)
+            return;
+
+        const size_t workCount = worklistSNP.size();
+        for (size_t index = 0; index < workCount; ++index)
         {
+            auto it = cacheable.find(worklistSNP[index]);
+            if (it == cacheable.end())
+                continue;
+
             CacheLine& cacheLine = *it->second;
+            if (!cacheLine.IsSNPInFlight(glbl))
+                continue;
+            InFlightClassUpdate inFlightUpdate(*this, cacheLine, InFlightClass::SNP);
 
             if (cacheLine.pendingSNPHazardRXSNP)
             {
@@ -2605,14 +2830,28 @@ namespace CCHI::Taurus {
                 }
             }
         }
+
+        worklistSNP.erase(std::remove_if(worklistSNP.begin(), worklistSNP.end(),
+            [this](uint64_t key) { return !worksetSNP.contains(key); }), worklistSNP.end());
     }
 
     template<FlitConfigurationConcept config>
     inline void UpstreamNode<config>::TickREQ() noexcept
     {
-        for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
+        if (inFlightREQ == 0)
+            return;
+
+        const size_t workCount = worklistREQ.size();
+        for (size_t index = 0; index < workCount; ++index)
         {
+            auto it = cacheable.find(worklistREQ[index]);
+            if (it == cacheable.end())
+                continue;
+
             CacheLine& cacheLine = *it->second;
+            if (!cacheLine.IsREQInFlight(glbl))
+                continue;
+            InFlightClassUpdate inFlightUpdate(*this, cacheLine, InFlightClass::REQ);
 
             if (cacheLine.pendingREQHazardTXREQ)
             {
@@ -2734,6 +2973,9 @@ namespace CCHI::Taurus {
                 }
             }
         }
+
+        worklistREQ.erase(std::remove_if(worklistREQ.begin(), worklistREQ.end(),
+            [this](uint64_t key) { return !worksetREQ.contains(key); }), worklistREQ.end());
     }
 
     template<FlitConfigurationConcept config>
@@ -2759,6 +3001,7 @@ namespace CCHI::Taurus {
             }
 
             CacheLine& cacheLine = *lineIt->second;
+            InFlightUpdate inFlightUpdate(*this, cacheLine);
 
             if (events)
                 if (events->OnEVTPreChannelChosen(*this, cacheLine, *cacheLine.pendingEVTChannelTXEVT).IsCancelled())
@@ -2796,6 +3039,7 @@ namespace CCHI::Taurus {
             }
 
             CacheLine& cacheLine = *lineIt->second;
+            InFlightUpdate inFlightUpdate(*this, cacheLine);
 
             auto& flit = *cacheLine.pendingEVTChannelTXEVT;
 
@@ -2877,6 +3121,7 @@ namespace CCHI::Taurus {
             }
 
             CacheLine& cacheLine = *lineIt->second;
+            InFlightUpdate inFlightUpdate(*this, cacheLine);
 
             // single-slot channel: exactly one deque entry per line, so a
             // cancelled candidate can never be re-offered through a second entry
@@ -2960,6 +3205,7 @@ namespace CCHI::Taurus {
             }
 
             CacheLine& cacheLine = *lineIt->second;
+            InFlightUpdate inFlightUpdate(*this, cacheLine);
 
             auto& flit = *cacheLine.pendingREQChannelTXREQ;
 
@@ -3126,6 +3372,8 @@ namespace CCHI::Taurus {
             SetCacheLine(cacheLine);
         }
 
+        InFlightUpdate inFlightUpdate(*this, *cacheLine);
+
         // acceptance point: the snoop's action-start age covers its SnpResp and
         // SnpRespData beats (a backpressured snoop above never reaches this stamp)
         cacheLine->ageSNP = NextEmissionAge();
@@ -3223,6 +3471,7 @@ namespace CCHI::Taurus {
             }
 
             CacheLine& cacheLine = *lineIt->second;
+            InFlightUpdate inFlightUpdate(*this, cacheLine);
 
             if (cacheLine.pendingSNPChannelTXRSP)
             {
@@ -3315,6 +3564,7 @@ namespace CCHI::Taurus {
             }
 
             CacheLine& cacheLine = *lineIt->second;
+            InFlightUpdate inFlightUpdate(*this, cacheLine);
 
             if (cacheLine.pendingSNPChannelTXRSP)
             {
@@ -3454,6 +3704,7 @@ namespace CCHI::Taurus {
             }
 
             CacheLine& cacheLine = *lineIt->second;
+            InFlightUpdate inFlightUpdate(*this, cacheLine);
 
             if (cacheLine.pendingSNPChannelTXDAT0)
             {
@@ -3585,6 +3836,7 @@ namespace CCHI::Taurus {
             }
 
             CacheLine& cacheLine = *lineIt->second;
+            InFlightUpdate inFlightUpdate(*this, cacheLine);
 
             if (cacheLine.pendingSNPChannelTXDAT0)
             {
