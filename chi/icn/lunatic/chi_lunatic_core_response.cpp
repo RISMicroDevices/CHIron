@@ -86,6 +86,27 @@ namespace CHI::Lunatic {
             flow.readReceiptSent = true;
     }
 
+    void Core::Impl::QueueRespSepData(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.respSepSent)
+            return;
+
+        Response response;
+        response.source = nodeId;
+        response.target = transaction.request.source;
+        response.txnId = transaction.request.txnId;
+        response.dbid = transaction.dbid;
+        response.opcode = CHI::Eb::Opcodes::RSP::RespSepData;
+        response.resp = 0;
+        response.respErr = transaction.responseRespErr == CHI::Eb::RespErrs::DERR
+            ? uint8_t(CHI::Eb::RespErrs::NDERR) : transaction.responseRespErr;
+        response.qos = transaction.request.qos;
+        response.traceTag = transaction.request.traceTag;
+        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+            flow.respSepSent = true;
+    }
+
     void Core::Impl::QueueRetryCredit(size_t index)
     {
         auto it = retries.find(index);
@@ -104,11 +125,17 @@ namespace CHI::Lunatic {
     void Core::Impl::ReturnRead(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
-        if (transaction.request.order != 0 && !flow.readReceiptEmitted)
+        if (transaction.request.order != 0 && !flow.separatedResponse && !flow.readReceiptEmitted)
         {
             if (!flow.readReceiptSent)
                 QueueReadReceipt(transaction);
             return;
+        }
+        if (flow.separatedResponse && !flow.respSepSent)
+        {
+            QueueRespSepData(transaction);
+            if (!flow.respSepSent)
+                return;
         }
 
         uint64_t mask = flow.expectedBeatMask;
@@ -131,7 +158,8 @@ namespace CHI::Lunatic {
         data.homeNid = nodeId;
         data.txnId = transaction.request.txnId;
         data.dbid = transaction.dbid;
-        data.opcode = CHI::Eb::Opcodes::DAT::CompData;
+        data.opcode = flow.separatedResponse
+            ? CHI::Eb::Opcodes::DAT::DataSepResp : CHI::Eb::Opcodes::DAT::CompData;
         data.resp = transaction.responseResp;
         data.respErr = transaction.responseRespErr;
         data.dataId = offset / 16;
@@ -186,6 +214,18 @@ namespace CHI::Lunatic {
             transaction.phase = Phase::Action;
             transaction.readyTime = time;
             return;
+        }
+        if (!transaction.canceled && flow.separatedResponse)
+        {
+            const uint64_t mask = flow.expectedBeatMask
+                ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+            if (!flow.respSepEmitted || flow.readBeatsEmitted != size_t(std::popcount(mask)))
+            {
+                transaction.phase = Phase::Return;
+                transaction.wait = WaitReason::None;
+                transaction.readyTime = time;
+                return;
+            }
         }
         transaction.Mark(COMPLETE_RESPONSE);
         transaction.wait = RequiresTransactionCompAck(transaction) && !transaction.Complete(COMPLETE_COMPACK)

@@ -88,12 +88,16 @@ namespace CHI::Lunatic {
                 return;
             }
             const auto requestClass = ClassifyRequest(transaction->request.opcode);
+            const FlowState& flow = flows.at(transaction->handle);
             const bool responseComplete = transaction->phase == Phase::WaitCompAck && transaction->Complete(COMPLETE_RESPONSE);
             const bool earlyWriteAck = (requestClass == RequestClass::NonCoherentWrite ||
-                requestClass == RequestClass::ImmediateWrite) && flows.at(transaction->handle).dbidEmitted &&
+                requestClass == RequestClass::ImmediateWrite) && flow.dbidEmitted &&
+                !transaction->Complete(COMPLETE_RESPONSE);
+            const bool earlySeparatedAck = flow.separatedResponse &&
+                flow.respSepEmitted && (transaction->request.order == 0 || flow.readBeatsEmitted != 0) &&
                 !transaction->Complete(COMPLETE_RESPONSE);
             if (!RequiresTransactionCompAck(*transaction) || transaction->Complete(COMPLETE_COMPACK) ||
-                (!responseComplete && !earlyWriteAck))
+                (!responseComplete && !earlyWriteAck && !earlySeparatedAck))
             {
                 Error(transaction->handle, "unexpected or early CompAck");
                 return;
@@ -134,7 +138,7 @@ namespace CHI::Lunatic {
     {
         namespace DAT = CHI::Eb::Opcodes::DAT;
 
-        if (flit.opcode == DAT::CompData)
+        if (flit.opcode == DAT::CompData || flit.opcode == DAT::DataSepResp)
         {
             if (Transaction* transaction = tracker.FindMemory(flit.source, flit.txnId))
             {
@@ -215,7 +219,15 @@ namespace CHI::Lunatic {
             return;
         }
 
-        flows.emplace(transaction->handle, FlowState{});
+        const auto requestClass = ClassifyRequest(request.opcode);
+        const bool separatedEligible = requestClass == RequestClass::NonCoherentRead ||
+            requestClass == RequestClass::ReadOnce;
+        const bool separatedLegal = separatedEligible &&
+            (request.order == 0 || RequiresCompAck(request));
+        FlowState flow;
+        flow.separatedResponse = separatedLegal && options.separatedReadResponse;
+        flow.separatedBackendRead = separatedLegal && options.separatedBackendRead;
+        flows.emplace(transaction->handle, std::move(flow));
         transaction->readyTime = pipeline.SaturatingAdd(time, 1);
         transaction->phase = Phase::Receive;
     }
@@ -450,6 +462,12 @@ namespace CHI::Lunatic {
             flows.at(transaction->handle).readReceiptEmitted = true;
             return;
         }
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::RespSepData)
+        {
+            flows.at(transaction->handle).respSepEmitted = true;
+            FinishResponse(*transaction);
+            return;
+        }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::StashDone)
         {
             flows.at(transaction->handle).stashDoneEmitted = true;
@@ -537,6 +555,10 @@ namespace CHI::Lunatic {
             }
             return;
         }
+        if (IsReadRequest(transaction->request.opcode) &&
+            (pending.flit.opcode == CHI::Eb::Opcodes::DAT::CompData ||
+             pending.flit.opcode == CHI::Eb::Opcodes::DAT::DataSepResp))
+            ++flow.readBeatsEmitted;
         if (pending.last)
         {
             if (IsAtomicRequest(transaction->request.opcode) &&

@@ -140,6 +140,7 @@ namespace CHI::Lunatic {
             result.opcode = flit.Opcode();
             result.resp = flit.Resp();
             result.respErr = flit.RespErr();
+            result.fwdState = flit.FwdState();
             result.dataSource = flit.DataSource();
             result.dataId = flit.DataID();
             result.ccid = flit.CCID();
@@ -254,7 +255,13 @@ namespace CHI::Lunatic {
             flit.Opcode() = value.opcode;
             flit.RespErr() = value.respErr;
             flit.Resp() = value.resp;
-            flit.DataSource() = value.dataSource;
+            if (value.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataFwded)
+                flit.FwdState() = value.fwdState;
+            else if (value.opcode == CHI::Eb::Opcodes::DAT::CompData ||
+                     value.opcode == CHI::Eb::Opcodes::DAT::DataSepResp)
+                flit.DataSource() = value.dataSource;
+            else
+                flit.DataPull() = value.dataSource;
             flit.CBusy() = value.cBusy;
             flit.DBID() = value.dbid;
             flit.CCID() = value.ccid;
@@ -305,8 +312,21 @@ namespace CHI::Lunatic {
             emission.flit.NS() = value.nonSecure;
             emission.flit.DoNotGoToSD() = value.doNotGoToSD;
             emission.flit.RetToSrc() = value.retToSrc;
-            emission.flit.StashLPIDValid() = value.stashLpidValid;
-            emission.flit.StashLPID() = value.stashLpid;
+            if (value.opcode == CHI::Eb::Opcodes::SNP::SnpSharedFwd ||
+                value.opcode == CHI::Eb::Opcodes::SNP::SnpCleanFwd ||
+                value.opcode == CHI::Eb::Opcodes::SNP::SnpOnceFwd ||
+                value.opcode == CHI::Eb::Opcodes::SNP::SnpNotSharedDirtyFwd ||
+                value.opcode == CHI::Eb::Opcodes::SNP::SnpPreferUniqueFwd ||
+                value.opcode == CHI::Eb::Opcodes::SNP::SnpUniqueFwd)
+            {
+                emission.flit.FwdNID() = value.fwdNid;
+                emission.flit.FwdTxnID() = value.fwdTxnId;
+            }
+            else
+            {
+                emission.flit.StashLPIDValid() = value.stashLpidValid;
+                emission.flit.StashLPID() = value.stashLpid;
+            }
             emission.flit.TraceTag() = value.traceTag;
             return emission;
         }

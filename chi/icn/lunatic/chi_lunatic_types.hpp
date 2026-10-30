@@ -131,6 +131,7 @@ namespace CHI::Lunatic {
         uint16_t                       opcode = 0;
         uint8_t                        resp = 0;
         uint8_t                        respErr = 0;
+        uint8_t                        fwdState = 0;
         uint8_t                        dataSource = 0;
         uint8_t                        dataId = 0;
         uint8_t                        ccid = 0;
@@ -149,6 +150,8 @@ namespace CHI::Lunatic {
         NodeId        source = 0;
         NodeId        target = 0;
         TransactionId txnId = 0;
+        NodeId        fwdNid = 0;
+        TransactionId fwdTxnId = 0;
         uint64_t      address = 0;
         uint16_t      opcode = 0;
         uint8_t       qos = 0;

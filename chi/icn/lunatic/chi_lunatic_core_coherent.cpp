@@ -157,6 +157,8 @@ namespace CHI::Lunatic {
                     transaction.responseResp = CHI::Eb::Resps::CompData_I;
                 else
                     transaction.responseResp = CHI::Eb::Resps::CompData_UC;
+                if (flow.separatedResponse)
+                    transaction.responseResp = CHI::Eb::Resps::DataSepResp_UC;
                 transaction.sentBeats = 0;
                 transaction.phase = Phase::Return;
                 transaction.readyTime = time;

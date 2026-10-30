@@ -11,7 +11,7 @@ namespace CHI::Lunatic {
         {
             case RequestClass::NonCoherentRead:
                 flow.expectedBeatMask = TransferBeatMask(transaction.request, options);
-                if (transaction.request.order != 0 && !flow.readReceiptSent)
+                if (transaction.request.order != 0 && !flow.separatedResponse && !flow.readReceiptSent)
                 {
                     QueueReadReceipt(transaction);
                     if (!flow.readReceiptSent)
@@ -46,7 +46,8 @@ namespace CHI::Lunatic {
         switch (ClassifyRequest(transaction.request.opcode))
         {
             case RequestClass::NonCoherentRead:
-                transaction.responseResp = CHI::Eb::Resps::CompData_I;
+                transaction.responseResp = flow.separatedResponse
+                    ? CHI::Eb::Resps::DataSepResp_UC : CHI::Eb::Resps::CompData_I;
                 transaction.phase = Phase::Return;
                 transaction.readyTime = time;
                 transaction.sentBeats = 0;

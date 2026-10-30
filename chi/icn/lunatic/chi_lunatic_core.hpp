@@ -52,6 +52,12 @@ namespace CHI::Lunatic {
         std::map<NodeId, uint8_t>  snoopResponses;
         bool                       readReceiptSent = false;
         bool                       readReceiptEmitted = false;
+        bool                       separatedResponse = false;
+        bool                       separatedBackendRead = false;
+        bool                       respSepSent = false;
+        bool                       respSepEmitted = false;
+        size_t                     readBeatsEmitted = 0;
+        bool                       backendReadReceiptReceived = false;
         bool                       directoryCommitted = false;
         bool                       baselineFetch = false;
         bool                       baselineFetched = false;
@@ -252,6 +258,7 @@ namespace CHI::Lunatic {
         void QueueStashDone(Transaction& transaction, bool withComp = false);
         void QueueCompPersist(Transaction& transaction);
         void QueueReadReceipt(Transaction& transaction);
+        void QueueRespSepData(Transaction& transaction);
         void QueueRetryCredit(size_t index);
         void FinishResponse(Transaction& transaction);
         bool RequiresTransactionCompAck(const Transaction& transaction) const;

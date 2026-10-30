@@ -46,7 +46,8 @@ namespace CHI::Lunatic {
         request.txnId = transaction.handle;
         request.returnNid = nodeId;
         request.returnTxnId = transaction.handle;
-        request.opcode = CHI::Eb::Opcodes::REQ::ReadNoSnp;
+        request.opcode = flow.separatedBackendRead
+            ? CHI::Eb::Opcodes::REQ::ReadNoSnpSep : CHI::Eb::Opcodes::REQ::ReadNoSnp;
         if (flow.victimPending && flow.victimDataPartial)
         {
             request.address = flow.victimLine.address;
@@ -259,7 +260,15 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
 
         if (flit.opcode == RSP::ReadReceipt)
-            return IsReadRequest(transaction.request.opcode) && transaction.request.order != 0;
+        {
+            if (!IsReadRequest(transaction.request.opcode) || transaction.request.order == 0 ||
+                flow.backendReadReceiptReceived)
+                return false;
+            flow.backendReadReceiptReceived = true;
+            if (transaction.Complete(COMPLETE_MEMORY))
+                tracker.UnbindMemory(options.subordinateId, transaction.handle);
+            return true;
+        }
 
         if (IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
             return HandleAtomicBackendRSP(transaction, flit);
@@ -349,6 +358,13 @@ namespace CHI::Lunatic {
         if (!transaction.memoryRequired || flow.memoryWrite ||
             (!IsReadRequest(transaction.request.opcode) && !flow.baselineFetch))
             return false;
+        if (flow.separatedBackendRead)
+        {
+            if (flit.opcode != CHI::Eb::Opcodes::DAT::DataSepResp)
+                return false;
+        }
+        else if (flit.opcode != CHI::Eb::Opcodes::DAT::CompData)
+            return false;
 
         const size_t bytes = BytesPerBeat(options);
         const size_t offset = flit.ByteOffset();
@@ -396,7 +412,8 @@ namespace CHI::Lunatic {
             flow.baselineFetched = true;
             flow.baselineFetch = false;
         }
-        tracker.UnbindMemory(options.subordinateId, transaction.handle);
+        if (transaction.request.order == 0 || flow.backendReadReceiptReceived)
+            tracker.UnbindMemory(options.subordinateId, transaction.handle);
         transaction.phase = Phase::Action;
         transaction.readyTime = pipeline.ScheduleData(time);
         return true;
