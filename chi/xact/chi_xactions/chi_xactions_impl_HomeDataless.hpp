@@ -398,7 +398,15 @@ namespace /*CHI::*/Xact {
             }
             else if (rspFlit.flit.rsp.Opcode() == Opcodes::RSP::Persist)
             {
-                if (!rspFlit.IsFromSubordinateToHome(glbl))
+                const auto& request = this->first.flit.req;
+                const bool directPersist = request.ReturnNID() != request.SrcID();
+
+                if (directPersist)
+                {
+                    if (!rspFlit.IsFromSubordinateToRequester(glbl))
+                        return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_TO_RN, rspFlit);
+                }
+                else if (!rspFlit.IsFromSubordinateToHome(glbl))
                     return this->ResponseFlitDenied(XactDenial::DENIED_RSP_NOT_FROM_SN_TO_HN, rspFlit);
 
                 if (this->HasRSP({ Opcodes::RSP::Persist }))
@@ -407,10 +415,10 @@ namespace /*CHI::*/Xact {
                 if (this->HasRSP({ Opcodes::RSP::CompPersist }))
                     return XactDenial::DENIED_PERSIST_AFTER_COMPPERSIST;
                 
-                if (rspFlit.flit.rsp.TgtID() != this->first.flit.req.SrcID())
+                if (rspFlit.flit.rsp.TgtID() != request.ReturnNID())
                     return XactDenial::DENIED_RSP_TGTID_MISMATCHING_REQ;
                 
-                if (rspFlit.flit.rsp.PGroupID() != this->first.flit.req.PGroupID())
+                if (rspFlit.flit.rsp.PGroupID() != request.PGroupID())
                     return XactDenial::DENIED_PGROUPID_MISMATCH;
                 
                 //

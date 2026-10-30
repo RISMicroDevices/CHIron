@@ -2174,6 +2174,25 @@ namespace /*CHI::*/Xact {
         key.id.txn  = rspFlit.TxnID();
 
         auto xactionIter = txTransactions.find(key);
+
+        if (rspFlit.Opcode() == Opcodes::RSP::Persist && rspFlit.TxnID() == 0)
+        {
+            xactionIter = std::find_if(txTransactions.begin(), txTransactions.end(),
+                [&](const auto& entry) {
+                    const auto& candidate = entry.second;
+                    const auto& first = candidate->GetFirst();
+
+                    return first.IsREQ()
+                        && first.flit.req.Opcode() == Opcodes::REQ::CleanSharedPersistSep
+                        && first.flit.req.SrcID() == rspFlit.TgtID()
+                        && first.flit.req.PGroupID() == rspFlit.PGroupID()
+                        && !candidate->HasRSP({
+                            Opcodes::RSP::Persist,
+                            Opcodes::RSP::CompPersist
+                        });
+                });
+        }
+
         if (xactionIter == txTransactions.end())
             return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_TXNID_NOT_EXIST, firedRspFlit);
 
@@ -3482,6 +3501,26 @@ namespace /*CHI::*/Xact {
         key.id.txn  = rspFlit.TxnID();
 
         auto xactionIter = rxTransactions.find(key);
+
+        if (rspFlit.Opcode() == Opcodes::RSP::Persist && rspFlit.TxnID() == 0)
+        {
+            xactionIter = std::find_if(rxTransactions.begin(), rxTransactions.end(),
+                [&](const auto& entry) {
+                    const auto& candidate = entry.second;
+                    const auto& first = candidate->GetFirst();
+
+                    return first.IsREQ()
+                        && first.flit.req.Opcode() == Opcodes::REQ::CleanSharedPersistSep
+                        && first.flit.req.TgtID() == rspFlit.SrcID()
+                        && first.flit.req.ReturnNID() == rspFlit.TgtID()
+                        && first.flit.req.PGroupID() == rspFlit.PGroupID()
+                        && !candidate->HasRSP({
+                            Opcodes::RSP::Persist,
+                            Opcodes::RSP::CompPersist
+                        });
+                });
+        }
+
         if (xactionIter == rxTransactions.end())
         {
             if (rspFlit.Opcode() == Opcodes::RSP::ReadReceipt)
