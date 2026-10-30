@@ -205,7 +205,6 @@ LUNATIC_TEST(Stage3BasicRetryGrantAndResend)
     driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
     driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
     driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
-    driver.Quiesce();
 
     auto retry = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 5, 51, line.address);
     retry.AllowRetry() = 0;

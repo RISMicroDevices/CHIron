@@ -4,6 +4,114 @@
 
 namespace CHI::Lunatic {
 
+    bool Core::Impl::HandleBackendRetry(Transaction& transaction, const Response&)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!transaction.memoryRequired || !flow.backendRequest.allowRetry ||
+            backendRetries.contains(transaction.handle))
+            return false;
+
+        BackendRetryRecord record{ flow.backendRequest, transaction.handle, nextBackendRetry++, false };
+        backendRetries.emplace(transaction.handle, record);
+        tracker.UnbindMemory(options.subordinateId, record.request.txnId);
+        flow.backendPhase = BackendPhase::WaitRetry;
+        flow.backendBeatMask = 0;
+        flow.backendCompReceived = false;
+        flow.backendDataEmitted = false;
+        flow.backendReadReceiptReceived = false;
+        flow.atomic.backendResultReceived = false;
+        flow.atomic.backendDirtyCommitted = false;
+        transaction.receivedBeats = 0;
+        transaction.wait = WaitReason::Memory;
+        transaction.phase = Phase::WaitMemory;
+        transaction.readyTime = time;
+        return true;
+    }
+
+    void Core::Impl::AdvanceBackendRetries()
+    {
+        for (auto credit = backendCredits.begin(); credit != backendCredits.end();)
+        {
+            while (credit->second)
+            {
+                auto selected = backendRetries.end();
+                for (auto iter = backendRetries.begin(); iter != backendRetries.end(); ++iter)
+                {
+                    BackendRetryRecord& retry = iter->second;
+                    if (retry.creditReceived || retry.request.target != credit->first.first ||
+                        retry.request.pCrdType != credit->first.second)
+                        continue;
+                    if (selected == backendRetries.end() || retry.serial > selected->second.serial)
+                        selected = iter;
+                }
+                if (selected == backendRetries.end())
+                    break;
+                selected->second.creditReceived = true;
+                --credit->second;
+            }
+            if (!credit->second)
+                credit = backendCredits.erase(credit);
+            else
+                ++credit;
+        }
+
+        for (auto iter = backendRetries.begin(); iter != backendRetries.end();)
+        {
+            BackendRetryRecord& retry = iter->second;
+            if (!retry.creditReceived)
+            {
+                ++iter;
+                continue;
+            }
+
+            Transaction* transaction = tracker.Find(retry.transaction);
+            if (!transaction)
+            {
+                iter = backendRetries.erase(iter);
+                continue;
+            }
+
+            const bool canceled = transaction->canceled;
+            Request request;
+            if (canceled)
+            {
+                request.source = nodeId;
+                request.target = options.subordinateId;
+                request.opcode = CHI::Eb::Opcodes::REQ::PCrdReturn;
+                request.pCrdType = retry.request.pCrdType;
+            }
+            else
+            {
+                request = retry.request;
+                request.allowRetry = false;
+            }
+
+            if (!Queue(txreq, request, retry.transaction, transaction->actionAge, false, true))
+            {
+                transaction->readyTime = time;
+                ++iter;
+                continue;
+            }
+
+            FlowState& flow = flows.at(transaction->handle);
+            if (canceled)
+                flow.backendPhase = BackendPhase::Done;
+            else
+            {
+                if (!tracker.BindMemory(transaction->handle, options.subordinateId, request.txnId))
+                {
+                    Error(transaction->handle, "unable to rebind downstream read ID");
+                    transaction->canceled = true;
+                    transaction->phase = Phase::Commit;
+                }
+                flow.backendPhase = BackendPhase::WaitRequestEmission;
+                transaction->phase = Phase::WaitMemory;
+                transaction->readyTime = time;
+            }
+            iter = backendRetries.erase(iter);
+        }
+    }
+
     void Core::Impl::StartMemoryRead(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);

@@ -103,6 +103,7 @@ namespace CHI::Lunatic {
         bool          snoopMe = false;
 
         LineKey Line() const noexcept { return LineKey::FromAddress(address, nonSecure); }
+        bool operator==(const Request&) const = default;
     };
 
     struct Response {

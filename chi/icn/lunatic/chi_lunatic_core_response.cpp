@@ -111,7 +111,7 @@ namespace CHI::Lunatic {
     void Core::Impl::QueueRetryCredit(size_t index)
     {
         auto it = retries.find(index);
-        if (it == retries.end() || !it->second.ackPopped || it->second.grantQueued || tracker.Size() >= tracker.Limit())
+        if (it == retries.end() || !it->second.ackPopped || it->second.grantQueued || !RetryReservationAvailable())
             return;
 
         Response response;
@@ -121,6 +121,38 @@ namespace CHI::Lunatic {
         response.pCrdType = it->second.request.pCrdType;
         if (Queue(txrsp, response, INVALID_TRANSACTION, nextAge++, false, false, index))
             it->second.grantQueued = true;
+    }
+
+    bool Core::Impl::RetryReservationAvailable() const noexcept
+    {
+        size_t reserved = 0;
+        for (const auto& [index, retry] : retries)
+        {
+            (void)index;
+            reserved += retry.grantQueued ? 1 : 0;
+        }
+        return tracker.Size() + reserved < tracker.Limit();
+    }
+
+    bool Core::Impl::ConsumeRetryRequest(const Request& request, bool creditReturn)
+    {
+        for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
+        {
+            const RetryRecord& retry = iter->second;
+            if (!retry.grantPopped)
+                continue;
+            if (creditReturn)
+            {
+                if (retry.request.source != request.source || retry.request.pCrdType != request.pCrdType)
+                    continue;
+            }
+            else if (!RetryRequestCompatible(retry.request, request))
+                continue;
+
+            retries.erase(std::next(iter).base());
+            return true;
+        }
+        return false;
     }
 
     void Core::Impl::ReturnRead(Transaction& transaction)

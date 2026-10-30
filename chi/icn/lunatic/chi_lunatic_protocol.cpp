@@ -198,6 +198,16 @@ namespace CHI::Lunatic {
                 requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ImmediateWrite);
     }
 
+    bool RetryRequestCompatible(const Request& original, const Request& resend) noexcept
+    {
+        Request left = original;
+        Request right = resend;
+        left.txnId = right.txnId = 0;
+        left.qos = right.qos = 0;
+        left.allowRetry = right.allowRetry = false;
+        return left == right;
+    }
+
     uint64_t TransferBeatMask(const Request& request, const Options& options) noexcept
     {
         const size_t bytes = BytesPerBeat(options);

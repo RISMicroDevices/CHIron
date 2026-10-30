@@ -28,6 +28,8 @@ namespace CHI::Lunatic {
         txdat.clear();
         txsnp.clear();
         retries.clear();
+        backendRetries.clear();
+        backendCredits.clear();
         flows.clear();
         errors.clear();
         tracker.Clear();
@@ -40,6 +42,7 @@ namespace CHI::Lunatic {
         time = 0;
         nextAge = 0;
         nextSerial = 0;
+        nextBackendRetry = 0;
         nextRetry = 0;
 
         Event event;
@@ -53,6 +56,7 @@ namespace CHI::Lunatic {
         ProcessResponses();
         AdmitRequests();
         AdvanceTransactions();
+        AdvanceBackendRetries();
 
         for (const auto& [index, retry] : retries)
             QueueRetryCredit(index);
@@ -79,6 +83,20 @@ namespace CHI::Lunatic {
     void Core::Impl::ProcessRSP(const Response& flit)
     {
         namespace RSP = CHI::Eb::Opcodes::RSP;
+
+        if (flit.opcode == RSP::PCrdGrant)
+        {
+            ++backendCredits[{ flit.source, flit.pCrdType }];
+            return;
+        }
+
+        if (flit.opcode == RSP::RetryAck)
+        {
+            Transaction* transaction = tracker.FindMemory(flit.source, flit.txnId);
+            if (!transaction || !HandleBackendRetry(*transaction, flit))
+                Error(transaction ? transaction->handle : INVALID_TRANSACTION, "unexpected downstream RetryAck");
+            return;
+        }
 
         if (flit.opcode == RSP::CompAck)
         {
@@ -185,7 +203,27 @@ namespace CHI::Lunatic {
         if (rxreq.empty())
             return;
 
-        if (tracker.Size() >= tracker.Limit())
+        if (rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PCrdReturn)
+        {
+            Request request = std::move(rxreq.front());
+            rxreq.pop_front();
+            if (!ConsumeRetryRequest(request, true))
+                Deny(request, "PCrdReturn has no matching credit");
+            return;
+        }
+
+        if (!rxreq.front().allowRetry)
+        {
+            if (!ordering.CanAdmit(rxreq.front()))
+                return;
+            Request request = std::move(rxreq.front());
+            rxreq.pop_front();
+            ConsumeRetryRequest(request, false);
+            AdmitRequest(request);
+            return;
+        }
+
+        if (!RetryReservationAvailable())
         {
             Request& request = rxreq.front();
             if (!options.retryEnabled || !request.allowRetry || txrsp.size() >= options.outputQueueLimit)
@@ -448,6 +486,7 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction->handle);
         if (flow.backendPhase == BackendPhase::WaitRequestEmission)
         {
+            flow.backendRequest = pending.flit;
             flow.backendPhase = !flow.spillPending && (IsReadRequest(transaction->request.opcode) || IsCMORequest(transaction->request.opcode))
                 ? BackendPhase::WaitComp : BackendPhase::WaitDBID;
             transaction->phase = Phase::WaitMemory;
@@ -466,8 +505,6 @@ namespace CHI::Lunatic {
                 it->second.ackPopped = true;
             if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant)
                 it->second.grantPopped = true;
-            if (it->second.ackPopped && it->second.grantPopped)
-                retries.erase(it);
             return;
         }
 
@@ -629,8 +666,8 @@ namespace CHI::Lunatic {
     bool Core::Impl::HasInflight() const noexcept
     {
         return !rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
-               !txdat.empty() || !txsnp.empty() || !retries.empty() || !tracker.Empty() || !hazards.Empty() ||
-               !ordering.Empty();
+               !txdat.empty() || !txsnp.empty() || !retries.empty() || !backendRetries.empty() ||
+               !backendCredits.empty() || !tracker.Empty() || !hazards.Empty() || !ordering.Empty();
     }
 
     bool Core::Impl::ValidateInvariants() const noexcept

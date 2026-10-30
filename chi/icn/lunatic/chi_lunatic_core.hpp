@@ -26,6 +26,7 @@ namespace CHI::Lunatic {
         SendData,
         WaitDataEmission,
         WaitComp,
+        WaitRetry,
         Done
     };
 
@@ -41,6 +42,7 @@ namespace CHI::Lunatic {
 
     struct FlowState {
         BackendPhase               backendPhase = BackendPhase::None;
+        Request                    backendRequest{};
         Time                       memoryReady = 0;
         bool                       memoryWrite = false;
         DataBufferId               backendDBID = 0;
@@ -113,6 +115,13 @@ namespace CHI::Lunatic {
         bool    grantPopped = false;
     };
 
+    struct BackendRetryRecord {
+        Request           request;
+        TransactionHandle transaction = INVALID_TRANSACTION;
+        uint64_t          serial = 0;
+        bool              creditReceived = false;
+    };
+
     template<typename T>
     struct Pending {
         T                 flit;
@@ -142,6 +151,11 @@ namespace CHI::Lunatic {
                                   flows;
         std::map<size_t, RetryRecord>
                                   retries;
+        std::map<TransactionHandle, BackendRetryRecord>
+                                  backendRetries;
+        std::map<std::pair<NodeId, uint8_t>, size_t>
+                                  backendCredits;
+        size_t                    nextBackendRetry = 0;
         size_t                    nextRetry = 0;
         uint64_t                  nextAge = 0;
         uint64_t                  nextSerial = 0;
@@ -262,12 +276,16 @@ namespace CHI::Lunatic {
         void QueueReadReceipt(Transaction& transaction);
         void QueueRespSepData(Transaction& transaction);
         void QueueRetryCredit(size_t index);
+        bool RetryReservationAvailable() const noexcept;
+        bool ConsumeRetryRequest(const Request& request, bool creditReturn);
         void FinishResponse(Transaction& transaction);
         bool RequiresTransactionCompAck(const Transaction& transaction) const;
         void RetireFinished();
         void Retire(TransactionHandle handle);
 
         void StartMemoryRead(Transaction& transaction);
+        void AdvanceBackendRetries();
+        bool HandleBackendRetry(Transaction& transaction, const Response& flit);
         void StartBackendWrite(Transaction& transaction);
         void AdvanceBackendWrite(Transaction& transaction);
         void ActionAtomicBackend(Transaction& transaction);
