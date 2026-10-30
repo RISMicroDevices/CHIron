@@ -1,0 +1,98 @@
+#include "oracle_driver.hpp"
+
+using namespace CHI::Lunatic;
+using namespace LunaticTest;
+
+namespace {
+
+    template<typename config>
+    void SeedDirtyProvider(CheckedDriver<config>& driver, const LineKey& line, const LineData& data)
+    {
+        ByteEnables enables{};
+        enables.fill(1);
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackFull, 6, 90, line.address));
+        const auto response = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
+        driver.WriteData(6, 90, response.DBID(), data, enables, CHI::Eb::Opcodes::DAT::CopyBackWrData,
+            CHI::Eb::Resps::CopyBackWrData_UD_PD);
+        driver.Quiesce();
+        driver.ReadData(6, 91, line.address, CHI::Eb::Opcodes::REQ::ReadUnique);
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::UD);
+    }
+
+    template<typename config>
+    typename CheckedDriver<config>::SNP StartDCT(CheckedDriver<config>& driver, const LineKey& line)
+    {
+        auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, line.address, true);
+        request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+        driver.PushRequest(request);
+        const auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpSharedFwd);
+        LUNATIC_CHECK(snoop.flit.FwdNID() == 4);
+        LUNATIC_CHECK(snoop.flit.FwdTxnID() == 1);
+        driver.Oracle(6).RegisterRequester(4);
+        return snoop;
+    }
+
+}
+
+LUNATIC_TEST(Stage6DCTForwardedRead)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x10000, false);
+    const LineData expected{};
+    SeedDirtyProvider(driver, line, expected);
+    const auto snoop = StartDCT(driver, line);
+
+    constexpr size_t bytes = Config256::dataWidth / 8;
+    for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
+    {
+        typename CheckedDriver<Config256>::DAT data{};
+        data.SrcID() = 6;
+        data.TgtID() = 4;
+        data.HomeNID() = 2;
+        data.TxnID() = 1;
+        data.DBID() = snoop.flit.TxnID();
+        data.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+        data.Resp() = CHI::Eb::Resps::CompData_UD_PD;
+        data.DataID() = beat * bytes / 16;
+        data.CCID() = 0;
+        driver.Oracle(6).SnoopData(driver.driver.now, data);
+        driver.Oracle(4).Data(driver.driver.now, data);
+    }
+
+    typename CheckedDriver<Config256>::RSP response{};
+    response.SrcID() = 6;
+    response.TgtID() = 2;
+    response.TxnID() = snoop.flit.TxnID();
+    response.Opcode() = CHI::Eb::Opcodes::RSP::SnpRespFwded;
+    response.Resp() = CHI::Eb::Resps::SnpResp_I;
+    response.FwdState() = CHI::Eb::Resps::CompData_UD_PD;
+    driver.Oracle(6).SnoopResponse(driver.driver.now, response);
+    LUNATIC_CHECK(driver.driver.node.PushRXRSP(response));
+    driver.driver.Tick();
+    driver.CompAck(4, snoop.flit.TxnID());
+    driver.Quiesce();
+}
+
+LUNATIC_TEST(Stage6DCTOrdinaryFallback)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x10000, false);
+    const LineData expected{};
+    SeedDirtyProvider(driver, line, expected);
+    const auto snoop = StartDCT(driver, line);
+
+    driver.SnoopData(6, snoop.flit.TxnID(), expected, CHI::Eb::Resps::SnpRespData_UC_PD);
+    DataBufferId dataBufferId = 0;
+    for (size_t beat = 0; beat < LINE_SIZE / (Config256::dataWidth / 8); ++beat)
+    {
+        const auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+        LUNATIC_CHECK(data.DBID() == snoop.flit.TxnID());
+        dataBufferId = data.DBID();
+    }
+    driver.CompAck(4, dataBufferId);
+    driver.Quiesce();
+}

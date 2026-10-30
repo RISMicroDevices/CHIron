@@ -10,6 +10,18 @@ namespace CHI::Lunatic {
         namespace SNP = CHI::Eb::Opcodes::SNP;
         if (flow.snoopForVictim)
             return SNP::SnpCleanInvalid;
+        if (flow.dctActive && flow.nextSnoop == 0)
+        {
+            switch (transaction.request.opcode)
+            {
+                case REQ::ReadShared: return SNP::SnpSharedFwd;
+                case REQ::ReadClean: return SNP::SnpCleanFwd;
+                case REQ::ReadOnce: return SNP::SnpOnceFwd;
+                case REQ::ReadNotSharedDirty: return SNP::SnpNotSharedDirtyFwd;
+                case REQ::ReadPreferUnique: return SNP::SnpPreferUniqueFwd;
+                default: return SNP::SnpUniqueFwd;
+            }
+        }
         switch (ClassifyRequest(transaction.request.opcode))
         {
             case RequestClass::CoherentRead:
@@ -158,6 +170,12 @@ namespace CHI::Lunatic {
         snoop.source = nodeId;
         snoop.target = target;
         snoop.txnId = transaction.handle * options.snoopLimit + (index % options.snoopLimit);
+        if (flow.dctActive && index == 0)
+        {
+            snoop.txnId = transaction.handle;
+            snoop.fwdNid = transaction.request.source;
+            snoop.fwdTxnId = transaction.request.txnId;
+        }
         snoop.address = flow.snoopLine.address;
         snoop.nonSecure = flow.snoopLine.nonSecure;
         snoop.opcode = SnoopOpcode(transaction, flow, target);
@@ -211,6 +229,17 @@ namespace CHI::Lunatic {
     void Core::Impl::ProcessSnoopDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataFwded)
+        {
+            if (!flow.dctActive ||
+                std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), flit.source) ==
+                    transaction.pendingSnoops.end())
+            {
+                Error(transaction.handle, "unexpected forwarding snoop data");
+                return;
+            }
+            flow.dctForwarded = true;
+        }
         const size_t bytes = BytesPerBeat(options);
         const size_t offset = flit.ByteOffset();
         if (offset + bytes > LINE_SIZE || offset % bytes != 0)
@@ -232,8 +261,9 @@ namespace CHI::Lunatic {
             return;
         }
         flow.snoopResponses[flit.source] = flit.resp;
-        if (!ValidateSnoopResponse(transaction, flit.source, flit.resp, true,
-            flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl, flit.dataSource))
+        if (flit.opcode != CHI::Eb::Opcodes::DAT::SnpRespDataFwded &&
+            !ValidateSnoopResponse(transaction, flit.source, flit.resp, true,
+                flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl, flit.dataSource))
             Error(transaction.handle, "illegal snoop data response");
 
         const CacheState initial = snoopFilter.State(flow.snoopLine, flit.source);
@@ -395,9 +425,14 @@ namespace CHI::Lunatic {
             transaction.pendingSnoops.erase(it);
         if (transaction.pendingSnoops.empty())
         {
-            transaction.phase = Phase::Action;
-            transaction.wait = WaitReason::None;
-            transaction.readyTime = time;
+            if (flow.dctForwarded)
+                FinishResponse(transaction);
+            else
+            {
+                transaction.phase = Phase::Action;
+                transaction.wait = WaitReason::None;
+                transaction.readyTime = time;
+            }
         }
     }
 

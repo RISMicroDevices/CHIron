@@ -170,6 +170,13 @@ namespace CHI::Lunatic {
             if (!flow.respSepSent)
                 return;
         }
+        if (flow.dmtActive)
+        {
+            if (flow.separatedResponse ? flow.respSepEmitted
+                                       : transaction.request.order == 0 || flow.readReceiptEmitted)
+                FinishResponse(transaction);
+            return;
+        }
 
         uint64_t mask = flow.expectedBeatMask;
         if (!mask)
@@ -216,7 +223,14 @@ namespace CHI::Lunatic {
     {
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         const FlowState& flow = flows.at(transaction.handle);
-        if (!transaction.canceled &&
+        if (!transaction.canceled && flow.dwtActive &&
+            (!flow.directoryCommitted || !flow.backendCompReceived || !flow.compEmitted))
+        {
+            transaction.phase = Phase::Action;
+            transaction.readyTime = time;
+            return;
+        }
+        if (!transaction.canceled && !flow.dwtActive &&
             (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero) &&
             (!transaction.Complete(COMPLETE_WRITE_DATA) || !flow.directoryCommitted ||
              !flow.dbidEmitted || !flow.compEmitted))
@@ -248,11 +262,27 @@ namespace CHI::Lunatic {
             transaction.readyTime = time;
             return;
         }
+        if (!transaction.canceled && flow.dctForwarded)
+        {
+            transaction.Mark(COMPLETE_RESPONSE);
+            transaction.wait = RequiresTransactionCompAck(transaction) && !transaction.Complete(COMPLETE_COMPACK)
+                ? WaitReason::CompAck : WaitReason::None;
+            transaction.phase = transaction.wait == WaitReason::CompAck ? Phase::WaitCompAck : Phase::Commit;
+            transaction.readyTime = time;
+            return;
+        }
+        if (!transaction.canceled && flow.dmtActive && !flow.backendReadReceiptReceived)
+        {
+            transaction.phase = Phase::Return;
+            transaction.wait = WaitReason::None;
+            transaction.readyTime = time;
+            return;
+        }
         if (!transaction.canceled && flow.separatedResponse)
         {
             const uint64_t mask = flow.expectedBeatMask
                 ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
-            if (!flow.respSepEmitted || flow.readBeatsEmitted != size_t(std::popcount(mask)))
+            if (!flow.respSepEmitted || (!flow.dmtActive && flow.readBeatsEmitted != size_t(std::popcount(mask))))
             {
                 transaction.phase = Phase::Return;
                 transaction.wait = WaitReason::None;

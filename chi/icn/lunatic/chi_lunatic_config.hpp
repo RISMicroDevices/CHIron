@@ -41,6 +41,10 @@ namespace CHI::Lunatic {
         bool        retryEnabled = true;
         bool        separatedReadResponse = false;
         bool        separatedBackendRead = false;
+        bool        dmtEnabled = false;
+        bool        dctEnabled = false;
+        bool        dwtEnabled = false;
+        bool        directPersistEnabled = false;
         bool        poisonEnabled = true;
         bool        dataCheckEnabled = true;
         bool        mteEnabled = false;

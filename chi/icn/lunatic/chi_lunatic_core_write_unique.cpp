@@ -68,6 +68,24 @@ namespace CHI::Lunatic {
     void Core::Impl::ActionImmediateWrite(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (flow.dwtActive)
+        {
+            if (!flow.compSent)
+            {
+                QueueComp(transaction);
+                transaction.phase = Phase::Action;
+                transaction.readyTime = time;
+                return;
+            }
+            if (flow.backendPhase == BackendPhase::None)
+            {
+                StartBackendWrite(transaction);
+                return;
+            }
+            if (flow.backendCompReceived && flow.compEmitted)
+                FinishResponse(transaction);
+            return;
+        }
         if (!flow.dbidSent || !flow.compSent)
         {
             QueueImmediateResponse(transaction);

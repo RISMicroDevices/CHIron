@@ -31,6 +31,16 @@ namespace LunaticTest {
             global.TOPOLOGY.SetNode(requester, CHI::Eb::Xact::NodeType::RN_F);
         }
 
+        void RegisterRequester(CHI::Lunatic::NodeId requester)
+        {
+            global.TOPOLOGY.SetNode(requester, CHI::Eb::Xact::NodeType::RN_F);
+        }
+
+        void RegisterSubordinate(CHI::Lunatic::NodeId subordinate)
+        {
+            global.TOPOLOGY.SetNode(subordinate, CHI::Eb::Xact::NodeType::SN_F);
+        }
+
         void Request(uint64_t time, const CHI::Eb::Flits::REQ<config>& flit)
         {
             Accept(joint.NextTXREQ(global, time, flit));
@@ -95,6 +105,11 @@ namespace LunaticTest {
         {
             global.TOPOLOGY.SetNode(home, CHI::Eb::Xact::NodeType::HN_F);
             global.TOPOLOGY.SetNode(subordinate, CHI::Eb::Xact::NodeType::SN_F);
+        }
+
+        void RegisterRequester(CHI::Lunatic::NodeId requester)
+        {
+            global.TOPOLOGY.SetNode(requester, CHI::Eb::Xact::NodeType::RN_F);
         }
 
         void Request(uint64_t time, const CHI::Eb::Flits::REQ<config>& flit)

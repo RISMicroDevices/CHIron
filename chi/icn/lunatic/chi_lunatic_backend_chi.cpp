@@ -155,6 +155,12 @@ namespace CHI::Lunatic {
         request.returnNid = nodeId;
         request.returnTxnId = transaction.handle;
         request.order = transaction.request.order != 0;
+        if (flow.dmtActive)
+        {
+            request.returnNid = transaction.request.source;
+            request.returnTxnId = transaction.request.txnId;
+            request.order = 1;
+        }
         request.opcode = flow.separatedBackendRead
             ? CHI::Eb::Opcodes::REQ::ReadNoSnpSep : CHI::Eb::Opcodes::REQ::ReadNoSnp;
         if (flow.victimPending && flow.victimDataPartial)
@@ -174,6 +180,9 @@ namespace CHI::Lunatic {
             transaction.readyTime = time;
             return;
         }
+        const RequestKey completedKey{ options.subordinateId, request.txnId };
+        completedBackendReads.erase(completedKey);
+        completedBackendReadOrder.remove(completedKey);
         if (!tracker.BindMemory(transaction.handle, options.subordinateId, transaction.handle))
         {
             Error(transaction.handle, "unable to bind downstream read ID");
@@ -182,7 +191,7 @@ namespace CHI::Lunatic {
             return;
         }
         flow.backendPhase = BackendPhase::WaitRequestEmission;
-        transaction.phase = Phase::WaitMemory;
+        transaction.phase = flow.dmtActive ? Phase::Action : Phase::WaitMemory;
         transaction.wait = WaitReason::Memory;
         transaction.readyTime = time;
     }
@@ -255,6 +264,15 @@ namespace CHI::Lunatic {
         request.doDwt = false;
         request.stashNidValid = false;
         request.stashLpidValid = false;
+        if (flow.dwtActive)
+        {
+            request.doDwt = true;
+            request.snpAttr = 1;
+            request.returnNid = transaction.request.source;
+            request.returnTxnId = transaction.request.txnId;
+            flow.directoryCommitted = true;
+            snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
+        }
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         if (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteEvictOrEvict)
         {
@@ -371,10 +389,18 @@ namespace CHI::Lunatic {
 
         if (flit.opcode == RSP::ReadReceipt)
         {
-            if (!IsReadRequest(transaction.request.opcode) || transaction.request.order == 0 ||
-                flow.backendReadReceiptReceived)
+            if (!IsReadRequest(transaction.request.opcode) ||
+                (!flow.dmtActive && transaction.request.order == 0) || flow.backendReadReceiptReceived)
                 return false;
             flow.backendReadReceiptReceived = true;
+            if (flow.dmtActive && !transaction.Complete(COMPLETE_MEMORY))
+            {
+                transaction.Mark(COMPLETE_MEMORY);
+                transaction.memoryRequired = false;
+                flow.backendPhase = BackendPhase::Done;
+                transaction.phase = Phase::Return;
+                transaction.readyTime = time;
+            }
             if (transaction.Complete(COMPLETE_MEMORY))
                 tracker.UnbindMemory(options.subordinateId, transaction.handle);
             return true;
@@ -386,7 +412,10 @@ namespace CHI::Lunatic {
         if (IsCMORequest(transaction.request.opcode) && !flow.spillPending)
         {
             const bool separatedPersistence = transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
-            if ((separatedPersistence && (flit.opcode != RSP::CompPersist || flit.pGroupId != transaction.request.pGroupId)) ||
+            const bool persistenceResponse = flow.directPersistActive
+                ? flit.opcode == RSP::Comp
+                : flit.opcode == RSP::CompPersist && flit.pGroupId == transaction.request.pGroupId;
+            if ((separatedPersistence && !persistenceResponse) ||
                 (!separatedPersistence && flit.opcode != RSP::Comp))
                 return false;
             flow.backendCompReceived = true;
@@ -432,6 +461,15 @@ namespace CHI::Lunatic {
 
         if (flit.opcode == RSP::Comp)
         {
+            if (flow.dwtActive)
+            {
+                flow.backendCompReceived = true;
+                flow.backendPhase = BackendPhase::Done;
+                tracker.UnbindMemory(options.subordinateId, transaction.handle);
+                transaction.phase = Phase::Action;
+                transaction.readyTime = time;
+                return true;
+            }
             if (ClassifyRequest(transaction.request.opcode) == RequestClass::ZeroWrite ||
                 ClassifyRequest(transaction.request.opcode) == RequestClass::WriteUniqueZero)
             {

@@ -27,10 +27,7 @@ namespace CHI::Lunatic {
             request.stashNidValid = false;
             request.stashLpidValid = false;
             if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
-            {
-                request.returnNid = nodeId;
-                request.returnTxnId = 0;
-            }
+                request.returnNid = flow.directPersistActive ? transaction.request.source : nodeId;
             else
                 request.pGroupId = 0;
             if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
@@ -53,7 +50,7 @@ namespace CHI::Lunatic {
         if (options.backend == BackendKind::CHI && flow.backendPhase != BackendPhase::Done)
             return;
 
-        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep && !flow.directPersistActive)
             QueueCompPersist(transaction);
         else
             QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC);

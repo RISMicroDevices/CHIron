@@ -15,6 +15,7 @@
 
 #include <deque>
 #include <limits>
+#include <list>
 #include <map>
 
 namespace CHI::Lunatic {
@@ -57,6 +58,11 @@ namespace CHI::Lunatic {
         bool                       readReceiptEmitted = false;
         bool                       separatedResponse = false;
         bool                       separatedBackendRead = false;
+        bool                       dmtActive = false;
+        bool                       dctActive = false;
+        bool                       dctForwarded = false;
+        bool                       dwtActive = false;
+        bool                       directPersistActive = false;
         bool                       respSepSent = false;
         bool                       respSepEmitted = false;
         size_t                     readBeatsEmitted = 0;
@@ -155,6 +161,9 @@ namespace CHI::Lunatic {
                                   backendRetries;
         std::map<std::pair<NodeId, uint8_t>, size_t>
                                   backendCredits;
+        std::map<RequestKey, Request>
+                                  completedBackendReads;
+        std::list<RequestKey>             completedBackendReadOrder;
         size_t                    nextBackendRetry = 0;
         size_t                    nextRetry = 0;
         uint64_t                  nextAge = 0;
