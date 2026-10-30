@@ -61,6 +61,92 @@ namespace CHI {
             inline constexpr JointTypeEnumBack SN_F     ("SN-F" , 1);
         };
 
+        namespace details {
+
+            template<typename RetryMap, typename ReturnMap, typename SourceKey, typename CreditKey>
+            size_t CountActiveRetries(const RetryMap& retries, const ReturnMap& returned,
+                                      const SourceKey& sourceKey, const CreditKey& creditKey,
+                                      uint64_t creditType) noexcept
+            {
+                auto list = retries.find(sourceKey);
+                if (list == retries.end())
+                    return 0;
+
+                size_t attempts = 0;
+                for (const auto& xaction : list->second)
+                {
+                    auto retryAck = xaction->GetRetryAck();
+                    if (retryAck && retryAck->flit.rsp.SrcID() == creditKey.id.src &&
+                        retryAck->flit.rsp.PCrdType() == creditType)
+                        ++attempts;
+                }
+
+                auto allowance = returned.find(creditKey);
+                const size_t canceled = allowance == returned.end() ? 0 : allowance->second;
+                return attempts > canceled ? attempts - canceled : 0;
+            }
+
+            template<typename RetryMap, typename ReturnMap, typename SourceKey, typename CreditKey>
+            void PurgeReturnedRetries(RetryMap& retries, ReturnMap& returned,
+                                      const SourceKey& sourceKey, const CreditKey& creditKey,
+                                      uint64_t creditType) noexcept
+            {
+                if (CountActiveRetries(retries, returned, sourceKey, creditKey, creditType) != 0)
+                    return;
+
+                auto list = retries.find(sourceKey);
+                if (list != retries.end())
+                {
+                    for (auto attempt = list->second.begin(); attempt != list->second.end();)
+                    {
+                        auto retryAck = (*attempt)->GetRetryAck();
+                        if (retryAck && retryAck->flit.rsp.SrcID() == creditKey.id.src &&
+                            retryAck->flit.rsp.PCrdType() == creditType)
+                            attempt = list->second.erase(attempt);
+                        else
+                            ++attempt;
+                    }
+                    if (list->second.empty())
+                        retries.erase(list);
+                }
+                returned.erase(creditKey);
+            }
+
+            template<typename RetryMap, typename CreditMap, typename ReturnMap,
+                     typename SourceKey, typename CreditKey>
+            bool ConsumePCrdReturn(RetryMap& retries, CreditMap& credits, ReturnMap& returned,
+                                   const SourceKey& sourceKey, const CreditKey& creditKey,
+                                   uint64_t creditType) noexcept
+            {
+                auto credit = credits.find(creditKey);
+                if (credit == credits.end() || credit->second.empty())
+                    return false;
+
+                if (CountActiveRetries(retries, returned, sourceKey, creditKey, creditType) != 0)
+                    ++returned[creditKey];
+
+                credit->second.pop_front();
+                if (credit->second.empty())
+                    credits.erase(credit);
+                PurgeReturnedRetries(retries, returned, sourceKey, creditKey, creditType);
+                return true;
+            }
+
+            template<typename CreditArray>
+            bool HasOutstandingCredits(const CreditArray& credits) noexcept
+            {
+                for (const auto& creditType : credits)
+                    for (const auto& [key, grants] : creditType)
+                    {
+                        (void)key;
+                        if (!grants.empty())
+                            return true;
+                    }
+                return false;
+            }
+
+        }
+
 
         // Joint Denial Events
         enum class JointDenialSource {
@@ -443,6 +529,7 @@ namespace CHI {
                                                                                   txRetriedTransactions;
 
             std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>    grantedPCredits[1 << Flits::RSP<config>::PCRDTYPE_WIDTH];
+            std::unordered_map<uint64_t, size_t>                                  returnedPCredits[1 << Flits::RSP<config>::PCRDTYPE_WIDTH];
 
             Opcodes::REQ::Decoder<Flits::REQ<config>, GetXaction>                 reqDecoder;
             Opcodes::SNP::Decoder<Flits::SNP<config>, GetXaction>                 snpDecoder;
@@ -598,6 +685,7 @@ namespace CHI {
                                                                                   rxRetriedTransactions;
 
             std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>    grantedPCredits[1 << Flits::RSP<config>::PCRDTYPE_WIDTH];
+            std::unordered_map<uint64_t, size_t>                                  returnedPCredits[1 << Flits::RSP<config>::PCRDTYPE_WIDTH];
 
             Opcodes::REQ::Decoder<Flits::REQ<config>, GetXaction>                 reqDecoder;
 
@@ -1519,6 +1607,8 @@ namespace /*CHI::*/Xact {
     {
         std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
             grantedPCredits);
+        std::copy(obj.returnedPCredits, obj.returnedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
+            returnedPCredits);
 
         Fork();
     }
@@ -1540,6 +1630,8 @@ namespace /*CHI::*/Xact {
 
         std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
             grantedPCredits);
+        std::copy(obj.returnedPCredits, obj.returnedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
+            returnedPCredits);
 
         Fork();
         return *this;
@@ -1598,7 +1690,10 @@ namespace /*CHI::*/Xact {
         txRetriedTransactions.clear();
 
         for (int i = 0; i < (1 << Flits::RSP<config>::PCRDTYPE_WIDTH); i++)
+        {
             grantedPCredits[i].clear();
+            returnedPCredits[i].clear();
+        }
     }
 
     template<FlitConfigurationConcept config>
@@ -1652,7 +1747,7 @@ namespace /*CHI::*/Xact {
     {
         return !rxTransactions.empty() || !txTransactions.empty()
             || !txDBIDTransactions.empty() || !txDBIDOverlappableTransactions.empty()
-            || !txRetriedTransactions.empty();
+            || !txRetriedTransactions.empty() || details::HasOutstandingCredits(grantedPCredits);
     }
 
     template<FlitConfigurationConcept config>
@@ -1667,8 +1762,6 @@ namespace /*CHI::*/Xact {
         key.id.src  = reqFlit.SrcID();
         key.id.txn  = reqFlit.TxnID();
 
-        bool retry = false;
-
         //
         FiredRequestFlit<config> firedReqFlit(XactScope::Requester, true, time, reqFlit);
 
@@ -1679,15 +1772,37 @@ namespace /*CHI::*/Xact {
             return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, firedReqFlit,
                 nullptr, std::string("This opcode could not be decoded by Opcodes::REQ::Decoder on ") + this->GetType()->name);
 
+        if (reqFlit.Opcode() == Opcodes::REQ::PCrdReturn)
+        {
+            if (glbl.CHECK_FIELD_MAPPING.enable)
+            {
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(reqFlit);
+                if (denial != XactDenial::ACCEPTED)
+                    return this->RequestDeniedByJoint(denial, firedReqFlit);
+            }
+
+            rnsrc_t rnKey;
+            rnKey.value     = 0;
+            rnKey.id.src    = reqFlit.SrcID();
+
+            pcrd_t pCrdKey;
+            pCrdKey.value   = 0;
+            pCrdKey.id.src  = reqFlit.TgtID();
+            pCrdKey.id.tgt  = reqFlit.SrcID();
+
+            const uint64_t creditType = reqFlit.PCrdType();
+            if (!details::ConsumePCrdReturn(txRetriedTransactions, grantedPCredits[creditType],
+                    returnedPCredits[creditType], rnKey, pCrdKey, creditType))
+                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
+            return XactDenial::ACCEPTED;
+        }
+
         //
         if (reqFlit.AllowRetry() == 0)
         {
             if (txTransactions.contains(key))
                 return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_TXNID_IN_USE, firedReqFlit, txTransactions[key]);
 
-            // iterate and compare retry transactions
-            // TODO: simplified retry mapping by TxnID, temporary workaround for KunminghuV2
-            //       specification retry mapping implementation here
             rnsrc_t rnKey;
             rnKey.value     = 0;
             rnKey.id.src    = reqFlit.SrcID();
@@ -1696,83 +1811,70 @@ namespace /*CHI::*/Xact {
             if (xactionList == txRetriedTransactions.end())
                 return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_RETRY, firedReqFlit);
 
-            auto xactionIter = xactionList->second.begin();
+            const uint64_t creditType = reqFlit.PCrdType();
+            auto& credits = grantedPCredits[creditType];
+            std::shared_ptr<Xaction<config>> firstXaction;
+            std::shared_ptr<Xaction<config>> retryXaction;
+            std::list<FiredResponseFlit<config>>* selectedCredits = nullptr;
+            pcrd_t selectedCreditKey;
 
-            for (; xactionIter != xactionList->second.end(); xactionIter++)
-                if (reqFlit.TxnID() == xactionIter->get()->GetFirst().flit.req.TxnID())
-                    break;
-
-            if (xactionIter == xactionList->second.end())
-                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_RETRY, firedReqFlit);
-
-            std::shared_ptr<Xaction<config>> firstXaction = *xactionIter;
-
-            xactionList->second.erase(xactionIter);
-            if (xactionList->second.empty())
-                txRetriedTransactions.erase(xactionList);
-
-            std::shared_ptr<Xaction<config>> retryXaction =
-                opcodeInfo.GetCompanion()(glbl, firedReqFlit, firstXaction);
-
-            if (!retryXaction) // unsupported opcode transaction
-                return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, firedReqFlit,
-                    nullptr, std::string("No Xaction object mapped for ") + opcodeInfo.GetName() + " on " + this->GetType()->name);
-
-            if (theXaction)
-                *theXaction = retryXaction;
-            
-            if (retryXaction->GetFirstDenial() != XactDenial::ACCEPTED)
-                return this->RequestDeniedByXaction(retryXaction->GetFirstDenial(), firedReqFlit, retryXaction);
-
-            assert(firstXaction->GetRetryAck() && "transaction not getting RetryAck but lies in retried list");
-
-            // check granted P-Credit
-            pcrd_t pCrdKey;
-            pCrdKey.value   = 0;
-            pCrdKey.id.src  = firstXaction->GetRetryAck()->flit.rsp.SrcID();
-            pCrdKey.id.tgt  = reqFlit.SrcID();
-
-            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>& grantedPCredits
-                = this->grantedPCredits[reqFlit.PCrdType()];
-
-            auto iterPCreditList = grantedPCredits.find(pCrdKey);
-            if (iterPCreditList == grantedPCredits.end())
-                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
-
-            std::list<FiredResponseFlit<config>>& pCreditList = iterPCreditList->second;
-
-            if (pCreditList.empty())
+            // PCrdGrant can precede RetryAck and credits are fungible. Select the youngest
+            // compatible retry as a deterministic assignment, not proof of credit provenance.
+            for (auto attempt = xactionList->second.rbegin(); attempt != xactionList->second.rend(); ++attempt)
             {
-                grantedPCredits.erase(iterPCreditList);
-                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
+                auto candidate = *attempt;
+                auto retryAck = candidate->GetRetryAck();
+                if (!retryAck || retryAck->flit.rsp.PCrdType() != creditType)
+                    continue;
+
+                pcrd_t creditKey;
+                creditKey.value   = 0;
+                creditKey.id.src  = retryAck->flit.rsp.SrcID();
+                creditKey.id.tgt  = reqFlit.SrcID();
+                if (details::CountActiveRetries(txRetriedTransactions, returnedPCredits[creditType],
+                        rnKey, creditKey, creditType) == 0)
+                    continue;
+
+                auto credit = credits.find(creditKey);
+                if (credit == credits.end() || credit->second.empty())
+                    continue;
+
+                auto candidateRetry = opcodeInfo.GetCompanion()(glbl, firedReqFlit, candidate);
+                if (!candidateRetry)
+                    return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, firedReqFlit,
+                        nullptr, std::string("No Xaction object mapped for ") + opcodeInfo.GetName() + " on " + this->GetType()->name);
+                if (candidateRetry->GetFirstDenial() != XactDenial::ACCEPTED)
+                    return this->RequestDeniedByXaction(candidateRetry->GetFirstDenial(), firedReqFlit, candidateRetry);
+
+                if (candidate->CheckResend(glbl, credit->second.front(), candidateRetry) == XactDenial::ACCEPTED)
+                {
+                    firstXaction = candidate;
+                    retryXaction = candidateRetry;
+                    selectedCredits = &credit->second;
+                    selectedCreditKey = creditKey;
+                    break;
+                }
             }
 
-            XactDenialEnum denial =
-                firstXaction->Resend(glbl, pCreditList.front(), retryXaction);
-            
+            if (!firstXaction)
+                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_RETRY, firedReqFlit);
+
+            XactDenialEnum denial = firstXaction->Resend(glbl, selectedCredits->front(), retryXaction);
             if (denial != XactDenial::ACCEPTED)
                 return this->RequestDeniedByXaction(denial, firedReqFlit, firstXaction);
 
-            // original xaction complete
-            txreqid_t firstKey;
-            firstKey.value  = 0;
-            firstKey.id.src = firstXaction->GetFirst().flit.req.SrcID();
-            firstKey.id.txn = firstXaction->GetFirst().flit.req.TxnID();
+            auto& attempts = xactionList->second;
+            attempts.erase(std::find(attempts.begin(), attempts.end(), firstXaction));
+            selectedCredits->pop_front();
+            if (selectedCredits->empty())
+                credits.erase(selectedCreditKey);
+            details::PurgeReturnedRetries(txRetriedTransactions, returnedPCredits[creditType],
+                rnKey, selectedCreditKey, creditType);
 
-            txTransactions.erase(firstKey);
-
-            // event on retry xaction
+            if (theXaction)
+                *theXaction = retryXaction;
             this->FireXactionRetry(retryXaction);
-
-            // event on TxnID allocation
             this->FireXactionTxnIDAllocation(retryXaction);
-
-            // consume P-Credit
-            pCreditList.pop_front();
-            if (pCreditList.empty())
-                grantedPCredits.erase(iterPCreditList);
-
-            // register retried xaction
             txTransactions[key] = retryXaction;
         }
         else
@@ -2034,6 +2136,13 @@ namespace /*CHI::*/Xact {
         // P-Credit Grant
         if (rspFlit.Opcode() == Opcodes::RSP::PCrdGrant)
         {
+            if (glbl.CHECK_FIELD_MAPPING.enable)
+            {
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(rspFlit);
+                if (denial != XactDenial::ACCEPTED)
+                    return this->ResponseDeniedByJoint(denial, firedRspFlit);
+            }
+
             pcrd_t pCrdKey;
             pCrdKey.value   = 0;
             pCrdKey.id.src  = rspFlit.SrcID();
@@ -2043,17 +2152,7 @@ namespace /*CHI::*/Xact {
                 = this->grantedPCredits[rspFlit.PCrdType()];
 
             auto iterPCreditList = grantedPCredits.try_emplace(pCrdKey).first;
-
             iterPCreditList->second.push_back(firedRspFlit);
-
-            //
-            if (glbl.CHECK_FIELD_MAPPING.enable)
-            {
-                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(rspFlit);
-                if (denial != XactDenial::ACCEPTED)
-                    return this->ResponseDeniedByJoint(denial, firedRspFlit);
-            }
-
             return XactDenial::ACCEPTED;
         }
 
@@ -2957,6 +3056,8 @@ namespace /*CHI::*/Xact {
     {
         std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
             grantedPCredits);
+        std::copy(obj.returnedPCredits, obj.returnedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
+            returnedPCredits);
 
         Fork();
     }
@@ -2976,6 +3077,8 @@ namespace /*CHI::*/Xact {
 
         std::copy(obj.grantedPCredits, obj.grantedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
             grantedPCredits);
+        std::copy(obj.returnedPCredits, obj.returnedPCredits + (1 << Flits::RSP<config>::PCRDTYPE_WIDTH),
+            returnedPCredits);
 
         Fork();
         return *this;
@@ -3030,7 +3133,10 @@ namespace /*CHI::*/Xact {
         rxRetriedTransactions.clear();
 
         for (int i = 0; i < (1 << Flits::RSP<config>::PCRDTYPE_WIDTH); i++)
+        {
             grantedPCredits[i].clear();
+            returnedPCredits[i].clear();
+        }
     }
 
     template<FlitConfigurationConcept config>
@@ -3080,8 +3186,8 @@ namespace /*CHI::*/Xact {
     inline bool SNFJoint<config>::HasInflight() const noexcept
     {
         return !rxTransactions.empty() || !rxDBIDTransactions.empty()
-            || !rxDBIDOverlappableTransactions.empty() 
-            || !rxRetriedTransactions.empty();
+            || !rxDBIDOverlappableTransactions.empty()
+            || !rxRetriedTransactions.empty() || details::HasOutstandingCredits(grantedPCredits);
     }
 
     template<FlitConfigurationConcept config>
@@ -3144,8 +3250,6 @@ namespace /*CHI::*/Xact {
         key.id.src  = reqFlit.SrcID();
         key.id.txn  = reqFlit.TxnID();
 
-        bool retry = false;
-
         //
         FiredRequestFlit<config> firedReqFlit(XactScope::Subordinate, false, time, reqFlit);
 
@@ -3156,15 +3260,37 @@ namespace /*CHI::*/Xact {
             return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_DECODED, firedReqFlit,
                 nullptr, std::string("This opcode could not be decoded by Opcodes::REQ::Decoder on ") + this->GetType()->name);
 
+        if (reqFlit.Opcode() == Opcodes::REQ::PCrdReturn)
+        {
+            if (glbl.CHECK_FIELD_MAPPING.enable)
+            {
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(reqFlit);
+                if (denial != XactDenial::ACCEPTED)
+                    return this->RequestDeniedByJoint(denial, firedReqFlit);
+            }
+
+            hnsrc_t hnKey;
+            hnKey.value     = 0;
+            hnKey.id.src    = reqFlit.SrcID();
+
+            pcrd_t pCrdKey;
+            pCrdKey.value   = 0;
+            pCrdKey.id.src  = reqFlit.TgtID();
+            pCrdKey.id.tgt  = reqFlit.SrcID();
+
+            const uint64_t creditType = reqFlit.PCrdType();
+            if (!details::ConsumePCrdReturn(rxRetriedTransactions, grantedPCredits[creditType],
+                    returnedPCredits[creditType], hnKey, pCrdKey, creditType))
+                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
+            return XactDenial::ACCEPTED;
+        }
+
         //
         if (reqFlit.AllowRetry() == 0)
         {
             if (rxTransactions.contains(key))
                 return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_TXNID_IN_USE, firedReqFlit, rxTransactions[key]);
 
-            // iterate and compare retry transactions
-            // TODO: simplified retry mapping by TxnID, temporary workaround for KunminghuV2
-            //       specification retry mapping implementation here
             hnsrc_t hnKey;
             hnKey.value     = 0;
             hnKey.id.src    = reqFlit.SrcID();
@@ -3173,83 +3299,70 @@ namespace /*CHI::*/Xact {
             if (xactionList == rxRetriedTransactions.end())
                 return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_RETRY, firedReqFlit);
 
-            auto xactionIter = xactionList->second.begin();
+            const uint64_t creditType = reqFlit.PCrdType();
+            auto& credits = grantedPCredits[creditType];
+            std::shared_ptr<Xaction<config>> firstXaction;
+            std::shared_ptr<Xaction<config>> retryXaction;
+            std::list<FiredResponseFlit<config>>* selectedCredits = nullptr;
+            pcrd_t selectedCreditKey;
 
-            for (; xactionIter != xactionList->second.end(); xactionIter++)
-                if (reqFlit.TxnID() == xactionIter->get()->GetFirst().flit.req.TxnID())
-                    break;
-
-            if (xactionIter == xactionList->second.end())
-                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_RETRY, firedReqFlit);
-
-            std::shared_ptr<Xaction<config>> firstXaction = *xactionIter;
-
-            xactionList->second.erase(xactionIter);
-            if (xactionList->second.empty())
-                rxRetriedTransactions.erase(xactionList);
-
-            std::shared_ptr<Xaction<config>> retryXaction =
-                opcodeInfo.GetCompanion()(glbl, firedReqFlit, firstXaction);
-
-            if (!retryXaction) // unsupported opcode transactions
-                return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, firedReqFlit,
-                    nullptr, std::string("No Xaction object mapped for ") + opcodeInfo.GetName() + " on " + this->GetType()->name);
-
-            if (theXaction)
-                *theXaction = retryXaction;
-
-            if (retryXaction->GetFirstDenial() != XactDenial::ACCEPTED)
-                return this->RequestDeniedByXaction(retryXaction->GetFirstDenial(), firedReqFlit, retryXaction);
-
-            assert(firstXaction->GetRetryAck() && "transaction not getting RetryAck but lies in retried list");
-
-            // check granted P-Credit
-            pcrd_t pCrdKey;
-            pCrdKey.value   = 0;
-            pCrdKey.id.src  = firstXaction->GetRetryAck()->flit.rsp.SrcID();
-            pCrdKey.id.tgt  = reqFlit.SrcID();
-
-            std::unordered_map<uint64_t, std::list<FiredResponseFlit<config>>>& grantedPCredits
-                = this->grantedPCredits[reqFlit.PCrdType()];
-
-            auto iterPCreditList = grantedPCredits.find(pCrdKey);
-            if (iterPCreditList == grantedPCredits.end())
-                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
-
-            std::list<FiredResponseFlit<config>>& pCreditList = iterPCreditList->second;
-
-            if (pCreditList.empty())
+            // PCrdGrant can precede RetryAck and credits are fungible. Select the youngest
+            // compatible retry as a deterministic assignment, not proof of credit provenance.
+            for (auto attempt = xactionList->second.rbegin(); attempt != xactionList->second.rend(); ++attempt)
             {
-                grantedPCredits.erase(iterPCreditList);
-                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_PCREDIT, firedReqFlit);
+                auto candidate = *attempt;
+                auto retryAck = candidate->GetRetryAck();
+                if (!retryAck || retryAck->flit.rsp.PCrdType() != creditType)
+                    continue;
+
+                pcrd_t creditKey;
+                creditKey.value   = 0;
+                creditKey.id.src  = retryAck->flit.rsp.SrcID();
+                creditKey.id.tgt  = reqFlit.SrcID();
+                if (details::CountActiveRetries(rxRetriedTransactions, returnedPCredits[creditType],
+                        hnKey, creditKey, creditType) == 0)
+                    continue;
+
+                auto credit = credits.find(creditKey);
+                if (credit == credits.end() || credit->second.empty())
+                    continue;
+
+                auto candidateRetry = opcodeInfo.GetCompanion()(glbl, firedReqFlit, candidate);
+                if (!candidateRetry)
+                    return this->RequestDeniedByJoint(XactDenial::DENIED_REQ_OPCODE_NOT_SUPPORTED, firedReqFlit,
+                        nullptr, std::string("No Xaction object mapped for ") + opcodeInfo.GetName() + " on " + this->GetType()->name);
+                if (candidateRetry->GetFirstDenial() != XactDenial::ACCEPTED)
+                    return this->RequestDeniedByXaction(candidateRetry->GetFirstDenial(), firedReqFlit, candidateRetry);
+
+                if (candidate->CheckResend(glbl, credit->second.front(), candidateRetry) == XactDenial::ACCEPTED)
+                {
+                    firstXaction = candidate;
+                    retryXaction = candidateRetry;
+                    selectedCredits = &credit->second;
+                    selectedCreditKey = creditKey;
+                    break;
+                }
             }
 
-            XactDenialEnum denial =
-                firstXaction->Resend(glbl, pCreditList.front(), retryXaction);
-            
+            if (!firstXaction)
+                return this->RequestDeniedByJoint(XactDenial::DENIED_NO_MATCHING_RETRY, firedReqFlit);
+
+            XactDenialEnum denial = firstXaction->Resend(glbl, selectedCredits->front(), retryXaction);
             if (denial != XactDenial::ACCEPTED)
                 return this->RequestDeniedByXaction(denial, firedReqFlit, firstXaction);
 
-            // original xaction complete
-            rxreqid_t firstKey;
-            firstKey.value  = 0;
-            firstKey.id.src = firstXaction->GetFirst().flit.req.SrcID();
-            firstKey.id.txn = firstXaction->GetFirst().flit.req.TxnID();
+            auto& attempts = xactionList->second;
+            attempts.erase(std::find(attempts.begin(), attempts.end(), firstXaction));
+            selectedCredits->pop_front();
+            if (selectedCredits->empty())
+                credits.erase(selectedCreditKey);
+            details::PurgeReturnedRetries(rxRetriedTransactions, returnedPCredits[creditType],
+                hnKey, selectedCreditKey, creditType);
 
-            rxTransactions.erase(firstKey);
-
-            // event on retry xaction
+            if (theXaction)
+                *theXaction = retryXaction;
             this->FireXactionRetry(retryXaction);
-
-            // event on TxnID allocation
             this->FireXactionTxnIDAllocation(retryXaction);
-
-            // consume P-Credit
-            pCreditList.pop_front();
-            if (pCreditList.empty())
-                grantedPCredits.erase(iterPCreditList);
-
-            // register retried xaction
             rxTransactions[key] = retryXaction;
         }
         else
@@ -3295,6 +3408,13 @@ namespace /*CHI::*/Xact {
         // P-Credit Grant
         if (rspFlit.Opcode() == Opcodes::RSP::PCrdGrant)
         {
+            if (glbl.CHECK_FIELD_MAPPING.enable)
+            {
+                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(rspFlit);
+                if (denial != XactDenial::ACCEPTED)
+                    return this->ResponseDeniedByJoint(denial, firedRspFlit);
+            }
+
             pcrd_t pCrdKey;
             pCrdKey.value   = 0;
             pCrdKey.id.src  = rspFlit.SrcID();
@@ -3304,17 +3424,7 @@ namespace /*CHI::*/Xact {
                 = this->grantedPCredits[rspFlit.PCrdType()];
 
             auto iterPCreditList = grantedPCredits.try_emplace(pCrdKey).first;
-
             iterPCreditList->second.push_back(firedRspFlit);
-
-            //
-            if (glbl.CHECK_FIELD_MAPPING.enable)
-            {
-                XactDenialEnum denial = glbl.CHECK_FIELD_MAPPING.Check(rspFlit);
-                if (denial != XactDenial::ACCEPTED)
-                    return this->ResponseDeniedByJoint(denial, firedRspFlit);
-            }
-
             return XactDenial::ACCEPTED;
         }
 

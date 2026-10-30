@@ -177,7 +177,7 @@ namespace CHI {
             std::vector<SubsequenceKey>                     subsequenceKeys;
 
             bool                                            resent;
-            std::shared_ptr<Xaction<config>>                resentXaction;
+            std::weak_ptr<Xaction<config>>                  resentXaction;
             FiredResponseFlit<config>                       sourcePCredit;
             XactDenialEnum                                  resentDenial;
 
@@ -333,6 +333,7 @@ namespace CHI {
             virtual XactDenialEnum                  NextRSP(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
             virtual XactDenialEnum                  NextDAT(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept;
 
+            XactDenialEnum                          CheckResend(const Global<config>& glbl, FiredResponseFlit<config> pCrdFlit, std::shared_ptr<Xaction<config>> xaction) noexcept;
             virtual XactDenialEnum                  Resend(const Global<config>& glbl, FiredResponseFlit<config> pCrdFlit, std::shared_ptr<Xaction<config>> xaction) noexcept;
             virtual bool                            RevertResent() noexcept;
 
@@ -634,7 +635,7 @@ namespace /*CHI::*/Xact {
         , subsequence       ()
         , subsequenceKeys   ()
         , resent            (false)
-        , resentXaction     (nullptr)
+        , resentXaction     ()
         , sourcePCredit     ()
         , resentDenial      (XactDenial::NOT_INITIALIZED)
         , retried           (false)
@@ -651,7 +652,7 @@ namespace /*CHI::*/Xact {
         , subsequence       ()
         , subsequenceKeys   ()
         , resent            (false)
-        , resentXaction     (nullptr)
+        , resentXaction     ()
         , sourcePCredit     ()
         , resentDenial      (XactDenial::NOT_INITIALIZED)
         , retried           (retried)
@@ -1605,7 +1606,7 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline std::shared_ptr<Xaction<config>> Xaction<config>::GetResentXaction() const noexcept
     {
-        return resentXaction;
+        return resentXaction.lock();
     }
 
     template<FlitConfigurationConcept config>
@@ -1652,6 +1653,12 @@ namespace /*CHI::*/Xact {
         subsequenceKeys.emplace_back(denial, datFlit.flit.dat.Opcode(), hasDBID);
 
         return denial;
+    }
+
+    template<FlitConfigurationConcept config>
+    inline XactDenialEnum Xaction<config>::CheckResend(const Global<config>& glbl, FiredResponseFlit<config> pCrdFlit, std::shared_ptr<Xaction<config>> xaction) noexcept
+    {
+        return ResendNoRecord(glbl, pCrdFlit, xaction);
     }
 
     template<FlitConfigurationConcept config>
