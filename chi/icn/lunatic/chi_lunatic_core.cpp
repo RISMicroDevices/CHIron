@@ -32,6 +32,7 @@ namespace CHI::Lunatic {
         errors.clear();
         tracker.Clear();
         hazards.Clear();
+        ordering.Clear();
         directory.Clear();
         snoopFilter.Clear();
         memory.Clear();
@@ -103,6 +104,8 @@ namespace CHI::Lunatic {
                 return;
             }
             transaction->Mark(COMPLETE_COMPACK);
+            if (IsOrderedWriteObservation(transaction->request))
+                ordering.Release(transaction->handle);
             if (responseComplete)
             {
                 transaction->phase = Phase::Commit;
@@ -204,6 +207,9 @@ namespace CHI::Lunatic {
             return;
         }
 
+        if (!ordering.CanAdmit(rxreq.front()))
+            return;
+
         Request request = std::move(rxreq.front());
         rxreq.pop_front();
         AdmitRequest(request);
@@ -216,6 +222,14 @@ namespace CHI::Lunatic {
         if (!transaction)
         {
             Deny(request, "duplicate live requester transaction ID");
+            return;
+        }
+
+        if (!ordering.Add(*transaction))
+        {
+            Error(transaction->handle, "duplicate requester ordering gate");
+            transaction->canceled = true;
+            transaction->phase = Phase::Commit;
             return;
         }
 
@@ -276,9 +290,11 @@ namespace CHI::Lunatic {
                 AtomicGeometry atomicGeometry;
                 const bool invalidAtomic = requestClass == RequestClass::Atomic &&
                     (!GetAtomicGeometry(transaction.request, atomicGeometry) || transaction.request.expCompAck);
+                const bool invalidOrder = transaction.request.order == 1 ||
+                    (transaction.request.order != 0 && !IsOrderingSupported(transaction.request.opcode));
                 if (!IsSupportedRequest(transaction.request.opcode) || transaction.request.size > 6 ||
                     (requestClass == RequestClass::ZeroWrite && transaction.request.size != 6) || invalidStash ||
-                    invalidCleanUnique || invalidPersistence || invalidAtomic)
+                    invalidCleanUnique || invalidPersistence || invalidAtomic || invalidOrder)
                 {
                     Deny(transaction.request, "unsupported request opcode or transfer geometry");
                     transaction.canceled = true;
@@ -403,6 +419,7 @@ namespace CHI::Lunatic {
             return;
 
         FlowState& flow = flows.at(handle);
+        ordering.Release(handle);
         hazards.Release(handle, transaction->request.Line());
         if (flow.victimLinked)
             hazards.Release(handle, flow.victimLine);
@@ -460,11 +477,13 @@ namespace CHI::Lunatic {
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::ReadReceipt)
         {
             flows.at(transaction->handle).readReceiptEmitted = true;
+            ordering.Release(transaction->handle);
             return;
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::RespSepData)
         {
             flows.at(transaction->handle).respSepEmitted = true;
+            ordering.Release(transaction->handle);
             FinishResponse(*transaction);
             return;
         }
@@ -481,9 +500,12 @@ namespace CHI::Lunatic {
             FinishResponse(*transaction);
             return;
         }
-        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::DBIDResp)
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::DBIDResp ||
+            pending.flit.opcode == CHI::Eb::Opcodes::RSP::DBIDRespOrd)
         {
             flows.at(transaction->handle).dbidEmitted = true;
+            if (!IsOrderedWriteObservation(transaction->request))
+                ordering.Release(transaction->handle);
             const auto requestClass = ClassifyRequest(transaction->request.opcode);
             if (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero ||
                 requestClass == RequestClass::Atomic)
@@ -495,7 +517,11 @@ namespace CHI::Lunatic {
         {
             flows.at(transaction->handle).compEmitted = true;
             if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
+            {
                 flows.at(transaction->handle).dbidEmitted = true;
+                if (!IsOrderedWriteObservation(transaction->request))
+                    ordering.Release(transaction->handle);
+            }
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp && IsCopybackRequest(transaction->request.opcode))
         {
@@ -603,12 +629,13 @@ namespace CHI::Lunatic {
     bool Core::Impl::HasInflight() const noexcept
     {
         return !rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
-               !txdat.empty() || !txsnp.empty() || !retries.empty() || !tracker.Empty() || !hazards.Empty();
+               !txdat.empty() || !txsnp.empty() || !retries.empty() || !tracker.Empty() || !hazards.Empty() ||
+               !ordering.Empty();
     }
 
     bool Core::Impl::ValidateInvariants() const noexcept
     {
-        if (!tracker.Validate() || !hazards.Validate())
+        if (!tracker.Validate() || !hazards.Validate() || !ordering.Validate())
             return false;
         if (!tracker.Empty())
             return true;

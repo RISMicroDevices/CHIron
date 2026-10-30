@@ -46,6 +46,7 @@ namespace CHI::Lunatic {
         request.txnId = transaction.handle;
         request.returnNid = nodeId;
         request.returnTxnId = transaction.handle;
+        request.order = transaction.request.order != 0;
         request.opcode = flow.separatedBackendRead
             ? CHI::Eb::Opcodes::REQ::ReadNoSnpSep : CHI::Eb::Opcodes::REQ::ReadNoSnp;
         if (flow.victimPending && flow.victimDataPartial)
@@ -139,6 +140,7 @@ namespace CHI::Lunatic {
         request.txnId = transaction.handle;
         request.returnNid = nodeId;
         request.returnTxnId = 0;
+        request.order = 0;
         request.allowRetry = true;
         request.expCompAck = false;
         request.snpAttr = 0;

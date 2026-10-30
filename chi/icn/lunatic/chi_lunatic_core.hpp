@@ -6,6 +6,7 @@
 #include "chi_lunatic_directory.hpp"
 #include "chi_lunatic_hazard.hpp"
 #include "chi_lunatic_memory.hpp"
+#include "chi_lunatic_ordering.hpp"
 #include "chi_lunatic_pipeline.hpp"
 #include "chi_lunatic_policy.hpp"
 #include "chi_lunatic_protocol.hpp"
@@ -134,6 +135,7 @@ namespace CHI::Lunatic {
                                   policy;
         Tracker                   tracker;
         HazardGraph               hazards;
+        OrderingTracker           ordering;
         VirtualPipeline           pipeline;
         SparseMemory              memory;
         std::map<TransactionHandle, FlowState>

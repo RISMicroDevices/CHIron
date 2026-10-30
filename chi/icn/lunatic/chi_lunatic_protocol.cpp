@@ -157,6 +157,36 @@ namespace CHI::Lunatic {
         return opcode == REQ::StashOnceSepUnique || opcode == REQ::StashOnceSepShared;
     }
 
+    bool IsOrderingSupported(uint16_t opcode) noexcept
+    {
+        if (IsAtomicRequest(opcode))
+            return true;
+        namespace REQ = CHI::Eb::Opcodes::REQ;
+        switch (opcode)
+        {
+            case REQ::ReadNoSnp:
+            case REQ::ReadOnce:
+            case REQ::ReadOnceCleanInvalid:
+            case REQ::ReadOnceMakeInvalid:
+            case REQ::WriteNoSnpPtl:
+            case REQ::WriteNoSnpFull:
+            case REQ::WriteNoSnpZero:
+            case REQ::WriteUniquePtl:
+            case REQ::WriteUniqueFull:
+            case REQ::WriteUniqueZero:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool IsOrderedWriteObservation(const Request& request) noexcept
+    {
+        const auto requestClass = ClassifyRequest(request.opcode);
+        return request.order == 2 && request.expCompAck &&
+            (requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ImmediateWrite);
+    }
+
     bool RequiresCompAck(const Request& request) noexcept
     {
         const auto requestClass = ClassifyRequest(request.opcode);
