@@ -158,6 +158,7 @@ namespace /*CHI::*/Xact {
             if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::RespSepData)
             {
                 gotResp = true;
+                gotReceipt = true;
             }
             else if (iter->IsRSP() && iter->flit.rsp.Opcode() == Opcodes::RSP::ReadReceipt)
             {
@@ -355,6 +356,10 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
+            if (this->first.flit.req.Order() != 0 &&
+                !this->first.flit.req.ExpCompAck())
+                return XactDenial::DENIED_RESPSEPDATA_ON_ORDER_WITHOUT_EXPCOMPACK;
+
             if (this->HasRSP({ Opcodes::RSP::RespSepData }))
                 return XactDenial::DENIED_RESPSEP_AFTER_RESPSEP;
 
@@ -393,7 +398,9 @@ namespace /*CHI::*/Xact {
 
             if (!this->HasDAT({ Opcodes::DAT::CompData })
 #ifdef CHI_ISSUE_EB_ENABLE
-             && !this->HasRSP({ Opcodes::RSP::RespSepData })
+             && !(this->HasRSP({ Opcodes::RSP::RespSepData }) &&
+                  (this->first.flit.req.Order() == 0 ||
+                   this->HasDAT({ Opcodes::DAT::DataSepResp })))
 #endif
             )
 #ifdef CHI_ISSUE_EB_ENABLE

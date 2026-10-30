@@ -292,6 +292,10 @@ namespace CHI {
 
             inline constexpr XactDenialEnumBack DENIED_DWT_INOPERATIVENESS                          ("XACT_DENIED_DWT_INOPERATIVENESS",                         0x000B0000 | 100);
 
+            inline constexpr XactDenialEnumBack DENIED_RESPSEPDATA_ON_ORDER_WITHOUT_EXPCOMPACK    ("XACT_DENIED_RESPSEPDATA_ON_ORDER_WITHOUT_EXPCOMPACK",   0x000B0000 | 101);
+
+            inline constexpr XactDenialEnumBack DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED     ("XACT_DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED",  0x000B0000 | 102);
+
             inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_XACT_TYPE         ("XACT_DENIED_RETRY_DIFF_XACT_TYPE",        0x000C0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_RETRY_NO_ALLOWRETRY          ("XACT_DENIED_RETRY_NO_ALLOWRETRY",         0x000C0000 |  1);
             inline constexpr XactDenialEnumBack DENIED_NO_MATCHING_RETRY            ("XACT_DENIED_NO_MATCHING_RETRY",           0x000C0000 |  2);

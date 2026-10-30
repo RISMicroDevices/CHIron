@@ -140,9 +140,6 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline bool XactionHomeRead<config>::IsResponseComplete(const Global<config>& glbl) const noexcept
     {
-        if (this->first.flit.req.Order() != 0)
-            return this->HasRSP({ Opcodes::RSP::ReadReceipt });
-
         return true;
     }
 
@@ -163,13 +160,15 @@ namespace /*CHI::*/Xact {
             if (!iter->IsFromSubordinate(glbl))
                 continue;
 
-            if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData)
+            if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::CompData &&
+                this->first.flit.req.Opcode() == Opcodes::REQ::ReadNoSnp)
             {
                 collectedDataID |= details::CollectDataID<config>(
                     this->first.flit.req.Size(), iter->flit.dat.DataID());
             }
 #ifdef CHI_ISSUE_EB_ENABLE
-            else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::DataSepResp)
+            else if (iter->IsDAT() && iter->flit.dat.Opcode() == Opcodes::DAT::DataSepResp &&
+                     this->first.flit.req.Opcode() == Opcodes::REQ::ReadNoSnpSep)
             {
                 collectedDataID |= details::CollectDataID<config>(
                     this->first.flit.req.Size(), iter->flit.dat.DataID());
@@ -284,7 +283,10 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline XactDenialEnum XactionHomeRead<config>::NextRSPNoRecord(const Global<config>& glbl, const FiredResponseFlit<config>& rspFlit, bool& hasDBID, bool& firstDBID) noexcept
     {
-        if (this->IsComplete(glbl))
+        if (this->IsComplete(glbl) &&
+            (this->GotRetryAck() ||
+             !rspFlit.IsRSP() ||
+             rspFlit.flit.rsp.Opcode() != Opcodes::RSP::ReadReceipt))
             return this->ResponseFlitDenied(XactDenial::DENIED_COMPLETED_RSP, rspFlit);
 
         if (!rspFlit.IsRSP())
@@ -334,9 +336,11 @@ namespace /*CHI::*/Xact {
             return this->ResponseFlitDenied(XactDenial::DENIED_CHANNEL_NOT_DAT, datFlit);
 
         if (
-            datFlit.flit.dat.Opcode() == Opcodes::DAT::CompData
+            (datFlit.flit.dat.Opcode() == Opcodes::DAT::CompData &&
+             this->first.flit.req.Opcode() == Opcodes::REQ::ReadNoSnp)
 #ifdef CHI_ISSUE_EB_ENABLE
-         || datFlit.flit.dat.Opcode() == Opcodes::DAT::DataSepResp
+         || (datFlit.flit.dat.Opcode() == Opcodes::DAT::DataSepResp &&
+             this->first.flit.req.Opcode() == Opcodes::REQ::ReadNoSnpSep)
 #endif
         )
         {

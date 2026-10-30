@@ -675,7 +675,14 @@ namespace CHI {
 
 
         private:
+            static constexpr size_t COMPLETED_READ_TRANSACTION_LIMIT = 64;
+
             std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        rxTransactions;
+            std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        rxCompletedReadTransactions;
+            std::list<uint64_t>                                                   rxCompletedReadTransactionOrder;
+
+            void                RetainCompletedReadTransaction(uint64_t key, const std::shared_ptr<Xaction<config>>& xaction) noexcept;
+            void                EraseCompletedReadTransaction(uint64_t key) noexcept;
 
             std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        rxDBIDTransactions;
 
@@ -3048,6 +3055,8 @@ namespace /*CHI::*/Xact {
     inline SNFJoint<config>::SNFJoint(const SNFJoint<config>& obj) noexcept
         : Joint<config>                     (obj.type)
         , rxTransactions                    (obj.rxTransactions)
+        , rxCompletedReadTransactions       (obj.rxCompletedReadTransactions)
+        , rxCompletedReadTransactionOrder   (obj.rxCompletedReadTransactionOrder)
         , rxDBIDTransactions                (obj.rxDBIDTransactions)
         , rxDBIDOverlappableTransactions    (obj.rxDBIDOverlappableTransactions)
         , rxRetriedTransactions             (obj.rxRetriedTransactions)
@@ -3068,10 +3077,12 @@ namespace /*CHI::*/Xact {
         this->type = obj.type;
         this->events = std::make_shared<typename Joint<config>::EventHub>();
 
-        rxTransactions                  = obj.rxTransactions;
-        rxDBIDTransactions              = obj.rxDBIDTransactions;
-        rxDBIDOverlappableTransactions  = obj.rxDBIDOverlappableTransactions;
-        rxRetriedTransactions           = obj.rxRetriedTransactions;
+        rxTransactions                      = obj.rxTransactions;
+        rxCompletedReadTransactions         = obj.rxCompletedReadTransactions;
+        rxCompletedReadTransactionOrder     = obj.rxCompletedReadTransactionOrder;
+        rxDBIDTransactions                  = obj.rxDBIDTransactions;
+        rxDBIDOverlappableTransactions      = obj.rxDBIDOverlappableTransactions;
+        rxRetriedTransactions               = obj.rxRetriedTransactions;
     //  grantedPCredits                 = obj.grantedPCredits;
         reqDecoder                      = obj.reqDecoder;
 
@@ -3110,6 +3121,9 @@ namespace /*CHI::*/Xact {
         for (auto& p : rxTransactions)
             p.second = forkXaction(p.second);
 
+        for (auto& p : rxCompletedReadTransactions)
+            p.second = forkXaction(p.second);
+
         for (auto& p : rxDBIDTransactions)
             p.second = forkXaction(p.second);
 
@@ -3125,6 +3139,9 @@ namespace /*CHI::*/Xact {
     inline void SNFJoint<config>::Clear() noexcept
     {
         rxTransactions.clear();
+
+        rxCompletedReadTransactions.clear();
+        rxCompletedReadTransactionOrder.clear();
         
         rxDBIDTransactions.clear();
 
@@ -3236,6 +3253,30 @@ namespace /*CHI::*/Xact {
             keyDBIDOvlp.id.tgt = source.flit.dat.TgtID();
             keyDBIDOvlp.id.txn = source.flit.dat.TxnID();
         }
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void SNFJoint<config>::RetainCompletedReadTransaction(
+        uint64_t key, const std::shared_ptr<Xaction<config>>& xaction) noexcept
+    {
+        EraseCompletedReadTransaction(key);
+        rxCompletedReadTransactions[key] = xaction;
+        rxCompletedReadTransactionOrder.push_back(key);
+
+        while (rxCompletedReadTransactions.size() > COMPLETED_READ_TRANSACTION_LIMIT)
+        {
+            assert(!rxCompletedReadTransactionOrder.empty());
+            const uint64_t oldest = rxCompletedReadTransactionOrder.front();
+            rxCompletedReadTransactionOrder.pop_front();
+            rxCompletedReadTransactions.erase(oldest);
+        }
+    }
+
+    template<FlitConfigurationConcept config>
+    inline void SNFJoint<config>::EraseCompletedReadTransaction(uint64_t key) noexcept
+    {
+        rxCompletedReadTransactions.erase(key);
+        rxCompletedReadTransactionOrder.remove(key);
     }
 
     template<FlitConfigurationConcept config>
@@ -3363,6 +3404,7 @@ namespace /*CHI::*/Xact {
                 *theXaction = retryXaction;
             this->FireXactionRetry(retryXaction);
             this->FireXactionTxnIDAllocation(retryXaction);
+            EraseCompletedReadTransaction(key);
             rxTransactions[key] = retryXaction;
         }
         else
@@ -3390,6 +3432,7 @@ namespace /*CHI::*/Xact {
             // event on TxnID allocation
             this->FireXactionTxnIDAllocation(xaction);
 
+            EraseCompletedReadTransaction(key);
             rxTransactions[key] = xaction;
         }
 
@@ -3440,7 +3483,32 @@ namespace /*CHI::*/Xact {
 
         auto xactionIter = rxTransactions.find(key);
         if (xactionIter == rxTransactions.end())
+        {
+            if (rspFlit.Opcode() == Opcodes::RSP::ReadReceipt)
+            {
+                auto completedIter = rxCompletedReadTransactions.find(key);
+                if (completedIter != rxCompletedReadTransactions.end())
+                {
+                    xaction = completedIter->second;
+                    if (theXaction)
+                        *theXaction = xaction;
+
+                    bool hasDBID, firstDBID;
+                    XactDenialEnum denial = xaction->NextRSP(glbl, firedRspFlit, hasDBID, firstDBID);
+                    if (denial != XactDenial::ACCEPTED)
+                        return this->ResponseDeniedByJoint(denial, firedRspFlit, xaction);
+
+                    EraseCompletedReadTransaction(key);
+                    return XactDenial::ACCEPTED;
+                }
+
+                return this->ResponseDeniedByJoint(
+                    XactDenial::DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED, firedRspFlit, nullptr,
+                    "ReadReceipt TxnID is not active or retained; completed-read tracking may have been evicted");
+            }
+
             return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_TXNID_NOT_EXIST, firedRspFlit);
+        }
 
         xaction = xactionIter->second;
 
@@ -3670,6 +3738,11 @@ namespace /*CHI::*/Xact {
             key.value   = 0;
             key.id.src  = xaction->GetFirst().flit.req.SrcID();
             key.id.txn  = xaction->GetFirst().flit.req.TxnID();
+
+            if (xaction->GetType() == XactionType::HomeRead &&
+                xaction->GetFirst().flit.req.Order() != 0 &&
+                !xaction->HasRSP({ Opcodes::RSP::ReadReceipt }))
+                RetainCompletedReadTransaction(key, xaction);
 
             rxTransactions.erase(key);
         }
