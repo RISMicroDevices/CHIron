@@ -75,7 +75,7 @@ namespace CHI::Lunatic {
             else
             {
                 transaction.phase = Phase::Return;
-                transaction.readyTime = pipeline.ScheduleData(time);
+                transaction.readyTime = ScheduleData();
             }
             return;
         }
@@ -88,7 +88,7 @@ namespace CHI::Lunatic {
         if (!store)
         {
             transaction.phase = Phase::Return;
-            transaction.readyTime = pipeline.ScheduleData(time);
+            transaction.readyTime = ScheduleData();
             return;
         }
         if (options.backend == BackendKind::AXI && !flow.compSent)

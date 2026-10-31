@@ -111,8 +111,13 @@ namespace CHI::Lunatic {
     void Core::Impl::QueueRetryCredit(size_t index)
     {
         auto it = retries.find(index);
-        if (it == retries.end() || !it->second.ackPopped || it->second.grantQueued || !RetryReservationAvailable())
+        if (it == retries.end() || !it->second.ackPopped || it->second.grantQueued)
             return;
+        if (!RetryReservationAvailable())
+        {
+            pmu.RecordStall(WaitReason::Tracker);
+            return;
+        }
 
         Response response;
         response.source = nodeId;
@@ -149,6 +154,10 @@ namespace CHI::Lunatic {
             else if (!RetryRequestCompatible(retry.request, request))
                 continue;
 
+            if (creditReturn)
+                ++pmu.returnedCredits;
+            else
+                ++pmu.creditedResends;
             retries.erase(std::next(iter).base());
             return true;
         }

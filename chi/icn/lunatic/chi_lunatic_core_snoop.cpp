@@ -426,7 +426,10 @@ namespace CHI::Lunatic {
         snoopFilter.Track(flow.snoopLine, target, final, time);
         auto it = std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target);
         if (it != transaction.pendingSnoops.end())
+        {
             transaction.pendingSnoops.erase(it);
+            ++pmu.completedSnoopTargets;
+        }
         if (transaction.pendingSnoops.empty())
         {
             if (flow.dctForwarded)

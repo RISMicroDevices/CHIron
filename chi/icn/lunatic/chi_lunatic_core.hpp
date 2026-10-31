@@ -156,6 +156,7 @@ namespace CHI::Lunatic {
         Options                   options;
         std::shared_ptr<EventHub> events;
         Time                      time = 0;
+        PerformanceCounters       pmu;
         Directory                 directory;
         SnoopFilter               snoopFilter;
         std::unique_ptr<CachePolicy>
@@ -198,7 +199,10 @@ namespace CHI::Lunatic {
         bool Push(std::deque<T>& queue, const T& flit, EventKind kind)
         {
             if (queue.size() >= options.inputQueueLimit)
+            {
+                pmu.RecordStall(WaitReason::InputQueue);
                 return false;
+            }
             queue.push_back(flit);
             Publish(kind, flit);
             return true;
@@ -207,6 +211,24 @@ namespace CHI::Lunatic {
         template<typename T>
         void Publish(EventKind kind, const T& flit, TransactionHandle handle = INVALID_TRANSACTION)
         {
+            switch (kind)
+            {
+                case EventKind::AcceptedRXREQ: ++pmu.acceptedRXREQ; break;
+                case EventKind::AcceptedRXRSP: ++pmu.acceptedRXRSP; break;
+                case EventKind::AcceptedRXDAT: ++pmu.acceptedRXDAT; break;
+                case EventKind::EmittedTXREQ: ++pmu.emittedTXREQ; break;
+                case EventKind::EmittedTXRSP:
+                    ++pmu.emittedTXRSP;
+                    if (flit.opcode == CHI::Eb::Opcodes::RSP::RetryAck)
+                        ++pmu.emittedRetryAcks;
+                    else if (flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant)
+                        ++pmu.emittedCreditGrants;
+                    break;
+                case EventKind::EmittedTXDAT: ++pmu.emittedTXDAT; break;
+                case EventKind::EmittedTXSNP: ++pmu.emittedTXSNP; break;
+                default: break;
+            }
+
             Event event;
             event.kind = kind;
             event.time = time;
@@ -296,7 +318,10 @@ namespace CHI::Lunatic {
                    size_t retry = std::numeric_limits<size_t>::max())
         {
             if (queue.size() >= options.outputQueueLimit)
+            {
+                pmu.RecordStall(WaitReason::OutputQueue);
                 return false;
+            }
             queue.push_back({ flit, handle, age, nextSerial++, retry, last, downstream });
             return true;
         }
@@ -310,6 +335,8 @@ namespace CHI::Lunatic {
         void AdmitRequest(const Request& request);
         void AdvanceTransactions();
         void Advance(Transaction& transaction);
+        Time ScheduleTag();
+        Time ScheduleData();
         void Resolve(Transaction& transaction);
         void ResolveNonCoherent(Transaction& transaction);
         void ResolveCoherent(Transaction& transaction);

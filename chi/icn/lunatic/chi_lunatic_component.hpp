@@ -3,6 +3,7 @@
 #include "chi_lunatic_backend_axi.hpp"
 #include "chi_lunatic_config.hpp"
 #include "chi_lunatic_events.hpp"
+#include "chi_lunatic_pmu.hpp"
 #include "chi_lunatic_state.hpp"
 #include "chi_lunatic_types.hpp"
 #include "../../../chi_eb/spec/chi_eb_protocol.hpp"
@@ -65,6 +66,7 @@ namespace CHI::Lunatic {
         NodeId                        GetNodeId() const noexcept;
         Time                          GetTime() const noexcept;
         const Options&                GetOptions() const noexcept;
+        PerformanceCounters           GetPerformanceCounters() const noexcept;
         std::shared_ptr<EventHub>     GetEvents() const noexcept;
         const std::vector<ErrorInfo>& GetErrors() const noexcept;
         SparseMemory&                 GetMemory() noexcept;
@@ -452,6 +454,7 @@ namespace CHI::Lunatic {
         NodeId                        GetNodeId() const noexcept { return core.GetNodeId(); }
         Time                          GetTime() const noexcept { return core.GetTime(); }
         const Options&                GetOptions() const noexcept { return core.GetOptions(); }
+        PerformanceCounters           GetPerformanceCounters() const noexcept { return core.GetPerformanceCounters(); }
         std::shared_ptr<EventHub>     GetEvents() const noexcept { return core.GetEvents(); }
         const std::vector<ErrorInfo>& GetErrors() const noexcept { return core.GetErrors(); }
         SparseMemory&                 GetMemory() noexcept { return core.GetMemory(); }

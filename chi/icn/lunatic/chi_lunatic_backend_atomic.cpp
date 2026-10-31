@@ -130,7 +130,7 @@ namespace CHI::Lunatic {
         else
         {
             transaction.phase = Phase::Return;
-            transaction.readyTime = pipeline.ScheduleData(time);
+            transaction.readyTime = ScheduleData();
         }
     }
 

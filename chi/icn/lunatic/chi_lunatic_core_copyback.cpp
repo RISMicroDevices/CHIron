@@ -367,7 +367,10 @@ namespace CHI::Lunatic {
         hazards.Add(transaction.handle, flow.victimLine, transaction.actionAge);
         flow.victimLinked = true;
         if (!hazards.IsHead(transaction.handle, flow.victimLine))
+        {
+            pmu.RecordStall(WaitReason::SameLine);
             return false;
+        }
 
         flow.snoopLine = flow.victimLine;
         flow.snoopForVictim = true;
@@ -379,6 +382,7 @@ namespace CHI::Lunatic {
         {
             return CompleteVictim(transaction);
         }
+        pmu.RecordStall(WaitReason::BackInvalidate);
         return false;
     }
 
@@ -407,7 +411,10 @@ namespace CHI::Lunatic {
             flow.victimLinked = true;
         }
         if (!hazards.IsHead(transaction.handle, flow.victimLine))
+        {
+            pmu.RecordStall(WaitReason::SameLine);
             return false;
+        }
 
         PolicyContext context;
         context.line = flow.victimLine;
@@ -423,6 +430,7 @@ namespace CHI::Lunatic {
             transaction.pendingSnoops.clear();
             transaction.snoopsRequired = true;
             flow.nextSnoop = 0;
+            pmu.RecordStall(WaitReason::BackInvalidate);
             return false;
         }
 

@@ -126,7 +126,7 @@ namespace CHI::Lunatic {
             transaction.memoryRequired = false;
             transaction.Mark(COMPLETE_MEMORY);
             transaction.phase = Phase::Action;
-            transaction.readyTime = pipeline.ScheduleData(time);
+            transaction.readyTime = ScheduleData();
             return;
         }
         if ((flow.snoopDataPartial || flow.victimDataPartial) && !transaction.homeHit)
@@ -261,7 +261,7 @@ namespace CHI::Lunatic {
         transaction.wait = WaitReason::None;
         flow.backendPhase = BackendPhase::Done;
         transaction.phase = Phase::Action;
-        transaction.readyTime = pipeline.ScheduleData(time);
+        transaction.readyTime = ScheduleData();
     }
 
     void Core::Impl::StartBackendWrite(Transaction& transaction)
@@ -637,7 +637,7 @@ namespace CHI::Lunatic {
         if (transaction.request.order == 0 || flow.backendReadReceiptReceived)
             tracker.UnbindMemory(options.subordinateId, transaction.handle);
         transaction.phase = Phase::Action;
-        transaction.readyTime = pipeline.ScheduleData(time);
+        transaction.readyTime = ScheduleData();
         return true;
     }
 

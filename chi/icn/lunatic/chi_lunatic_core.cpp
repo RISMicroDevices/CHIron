@@ -45,6 +45,7 @@ namespace CHI::Lunatic {
         axi.Reset();
         pipeline.Reset();
         random.Reset(options.seed);
+        pmu.Reset();
         time = 0;
         nextAge = 0;
         nextSerial = 0;
@@ -269,7 +270,10 @@ namespace CHI::Lunatic {
 
         const auto decision = events->Decide(RequestAdmissionEvent(time, nodeId, rxreq.front()));
         if (decision.IsBackpressured())
+        {
+            pmu.RecordStall(WaitReason::Decision);
             return;
+        }
 
         bool requestRetry = decision.IsRetryRequested();
         if (requestRetry && (!options.retryEnabled || !rxreq.front().allowRetry ||
@@ -291,7 +295,10 @@ namespace CHI::Lunatic {
         if (!rxreq.front().allowRetry)
         {
             if (!ordering.CanAdmit(rxreq.front()))
+            {
+                pmu.RecordStall(WaitReason::InputQueue);
                 return;
+            }
             Request request = std::move(rxreq.front());
             rxreq.pop_front();
             ConsumeRetryRequest(request, false);
@@ -299,11 +306,19 @@ namespace CHI::Lunatic {
             return;
         }
 
-        if (requestRetry || !RetryReservationAvailable())
+        const bool reservationAvailable = RetryReservationAvailable();
+        if (!reservationAvailable)
+            pmu.RecordStall(WaitReason::Tracker);
+        if (requestRetry || !reservationAvailable)
         {
             Request& request = rxreq.front();
-            if (!options.retryEnabled || !request.allowRetry || txrsp.size() >= options.outputQueueLimit)
+            if (!options.retryEnabled || !request.allowRetry)
                 return;
+            if (txrsp.size() >= options.outputQueueLimit)
+            {
+                pmu.RecordStall(WaitReason::OutputQueue);
+                return;
+            }
 
             const size_t index = nextRetry++;
             RetryRecord record{ request, false, false, false };
@@ -322,7 +337,10 @@ namespace CHI::Lunatic {
         }
 
         if (!ordering.CanAdmit(rxreq.front()))
+        {
+            pmu.RecordStall(WaitReason::InputQueue);
             return;
+        }
 
         Request request = std::move(rxreq.front());
         rxreq.pop_front();
@@ -338,6 +356,7 @@ namespace CHI::Lunatic {
             Deny(request, "duplicate live requester transaction ID");
             return;
         }
+        ++pmu.admittedTransactions;
 
         if (!ordering.Add(*transaction))
         {
@@ -438,7 +457,10 @@ namespace CHI::Lunatic {
             {
                 const auto decision = events->Decide(TransactionScheduleEvent(time, nodeId, *transaction));
                 if (decision.IsBackpressured())
+                {
+                    pmu.RecordStall(WaitReason::Decision);
                     continue;
+                }
                 transaction->readyTime = pipeline.SaturatingAdd(
                     transaction->readyTime, decision.GetAdditionalDelay());
                 flow.eventApplied = true;
@@ -446,6 +468,20 @@ namespace CHI::Lunatic {
             if (pipeline.Eligible(*transaction, time))
                 Advance(*transaction);
         }
+    }
+
+    Time Core::Impl::ScheduleTag()
+    {
+        if (pipeline.TagBusy(time))
+            pmu.RecordStall(WaitReason::TagPort);
+        return pipeline.ScheduleTag(time);
+    }
+
+    Time Core::Impl::ScheduleData()
+    {
+        if (pipeline.DataBusy(time))
+            pmu.RecordStall(WaitReason::DataPort);
+        return pipeline.ScheduleData(time);
     }
 
     void Core::Impl::Advance(Transaction& transaction)
@@ -520,11 +556,12 @@ namespace CHI::Lunatic {
                 {
                     transaction.wait = WaitReason::SameLine;
                     transaction.readyTime = time;
+                    pmu.RecordStall(WaitReason::SameLine);
                     return;
                 }
                 transaction.wait = WaitReason::None;
                 transaction.phase = Phase::Lookup;
-                transaction.readyTime = pipeline.ScheduleTag(time);
+                transaction.readyTime = ScheduleTag();
                 return;
             case Phase::Lookup:
             {
@@ -558,18 +595,28 @@ namespace CHI::Lunatic {
                 return;
             case Phase::WaitMemory:
                 if (options.backend == BackendKind::Internal && transaction.memoryRequired && flow.memoryReady > time)
+                {
+                    pmu.RecordStall(WaitReason::Memory);
                     return;
+                }
                 if (options.backend == BackendKind::Internal && transaction.memoryRequired)
                     CompleteMemoryRead(transaction);
                 else if (flow.backendPhase == BackendPhase::Done)
                     pipeline.Advance(transaction, Phase::Action, time);
+                else
+                    pmu.RecordStall(WaitReason::Memory);
                 return;
             case Phase::WaitWriteData:
+                pmu.RecordStall(WaitReason::WriteData);
+                return;
             case Phase::WaitCompAck:
+                pmu.RecordStall(WaitReason::CompAck);
                 return;
             case Phase::WaitSnoop:
                 if (transaction.pendingSnoops.empty())
                     pipeline.Advance(transaction, Phase::Action, time);
+                else
+                    pmu.RecordStall(WaitReason::Snoop);
                 return;
             case Phase::Return:
                 if (IsAtomicRequest(transaction.request.opcode))
@@ -635,6 +682,7 @@ namespace CHI::Lunatic {
         hazards.Release(handle, transaction->request.Line());
         if (flow.victimLinked)
             hazards.Release(handle, flow.victimLine);
+        ++pmu.retiredTransactions;
 
         Event event;
         event.kind = EventKind::Retired;

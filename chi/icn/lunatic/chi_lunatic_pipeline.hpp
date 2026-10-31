@@ -20,6 +20,8 @@ namespace CHI::Lunatic {
         Time Advance(Transaction& transaction, Phase next, Time time) const noexcept;
         Time ScheduleTag(Time earliest) noexcept;
         Time ScheduleData(Time earliest) noexcept;
+        bool TagBusy(Time earliest) const noexcept { return tagPortFree > earliest; }
+        bool DataBusy(Time earliest) const noexcept { return dataPortFree > earliest; }
         Time SaturatingAdd(Time time, Time delay) const noexcept;
         void Reset() noexcept;
     };

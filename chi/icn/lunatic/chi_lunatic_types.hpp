@@ -65,7 +65,8 @@ namespace CHI::Lunatic {
         Snoop,
         CompAck,
         OutputQueue,
-        BackInvalidate
+        BackInvalidate,
+        Decision
     };
 
     enum class Direction : uint8_t {

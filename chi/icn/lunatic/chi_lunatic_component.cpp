@@ -58,12 +58,28 @@ namespace CHI::Lunatic {
 
     bool Core::PushRXB(const AXIWriteResponse& response)
     {
-        return !impl->Reentry() && impl->axi.PushB(response);
+        if (impl->Reentry())
+            return false;
+        if (!impl->axi.PushB(response))
+        {
+            impl->pmu.RecordStall(WaitReason::InputQueue);
+            return false;
+        }
+        ++impl->pmu.acceptedRXB;
+        return true;
     }
 
     bool Core::PushRXR(const AXIReadData& response)
     {
-        return !impl->Reentry() && impl->axi.PushR(response);
+        if (impl->Reentry())
+            return false;
+        if (!impl->axi.PushR(response))
+        {
+            impl->pmu.RecordStall(WaitReason::InputQueue);
+            return false;
+        }
+        ++impl->pmu.acceptedRXR;
+        return true;
     }
 
     std::optional<AXIAddress> Core::PeekTXAW() const
@@ -83,17 +99,32 @@ namespace CHI::Lunatic {
 
     std::optional<AXIAddress> Core::PopTXAW()
     {
-        return impl->Reentry() ? std::nullopt : impl->axi.PopAW();
+        if (impl->Reentry())
+            return std::nullopt;
+        auto result = impl->axi.PopAW();
+        if (result)
+            ++impl->pmu.emittedTXAW;
+        return result;
     }
 
     std::optional<AXIWriteData> Core::PopTXW()
     {
-        return impl->Reentry() ? std::nullopt : impl->axi.PopW();
+        if (impl->Reentry())
+            return std::nullopt;
+        auto result = impl->axi.PopW();
+        if (result)
+            ++impl->pmu.emittedTXW;
+        return result;
     }
 
     std::optional<AXIAddress> Core::PopTXAR()
     {
-        return impl->Reentry() ? std::nullopt : impl->axi.PopAR();
+        if (impl->Reentry())
+            return std::nullopt;
+        auto result = impl->axi.PopAR();
+        if (result)
+            ++impl->pmu.emittedTXAR;
+        return result;
     }
 
     std::optional<Request> Core::PeekTXREQ() const
@@ -151,6 +182,7 @@ namespace CHI::Lunatic {
     NodeId Core::GetNodeId() const noexcept { return impl->nodeId; }
     Time Core::GetTime() const noexcept { return impl->time; }
     const Options& Core::GetOptions() const noexcept { return impl->options; }
+    PerformanceCounters Core::GetPerformanceCounters() const noexcept { return impl->pmu; }
     std::shared_ptr<EventHub> Core::GetEvents() const noexcept { return impl->events; }
     const std::vector<ErrorInfo>& Core::GetErrors() const noexcept { return impl->errors; }
     SparseMemory& Core::GetMemory() noexcept { return impl->memory; }
