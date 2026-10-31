@@ -13,7 +13,10 @@ file(GLOB test_sources CONFIGURE_DEPENDS
 set_source_files_properties(${test_sources} PROPERTIES COMPILE_OPTIONS "-Wno-error")
 
 add_executable(test_chi_lunatic ${test_sources} ${lunatic_sources})
-target_include_directories(test_chi_lunatic PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+target_include_directories(test_chi_lunatic PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../.."
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../cchi/cohestra"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../cchi/cohestra/spdlog/include")
 target_compile_options(test_chi_lunatic PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Werror;-Wno-empty-body>)
 

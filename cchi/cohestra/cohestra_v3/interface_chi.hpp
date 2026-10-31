@@ -270,14 +270,14 @@ namespace Cohestra {
             static inline uint8_t& FlitPend(VT& v) noexcept { return v.chi_rn ## PORT ## _rxrsp_flitpend; } \
             static inline uint8_t& FlitV(VT& v) noexcept { return v.chi_rn ## PORT ## _rxrsp_flitv; }    \
             static inline uint8_t& LCrdV(VT& v) noexcept { return v.chi_rn ## PORT ## _rxrsp_lcrdv; }    \
-            V3_CHI_RSP_FIELDS_P(V3_CHI_RSP_FIELD_PTR, PORT)                         \
+            V3_CHI_RSP_FIELDS_P(V3_CHI_RSP_RX_FIELD_PTR, PORT)                      \
         };                                                                  \
         template<class VT>                                                  \
         struct V3CHISeparateFieldRNPinTraits<VT, PORT, RXDATChannel> {      \
             static inline uint8_t& FlitPend(VT& v) noexcept { return v.chi_rn ## PORT ## _rxdat_flitpend; } \
             static inline uint8_t& FlitV(VT& v) noexcept { return v.chi_rn ## PORT ## _rxdat_flitv; }    \
             static inline uint8_t& LCrdV(VT& v) noexcept { return v.chi_rn ## PORT ## _rxdat_lcrdv; }    \
-            V3_CHI_DAT_FIELDS_P(V3_CHI_DAT_FIELD_PTR, PORT)                         \
+            V3_CHI_DAT_FIELDS_P(V3_CHI_DAT_RX_FIELD_PTR, PORT)                      \
         };                                                                  \
         template<class VT>                                                  \
         struct V3CHISeparateFieldRNPinTraits<VT, PORT, RXSNPChannel> {      \
@@ -291,8 +291,12 @@ namespace Cohestra {
             static inline auto& name(VT& v) noexcept { return v.chi_rn ## PORT ## _txreq_bits_ ## name; }
 #define V3_CHI_RSP_FIELD_PTR(PORT, name)                                                \
             static inline auto& name(VT& v) noexcept { return v.chi_rn ## PORT ## _txrsp_bits_ ## name; }
+#define V3_CHI_RSP_RX_FIELD_PTR(PORT, name)                                             \
+            static inline auto& name(VT& v) noexcept { return v.chi_rn ## PORT ## _rxrsp_bits_ ## name; }
 #define V3_CHI_DAT_FIELD_PTR(PORT, name)                                                \
             static inline auto& name(VT& v) noexcept { return v.chi_rn ## PORT ## _txdat_bits_ ## name; }
+#define V3_CHI_DAT_RX_FIELD_PTR(PORT, name)                                             \
+            static inline auto& name(VT& v) noexcept { return v.chi_rn ## PORT ## _rxdat_bits_ ## name; }
 #define V3_CHI_SNP_FIELD_PTR(PORT, name)                                                \
             static inline auto& name(VT& v) noexcept { return v.chi_rn ## PORT ## _rxsnp_bits_ ## name; }
 
@@ -310,7 +314,9 @@ namespace Cohestra {
 
 #undef V3_CHI_REQ_FIELD_PTR
 #undef V3_CHI_RSP_FIELD_PTR
+#undef V3_CHI_RSP_RX_FIELD_PTR
 #undef V3_CHI_DAT_FIELD_PTR
+#undef V3_CHI_DAT_RX_FIELD_PTR
 #undef V3_CHI_SNP_FIELD_PTR
 
         // SN-side separate-field pin traits.
@@ -341,7 +347,7 @@ namespace Cohestra {
             static inline uint8_t& FlitPend(VT& v) noexcept { return v.chi_sn ## PORT ## _rxdat_flitpend; } \
             static inline uint8_t& FlitV(VT& v) noexcept { return v.chi_sn ## PORT ## _rxdat_flitv; }    \
             static inline uint8_t& LCrdV(VT& v) noexcept { return v.chi_sn ## PORT ## _rxdat_lcrdv; }    \
-            V3_CHI_DAT_FIELDS_P(V3_CHI_DAT_FIELD_PTR_SN, PORT)                      \
+            V3_CHI_DAT_FIELDS_P(V3_CHI_DAT_RX_FIELD_PTR_SN, PORT)                   \
         };
 
 #define V3_CHI_REQ_FIELD_PTR_SN(PORT, name)                                                \
@@ -398,14 +404,14 @@ namespace Cohestra {
             static inline uint8_t& FlitPend(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _rxrsp_flitpend; } \
             static inline uint8_t& FlitV(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _rxrsp_flitv; }    \
             static inline uint8_t& LCrdV(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _rxrsp_lcrdv; }    \
-            V3_CHI_RSP_FIELDS_P(V3_CHI_RSP_FIELD_PTR_MON, PORT)                     \
+            V3_CHI_RSP_FIELDS_P(V3_CHI_RSP_RX_FIELD_PTR_MON, PORT)                  \
         };                                                                  \
         template<class VT>                                                  \
         struct V3CHISeparateFieldMonitorRNPinTraits<VT, PORT, RXDATChannel> { \
             static inline uint8_t& FlitPend(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _rxdat_flitpend; } \
             static inline uint8_t& FlitV(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _rxdat_flitv; }    \
             static inline uint8_t& LCrdV(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _rxdat_lcrdv; }    \
-            V3_CHI_DAT_FIELDS_P(V3_CHI_DAT_FIELD_PTR_MON, PORT)                     \
+            V3_CHI_DAT_FIELDS_P(V3_CHI_DAT_RX_FIELD_PTR_MON, PORT)                  \
         };                                                                  \
         template<class VT>                                                  \
         struct V3CHISeparateFieldMonitorRNPinTraits<VT, PORT, RXSNPChannel> { \
@@ -419,8 +425,12 @@ namespace Cohestra {
             static inline auto& name(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _txreq_flit_ ## name; }
 #define V3_CHI_RSP_FIELD_PTR_MON(PORT, name)                                                \
             static inline auto& name(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _txrsp_flit_ ## name; }
+#define V3_CHI_RSP_RX_FIELD_PTR_MON(PORT, name)                                             \
+            static inline auto& name(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _rxrsp_flit_ ## name; }
 #define V3_CHI_DAT_FIELD_PTR_MON(PORT, name)                                                \
             static inline auto& name(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _txdat_flit_ ## name; }
+#define V3_CHI_DAT_RX_FIELD_PTR_MON(PORT, name)                                             \
+            static inline auto& name(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _rxdat_flit_ ## name; }
 #define V3_CHI_SNP_FIELD_PTR_MON(PORT, name)                                                \
             static inline auto& name(VT& v) noexcept { return v.mon_chi_rn ## PORT ## _rxsnp_flit_ ## name; }
 
@@ -438,7 +448,9 @@ namespace Cohestra {
 
 #undef V3_CHI_REQ_FIELD_PTR_MON
 #undef V3_CHI_RSP_FIELD_PTR_MON
+#undef V3_CHI_RSP_RX_FIELD_PTR_MON
 #undef V3_CHI_DAT_FIELD_PTR_MON
+#undef V3_CHI_DAT_RX_FIELD_PTR_MON
 #undef V3_CHI_SNP_FIELD_PTR_MON
 
 #define V3_CHI_DEFINE_MONITOR_SN_SEPARATE_PIN_TRAITS(PORT)                  \
