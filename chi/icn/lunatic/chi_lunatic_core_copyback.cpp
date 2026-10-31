@@ -311,6 +311,27 @@ namespace CHI::Lunatic {
         return true;
     }
 
+    size_t Core::Impl::ChooseVictim(TransactionHandle handle, VictimDomain domain, const LineKey& line)
+    {
+        const bool directoryDomain = domain == VictimDomain::Directory;
+        if (events->OnVictimSelection.empty())
+            return directoryDomain ? directory.ChooseVictim(line) : snoopFilter.ChooseVictim(line);
+
+        std::vector<size_t> candidates = directoryDomain
+            ? directory.VictimCandidates(line) : snoopFilter.VictimCandidates(line);
+        const auto decision = events->Decide(
+            VictimSelectionEvent(time, nodeId, handle, domain, line, candidates));
+        const auto selected = decision.GetSelectedVictim();
+        if (selected)
+        {
+            for (size_t way : candidates)
+                if (way == *selected)
+                    return way;
+            Error(handle, "victim decision selected a way outside the legal candidate set");
+        }
+        return directoryDomain ? directory.ChooseVictim(line) : snoopFilter.ChooseVictim(line);
+    }
+
     bool Core::Impl::PrepareSnoopFilterCapacity(Transaction& transaction)
     {
         const LineKey line = transaction.request.Line();
@@ -322,7 +343,7 @@ namespace CHI::Lunatic {
             return false;
 
         flow.victimSnoopFilterOnly = true;
-        flow.victimWay = snoopFilter.ChooseVictim(line);
+        flow.victimWay = ChooseVictim(transaction.handle, VictimDomain::SnoopFilter, line);
         const SnoopFilterEntry& victim = snoopFilter.At(snoopFilter.SetIndex(line), flow.victimWay);
         flow.victimLine = victim.key;
         flow.victimPending = true;
@@ -367,7 +388,7 @@ namespace CHI::Lunatic {
         const LineKey line = transaction.request.Line();
         if (!flow.victimPending)
         {
-            flow.victimWay = directory.ChooseVictim(line);
+            flow.victimWay = ChooseVictim(transaction.handle, VictimDomain::Directory, line);
             const HomeLine& victim = directory.At(directory.SetIndex(line), flow.victimWay);
             if (!victim.valid)
                 return true;

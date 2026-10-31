@@ -380,6 +380,7 @@ namespace CHI::Lunatic {
 
         bool      PrepareHomeCommit(Transaction& transaction);
         bool      PrepareSnoopFilterCapacity(Transaction& transaction);
+        size_t    ChooseVictim(TransactionHandle handle, VictimDomain domain, const LineKey& line);
         bool      PrepareVictim(Transaction& transaction);
         bool      CompleteVictim(Transaction& transaction);
         bool      CommitReadDirectory(Transaction& transaction);
