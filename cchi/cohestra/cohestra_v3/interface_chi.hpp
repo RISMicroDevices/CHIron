@@ -920,6 +920,11 @@ namespace Cohestra {
                 Traits::LCrdV(verilated) = value ? 1 : 0;
             }
 
+            static void DrivePending(VT& verilated, bool value) noexcept
+            {
+                Traits::FlitPend(verilated) = value ? 1 : 0;
+            }
+
             static void ClearValid(VT& verilated) noexcept
             {
                 Traits::FlitV(verilated) = 0;
@@ -976,6 +981,7 @@ namespace Cohestra {
 
             static bool SampleLCrdV(VT& verilated) noexcept { return Traits::LCrdV(verilated) != 0; }
             static void DriveLCrdV(VT& verilated, bool value) noexcept { Traits::LCrdV(verilated) = value ? 1 : 0; }
+            static void DrivePending(VT& verilated, bool value) noexcept { Traits::FlitPend(verilated) = value ? 1 : 0; }
             static void ClearValid(VT& verilated) noexcept { Traits::FlitV(verilated) = 0; Traits::FlitPend(verilated) = 0; }
             static void ClearLCrdV(VT& verilated) noexcept { Traits::LCrdV(verilated) = 0; }
 
@@ -1107,6 +1113,7 @@ namespace Cohestra {
 
             static bool SampleLCrdV(VT& verilated) noexcept { return Traits::LCrdV(verilated) != 0; }
             static void DriveLCrdV(VT& verilated, bool value) noexcept { Traits::LCrdV(verilated) = value ? 1 : 0; }
+            static void DrivePending(VT& verilated, bool value) noexcept { Traits::FlitPend(verilated) = value ? 1 : 0; }
             static void ClearValid(VT& verilated) noexcept { Traits::FlitV(verilated) = 0; Traits::FlitPend(verilated) = 0; }
             static void ClearLCrdV(VT& verilated) noexcept { Traits::LCrdV(verilated) = 0; }
 
@@ -1164,6 +1171,7 @@ namespace Cohestra {
 
             static bool SampleLCrdV(VT& verilated) noexcept { return Traits::LCrdV(verilated) != 0; }
             static void DriveLCrdV(VT& verilated, bool value) noexcept { Traits::LCrdV(verilated) = value ? 1 : 0; }
+            static void DrivePending(VT& verilated, bool value) noexcept { Traits::FlitPend(verilated) = value ? 1 : 0; }
             static void ClearValid(VT& verilated) noexcept { Traits::FlitV(verilated) = 0; Traits::FlitPend(verilated) = 0; }
             static void ClearLCrdV(VT& verilated) noexcept { Traits::LCrdV(verilated) = 0; }
 
@@ -1302,6 +1310,7 @@ namespace Cohestra {
             void Drive(VT& verilated) noexcept
             {
                 ChannelPolicy<VT, PORT, ChannelTag>::ClearValid(verilated);
+                ChannelPolicy<VT, PORT, ChannelTag>::DrivePending(verilated, true);
 
                 if (!txDriven && !txBuffer.IsEmpty() && txCredits > 0)
                 {
