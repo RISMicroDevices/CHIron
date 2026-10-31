@@ -80,7 +80,7 @@ namespace Cohestra::CHI {
         TFlit       Flit;
 
     public:
-        bool        Fire() const noexcept { return FlitV != 0 && LCrdV != 0; }
+        bool        Fire() const noexcept { return FlitV != 0; }
     };
 
     using BundleChannelREQ  = BundleChannel<REQFlit>;

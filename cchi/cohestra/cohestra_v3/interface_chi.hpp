@@ -1311,18 +1311,15 @@ namespace Cohestra {
                 }
             }
 
-            // Retire phase: consume driven flits and observe returned credits.
+            // Retire phase: consume driven flits and observe new credit grants.
             template<class VT, template<class, size_t, class> class ChannelPolicy, size_t PORT, class ChannelTag>
             void Retire(VT& verilated) noexcept
             {
                 if (txDriven)
                 {
-                    if (ChannelPolicy<VT, PORT, ChannelTag>::SampleLCrdV(verilated))
-                    {
-                        txBuffer.Pop();
-                        --txCredits;
-                        txDriven = false;
-                    }
+                    txBuffer.Pop();
+                    --txCredits;
+                    txDriven = false;
                 }
 
                 // DUT may return a credit even when we are not driving.
@@ -1380,14 +1377,10 @@ namespace Cohestra {
                 return { flit };
             }
 
-            // Monitor-only observation: capture completed handshakes
-            // (FLITV && LCRDV) with a timestamp.
+            // Monitor-only observation: capture completed flit transfers with a timestamp.
             template<class VT, template<class, size_t, class> class ChannelPolicy, size_t PORT, class ChannelTag>
             void MonitorObserve(VT& verilated, uint64_t time) noexcept
             {
-                if (!ChannelPolicy<VT, PORT, ChannelTag>::SampleLCrdV(verilated))
-                    return;
-
                 TFlit flit {};
                 if (!ChannelPolicy<VT, PORT, ChannelTag>::SampleFlit(verilated, static_cast<void*>(&flit)))
                     return;

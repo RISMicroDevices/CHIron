@@ -209,3 +209,80 @@ LUNATIC_TEST(Stage9SeparateFieldRXPinMapping)
     LUNATIC_CHECK(sampledData.Data()[0] == data.Data()[0]);
     LUNATIC_CHECK(sampledData.Data()[3] == data.Data()[3]);
 }
+
+namespace {
+
+    struct CreditPinMock {
+        uint8_t                 flitpend = 0;
+        uint8_t                 flitv = 0;
+        uint8_t                 lcrdv = 0;
+        Cohestra::CHI::REQFlit  flit{};
+    };
+
+    template<class VT, size_t PORT, class ChannelTag>
+    struct CreditPinPolicy {
+        static void DriveFlit(VT& mock, const void* flit, bool valid) noexcept
+        {
+            mock.flitv = valid ? 1 : 0;
+            if (valid)
+                mock.flit = *static_cast<const Cohestra::CHI::REQFlit*>(flit);
+        }
+
+        static bool SampleFlit(VT& mock, void* flit) noexcept
+        {
+            if (!mock.flitv)
+                return false;
+            *static_cast<Cohestra::CHI::REQFlit*>(flit) = mock.flit;
+            return true;
+        }
+
+        static bool SampleLCrdV(VT& mock) noexcept { return mock.lcrdv != 0; }
+        static void DriveLCrdV(VT& mock, bool value) noexcept { mock.lcrdv = value ? 1 : 0; }
+        static void ClearValid(VT& mock) noexcept { mock.flitv = 0; mock.flitpend = 0; }
+        static void ClearLCrdV(VT& mock) noexcept { mock.lcrdv = 0; }
+    };
+
+}
+
+LUNATIC_TEST(Stage9CreditTransferDoesNotRequireLCRDV)
+{
+    CHICreditChannel<Cohestra::CHI::REQFlit> channel;
+    channel.SetBufferSize(2);
+
+    Cohestra::CHI::REQFlit request{};
+    request.TxnID() = 0x33;
+    request.SrcID() = 1;
+    request.TgtID() = 2;
+    LUNATIC_CHECK(channel.Push(request));
+
+    CreditPinMock mock;
+    mock.lcrdv = 1;
+    channel.Drive<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+    LUNATIC_CHECK(!channel.txDriven);
+    LUNATIC_CHECK(!mock.flitv);
+    channel.Retire<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+    LUNATIC_CHECK(channel.txCredits == 1);
+
+    mock.lcrdv = 0;
+    channel.Drive<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+    LUNATIC_CHECK(channel.txDriven);
+    LUNATIC_CHECK(mock.flitv);
+    channel.Retire<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+    LUNATIC_CHECK(!channel.txDriven);
+    LUNATIC_CHECK(channel.txBuffer.IsEmpty());
+    LUNATIC_CHECK(channel.txCredits == 0);
+
+    CHICreditChannel<Cohestra::CHI::REQFlit> monitor;
+    mock.flitv = 1;
+    mock.flit = request;
+    mock.lcrdv = 0;
+    monitor.MonitorObserve<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock, 9);
+    LUNATIC_CHECK(monitor.firedObservations.size() == 1);
+    LUNATIC_CHECK(monitor.firedObservations.front().Time == 9);
+    LUNATIC_CHECK(monitor.firedObservations.front().Flit.TxnID() == request.TxnID());
+
+    Cohestra::CHI::BundleChannel<Cohestra::CHI::REQFlit> bundle;
+    bundle.FlitV = 1;
+    bundle.LCrdV = 0;
+    LUNATIC_CHECK(bundle.Fire());
+}
