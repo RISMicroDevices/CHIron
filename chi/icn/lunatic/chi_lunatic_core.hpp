@@ -48,6 +48,8 @@ namespace CHI::Lunatic {
     struct FlowState {
         Phase                      timingPhase = Phase::Retired;
         bool                       timingApplied = false;
+        Phase                      eventPhase = Phase::Retired;
+        bool                       eventApplied = false;
         BackendPhase               backendPhase = BackendPhase::None;
         Request                    backendRequest{};
         Time                       memoryReady = 0;

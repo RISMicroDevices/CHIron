@@ -267,6 +267,18 @@ namespace CHI::Lunatic {
         if (rxreq.empty())
             return;
 
+        const auto decision = events->Decide(RequestAdmissionEvent(time, nodeId, rxreq.front()));
+        if (decision.IsBackpressured())
+            return;
+
+        bool requestRetry = decision.IsRetryRequested();
+        if (requestRetry && (!options.retryEnabled || !rxreq.front().allowRetry ||
+            rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PCrdReturn))
+        {
+            Error(INVALID_TRANSACTION, "requester retry decision is not legal for this request");
+            requestRetry = false;
+        }
+
         if (rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PCrdReturn)
         {
             Request request = std::move(rxreq.front());
@@ -287,7 +299,7 @@ namespace CHI::Lunatic {
             return;
         }
 
-        if (!RetryReservationAvailable())
+        if (requestRetry || !RetryReservationAvailable())
         {
             Request& request = rxreq.front();
             if (!options.retryEnabled || !request.allowRetry || txrsp.size() >= options.outputQueueLimit)
@@ -415,6 +427,21 @@ namespace CHI::Lunatic {
                     delay = pipeline.SaturatingAdd(delay, random.Bounded(options.randomDelayLimit));
                 transaction->readyTime = pipeline.SaturatingAdd(transaction->readyTime, delay);
                 flow.timingApplied = true;
+            }
+
+            if (flow.eventPhase != transaction->phase)
+            {
+                flow.eventPhase = transaction->phase;
+                flow.eventApplied = false;
+            }
+            if (!flow.eventApplied)
+            {
+                const auto decision = events->Decide(TransactionScheduleEvent(time, nodeId, *transaction));
+                if (decision.IsBackpressured())
+                    continue;
+                transaction->readyTime = pipeline.SaturatingAdd(
+                    transaction->readyTime, decision.GetAdditionalDelay());
+                flow.eventApplied = true;
             }
             if (pipeline.Eligible(*transaction, time))
                 Advance(*transaction);
