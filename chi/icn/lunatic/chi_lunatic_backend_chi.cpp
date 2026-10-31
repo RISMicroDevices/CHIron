@@ -147,6 +147,28 @@ namespace CHI::Lunatic {
             transaction.readyTime = time;
             return;
         }
+        if (options.backend == BackendKind::AXI)
+        {
+            AXIOperation operation;
+            operation.transaction = transaction.handle;
+            operation.line = flow.baselineFetch ? flow.baselineLine : transaction.request.Line();
+            operation.beatMask = flow.expectedBeatMask
+                ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+            operation.memAttr = transaction.request.memAttr;
+            operation.qos = transaction.request.qos;
+            if (!axi.Submit(operation))
+            {
+                transaction.readyTime = time;
+                return;
+            }
+            flow.backendCompReceived = false;
+            flow.backendDataEmitted = false;
+            flow.backendPhase = BackendPhase::WaitComp;
+            transaction.phase = Phase::WaitMemory;
+            transaction.wait = WaitReason::Memory;
+            transaction.readyTime = time;
+            return;
+        }
 
         Request request = transaction.request;
         request.source = nodeId;
@@ -258,6 +280,37 @@ namespace CHI::Lunatic {
             transaction.memoryRequired = true;
             flow.memoryWrite = true;
             flow.memoryReady = pipeline.SaturatingAdd(time, memory.NextLatency(options.memoryLatency));
+            transaction.phase = Phase::WaitMemory;
+            transaction.wait = WaitReason::Memory;
+            transaction.readyTime = time;
+            return;
+        }
+        if (options.backend == BackendKind::AXI)
+        {
+            const auto requestClass = ClassifyRequest(transaction.request.opcode);
+            const bool fullSpill = flow.spillPending &&
+                !(flow.spillLine == transaction.request.Line() &&
+                  (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero));
+            AXIOperation operation;
+            operation.transaction = transaction.handle;
+            operation.line = flow.spillPending ? flow.spillLine : transaction.request.Line();
+            operation.data = flow.spillPending ? flow.spillData : transaction.data;
+            operation.enables = flow.spillPending ? flow.spillEnables : transaction.byteEnables;
+            operation.beatMask = fullSpill ? (uint64_t(1) << BeatsPerLine(options)) - 1 : flow.expectedBeatMask;
+            if (!operation.beatMask)
+                operation.beatMask = (uint64_t(1) << BeatsPerLine(options)) - 1;
+            operation.memAttr = fullSpill ? uint8_t(CHI::Eb::MemAttrs::NonCacheable_Bufferable)
+                                          : transaction.request.memAttr;
+            operation.qos = transaction.request.qos;
+            operation.write = true;
+            if (!axi.Submit(operation))
+            {
+                transaction.readyTime = time;
+                return;
+            }
+            flow.backendCompReceived = false;
+            flow.backendDataEmitted = false;
+            flow.backendPhase = BackendPhase::WaitComp;
             transaction.phase = Phase::WaitMemory;
             transaction.wait = WaitReason::Memory;
             transaction.readyTime = time;
@@ -516,10 +569,11 @@ namespace CHI::Lunatic {
     bool Core::Impl::HandleBackendDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
-        if (IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
+        if (options.backend == BackendKind::CHI && IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
             return HandleAtomicBackendDAT(transaction, flit);
+        const bool localAtomicRead = options.backend != BackendKind::CHI && IsAtomicRequest(transaction.request.opcode);
         if (!transaction.memoryRequired || flow.memoryWrite ||
-            (!IsReadRequest(transaction.request.opcode) && !flow.baselineFetch))
+            (!IsReadRequest(transaction.request.opcode) && !flow.baselineFetch && !localAtomicRead))
             return false;
         if (flow.separatedBackendRead)
         {
@@ -535,7 +589,7 @@ namespace CHI::Lunatic {
             return false;
         const size_t beat = offset / bytes;
         const uint64_t bit = uint64_t(1) << beat;
-        uint64_t& received = flow.baselineFetch ? flow.backendBeatMask : transaction.receivedBeats;
+        uint64_t& received = flow.baselineFetch || localAtomicRead ? flow.backendBeatMask : transaction.receivedBeats;
         if (received & bit)
             return false;
 
@@ -612,7 +666,8 @@ namespace CHI::Lunatic {
             spill.data = flow.spillData;
             spill.poison = flow.spillPoison;
             spill.dataCheck = flow.spillDataCheck;
-            memory.WriteImage(flow.spillLine, spill, flow.spillEnables, options);
+            if (!transaction.responseRespErr)
+                memory.WriteImage(flow.spillLine, spill, flow.spillEnables, options);
             flow.spillPending = false;
             flow.backendPhase = BackendPhase::None;
             return true;

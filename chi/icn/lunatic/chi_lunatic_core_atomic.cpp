@@ -35,7 +35,7 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         const bool store = CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction.request.opcode);
-        if (store && (!flow.dbidSent || !flow.compSent))
+        if (store && (!flow.dbidSent || (options.backend != BackendKind::AXI && !flow.compSent)))
         {
             QueueImmediateResponse(transaction);
             return;
@@ -62,6 +62,23 @@ namespace CHI::Lunatic {
             transaction.readyTime = time;
             return;
         }
+        if (options.backend == BackendKind::AXI && transaction.responseRespErr)
+        {
+            flow.directoryCommitted = true;
+            if (store)
+            {
+                if (!flow.compSent)
+                    QueueComp(transaction);
+                else if (flow.compEmitted)
+                    FinishResponse(transaction);
+            }
+            else
+            {
+                transaction.phase = Phase::Return;
+                transaction.readyTime = pipeline.ScheduleData(time);
+            }
+            return;
+        }
         if (!PrepareHomeCommit(transaction))
         {
             transaction.phase = Phase::Action;
@@ -72,6 +89,11 @@ namespace CHI::Lunatic {
         {
             transaction.phase = Phase::Return;
             transaction.readyTime = pipeline.ScheduleData(time);
+            return;
+        }
+        if (options.backend == BackendKind::AXI && !flow.compSent)
+        {
+            QueueComp(transaction);
             return;
         }
         if (flow.compEmitted)
@@ -103,6 +125,7 @@ namespace CHI::Lunatic {
         data.dbid = transaction.dbid;
         data.opcode = CHI::Eb::Opcodes::DAT::CompData;
         data.resp = CHI::Eb::Resps::CompData_I;
+        data.respErr = transaction.responseRespErr;
         data.dataId = offset / 16;
         data.ccid = (transaction.request.address >> 4) & 3;
         data.qos = transaction.request.qos;

@@ -69,6 +69,8 @@ namespace CHI::Lunatic {
     bool Core::Impl::CommitReadDirectory(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (transaction.responseRespErr)
+            return true;
         const LineKey line = transaction.request.Line();
         PolicyContext context;
         context.line = line;
@@ -194,7 +196,7 @@ namespace CHI::Lunatic {
 
         if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl && !transaction.homeHit)
         {
-            if (options.backend == BackendKind::CHI && !FetchBaseline(transaction))
+            if (options.backend != BackendKind::Internal && !FetchBaseline(transaction))
                 return false;
             if (options.backend == BackendKind::Internal)
             {
@@ -258,7 +260,7 @@ namespace CHI::Lunatic {
         const LineKey line = transaction.request.Line();
         if (flow.snoopDataPartial && !transaction.homeHit)
         {
-            if (options.backend == BackendKind::CHI)
+            if (options.backend != BackendKind::Internal)
             {
                 if (!FetchBaseline(transaction))
                     return false;
@@ -415,7 +417,7 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         if (!flow.victimPending)
             return true;
-        if (options.backend == BackendKind::CHI && flow.victimDataPartial && !directory.Find(flow.victimLine) &&
+        if (options.backend != BackendKind::Internal && flow.victimDataPartial && !directory.Find(flow.victimLine) &&
             !FetchBaseline(transaction))
             return false;
 

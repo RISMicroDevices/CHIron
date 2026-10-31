@@ -35,6 +35,15 @@ namespace CHI::Lunatic {
         bool PushUpstreamDAT(const DATFlit& flit) { return node.PushRXDAT(flit); }
         bool PushDownstreamRSP(const RSPFlit& flit) { return node.PushRXRSP(flit); }
         bool PushDownstreamDAT(const DATFlit& flit) { return node.PushRXDAT(flit); }
+        bool PushDownstreamB(const AXIWriteResponse& response) { return node.PushRXB(response); }
+        bool PushDownstreamR(const AXIReadData& response) { return node.PushRXR(response); }
+
+        std::optional<AXIAddress>   PeekDownstreamAW() const { return node.PeekTXAW(); }
+        std::optional<AXIWriteData> PeekDownstreamW() const { return node.PeekTXW(); }
+        std::optional<AXIAddress>   PeekDownstreamAR() const { return node.PeekTXAR(); }
+        std::optional<AXIAddress>   PopDownstreamAW() { return node.PopTXAW(); }
+        std::optional<AXIWriteData> PopDownstreamW() { return node.PopTXW(); }
+        std::optional<AXIAddress>   PopDownstreamAR() { return node.PopTXAR(); }
 
         std::optional<RSPFlit>      PeekUpstreamRSP() const { return node.PeekTXRSP(false); }
         std::optional<DATFlit>      PeekUpstreamDAT() const { return node.PeekTXDAT(false); }

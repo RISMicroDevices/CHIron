@@ -31,6 +31,15 @@ namespace CHI::Lunatic {
     bool Core::PushRXREQ(const Request& flit) { return impl->Push(impl->rxreq, flit, EventKind::AcceptedRXREQ); }
     bool Core::PushRXRSP(const Response& flit) { return impl->Push(impl->rxrsp, flit, EventKind::AcceptedRXRSP); }
     bool Core::PushRXDAT(const Data& flit) { return impl->Push(impl->rxdat, flit, EventKind::AcceptedRXDAT); }
+    bool Core::PushRXB(const AXIWriteResponse& response) { return impl->axi.PushB(response); }
+    bool Core::PushRXR(const AXIReadData& response) { return impl->axi.PushR(response); }
+
+    std::optional<AXIAddress> Core::PeekTXAW() const { return impl->axi.PeekAW(); }
+    std::optional<AXIWriteData> Core::PeekTXW() const { return impl->axi.PeekW(); }
+    std::optional<AXIAddress> Core::PeekTXAR() const { return impl->axi.PeekAR(); }
+    std::optional<AXIAddress> Core::PopTXAW() { return impl->axi.PopAW(); }
+    std::optional<AXIWriteData> Core::PopTXW() { return impl->axi.PopW(); }
+    std::optional<AXIAddress> Core::PopTXAR() { return impl->axi.PopAR(); }
 
     std::optional<Request> Core::PeekTXREQ() const
     {

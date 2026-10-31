@@ -1,5 +1,6 @@
 #pragma once
 
+#include "chi_lunatic_backend_axi.hpp"
 #include "chi_lunatic_config.hpp"
 #include "chi_lunatic_events.hpp"
 #include "chi_lunatic_state.hpp"
@@ -37,6 +38,15 @@ namespace CHI::Lunatic {
         bool PushRXREQ(const Request& flit);
         bool PushRXRSP(const Response& flit);
         bool PushRXDAT(const Data& flit);
+        bool PushRXB(const AXIWriteResponse& response);
+        bool PushRXR(const AXIReadData& response);
+
+        std::optional<AXIAddress>   PeekTXAW() const;
+        std::optional<AXIWriteData> PeekTXW() const;
+        std::optional<AXIAddress>   PeekTXAR() const;
+        std::optional<AXIAddress>   PopTXAW();
+        std::optional<AXIWriteData> PopTXW();
+        std::optional<AXIAddress>   PopTXAR();
 
         std::optional<Request>  PeekTXREQ() const;
         std::optional<Response> PeekTXRSP() const;
@@ -357,6 +367,15 @@ namespace CHI::Lunatic {
         bool PushRXREQ(const REQFlit& flit) { return core.PushRXREQ(Decode(flit)); }
         bool PushRXRSP(const RSPFlit& flit) { return core.PushRXRSP(Decode(flit)); }
         bool PushRXDAT(const DATFlit& flit) { return core.PushRXDAT(Decode(flit)); }
+        bool PushRXB(const AXIWriteResponse& response) { return core.PushRXB(response); }
+        bool PushRXR(const AXIReadData& response) { return core.PushRXR(response); }
+
+        std::optional<AXIAddress>   PeekTXAW() const { return core.PeekTXAW(); }
+        std::optional<AXIWriteData> PeekTXW() const { return core.PeekTXW(); }
+        std::optional<AXIAddress>   PeekTXAR() const { return core.PeekTXAR(); }
+        std::optional<AXIAddress>   PopTXAW() { return core.PopTXAW(); }
+        std::optional<AXIWriteData> PopTXW() { return core.PopTXW(); }
+        std::optional<AXIAddress>   PopTXAR() { return core.PopTXAR(); }
 
         std::optional<REQFlit>      PeekTXREQ() const
         {

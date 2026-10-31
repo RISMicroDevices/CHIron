@@ -20,7 +20,7 @@ namespace CHI::Lunatic {
 
         if (flow.snoopDataPartial && !transaction.homeHit)
         {
-            if (options.backend == BackendKind::CHI)
+            if (options.backend != BackendKind::Internal)
             {
                 if (!FetchBaseline(transaction))
                     return false;

@@ -39,7 +39,7 @@ LUNATIC_TEST(Stage1RejectsInvalidOptions)
     options.dvmEnabled = true;
     CheckThrows([&] { ValidateOptions(options); });
     options = {};
-    options.backend = BackendKind::AXI;
+    options.axiOutstandingLimit = 0;
     CheckThrows([&] { ValidateOptions(options); });
 }
 

@@ -43,6 +43,12 @@ namespace CHI::Lunatic {
     void Core::Impl::QueueImmediateResponse(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (options.backend == BackendKind::AXI)
+        {
+            if (!flow.dbidSent)
+                QueueDBID(transaction);
+            return;
+        }
         switch (flow.responseForm)
         {
             case 0:
@@ -88,7 +94,7 @@ namespace CHI::Lunatic {
                 FinishResponse(transaction);
             return;
         }
-        if (!flow.dbidSent || !flow.compSent)
+        if (!flow.dbidSent || (options.backend != BackendKind::AXI && !flow.compSent))
         {
             QueueImmediateResponse(transaction);
             return;
@@ -104,6 +110,11 @@ namespace CHI::Lunatic {
         {
             transaction.phase = Phase::Action;
             transaction.readyTime = time;
+            return;
+        }
+        if (options.backend == BackendKind::AXI && !flow.compSent)
+        {
+            QueueComp(transaction);
             return;
         }
         if (flow.compEmitted)
@@ -197,7 +208,7 @@ namespace CHI::Lunatic {
                 baselineRequired |= !valid;
             if (baselineRequired)
             {
-                if (options.backend == BackendKind::CHI)
+                if (options.backend != BackendKind::Internal)
                 {
                     if (!FetchBaseline(transaction))
                         return false;

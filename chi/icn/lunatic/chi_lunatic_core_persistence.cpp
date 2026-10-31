@@ -68,6 +68,7 @@ namespace CHI::Lunatic {
         response.txnId = transaction.request.txnId;
         response.opcode = CHI::Eb::Opcodes::RSP::CompPersist;
         response.resp = CHI::Eb::Resps::Comp_UC;
+        response.respErr = transaction.responseRespErr;
         response.pGroupId = transaction.request.pGroupId;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;

@@ -36,6 +36,8 @@ namespace CHI::Lunatic {
         NodeId      subordinateId = 0;
         PolicyKind  policy = PolicyKind::Exclusive;
         BackendKind backend = BackendKind::Internal;
+        size_t      axiOutstandingLimit = 1;
+        uint8_t     axiIdWidth = 4;
         bool        preciseSnoopFilter = true;
         bool        doNotGoToSD = false;
         bool        retryEnabled = true;

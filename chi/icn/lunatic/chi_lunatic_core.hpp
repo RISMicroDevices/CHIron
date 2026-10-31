@@ -2,6 +2,7 @@
 
 #include "chi_lunatic_arbiter.hpp"
 #include "chi_lunatic_atomic.hpp"
+#include "chi_lunatic_backend_axi.hpp"
 #include "chi_lunatic_component.hpp"
 #include "chi_lunatic_directory.hpp"
 #include "chi_lunatic_hazard.hpp"
@@ -159,6 +160,7 @@ namespace CHI::Lunatic {
         OrderingTracker           ordering;
         VirtualPipeline           pipeline;
         SparseMemory              memory;
+        AXIBackend                axi;
         std::map<TransactionHandle, FlowState>
                                   flows;
         std::map<size_t, RetryRecord>
@@ -347,6 +349,7 @@ namespace CHI::Lunatic {
         bool HandleAtomicBackendDAT(Transaction& transaction, const Data& flit);
         bool HandleBackendRSP(Transaction& transaction, const Response& flit);
         bool HandleBackendDAT(Transaction& transaction, const Data& flit);
+        void HandleAXICompletion(const AXICompletion& completion);
         bool HandleWriteDAT(Transaction& transaction, const Data& flit);
         bool HandleAtomicDAT(Transaction& transaction, const Data& flit);
         void CompleteMemoryRead(Transaction& transaction);

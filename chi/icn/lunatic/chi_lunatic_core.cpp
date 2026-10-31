@@ -15,6 +15,7 @@ namespace CHI::Lunatic {
         , policy(MakePolicy(this->options.policy))
         , tracker(this->options.transactionLimit)
         , pipeline(this->options)
+        , axi(this->options)
     {
     }
 
@@ -40,6 +41,7 @@ namespace CHI::Lunatic {
         directory.Clear();
         snoopFilter.Clear();
         memory.Clear();
+        axi.Reset();
         pipeline.Reset();
         time = 0;
         nextAge = 0;
@@ -55,6 +57,17 @@ namespace CHI::Lunatic {
 
     void Core::Impl::Tick()
     {
+        if (options.backend == BackendKind::AXI)
+        {
+            axi.Tick();
+            while (auto error = axi.PopError())
+                Error(INVALID_TRANSACTION, std::move(*error));
+            while (const auto completion = axi.PeekCompletion())
+            {
+                HandleAXICompletion(*completion);
+                axi.PopCompletion();
+            }
+        }
         ProcessResponses();
         AdmitRequests();
         AdvanceTransactions();
@@ -390,6 +403,18 @@ namespace CHI::Lunatic {
                     (!GetAtomicGeometry(transaction.request, atomicGeometry) || transaction.request.expCompAck);
                 const bool invalidOrder = transaction.request.order == 1 ||
                     (transaction.request.order != 0 && !IsOrderingSupported(transaction.request.opcode));
+                if (options.backend == BackendKind::AXI && requestClass == RequestClass::Persistence)
+                {
+                    Deny(transaction.request, "AXI write response is not a persistence guarantee");
+                    transaction.canceled = true;
+                    transaction.dbid = transaction.handle;
+                    transaction.responseRespErr = CHI::Eb::RespErrs::NDERR;
+                    if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+                        QueueCompPersist(transaction);
+                    else
+                        QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC, CHI::Eb::RespErrs::NDERR);
+                    return;
+                }
                 if (!IsSupportedRequest(transaction.request.opcode) || transaction.request.size > 6 ||
                     (requestClass == RequestClass::ZeroWrite && transaction.request.size != 6) || invalidStash ||
                     invalidCleanUnique || invalidPersistence || invalidAtomic || invalidOrder)
@@ -748,7 +773,8 @@ namespace CHI::Lunatic {
     {
         return !rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
                !txdat.empty() || !txsnp.empty() || !retries.empty() || !backendRetries.empty() ||
-               !backendCredits.empty() || !tracker.Empty() || !hazards.Empty() || !ordering.Empty();
+               !backendCredits.empty() || !tracker.Empty() || !hazards.Empty() || !ordering.Empty() ||
+               (options.backend == BackendKind::AXI && axi.HasInflight());
     }
 
     bool Core::Impl::ValidateInvariants() const noexcept

@@ -51,7 +51,7 @@ namespace CHI::Lunatic {
         response.dbid = transaction.dbid;
         response.opcode = withDBID ? CHI::Eb::Opcodes::RSP::CompDBIDResp : CHI::Eb::Opcodes::RSP::Comp;
         response.resp = resp;
-        response.respErr = respErr;
+        response.respErr = respErr ? respErr : transaction.responseRespErr;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
         if (Queue(txrsp, response, transaction.handle, transaction.actionAge))

@@ -31,11 +31,18 @@ namespace CHI::Lunatic {
         if (!options.tagLatency || !options.dataLatency)
             throw std::invalid_argument("Lunatic tag and data latencies must be non-zero");
 
-        if (options.backend == BackendKind::AXI)
-            throw std::invalid_argument("Lunatic AXI backend is not enabled in this profile");
+        if (!options.axiOutstandingLimit || options.axiOutstandingLimit > 256 ||
+            !options.axiIdWidth || options.axiIdWidth > 16 ||
+            options.axiOutstandingLimit > (size_t(1) << options.axiIdWidth))
+            throw std::invalid_argument("Lunatic AXI outstanding capacity exceeds its ID space");
+
+        if (options.backend == BackendKind::AXI &&
+            (options.separatedBackendRead || options.dmtEnabled || options.dwtEnabled ||
+             options.directPersistEnabled || options.poisonEnabled || options.dataCheckEnabled))
+            throw std::invalid_argument("Lunatic AXI does not support CHI-only backend features or metadata");
 
         if (options.mteEnabled || options.dvmEnabled)
-            throw std::invalid_argument("Lunatic MTE and DVM are not enabled in this profile");
+            throw std::invalid_argument("Lunatic MTE and DVM are prohibited");
     }
 
     size_t BytesPerBeat(const Options& options) noexcept
