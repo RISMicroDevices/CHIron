@@ -11,6 +11,7 @@
 #include "chi_lunatic_pipeline.hpp"
 #include "chi_lunatic_policy.hpp"
 #include "chi_lunatic_protocol.hpp"
+#include "chi_lunatic_random.hpp"
 #include "chi_lunatic_snoop_filter.hpp"
 #include "chi_lunatic_tracker.hpp"
 
@@ -45,6 +46,8 @@ namespace CHI::Lunatic {
     };
 
     struct FlowState {
+        Phase                      timingPhase = Phase::Retired;
+        bool                       timingApplied = false;
         BackendPhase               backendPhase = BackendPhase::None;
         Request                    backendRequest{};
         Time                       memoryReady = 0;
@@ -159,6 +162,7 @@ namespace CHI::Lunatic {
         HazardGraph               hazards;
         OrderingTracker           ordering;
         VirtualPipeline           pipeline;
+        DeterministicRandom       random;
         SparseMemory              memory;
         AXIBackend                axi;
         std::map<TransactionHandle, FlowState>

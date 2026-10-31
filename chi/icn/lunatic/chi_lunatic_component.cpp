@@ -22,6 +22,11 @@ namespace CHI::Lunatic {
     {
         if (impl->Reentry())
             return;
+        if (time < impl->time)
+        {
+            impl->Error(INVALID_TRANSACTION, "Lunatic virtual time must not decrease");
+            return;
+        }
         impl->time = time;
         impl->Tick();
     }

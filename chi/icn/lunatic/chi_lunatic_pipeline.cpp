@@ -27,6 +27,42 @@ namespace CHI::Lunatic {
         }
     }
 
+    Time VirtualPipeline::PhaseDelay(Phase phase) const noexcept
+    {
+        switch (phase)
+        {
+            case Phase::Receive: return options.receiveDelay;
+            case Phase::Decode: return options.decodeDelay;
+            case Phase::Admit: return options.admissionDelay;
+            case Phase::Hazard: return options.hazardDelay;
+            case Phase::Lookup: return options.lookupDelay;
+            case Phase::Resolve: return options.resolveDelay;
+            case Phase::Action: return options.actionDelay;
+            case Phase::Return: return options.returnDelay;
+            case Phase::Commit: return options.commitDelay;
+            default: return 0;
+        }
+    }
+
+    bool VirtualPipeline::DelayablePhase(Phase phase) const noexcept
+    {
+        switch (phase)
+        {
+            case Phase::Receive:
+            case Phase::Decode:
+            case Phase::Admit:
+            case Phase::Hazard:
+            case Phase::Lookup:
+            case Phase::Resolve:
+            case Phase::Action:
+            case Phase::Return:
+            case Phase::Commit:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     Time VirtualPipeline::Advance(Transaction& transaction, Phase next, Time time) const noexcept
     {
         transaction.phase = next;

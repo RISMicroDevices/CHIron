@@ -15,6 +15,7 @@ namespace CHI::Lunatic {
         , policy(MakePolicy(this->options.policy))
         , tracker(this->options.transactionLimit)
         , pipeline(this->options)
+        , random(this->options.seed)
         , axi(this->options)
     {
     }
@@ -43,6 +44,7 @@ namespace CHI::Lunatic {
         memory.Clear();
         axi.Reset();
         pipeline.Reset();
+        random.Reset(options.seed);
         time = 0;
         nextAge = 0;
         nextSerial = 0;
@@ -368,10 +370,53 @@ namespace CHI::Lunatic {
             return a < b;
         });
 
+        if (options.randomizeArbitration && handles.size() > 1)
+        {
+            struct WorkGroup {
+                LineKey                       line;
+                std::vector<TransactionHandle> handles;
+            };
+            std::vector<WorkGroup> groups;
+            std::map<LineKey, size_t> groupByLine;
+            for (TransactionHandle handle : handles)
+            {
+                const Transaction* transaction = tracker.Find(handle);
+                if (!transaction || !pipeline.Eligible(*transaction, time))
+                    continue;
+                const LineKey line = transaction->request.Line();
+                auto [it, inserted] = groupByLine.emplace(line, groups.size());
+                if (inserted)
+                    groups.push_back({ line, {} });
+                groups[it->second].handles.push_back(handle);
+            }
+            for (size_t size = groups.size(); size > 1; --size)
+                std::swap(groups[size - 1], groups[random.Bounded(size - 1)]);
+            handles.clear();
+            for (const WorkGroup& group : groups)
+                handles.insert(handles.end(), group.handles.begin(), group.handles.end());
+        }
+
         for (TransactionHandle handle : handles)
         {
             Transaction* transaction = tracker.Find(handle);
-            if (transaction && pipeline.Eligible(*transaction, time))
+            if (!transaction || !pipeline.Eligible(*transaction, time))
+                continue;
+
+            FlowState& flow = flows.at(handle);
+            if (flow.timingPhase != transaction->phase)
+            {
+                flow.timingPhase = transaction->phase;
+                flow.timingApplied = false;
+            }
+            if (!flow.timingApplied)
+            {
+                Time delay = pipeline.PhaseDelay(transaction->phase);
+                if (options.randomDelayLimit && pipeline.DelayablePhase(transaction->phase))
+                    delay = pipeline.SaturatingAdd(delay, random.Bounded(options.randomDelayLimit));
+                transaction->readyTime = pipeline.SaturatingAdd(transaction->readyTime, delay);
+                flow.timingApplied = true;
+            }
+            if (pipeline.Eligible(*transaction, time))
                 Advance(*transaction);
         }
     }
