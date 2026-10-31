@@ -137,8 +137,9 @@ namespace CHI::Lunatic {
                 (flow.separatedResponse ? flow.respSepEmitted
                                         : transaction->request.order == 0 || flow.readReceiptEmitted) &&
                 !transaction->Complete(COMPLETE_RESPONSE);
+            const bool earlyDCTAck = flow.dctActive && !transaction->Complete(COMPLETE_RESPONSE);
             if (!RequiresTransactionCompAck(*transaction) || transaction->Complete(COMPLETE_COMPACK) ||
-                (!responseComplete && !earlyWriteAck && !earlySeparatedAck && !dmtResponseReady))
+                (!responseComplete && !earlyWriteAck && !earlySeparatedAck && !dmtResponseReady && !earlyDCTAck))
             {
                 Error(transaction->handle, "unexpected or early CompAck");
                 return;
@@ -172,15 +173,11 @@ namespace CHI::Lunatic {
                 Error(INVALID_TRANSACTION, "unmatched SnpRespFwded");
                 return;
             }
-            FlowState& flow = flows.at(transaction->handle);
-            if (!flow.dctActive ||
-                std::find(transaction->pendingSnoops.begin(), transaction->pendingSnoops.end(), flit.source) ==
-                    transaction->pendingSnoops.end())
+            if (!AcceptForwardedResponse(*transaction, flit.source, flit.resp, flit.fwdState, false))
             {
-                Error(transaction->handle, "unexpected forwarding snoop response");
+                Error(transaction->handle, "unexpected or illegal forwarding snoop response");
                 return;
             }
-            flow.dctForwarded = true;
             CompleteSnoopTarget(*transaction, flit.source, flit.resp, false);
             return;
         }

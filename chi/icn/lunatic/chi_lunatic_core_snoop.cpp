@@ -3,6 +3,39 @@
 #include <algorithm>
 
 namespace CHI::Lunatic {
+    namespace {
+
+        uint16_t ForwardingOpcode(uint16_t opcode) noexcept
+        {
+            namespace REQ = CHI::Eb::Opcodes::REQ;
+            namespace SNP = CHI::Eb::Opcodes::SNP;
+            switch (opcode)
+            {
+                case REQ::ReadShared: return SNP::SnpSharedFwd;
+                case REQ::ReadClean: return SNP::SnpCleanFwd;
+                case REQ::ReadOnce:
+                case REQ::ReadOnceCleanInvalid: return SNP::SnpOnceFwd;
+                case REQ::ReadNotSharedDirty: return SNP::SnpNotSharedDirtyFwd;
+                case REQ::ReadPreferUnique: return SNP::SnpPreferUniqueFwd;
+                case REQ::ReadUnique: return SNP::SnpUniqueFwd;
+                default: return 0;
+            }
+        }
+
+        std::optional<CacheState> DecodeForwardedState(uint8_t resp) noexcept
+        {
+            switch (resp)
+            {
+                case CHI::Eb::FwdStates::I: return CacheState::I;
+                case CHI::Eb::FwdStates::SC: return CacheState::SC;
+                case CHI::Eb::FwdStates::UC: return CacheState::UC;
+                case CHI::Eb::FwdStates::UD_PD: return CacheState::UD;
+                case CHI::Eb::FwdStates::SD_PD: return CacheState::SD;
+                default: return std::nullopt;
+            }
+        }
+
+    }
 
     uint16_t Core::Impl::SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const
     {
@@ -10,18 +43,8 @@ namespace CHI::Lunatic {
         namespace SNP = CHI::Eb::Opcodes::SNP;
         if (flow.snoopForVictim)
             return SNP::SnpCleanInvalid;
-        if (flow.dctActive && flow.nextSnoop == 0)
-        {
-            switch (transaction.request.opcode)
-            {
-                case REQ::ReadShared: return SNP::SnpSharedFwd;
-                case REQ::ReadClean: return SNP::SnpCleanFwd;
-                case REQ::ReadOnce: return SNP::SnpOnceFwd;
-                case REQ::ReadNotSharedDirty: return SNP::SnpNotSharedDirtyFwd;
-                case REQ::ReadPreferUnique: return SNP::SnpPreferUniqueFwd;
-                default: return SNP::SnpUniqueFwd;
-            }
-        }
+        if (flow.dctActive && target == flow.dctTarget)
+            return ForwardingOpcode(transaction.request.opcode);
         switch (ClassifyRequest(transaction.request.opcode))
         {
             case RequestClass::CoherentRead:
@@ -123,6 +146,22 @@ namespace CHI::Lunatic {
             return;
         }
 
+        flow.dctTarget = candidates.front();
+        flow.retToSrcUsed = false;
+        if (flow.dctActive)
+        {
+            const std::vector<NodeId> owners = snoopFilter.Targets(transaction.request.Line());
+            const bool soleProvider = options.preciseSnoopFilter && owners.size() == 1 &&
+                owners.front() == flow.dctTarget;
+            const bool uniqueProviderRequired = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique ||
+                transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadPreferUnique;
+            const bool inclusiveMiss = options.policy == PolicyKind::Inclusive && !transaction.homeHit &&
+                ClassifyRequest(transaction.request.opcode) != RequestClass::ReadOnce;
+            flow.dctActive = ForwardingOpcode(transaction.request.opcode) != 0 &&
+                transaction.request.size == 6 && !flow.homeDirty && !inclusiveMiss &&
+                (!uniqueProviderRequired || soleProvider);
+        }
+
         transaction.snoopTargets = candidates;
         transaction.pendingSnoops.clear();
         transaction.snoopsRequired = true;
@@ -170,7 +209,7 @@ namespace CHI::Lunatic {
         snoop.source = nodeId;
         snoop.target = target;
         snoop.txnId = transaction.handle * options.snoopLimit + (index % options.snoopLimit);
-        if (flow.dctActive && index == 0)
+        if (flow.dctActive && target == flow.dctTarget)
         {
             snoop.txnId = transaction.handle;
             snoop.fwdNid = transaction.request.source;
@@ -185,6 +224,7 @@ namespace CHI::Lunatic {
         snoop.stashLpidValid = IsStashRequest(transaction.request.opcode) && transaction.request.stashLpidValid;
         snoop.doNotGoToSD = options.doNotGoToSD ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique ||
+            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUniqueFwd ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpCleanShared ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid ||
@@ -192,7 +232,8 @@ namespace CHI::Lunatic {
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
-        snoop.retToSrc = !IsCMORequest(transaction.request.opcode) && !IsAtomicRequest(transaction.request.opcode) &&
+        snoop.retToSrc = !flow.retToSrcUsed && !IsCMORequest(transaction.request.opcode) &&
+            !IsAtomicRequest(transaction.request.opcode) &&
             (snoop.opcode == CHI::Eb::Opcodes::SNP::SnpShared ||
              snoop.opcode == CHI::Eb::Opcodes::SNP::SnpOnce || snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique);
 
@@ -203,6 +244,8 @@ namespace CHI::Lunatic {
         }
         if (!Queue(txsnp, snoop, transaction.handle, transaction.actionAge, index + 1 == transaction.snoopTargets.size()))
             return false;
+        if (snoop.retToSrc)
+            flow.retToSrcUsed = true;
         if (!tracker.BindSnoop(transaction.handle, target, snoop.txnId))
         {
             Error(transaction.handle, "unable to bind snoop response ID");
@@ -229,16 +272,11 @@ namespace CHI::Lunatic {
     void Core::Impl::ProcessSnoopDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
-        if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataFwded)
+        if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataFwded &&
+            !AcceptForwardedResponse(transaction, flit.source, flit.resp, flit.fwdState, true))
         {
-            if (!flow.dctActive ||
-                std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), flit.source) ==
-                    transaction.pendingSnoops.end())
-            {
-                Error(transaction.handle, "unexpected forwarding snoop data");
-                return;
-            }
-            flow.dctForwarded = true;
+            Error(transaction.handle, "unexpected or illegal forwarding snoop data");
+            return;
         }
         const size_t bytes = BytesPerBeat(options);
         const size_t offset = flit.ByteOffset();
@@ -323,6 +361,76 @@ namespace CHI::Lunatic {
         const uint64_t complete = (uint64_t(1) << BeatsPerLine(options)) - 1;
         if ((received & complete) == complete)
             CompleteSnoopTarget(transaction, flit.source, flit.resp, true, flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl);
+    }
+
+    bool Core::Impl::AcceptForwardedResponse(Transaction& transaction, NodeId target, uint8_t resp,
+                                             uint8_t fwdState, bool withData)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.dctActive || target != flow.dctTarget ||
+            std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target) ==
+                transaction.pendingSnoops.end())
+            return false;
+
+        const std::optional<CacheState> requester = DecodeForwardedState(fwdState);
+        if (!requester)
+            return false;
+        const bool validPair = withData
+            ? CHI::Eb::RespAndFwdStates::IsSnpRespDataFwdedValid(resp, fwdState)
+            : CHI::Eb::RespAndFwdStates::IsSnpRespFwdedValid(resp, fwdState);
+        if (!validPair)
+            return false;
+
+        const CacheState initial = snoopFilter.State(flow.snoopLine, target);
+        if (initial == CacheState::I || initial == CacheState::UCE || initial == CacheState::UDP)
+            return false;
+        const CacheState provider = DecodeSnoopState(transaction, target, resp, false);
+        const uint16_t opcode = SnoopOpcode(transaction, flow, target);
+        bool requesterStateLegal = false;
+        bool providerStateLegal = true;
+        switch (opcode)
+        {
+            case CHI::Eb::Opcodes::SNP::SnpOnceFwd:
+                requesterStateLegal = *requester == CacheState::I;
+                break;
+            case CHI::Eb::Opcodes::SNP::SnpSharedFwd:
+                requesterStateLegal = *requester == CacheState::SC || *requester == CacheState::SD ||
+                    *requester == CacheState::UD;
+                providerStateLegal = !IsUnique(provider);
+                break;
+            case CHI::Eb::Opcodes::SNP::SnpCleanFwd:
+            case CHI::Eb::Opcodes::SNP::SnpNotSharedDirtyFwd:
+                requesterStateLegal = *requester == CacheState::SC;
+                providerStateLegal = !IsUnique(provider);
+                break;
+            case CHI::Eb::Opcodes::SNP::SnpUniqueFwd:
+                requesterStateLegal = *requester == CacheState::UC || *requester == CacheState::UD;
+                providerStateLegal = provider == CacheState::I;
+                break;
+            case CHI::Eb::Opcodes::SNP::SnpPreferUniqueFwd:
+                requesterStateLegal = *requester == CacheState::SC || *requester == CacheState::UC ||
+                    *requester == CacheState::UD;
+                break;
+            default:
+                return false;
+        }
+        if (!requesterStateLegal || !providerStateLegal)
+            return false;
+        if (options.doNotGoToSD && provider == CacheState::SD &&
+            opcode != CHI::Eb::Opcodes::SNP::SnpOnceFwd)
+            return false;
+        if (IsDirty(initial) && !withData && !IsDirty(provider) && !IsDirty(*requester))
+            return false;
+        if (flow.dctForwarded && flow.dctFwdState != fwdState)
+            return false;
+
+        if (!flow.dctForwarded)
+        {
+            flow.dctForwarded = true;
+            flow.dctFwdState = fwdState;
+            flow.requesterFinal = *requester;
+        }
+        return true;
     }
 
     bool Core::Impl::ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp,
@@ -432,7 +540,7 @@ namespace CHI::Lunatic {
         }
         if (transaction.pendingSnoops.empty())
         {
-            if (flow.dctForwarded)
+            if (flow.dctForwarded && !flow.snoopForVictim && !flow.victimPending)
                 FinishResponse(transaction);
             else
             {

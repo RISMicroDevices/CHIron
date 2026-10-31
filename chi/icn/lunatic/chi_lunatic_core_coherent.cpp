@@ -123,6 +123,18 @@ namespace CHI::Lunatic {
             flow.snoopResponses.clear();
         }
 
+        if (flow.dctForwarded)
+        {
+            if (!PrepareHomeCommit(transaction))
+            {
+                transaction.phase = Phase::Action;
+                transaction.readyTime = time;
+                return;
+            }
+            FinishResponse(transaction);
+            return;
+        }
+
         switch (ClassifyRequest(transaction.request.opcode))
         {
             case RequestClass::ReadOnce:

@@ -69,6 +69,9 @@ namespace CHI::Lunatic {
         bool                       dmtActive = false;
         bool                       dctActive = false;
         bool                       dctForwarded = false;
+        NodeId                     dctTarget = 0;
+        uint8_t                    dctFwdState = 0;
+        bool                       retToSrcUsed = false;
         bool                       dwtActive = false;
         bool                       directPersistActive = false;
         bool                       respSepSent = false;
@@ -408,6 +411,8 @@ namespace CHI::Lunatic {
                                     bool partial = false) const;
         bool       ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp,
                                          bool withData, bool partial = false, uint8_t dataPull = 0) const;
+        bool       AcceptForwardedResponse(Transaction& transaction, NodeId target, uint8_t resp,
+                                           uint8_t fwdState, bool withData);
 
         bool      PrepareHomeCommit(Transaction& transaction);
         bool      PrepareSnoopFilterCapacity(Transaction& transaction);

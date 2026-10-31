@@ -273,6 +273,13 @@ namespace CHI::Lunatic {
         }
         if (!transaction.canceled && flow.dctForwarded)
         {
+            if (!flow.directoryCommitted)
+            {
+                transaction.phase = Phase::Action;
+                transaction.wait = WaitReason::None;
+                transaction.readyTime = time;
+                return;
+            }
             transaction.Mark(COMPLETE_RESPONSE);
             transaction.wait = RequiresTransactionCompAck(transaction) && !transaction.Complete(COMPLETE_COMPACK)
                 ? WaitReason::CompAck : WaitReason::None;

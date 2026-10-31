@@ -73,6 +73,9 @@ LUNATIC_TEST(Stage6DCTForwardedRead)
     driver.driver.Tick();
     driver.CompAck(4, snoop.flit.TxnID());
     driver.Quiesce();
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::UD);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::I);
+    LUNATIC_CHECK(driver.driver.node.ValidateInvariants());
 }
 
 LUNATIC_TEST(Stage6DCTOrdinaryFallback)
