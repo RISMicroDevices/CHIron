@@ -27,10 +27,17 @@ namespace CHI::Lunatic {
             }
             else
             {
-                const LineData baseline = memory.Read(line);
+                const LineImage baseline = memory.ReadImage(line);
+                ByteEnables enables{};
                 for (size_t index = 0; index < LINE_SIZE; ++index)
-                    if (!flow.snoopValidBytes[index])
-                        transaction.data[index] = baseline[index];
+                {
+                    if (flow.snoopValidBytes[index])
+                        continue;
+                    transaction.data[index] = baseline.data[index];
+                    enables[index] = 1;
+                }
+                MergeMetadata(transaction.poison, transaction.dataCheck, baseline.poison, baseline.dataCheck,
+                              enables, 0, 0, LINE_SIZE, options);
             }
         }
 
@@ -58,6 +65,7 @@ namespace CHI::Lunatic {
             const std::optional<size_t> currentWay = directory.FindWay(line);
             const size_t way = currentWay ? *currentWay : flow.victimWay;
             HomeLine& home = InstallHome(line, way, transaction.data, false, time);
+            CopyMetadata(home, transaction, options);
             home.validBytes = flow.validBytes;
         }
         else if (decision.removeHome && transaction.homeHit)

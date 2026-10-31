@@ -12,6 +12,8 @@ namespace CHI::Lunatic {
         {
             transaction.data.fill(0);
             transaction.byteEnables.fill(1);
+            GenerateMetadata(transaction.poison, transaction.dataCheck, transaction.data,
+                             transaction.byteEnables, options);
             flow.validBytes.fill(1);
             transaction.Mark(COMPLETE_WRITE_DATA);
         }
@@ -202,10 +204,17 @@ namespace CHI::Lunatic {
                 }
                 else
                 {
-                    const LineData baseline = memory.Read(line);
+                    const LineImage baseline = memory.ReadImage(line);
+                    ByteEnables enables{};
                     for (size_t index = 0; index < LINE_SIZE; ++index)
-                        if (!flow.validBytes[index])
-                            transaction.data[index] = baseline[index];
+                    {
+                        if (flow.validBytes[index])
+                            continue;
+                        transaction.data[index] = baseline.data[index];
+                        enables[index] = 1;
+                    }
+                    MergeMetadata(transaction.poison, transaction.dataCheck, baseline.poison, baseline.dataCheck,
+                                  enables, 0, 0, LINE_SIZE, options);
                 }
             }
         }
@@ -219,6 +228,7 @@ namespace CHI::Lunatic {
             const size_t way = currentWay ? *currentWay : flow.victimWay;
             const bool dirty = flow.homeDirty || flow.dataDirty || !flow.validBytes.empty();
             HomeLine& home = InstallHome(line, way, transaction.data, dirty, time);
+            CopyMetadata(home, transaction, options);
             home.validBytes = flow.validBytes;
             flow.backendPhase = BackendPhase::Done;
         }

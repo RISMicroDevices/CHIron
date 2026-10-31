@@ -26,8 +26,8 @@ namespace CHI::Lunatic {
         DataBufferId                   dbid = 0;
         LineData                       data{};
         ByteEnables                    byteEnables{};
-        std::array<uint8_t, 8>         poison{};
-        std::array<uint8_t, LINE_SIZE> dataCheck{};
+        LinePoison                     poison{};
+        LineDataCheck                  dataCheck{};
         uint64_t                       receivedBeats = 0;
         uint64_t                       sentBeats = 0;
         uint32_t                       completion = 0;

@@ -175,10 +175,10 @@ namespace CHI::Lunatic {
             data.bytes[index] = flow.atomic.operands[lineOffset];
             data.byteEnables[index] = lineOffset >= geometry.windowOffset &&
                 lineOffset < geometry.windowOffset + geometry.windowBytes;
-            data.dataCheck[index] = transaction.dataCheck[lineOffset];
+            data.dataCheck[index] = flow.atomic.operandsDataCheck[lineOffset];
         }
         for (size_t lane = 0; lane < bytes / 8; ++lane)
-            data.poison[lane] = transaction.poison[offset / 8 + lane];
+            data.poison[lane] = flow.atomic.operandsPoison[offset / 8 + lane];
 
         const uint64_t remaining = flow.expectedBeatMask & ~(flow.backendBeatMask | (uint64_t(1) << beat));
         if (!Queue(txdat, data, transaction.handle, transaction.actionAge, remaining == 0, true))
@@ -245,12 +245,15 @@ namespace CHI::Lunatic {
         const size_t offset = address / bytes * bytes;
         if (flit.ByteOffset() != offset || flit.dataId != offset / 16)
             return false;
+        ByteEnables enables{};
         for (size_t index = 0; index < geometry.operandBytes; ++index)
         {
             const size_t packetIndex = address - offset + index;
             transaction.data[address + index] = flit.bytes[packetIndex];
-            transaction.dataCheck[address + index] = flit.dataCheck[packetIndex];
+            enables[address + index] = 1;
         }
+        MergeMetadata(transaction.poison, transaction.dataCheck, flit.poison, flit.dataCheck,
+                      enables, address, address - offset, geometry.operandBytes, options);
         flow.atomic.backendResultReceived = true;
         CompleteAtomicBackendIfReady(*this, transaction);
         return true;

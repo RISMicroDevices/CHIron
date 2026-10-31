@@ -203,23 +203,36 @@ namespace CHI::Lunatic {
             return;
 
         if (flow.memoryWrite)
-            memory.Write(transaction.request.Line(), transaction.data, transaction.byteEnables);
+            memory.WriteImage(transaction.request.Line(), MakeLineImage(transaction, options),
+                              transaction.byteEnables, options);
         else if (flow.baselineFetch)
         {
-            const LineData baseline = memory.Read(transaction.request.Line());
+            const LineImage baseline = memory.ReadImage(transaction.request.Line());
             const bool victimBaseline = flow.victimPending && flow.victimDataPartial;
             LineData& destination = victimBaseline ? flow.victimData : transaction.data;
+            ByteEnables enables{};
             for (size_t index = 0; index < LINE_SIZE; ++index)
             {
                 const bool preserve = victimBaseline ? flow.victimValidBytes[index]
                     : flow.snoopDataPartial ? flow.snoopValidBytes[index]
                     : IsCopybackRequest(transaction.request.opcode) && transaction.byteEnables[index];
                 if (!preserve)
-                    destination[index] = baseline[index];
+                {
+                    destination[index] = baseline.data[index];
+                    enables[index] = 1;
+                }
             }
+            LinePoison& poison = victimBaseline ? flow.victimPoison : transaction.poison;
+            LineDataCheck& dataCheck = victimBaseline ? flow.victimDataCheck : transaction.dataCheck;
+            MergeMetadata(poison, dataCheck, baseline.poison, baseline.dataCheck,
+                          enables, 0, 0, LINE_SIZE, options);
         }
         else
-            transaction.data = memory.Read(transaction.request.Line());
+        {
+            const LineImage image = memory.ReadImage(transaction.request.Line());
+            transaction.data = image.data;
+            CopyMetadata(transaction, image, options);
+        }
 
         transaction.Mark(COMPLETE_MEMORY);
         transaction.memoryRequired = false;
@@ -352,14 +365,16 @@ namespace CHI::Lunatic {
         data.traceTag = transaction.request.traceTag;
         const LineData& payload = flow.spillPending ? flow.spillData : transaction.data;
         const ByteEnables& enables = flow.spillPending ? flow.spillEnables : transaction.byteEnables;
+        const LinePoison& poison = flow.spillPending ? flow.spillPoison : transaction.poison;
+        const LineDataCheck& dataCheck = flow.spillPending ? flow.spillDataCheck : transaction.dataCheck;
         for (size_t index = 0; index < bytes; ++index)
         {
             data.bytes[index] = payload[offset + index];
             data.byteEnables[index] = enables[offset + index];
-            data.dataCheck[index] = transaction.dataCheck[offset + index];
+            data.dataCheck[index] = dataCheck[offset + index];
         }
         for (size_t lane = 0; lane < bytes / 8; ++lane)
-            data.poison[lane] = transaction.poison[offset / 8 + lane];
+            data.poison[lane] = poison[offset / 8 + lane];
 
         const uint64_t remaining = flow.expectedBeatMask & ~(flow.backendBeatMask | (uint64_t(1) << beat));
         if (!Queue(txdat, data, transaction.handle, transaction.actionAge, remaining == 0, true))
@@ -528,6 +543,7 @@ namespace CHI::Lunatic {
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         const bool immediateBaseline = requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero;
         LineData& destination = victimBaseline ? flow.victimData : transaction.data;
+        ByteEnables enables{};
         for (size_t index = 0; index < bytes; ++index)
         {
             const bool preserve = flow.baselineFetch &&
@@ -536,13 +552,17 @@ namespace CHI::Lunatic {
                                 : flow.snoopDataPartial ? flow.snoopValidBytes[offset + index]
                                 : IsCopybackRequest(transaction.request.opcode) && transaction.byteEnables[offset + index]);
             if (!preserve)
+            {
                 destination[offset + index] = flit.bytes[index];
+                enables[offset + index] = 1;
+            }
             if (!flow.baselineFetch || !IsCopybackRequest(transaction.request.opcode))
                 transaction.byteEnables[offset + index] = 1;
-            transaction.dataCheck[offset + index] = flit.dataCheck[index];
         }
-        for (size_t lane = 0; lane < bytes / 8; ++lane)
-            transaction.poison[offset / 8 + lane] = flit.poison[lane];
+        LinePoison& poison = victimBaseline ? flow.victimPoison : transaction.poison;
+        LineDataCheck& dataCheck = victimBaseline ? flow.victimDataCheck : transaction.dataCheck;
+        MergeMetadata(poison, dataCheck, flit.poison, flit.dataCheck,
+                      enables, offset, 0, bytes, options);
         transaction.responseRespErr = flit.respErr;
         received |= bit;
 
@@ -569,10 +589,18 @@ namespace CHI::Lunatic {
 
     bool Core::Impl::WriteLine(Transaction& transaction, const LineKey& line, const LineData& data, const ByteEnables& enables)
     {
+        LineImage image = MakeLineImage(transaction, options);
+        image.data = data;
+        return WriteLineImage(transaction, line, image, enables);
+    }
+
+    bool Core::Impl::WriteLineImage(Transaction& transaction, const LineKey& line, const LineImage& image,
+                                    const ByteEnables& enables)
+    {
         FlowState& flow = flows.at(transaction.handle);
         if (options.backend == BackendKind::Internal)
         {
-            memory.Write(line, data, enables);
+            memory.WriteImage(line, image, enables, options);
             return true;
         }
 
@@ -580,7 +608,11 @@ namespace CHI::Lunatic {
         {
             if (flow.backendPhase != BackendPhase::Done)
                 return false;
-            memory.Write(flow.spillLine, flow.spillData, flow.spillEnables);
+            LineImage spill;
+            spill.data = flow.spillData;
+            spill.poison = flow.spillPoison;
+            spill.dataCheck = flow.spillDataCheck;
+            memory.WriteImage(flow.spillLine, spill, flow.spillEnables, options);
             flow.spillPending = false;
             flow.backendPhase = BackendPhase::None;
             return true;
@@ -588,7 +620,9 @@ namespace CHI::Lunatic {
 
         flow.spillPending = true;
         flow.spillLine = line;
-        flow.spillData = data;
+        flow.spillData = image.data;
+        flow.spillPoison = image.poison;
+        flow.spillDataCheck = image.dataCheck;
         flow.spillEnables = enables;
         StartBackendWrite(transaction);
         return false;

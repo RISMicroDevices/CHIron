@@ -437,11 +437,16 @@ namespace CHI::Lunatic {
                 if (transaction.homeHit)
                 {
                     transaction.data = home->data;
+                    CopyMetadata(transaction, *home, options);
                     flow.homeDirty = home->dirty;
                     flow.validBytes = home->validBytes;
                 }
                 else if (IsReadRequest(transaction.request.opcode) || IsCMORequest(transaction.request.opcode))
-                    transaction.data = memory.Read(transaction.request.Line());
+                {
+                    const LineImage image = memory.ReadImage(transaction.request.Line());
+                    transaction.data = image.data;
+                    CopyMetadata(transaction, image, options);
+                }
                 const CacheState requesterState = snoopFilter.State(transaction.request.Line(), transaction.request.source);
                 flow.requesterWasValid = IsValid(requesterState);
                 flow.requesterWasDirty = IsDirty(requesterState);

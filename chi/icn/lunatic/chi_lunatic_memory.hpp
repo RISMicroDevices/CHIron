@@ -1,5 +1,6 @@
 #pragma once
 
+#include "chi_lunatic_metadata.hpp"
 #include "chi_lunatic_types.hpp"
 
 #include <deque>
@@ -10,19 +11,25 @@ namespace CHI::Lunatic {
     class MemoryBackend {
     public:
         virtual ~MemoryBackend() = default;
-        virtual LineData Read(const LineKey& key) const = 0;
-        virtual void     Write(const LineKey& key, const LineData& data, const ByteEnables& enables) = 0;
-        virtual uint64_t NextLatency(uint64_t fallback) = 0;
+        virtual LineData  Read(const LineKey& key) const = 0;
+        virtual LineImage ReadImage(const LineKey& key) const = 0;
+        virtual void      Write(const LineKey& key, const LineData& data, const ByteEnables& enables) = 0;
+        virtual void      WriteImage(const LineKey& key, const LineImage& data, const ByteEnables& enables,
+                                     const Options& options) = 0;
+        virtual uint64_t  NextLatency(uint64_t fallback) = 0;
     };
 
     class SparseMemory final : public MemoryBackend {
-        std::map<LineKey, LineData> lines;
-        std::deque<uint64_t>        latencies;
+        std::map<LineKey, LineImage> lines;
+        std::deque<uint64_t>         latencies;
 
     public:
-        LineData Read(const LineKey& key) const override;
-        void     Write(const LineKey& key, const LineData& data, const ByteEnables& enables) override;
-        uint64_t NextLatency(uint64_t fallback) override;
+        LineData  Read(const LineKey& key) const override;
+        LineImage ReadImage(const LineKey& key) const override;
+        void      Write(const LineKey& key, const LineData& data, const ByteEnables& enables) override;
+        void      WriteImage(const LineKey& key, const LineImage& data, const ByteEnables& enables,
+                             const Options& options) override;
+        uint64_t  NextLatency(uint64_t fallback) override;
 
         void   WriteFull(const LineKey& key, const LineData& data);
         bool   Contains(const LineKey& key) const noexcept;

@@ -12,6 +12,7 @@
 #include "chi_lunatic_snoop_filter.hpp"
 #include "chi_lunatic_policy.hpp"
 #include "chi_lunatic_memory.hpp"
+#include "chi_lunatic_metadata.hpp"
 #include "chi_lunatic_transaction.hpp"
 #include "chi_lunatic_tracker.hpp"
 #include "chi_lunatic_hazard.hpp"

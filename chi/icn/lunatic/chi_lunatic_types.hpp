@@ -21,6 +21,8 @@ namespace CHI::Lunatic {
 
     using LineData = std::array<uint8_t, LINE_SIZE>;
     using ByteEnables = std::array<uint8_t, LINE_SIZE>;
+    using LinePoison = std::array<uint8_t, LINE_SIZE / 8>;
+    using LineDataCheck = std::array<uint8_t, LINE_SIZE>;
 
     struct LineKey {
         uint64_t address = 0;
@@ -141,8 +143,8 @@ namespace CHI::Lunatic {
         uint8_t                        traceTag = 0;
         LineData                       bytes{};
         ByteEnables                    byteEnables{};
-        std::array<uint8_t, 8>         poison{};
-        std::array<uint8_t, LINE_SIZE> dataCheck{};
+        LinePoison                     poison{};
+        LineDataCheck                  dataCheck{};
 
         size_t ByteOffset() const noexcept { return size_t(dataId) * 16; }
     };
@@ -167,9 +169,12 @@ namespace CHI::Lunatic {
     };
 
     struct HomeLineInfo {
-        LineData data{};
-        bool     valid = false;
-        bool     dirty = false;
+        LineData      data{};
+        ByteEnables   validBytes{};
+        LinePoison    poison{};
+        LineDataCheck dataCheck{};
+        bool          valid = false;
+        bool          dirty = false;
     };
 
     struct ErrorInfo {

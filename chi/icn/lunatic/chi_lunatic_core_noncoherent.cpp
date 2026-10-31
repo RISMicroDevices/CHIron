@@ -29,6 +29,8 @@ namespace CHI::Lunatic {
             case RequestClass::ZeroWrite:
                 transaction.data.fill(0);
                 transaction.byteEnables.fill(1);
+                GenerateMetadata(transaction.poison, transaction.dataCheck, transaction.data,
+                                 transaction.byteEnables, options);
                 StartBackendWrite(transaction);
                 return;
             default:
@@ -145,10 +147,10 @@ namespace CHI::Lunatic {
             transaction.byteEnables[offset + index] = flit.byteEnables[index];
             if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite && flit.byteEnables[index])
                 flow.validBytes[offset + index] = 1;
-            transaction.dataCheck[offset + index] = flit.dataCheck[index];
         }
-        for (size_t lane = 0; lane < bytes / 8; ++lane)
-            transaction.poison[offset / 8 + lane] = flit.poison[lane];
+        const ByteEnables enables = ExpandedEnables(flit.byteEnables, offset, bytes);
+        MergeMetadata(transaction.poison, transaction.dataCheck, flit.poison, flit.dataCheck,
+                      enables, offset, 0, bytes, options);
 
         transaction.receivedBeats |= bit;
         if ((transaction.receivedBeats & flow.expectedBeatMask) != flow.expectedBeatMask)

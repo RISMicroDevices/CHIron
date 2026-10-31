@@ -4,19 +4,43 @@ namespace CHI::Lunatic {
 
     LineData SparseMemory::Read(const LineKey& key) const
     {
-        auto it = lines.find(key);
-        return it == lines.end() ? LineData{} : it->second;
+        return ReadImage(key).data;
+    }
+
+    LineImage SparseMemory::ReadImage(const LineKey& key) const
+    {
+        const auto it = lines.find(key);
+        if (it != lines.end())
+        {
+            LineImage result = it->second;
+            result.validBytes.fill(1);
+            return result;
+        }
+
+        Options options;
+        options.dataCheckEnabled = true;
+        ByteEnables enables{};
+        enables.fill(1);
+        LineImage result;
+        GenerateMetadata(result.poison, result.dataCheck, result.data, enables, options);
+        result.validBytes = enables;
+        return result;
     }
 
     void SparseMemory::Write(const LineKey& key, const LineData& data, const ByteEnables& enables)
     {
-        auto [it, inserted] = lines.try_emplace(key);
-        (void)inserted;
-        LineData& line = it->second;
-        for (size_t index = 0; index < LINE_SIZE; ++index) {
-            if (enables[index])
-                line[index] = data[index];
-        }
+        Options options;
+        options.dataCheckEnabled = true;
+        LineImage update;
+        update.data = data;
+        GenerateMetadata(update.poison, update.dataCheck, data, enables, options);
+        MergeLineImage(lines[key], update, enables, options);
+    }
+
+    void SparseMemory::WriteImage(const LineKey& key, const LineImage& data, const ByteEnables& enables,
+                                  const Options& options)
+    {
+        MergeLineImage(lines[key], data, enables, options);
     }
 
     uint64_t SparseMemory::NextLatency(uint64_t fallback)
@@ -31,7 +55,9 @@ namespace CHI::Lunatic {
 
     void SparseMemory::WriteFull(const LineKey& key, const LineData& data)
     {
-        lines.insert_or_assign(key, data);
+        ByteEnables enables{};
+        enables.fill(1);
+        Write(key, data, enables);
     }
 
     bool SparseMemory::Contains(const LineKey& key) const noexcept

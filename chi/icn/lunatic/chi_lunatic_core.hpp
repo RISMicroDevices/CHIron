@@ -33,6 +33,8 @@ namespace CHI::Lunatic {
 
     struct AtomicFlowState {
         LineData        operands{};
+        LinePoison      operandsPoison{};
+        LineDataCheck   operandsDataCheck{};
         AtomicExecution execution{};
         uint64_t        resultBeatMask = 0;
         bool            returnSent = false;
@@ -77,6 +79,8 @@ namespace CHI::Lunatic {
         bool                       spillPending = false;
         LineKey                    spillLine{};
         LineData                   spillData{};
+        LinePoison                 spillPoison{};
+        LineDataCheck              spillDataCheck{};
         ByteEnables                spillEnables{};
         bool                       victimSnoopFilterOnly = false;
         bool                       dbidSent = false;
@@ -107,6 +111,8 @@ namespace CHI::Lunatic {
         size_t                     victimWay = 0;
         LineKey                    victimLine{};
         LineData                   victimData{};
+        LinePoison                 victimPoison{};
+        LineDataCheck              victimDataCheck{};
         bool                       allocateHome = false;
         bool                       removeHome = false;
         bool                       retainHome = false;
@@ -221,9 +227,31 @@ namespace CHI::Lunatic {
         }
 
         template<typename T>
+        static size_t Select(const std::deque<Pending<T>>& queue, bool downstream)
+        {
+            size_t selected = queue.size();
+            for (size_t index = 0; index < queue.size(); ++index)
+            {
+                if (queue[index].downstream != downstream)
+                    continue;
+                if (selected == queue.size() || queue[index].age < queue[selected].age ||
+                    (queue[index].age == queue[selected].age && queue[index].serial < queue[selected].serial))
+                    selected = index;
+            }
+            return selected;
+        }
+
+        template<typename T>
         const T* Peek(const std::deque<Pending<T>>& queue) const
         {
             return queue.empty() ? nullptr : &queue[Select(queue)].flit;
+        }
+
+        template<typename T>
+        const T* Peek(const std::deque<Pending<T>>& queue, bool downstream) const
+        {
+            const size_t selected = Select(queue, downstream);
+            return selected == queue.size() ? nullptr : &queue[selected].flit;
         }
 
         template<typename T>
@@ -232,6 +260,20 @@ namespace CHI::Lunatic {
             if (queue.empty())
                 return std::nullopt;
             const size_t selected = Select(queue);
+            Pending<T> pending = std::move(queue[selected]);
+            queue.erase(queue.begin() + selected);
+            std::optional<T> result(std::move(pending.flit));
+            Publish(kind, *result, pending.transaction);
+            OnEmitted(pending);
+            return result;
+        }
+
+        template<typename T>
+        std::optional<T> Pop(std::deque<Pending<T>>& queue, EventKind kind, bool downstream)
+        {
+            const size_t selected = Select(queue, downstream);
+            if (selected == queue.size())
+                return std::nullopt;
             Pending<T> pending = std::move(queue[selected]);
             queue.erase(queue.begin() + selected);
             std::optional<T> result(std::move(pending.flit));
@@ -310,6 +352,8 @@ namespace CHI::Lunatic {
         void CompleteMemoryRead(Transaction& transaction);
         bool WriteLine(Transaction& transaction, const LineKey& line, const LineData& data,
                        const ByteEnables& enables);
+        bool WriteLineImage(Transaction& transaction, const LineKey& line, const LineImage& image,
+                            const ByteEnables& enables);
         bool FetchBaseline(Transaction& transaction);
 
         uint16_t   SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const;
@@ -349,5 +393,27 @@ namespace CHI::Lunatic {
         bool HasInflight() const noexcept;
         bool ValidateInvariants() const noexcept;
     };
+
+    inline std::optional<Response> Core::PeekTXRSP(bool downstream) const
+    {
+        const auto* value = impl->Peek(impl->txrsp, downstream);
+        return value ? std::optional<Response>(*value) : std::nullopt;
+    }
+
+    inline std::optional<Data> Core::PeekTXDAT(bool downstream) const
+    {
+        const auto* value = impl->Peek(impl->txdat, downstream);
+        return value ? std::optional<Data>(*value) : std::nullopt;
+    }
+
+    inline std::optional<Response> Core::PopTXRSP(bool downstream)
+    {
+        return impl->Pop(impl->txrsp, EventKind::EmittedTXRSP, downstream);
+    }
+
+    inline std::optional<Data> Core::PopTXDAT(bool downstream)
+    {
+        return impl->Pop(impl->txdat, EventKind::EmittedTXDAT, downstream);
+    }
 
 }

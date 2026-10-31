@@ -77,6 +77,8 @@ namespace CHI::Lunatic {
             result.valid = home->valid;
             result.dirty = home->dirty;
             result.data = home->data;
+            result.validBytes = home->validBytes;
+            CopyMetadata(result, *home, impl->options);
         }
         return result;
     }

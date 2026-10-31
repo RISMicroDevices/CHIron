@@ -156,6 +156,7 @@ namespace CHI::Lunatic {
             }
             const bool dirty = anyRequesterDirty ? false : flow.homeDirty || flow.dataDirty;
             HomeLine& home = InstallHome(line, way, transaction.data, dirty, time);
+            CopyMetadata(home, transaction, options);
             home.validBytes = flow.validBytes;
         }
         else if (decision.removeHome && transaction.homeHit)
@@ -197,12 +198,17 @@ namespace CHI::Lunatic {
                 return false;
             if (options.backend == BackendKind::Internal)
             {
-                const LineData base = memory.Read(line);
+                const LineImage baseline = memory.ReadImage(line);
+                ByteEnables enables{};
                 for (size_t index = 0; index < LINE_SIZE; ++index)
                 {
-                    if (!transaction.byteEnables[index])
-                        transaction.data[index] = base[index];
+                    if (transaction.byteEnables[index])
+                        continue;
+                    transaction.data[index] = baseline.data[index];
+                    enables[index] = 1;
                 }
+                MergeMetadata(transaction.poison, transaction.dataCheck, baseline.poison, baseline.dataCheck,
+                              enables, 0, 0, LINE_SIZE, options);
             }
         }
 
@@ -232,6 +238,7 @@ namespace CHI::Lunatic {
         {
             const std::optional<size_t> currentWay = directory.FindWay(line);
             HomeLine& home = InstallHome(line, currentWay ? *currentWay : flow.victimWay, transaction.data, dirty, time);
+            CopyMetadata(home, transaction, options);
             if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl)
                 home.validBytes = transaction.byteEnables;
         }
@@ -258,10 +265,17 @@ namespace CHI::Lunatic {
             }
             else
             {
-                const LineData baseline = memory.Read(line);
+                const LineImage baseline = memory.ReadImage(line);
+                ByteEnables enables{};
                 for (size_t index = 0; index < LINE_SIZE; ++index)
-                    if (!flow.snoopValidBytes[index])
-                        transaction.data[index] = baseline[index];
+                {
+                    if (flow.snoopValidBytes[index])
+                        continue;
+                    transaction.data[index] = baseline.data[index];
+                    enables[index] = 1;
+                }
+                MergeMetadata(transaction.poison, transaction.dataCheck, baseline.poison, baseline.dataCheck,
+                              enables, 0, 0, LINE_SIZE, options);
             }
         }
         HomeLine* home = directory.Find(line);
@@ -273,7 +287,10 @@ namespace CHI::Lunatic {
             if (home)
             {
                 if (flow.snoopDataValid)
+                {
                     home->data = transaction.data;
+                    CopyMetadata(*home, transaction, options);
+                }
                 home->dirty = false;
             }
             if ((flow.dataDirty || flow.homeDirty) && !WriteLine(transaction, line, transaction.data, FullEnables()))
@@ -310,11 +327,16 @@ namespace CHI::Lunatic {
         if (const HomeLine* home = directory.Find(flow.victimLine))
         {
             flow.victimData = home->data;
+            flow.victimPoison = options.poisonEnabled ? home->poison : LinePoison{};
+            flow.victimDataCheck = options.dataCheckEnabled ? home->dataCheck : LineDataCheck{};
             flow.victimDirty = home->dirty;
         }
         else
         {
-            flow.victimData = memory.Read(flow.victimLine);
+            const LineImage image = memory.ReadImage(flow.victimLine);
+            flow.victimData = image.data;
+            flow.victimPoison = options.poisonEnabled ? image.poison : LinePoison{};
+            flow.victimDataCheck = options.dataCheckEnabled ? image.dataCheck : LineDataCheck{};
             flow.victimDirty = false;
         }
         flow.victimDataValid = true;
@@ -350,6 +372,8 @@ namespace CHI::Lunatic {
             flow.victimPending = true;
             flow.victimLine = victim.key;
             flow.victimData = victim.data;
+            flow.victimPoison = options.poisonEnabled ? victim.poison : LinePoison{};
+            flow.victimDataCheck = options.dataCheckEnabled ? victim.dataCheck : LineDataCheck{};
             flow.victimDirty = victim.dirty;
             flow.victimDataValid = true;
         }
@@ -395,6 +419,10 @@ namespace CHI::Lunatic {
             !FetchBaseline(transaction))
             return false;
 
+        LineImage victimImage;
+        victimImage.data = flow.victimData;
+        victimImage.poison = flow.victimPoison;
+        victimImage.dataCheck = flow.victimDataCheck;
         if (flow.victimSnoopFilterOnly)
         {
             if (flow.victimDirty)
@@ -402,9 +430,11 @@ namespace CHI::Lunatic {
                 if (HomeLine* home = directory.Find(flow.victimLine))
                 {
                     home->data = flow.victimData;
+                    home->poison = flow.victimPoison;
+                    home->dataCheck = flow.victimDataCheck;
                     home->dirty = true;
                 }
-                else if (!WriteLine(transaction, flow.victimLine, flow.victimData, FullEnables()))
+                else if (!WriteLineImage(transaction, flow.victimLine, victimImage, FullEnables()))
                     return false;
             }
             const auto requesters = snoopFilter.Targets(flow.victimLine);
@@ -414,7 +444,7 @@ namespace CHI::Lunatic {
         }
         else
         {
-            if (flow.victimDirty && !WriteLine(transaction, flow.victimLine, flow.victimData, FullEnables()))
+            if (flow.victimDirty && !WriteLineImage(transaction, flow.victimLine, victimImage, FullEnables()))
                 return false;
             directory.Invalidate(directory.SetIndex(flow.victimLine), flow.victimWay);
         }

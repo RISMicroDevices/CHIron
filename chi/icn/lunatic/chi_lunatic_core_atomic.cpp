@@ -155,10 +155,10 @@ namespace CHI::Lunatic {
             if (flit.byteEnables[index])
                 flow.atomic.operands[lineOffset] = flit.bytes[index];
             transaction.byteEnables[lineOffset] = flit.byteEnables[index];
-            transaction.dataCheck[lineOffset] = flit.dataCheck[index];
         }
-        for (size_t lane = 0; lane < bytes / 8; ++lane)
-            transaction.poison[offset / 8 + lane] = flit.poison[lane];
+        const ByteEnables enables = ExpandedEnables(flit.byteEnables, offset, bytes);
+        MergeMetadata(flow.atomic.operandsPoison, flow.atomic.operandsDataCheck,
+                      flit.poison, flit.dataCheck, enables, offset, 0, bytes, options);
 
         transaction.receivedBeats |= bit;
         if ((transaction.receivedBeats & flow.expectedBeatMask) != flow.expectedBeatMask)
@@ -175,22 +175,30 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         const LineKey line = transaction.request.Line();
         flow.atomic.execution = ExecuteAtomic(transaction.request, transaction.data, flow.atomic.operands);
+        LineImage commitImage = MakeLineImage(transaction, options);
+        commitImage.data = flow.atomic.execution.write ? flow.atomic.execution.data : transaction.data;
+        if (flow.atomic.execution.write)
+        {
+            ByteEnables changed{};
+            for (size_t index = 0; index < LINE_SIZE; ++index)
+                changed[index] = commitImage.data[index] != transaction.data[index];
+            GenerateDataCheck(commitImage.dataCheck, commitImage.data, changed, options);
+            if (options.poisonEnabled)
+                for (size_t lane = 0; lane < commitImage.poison.size(); ++lane)
+                    commitImage.poison[lane] |= flow.atomic.operandsPoison[lane];
+        }
+
         if (HomeLine* home = directory.Find(line))
         {
-            if (flow.atomic.execution.write)
+            if (flow.atomic.execution.write || flow.dataDirty)
             {
-                home->data = flow.atomic.execution.data;
-                home->dirty = true;
-            }
-            else if (flow.dataDirty)
-            {
-                home->data = transaction.data;
+                home->data = commitImage.data;
+                CopyMetadata(*home, commitImage, options);
                 home->dirty = true;
             }
         }
         else if (flow.atomic.execution.write || flow.dataDirty)
         {
-            const LineData& commitData = flow.atomic.execution.write ? flow.atomic.execution.data : transaction.data;
             PolicyContext context;
             context.line = line;
             context.requester = transaction.request.source;
@@ -203,8 +211,11 @@ namespace CHI::Lunatic {
             if (decision.allocateHome && !PrepareVictim(transaction))
                 return false;
             if (decision.allocateHome || decision.retainHome)
-                InstallHome(line, flow.victimWay, commitData, true, time);
-            else if (!WriteLine(transaction, line, commitData, AtomicFullEnables()))
+            {
+                HomeLine& home = InstallHome(line, flow.victimWay, commitImage.data, true, time);
+                CopyMetadata(home, commitImage, options);
+            }
+            else if (!WriteLineImage(transaction, line, commitImage, AtomicFullEnables()))
                 return false;
         }
         flow.requesterFinal = CacheState::I;

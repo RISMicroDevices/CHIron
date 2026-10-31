@@ -302,6 +302,10 @@ namespace CHI::Lunatic {
                 if (flit.byteEnables[index])
                     destination[offset + index] = flit.bytes[index];
             }
+            LinePoison& poison = flow.snoopForVictim ? flow.victimPoison : transaction.poison;
+            LineDataCheck& dataCheck = flow.snoopForVictim ? flow.victimDataCheck : transaction.dataCheck;
+            const ByteEnables enables = ExpandedEnables(flit.byteEnables, offset, bytes);
+            MergeMetadata(poison, dataCheck, flit.poison, flit.dataCheck, enables, offset, 0, bytes, options);
         }
         received |= bit;
         if (flow.snoopForVictim)

@@ -40,12 +40,16 @@ namespace CHI::Lunatic {
 
         std::optional<Request>  PeekTXREQ() const;
         std::optional<Response> PeekTXRSP() const;
+        std::optional<Response> PeekTXRSP(bool downstream) const;
         std::optional<Data>     PeekTXDAT() const;
+        std::optional<Data>     PeekTXDAT(bool downstream) const;
         std::optional<Snoop>    PeekTXSNP() const;
 
         std::optional<Request>  PopTXREQ();
         std::optional<Response> PopTXRSP();
+        std::optional<Response> PopTXRSP(bool downstream);
         std::optional<Data>     PopTXDAT();
+        std::optional<Data>     PopTXDAT(bool downstream);
         std::optional<Snoop>    PopTXSNP();
 
         NodeId                        GetNodeId() const noexcept;
@@ -336,6 +340,10 @@ namespace CHI::Lunatic {
             : core(nodeId, [&options] {
                 if (options.dataWidth != config::dataWidth)
                     throw std::invalid_argument("Lunatic options and flit data widths differ");
+                if (options.poisonEnabled && !DATFlit::hasPoison)
+                    throw std::invalid_argument("Lunatic Poison requires the DAT Poison field");
+                if (options.dataCheckEnabled && !DATFlit::hasDataCheck)
+                    throw std::invalid_argument("Lunatic DataCheck requires the DAT DataCheck field");
                 return options;
             }(), std::move(events))
         {
@@ -362,9 +370,21 @@ namespace CHI::Lunatic {
             return value ? std::optional<RSPFlit>(Encode(*value)) : std::nullopt;
         }
 
+        std::optional<RSPFlit>      PeekTXRSP(bool downstream) const
+        {
+            const auto value = core.PeekTXRSP(downstream);
+            return value ? std::optional<RSPFlit>(Encode(*value)) : std::nullopt;
+        }
+
         std::optional<DATFlit>      PeekTXDAT() const
         {
             const auto value = core.PeekTXDAT();
+            return value ? std::optional<DATFlit>(Encode(*value)) : std::nullopt;
+        }
+
+        std::optional<DATFlit>      PeekTXDAT(bool downstream) const
+        {
+            const auto value = core.PeekTXDAT(downstream);
             return value ? std::optional<DATFlit>(Encode(*value)) : std::nullopt;
         }
 
@@ -386,9 +406,21 @@ namespace CHI::Lunatic {
             return value ? std::optional<RSPFlit>(Encode(*value)) : std::nullopt;
         }
 
+        std::optional<RSPFlit>      PopTXRSP(bool downstream)
+        {
+            const auto value = core.PopTXRSP(downstream);
+            return value ? std::optional<RSPFlit>(Encode(*value)) : std::nullopt;
+        }
+
         std::optional<DATFlit>      PopTXDAT()
         {
             const auto value = core.PopTXDAT();
+            return value ? std::optional<DATFlit>(Encode(*value)) : std::nullopt;
+        }
+
+        std::optional<DATFlit>      PopTXDAT(bool downstream)
+        {
+            const auto value = core.PopTXDAT(downstream);
             return value ? std::optional<DATFlit>(Encode(*value)) : std::nullopt;
         }
 

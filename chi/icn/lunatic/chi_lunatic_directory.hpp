@@ -10,12 +10,14 @@
 namespace CHI::Lunatic {
 
     struct HomeLine {
-        LineKey     key{};
-        LineData    data{};
-        ByteEnables validBytes{};
-        uint64_t    age = 0;
-        bool        valid = false;
-        bool        dirty = false;
+        LineKey       key{};
+        LineData      data{};
+        ByteEnables   validBytes{};
+        LinePoison    poison{};
+        LineDataCheck dataCheck{};
+        uint64_t      age = 0;
+        bool          valid = false;
+        bool          dirty = false;
     };
 
     class Directory {

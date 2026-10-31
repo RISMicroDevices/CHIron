@@ -45,8 +45,8 @@ namespace CHI::Lunatic {
         bool        dctEnabled = false;
         bool        dwtEnabled = false;
         bool        directPersistEnabled = false;
-        bool        poisonEnabled = true;
-        bool        dataCheckEnabled = true;
+        bool        poisonEnabled = false;
+        bool        dataCheckEnabled = false;
         bool        mteEnabled = false;
         bool        dvmEnabled = false;
     };
