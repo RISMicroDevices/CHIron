@@ -391,3 +391,51 @@ LUNATIC_TEST(Stage8PMUAXIReadWriteActivity)
     fixture.bridge.Reset();
     LUNATIC_CHECK(fixture.bridge.GetNode().GetPerformanceCounters() == PerformanceCounters{});
 }
+
+LUNATIC_TEST(Stage8RobustnessAXIBackpressureResetAndRestart)
+{
+    AXIFixture fixture;
+    bool hold = true;
+    fixture.bridge.GetNode().GetEvents()->OnRequestAdmission.Register(
+        Gravity::MakeListener<RequestAdmissionEvent>("axi-reset-backpressure", 0, [&](RequestAdmissionEvent& event) {
+            if (hold)
+                event.Backpressure();
+        }));
+    fixture.memory.Stall(AXIChannel::AR, 4);
+    fixture.memory.Stall(AXIChannel::R, 4);
+    fixture.bridge.PushUpstreamREQ(fixture.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 1, 0x70000));
+    fixture.Tick();
+    LUNATIC_CHECK(!fixture.bridge.Drain());
+    LUNATIC_CHECK(fixture.bridge.GetNode().GetPerformanceCounters().GetStalls(WaitReason::Decision) > 0);
+
+    hold = false;
+    fixture.Until([&] { return fixture.bridge.GetNode().GetPerformanceCounters().acceptedRXR == 1; });
+    LUNATIC_CHECK(fixture.bridge.HasInflight());
+    fixture.bridge.Reset();
+    fixture.memory.Reset();
+    fixture.now = 0;
+    LUNATIC_CHECK(!fixture.bridge.HasInflight());
+    LUNATIC_CHECK(!fixture.bridge.PeekDownstreamAW());
+    LUNATIC_CHECK(!fixture.bridge.PeekDownstreamW());
+    LUNATIC_CHECK(!fixture.bridge.PeekDownstreamAR());
+    LUNATIC_CHECK(!fixture.bridge.PeekUpstreamDAT());
+    LUNATIC_CHECK(fixture.bridge.GetNode().GetPerformanceCounters() == PerformanceCounters{});
+
+    hold = true;
+    fixture.memory.Stall(AXIChannel::AR, 2);
+    fixture.memory.Stall(AXIChannel::R, 2);
+    fixture.bridge.PushUpstreamREQ(fixture.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 1, 0x70000));
+    fixture.Tick();
+    LUNATIC_CHECK(!fixture.bridge.Drain());
+    hold = false;
+    fixture.Until([&] { return static_cast<bool>(fixture.bridge.PeekUpstreamDAT()); });
+    LUNATIC_CHECK(fixture.bridge.PopUpstreamDAT());
+    fixture.Quiesce();
+    const auto pmu = fixture.bridge.GetNode().GetPerformanceCounters();
+    LUNATIC_CHECK(pmu.acceptedRXREQ == 1);
+    LUNATIC_CHECK(pmu.admittedTransactions == 1);
+    LUNATIC_CHECK(pmu.retiredTransactions == 1);
+    LUNATIC_CHECK(pmu.emittedTXAR == 1);
+    LUNATIC_CHECK(pmu.acceptedRXR == 1);
+    LUNATIC_CHECK(pmu.GetStalls(WaitReason::Decision) > 0);
+}

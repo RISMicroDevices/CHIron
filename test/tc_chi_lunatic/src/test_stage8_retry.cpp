@@ -142,3 +142,73 @@ LUNATIC_TEST(Stage8RetryMultipleForcedCredits)
     ReturnCredit(driver, 4, older.PCrdType());
     driver.Quiesce();
 }
+
+LUNATIC_TEST(Stage8RetryBackendWithFlowDecisions)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    options.randomDelayLimit = 1;
+    options.randomizeArbitration = true;
+    options.seed = 0x42;
+    CheckedDriver<Config256> driver(options);
+    SNOracle<Config256> oracle(2, 6);
+    bool block = true;
+    driver.driver.node.GetEvents()->OnRequestAdmission.Register(
+        Gravity::MakeListener<RequestAdmissionEvent>("backend-backpressure", 0, [&](RequestAdmissionEvent& event) {
+            if (block)
+            {
+                block = false;
+                event.Backpressure();
+            }
+        }));
+    driver.driver.node.GetEvents()->OnTransactionSchedule.Register(
+        Gravity::MakeListener<TransactionScheduleEvent>("backend-delay", 0, [&](TransactionScheduleEvent& event) {
+            if (event.phase == Phase::Action)
+                event.AddDelay(1);
+        }));
+
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 1, 0x1c000, false));
+    const auto downstream = driver.driver.NextREQ(CHI::Eb::Opcodes::REQ::ReadNoSnp);
+    oracle.Request(driver.driver.now, downstream);
+    typename CheckedDriver<Config256>::RSP retry{};
+    retry.SrcID() = 6;
+    retry.TgtID() = 2;
+    retry.TxnID() = downstream.TxnID();
+    retry.Opcode() = CHI::Eb::Opcodes::RSP::RetryAck;
+    retry.PCrdType() = downstream.PCrdType();
+    typename CheckedDriver<Config256>::RSP grant{};
+    grant.SrcID() = 6;
+    grant.TgtID() = 2;
+    grant.Opcode() = CHI::Eb::Opcodes::RSP::PCrdGrant;
+    grant.PCrdType() = downstream.PCrdType();
+
+    oracle.Response(driver.driver.now, retry);
+    LUNATIC_CHECK(driver.driver.node.PushRXRSP(retry));
+    driver.driver.Tick();
+    oracle.Response(driver.driver.now, grant);
+    LUNATIC_CHECK(driver.driver.node.PushRXRSP(grant));
+    driver.driver.Tick();
+    const auto resent = driver.driver.NextREQ(CHI::Eb::Opcodes::REQ::ReadNoSnp);
+    LUNATIC_CHECK(resent.AllowRetry() == 0);
+    LUNATIC_CHECK(resent.TxnID() == downstream.TxnID());
+    oracle.Request(driver.driver.now, resent);
+    for (size_t beat = 0; beat < 2; ++beat)
+    {
+        typename CheckedDriver<Config256>::DAT data{};
+        data.SrcID() = 6;
+        data.TgtID() = 2;
+        data.HomeNID() = 2;
+        data.TxnID() = resent.TxnID();
+        data.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
+        data.Resp() = CHI::Eb::Resps::CompData_I;
+        data.DataID() = beat * 2;
+        data.CCID() = (resent.Addr() >> 4) & 3;
+        oracle.Data(driver.driver.now, data);
+        LUNATIC_CHECK(driver.driver.node.PushRXDAT(data));
+    }
+    CompleteRead(driver, 1);
+    driver.Quiesce();
+    LUNATIC_CHECK(!block);
+    LUNATIC_CHECK(!oracle.HasInflight());
+}

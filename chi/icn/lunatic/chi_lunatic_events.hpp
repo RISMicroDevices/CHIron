@@ -72,9 +72,9 @@ namespace CHI::Lunatic {
         bool retry = false;
 
     public:
-        const Time    time;
-        const NodeId  home;
-        const Request request;
+        const Time     time;
+        const NodeId   home;
+        const Request  request;
 
         RequestAdmissionEvent(Time time, NodeId home, const Request& request)
             : time(time), home(home), request(request)
