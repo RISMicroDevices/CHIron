@@ -741,6 +741,22 @@ namespace CHI::Lunatic {
     {
     }
 
+    bool Core::Impl::Reentry()
+    {
+        if (!events->Dispatching())
+            return false;
+
+        const std::string reason = "Lunatic same-node event reentry is prohibited";
+        errors.push_back({ time, INVALID_TRANSACTION, reason });
+        Event event;
+        event.kind = EventKind::Error;
+        event.time = time;
+        event.home = nodeId;
+        event.message = reason;
+        events->Defer(std::move(event));
+        return true;
+    }
+
     void Core::Impl::Error(TransactionHandle handle, std::string reason)
     {
         errors.push_back({ time, handle, reason });

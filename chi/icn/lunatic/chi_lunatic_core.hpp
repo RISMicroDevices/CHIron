@@ -391,6 +391,7 @@ namespace CHI::Lunatic {
         void OnEmitted(const Pending<Data>& pending);
         void OnEmitted(const Pending<Snoop>& pending);
 
+        bool Reentry();
         void Error(TransactionHandle handle, std::string reason);
         void Deny(const Request& request, std::string reason);
         bool HasInflight() const noexcept;
@@ -399,24 +400,28 @@ namespace CHI::Lunatic {
 
     inline std::optional<Response> Core::PeekTXRSP(bool downstream) const
     {
+        if (impl->Reentry())
+            return std::nullopt;
         const auto* value = impl->Peek(impl->txrsp, downstream);
         return value ? std::optional<Response>(*value) : std::nullopt;
     }
 
     inline std::optional<Data> Core::PeekTXDAT(bool downstream) const
     {
+        if (impl->Reentry())
+            return std::nullopt;
         const auto* value = impl->Peek(impl->txdat, downstream);
         return value ? std::optional<Data>(*value) : std::nullopt;
     }
 
     inline std::optional<Response> Core::PopTXRSP(bool downstream)
     {
-        return impl->Pop(impl->txrsp, EventKind::EmittedTXRSP, downstream);
+        return impl->Reentry() ? std::nullopt : impl->Pop(impl->txrsp, EventKind::EmittedTXRSP, downstream);
     }
 
     inline std::optional<Data> Core::PopTXDAT(bool downstream)
     {
-        return impl->Pop(impl->txdat, EventKind::EmittedTXDAT, downstream);
+        return impl->Reentry() ? std::nullopt : impl->Pop(impl->txdat, EventKind::EmittedTXDAT, downstream);
     }
 
 }

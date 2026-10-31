@@ -4,10 +4,15 @@
 #include "../../../common/eventbus.hpp"
 
 #include <cstdint>
+#include <deque>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace CHI::Lunatic {
+
+    struct Transaction;
 
     enum class EventKind : uint8_t {
         AcceptedRXREQ,
@@ -62,21 +67,84 @@ namespace CHI::Lunatic {
     using ResetEvent = EventRecord<EventKind::Reset>;
     using ErrorEvent = EventRecord<EventKind::Error>;
 
-    class EventHub {
-    public:
-        Gravity::EventBus<AcceptedRXREQEvent> OnAcceptedRXREQ;
-        Gravity::EventBus<AcceptedRXRSPEvent> OnAcceptedRXRSP;
-        Gravity::EventBus<AcceptedRXDATEvent> OnAcceptedRXDAT;
-        Gravity::EventBus<EmittedTXREQEvent>  OnEmittedTXREQ;
-        Gravity::EventBus<EmittedTXRSPEvent>  OnEmittedTXRSP;
-        Gravity::EventBus<EmittedTXDATEvent>  OnEmittedTXDAT;
-        Gravity::EventBus<EmittedTXSNPEvent>  OnEmittedTXSNP;
-        Gravity::EventBus<DeniedEvent>        OnDenied;
-        Gravity::EventBus<RetiredEvent>       OnRetired;
-        Gravity::EventBus<ResetEvent>         OnReset;
-        Gravity::EventBus<ErrorEvent>         OnError;
+    class RequestAdmissionEvent : public Gravity::Event<RequestAdmissionEvent> {
+        bool backpressure = false;
+        bool retry = false;
 
-    private:
+    public:
+        const Time    time;
+        const NodeId  home;
+        const Request request;
+
+        RequestAdmissionEvent(Time time, NodeId home, const Request& request)
+            : time(time), home(home), request(request)
+        {
+        }
+
+        void Backpressure() noexcept { backpressure = true; }
+        void RequestRetry() noexcept { retry = true; }
+        bool IsBackpressured() const noexcept { return backpressure; }
+        bool IsRetryRequested() const noexcept { return retry; }
+    };
+
+    class TransactionScheduleEvent : public Gravity::Event<TransactionScheduleEvent> {
+        Time additionalDelay = 0;
+        bool backpressure = false;
+
+    public:
+        const Time              time;
+        const NodeId            home;
+        const TransactionHandle transaction;
+        const Phase             phase;
+        const Time              readyTime;
+        const LineKey           line;
+
+        TransactionScheduleEvent(Time time, NodeId home, const Transaction& transaction);
+        void Backpressure() noexcept { backpressure = true; }
+        void AddDelay(Time delay) noexcept;
+        Time GetAdditionalDelay() const noexcept { return additionalDelay; }
+        bool IsBackpressured() const noexcept { return backpressure; }
+    };
+
+    enum class VictimDomain : uint8_t {
+        Directory,
+        SnoopFilter
+    };
+
+    class VictimSelectionEvent : public Gravity::Event<VictimSelectionEvent> {
+        std::optional<size_t> selectedWay;
+
+    public:
+        const Time                   time;
+        const NodeId                 home;
+        const TransactionHandle      transaction;
+        const VictimDomain           domain;
+        const LineKey                line;
+        const std::vector<size_t>    candidates;
+
+        VictimSelectionEvent(Time time, NodeId home, TransactionHandle transaction, VictimDomain domain,
+                             const LineKey& line, std::vector<size_t> candidates)
+            : time(time), home(home), transaction(transaction), domain(domain), line(line),
+              candidates(std::move(candidates))
+        {
+        }
+
+        void SelectVictim(size_t way) noexcept { selectedWay = way; }
+        std::optional<size_t> GetSelectedVictim() const noexcept { return selectedWay; }
+    };
+
+    class EventHub {
+        size_t           dispatchDepth = 0;
+        std::deque<Event> deferred;
+
+        class DispatchScope {
+            EventHub& hub;
+
+        public:
+            explicit DispatchScope(EventHub& hub) : hub(hub) { ++hub.dispatchDepth; }
+            ~DispatchScope() { --hub.dispatchDepth; }
+        };
+
         template<EventKind kind>
         Gravity::EventBus<EventRecord<kind>>& Bus() noexcept
         {
@@ -107,7 +175,6 @@ namespace CHI::Lunatic {
             }
         }
 
-    private:
         template<EventKind kind>
         void Fire(Event event)
         {
@@ -115,28 +182,30 @@ namespace CHI::Lunatic {
             Bus<kind>().Fire(record);
         }
 
-    public:
-        // Listeners run synchronously while node containers may be changing.
-        // A listener must not call back into the same node during publication.
-        void Publish(Event event)
-        {
-            switch (event.kind)
-            {
-                case EventKind::AcceptedRXREQ: Fire<EventKind::AcceptedRXREQ>(std::move(event)); return;
-                case EventKind::AcceptedRXRSP: Fire<EventKind::AcceptedRXRSP>(std::move(event)); return;
-                case EventKind::AcceptedRXDAT: Fire<EventKind::AcceptedRXDAT>(std::move(event)); return;
-                case EventKind::EmittedTXREQ: Fire<EventKind::EmittedTXREQ>(std::move(event)); return;
-                case EventKind::EmittedTXRSP: Fire<EventKind::EmittedTXRSP>(std::move(event)); return;
-                case EventKind::EmittedTXDAT: Fire<EventKind::EmittedTXDAT>(std::move(event)); return;
-                case EventKind::EmittedTXSNP: Fire<EventKind::EmittedTXSNP>(std::move(event)); return;
-                case EventKind::Denied: Fire<EventKind::Denied>(std::move(event)); return;
-                case EventKind::Retired: Fire<EventKind::Retired>(std::move(event)); return;
-                case EventKind::Reset: Fire<EventKind::Reset>(std::move(event)); return;
-                case EventKind::Error: Fire<EventKind::Error>(std::move(event)); return;
-                default: Fire<EventKind::Error>(std::move(event)); return;
-            }
-        }
+        void FlushDeferred();
 
+    public:
+        Gravity::EventBus<AcceptedRXREQEvent>       OnAcceptedRXREQ;
+        Gravity::EventBus<AcceptedRXRSPEvent>       OnAcceptedRXRSP;
+        Gravity::EventBus<AcceptedRXDATEvent>       OnAcceptedRXDAT;
+        Gravity::EventBus<EmittedTXREQEvent>        OnEmittedTXREQ;
+        Gravity::EventBus<EmittedTXRSPEvent>        OnEmittedTXRSP;
+        Gravity::EventBus<EmittedTXDATEvent>        OnEmittedTXDAT;
+        Gravity::EventBus<EmittedTXSNPEvent>        OnEmittedTXSNP;
+        Gravity::EventBus<DeniedEvent>              OnDenied;
+        Gravity::EventBus<RetiredEvent>             OnRetired;
+        Gravity::EventBus<ResetEvent>               OnReset;
+        Gravity::EventBus<ErrorEvent>               OnError;
+        Gravity::EventBus<RequestAdmissionEvent>    OnRequestAdmission;
+        Gravity::EventBus<TransactionScheduleEvent> OnTransactionSchedule;
+        Gravity::EventBus<VictimSelectionEvent>     OnVictimSelection;
+
+        bool Dispatching() const noexcept { return dispatchDepth != 0; }
+        void Defer(Event event);
+        void Publish(Event event);
+        RequestAdmissionEvent Decide(RequestAdmissionEvent event);
+        TransactionScheduleEvent Decide(TransactionScheduleEvent event);
+        VictimSelectionEvent Decide(VictimSelectionEvent event);
         void Clear() noexcept;
     };
 
