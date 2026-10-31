@@ -191,3 +191,66 @@ LUNATIC_TEST(Stage8EventRetireReentryDefersUntilErasure)
     LUNATIC_CHECK(driver.node.GetTime() < 1000);
     LUNATIC_CHECK(driver.node.GetErrors().size() == 1);
 }
+
+LUNATIC_TEST(Stage8EventSharedHubAllowsOtherNode)
+{
+    auto events = std::make_shared<EventHub>();
+    HomeNode<Config256> first(2, {}, events);
+    HomeNode<Config256> second(3, {}, events);
+    HomeNode<Config256>::REQFlit firstRequest{};
+    firstRequest.SrcID() = 4;
+    firstRequest.TgtID() = 2;
+    firstRequest.TxnID() = 1;
+    firstRequest.Opcode() = CHI::Eb::Opcodes::REQ::ReadNoSnp;
+    firstRequest.Size() = 6;
+    auto secondRequest = firstRequest;
+    secondRequest.TgtID() = 3;
+    secondRequest.TxnID() = 2;
+
+    size_t secondAccepted = 0;
+    events->OnAcceptedRXREQ.Register(
+        Gravity::MakeListener<AcceptedRXREQEvent>("second-accepted", 0, [&](AcceptedRXREQEvent& event) {
+            if (event.home == 3)
+                ++secondAccepted;
+        }));
+    events->OnAcceptedRXREQ.Register(
+        Gravity::MakeListener<AcceptedRXREQEvent>("first-reentry", -1, [&](AcceptedRXREQEvent& event) {
+            if (event.home != 2)
+                return;
+            LUNATIC_CHECK(!first.PushRXREQ(firstRequest));
+            LUNATIC_CHECK(second.PushRXREQ(secondRequest));
+            second.Tick(1);
+            LUNATIC_CHECK(second.GetTime() == 1);
+            LUNATIC_CHECK(second.GetErrors().empty());
+        }));
+
+    LUNATIC_CHECK(first.PushRXREQ(firstRequest));
+    LUNATIC_CHECK(first.GetErrors().size() == 1);
+    LUNATIC_CHECK(second.GetErrors().empty());
+    LUNATIC_CHECK(secondAccepted == 1);
+    LUNATIC_CHECK(second.HasInflight());
+    first.Reset();
+    second.Reset();
+}
+
+LUNATIC_TEST(Stage8EventDeferredBurstIsIterative)
+{
+    auto events = std::make_shared<EventHub>();
+    constexpr size_t eventLimit = 4096;
+    size_t accepted = 0;
+    events->OnAcceptedRXREQ.Register(
+        Gravity::MakeListener<AcceptedRXREQEvent>("burst", 0, [&](AcceptedRXREQEvent&) {
+            ++accepted;
+            if (accepted < eventLimit)
+            {
+                Event next;
+                next.kind = EventKind::AcceptedRXREQ;
+                events->Publish(std::move(next));
+            }
+        }));
+
+    Event initial;
+    initial.kind = EventKind::AcceptedRXREQ;
+    events->Publish(std::move(initial));
+    LUNATIC_CHECK(accepted == eventLimit);
+}

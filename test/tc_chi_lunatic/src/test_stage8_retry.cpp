@@ -212,3 +212,35 @@ LUNATIC_TEST(Stage8RetryBackendWithFlowDecisions)
     LUNATIC_CHECK(!block);
     LUNATIC_CHECK(!oracle.HasInflight());
 }
+
+LUNATIC_TEST(Stage8RetryChangedTraceTagAndTargetResend)
+{
+    Driver<Config256> driver;
+    driver.node.GetEvents()->OnRequestAdmission.Register(
+        Gravity::MakeListener<RequestAdmissionEvent>("force-retry", 0, [&](RequestAdmissionEvent& event) {
+            if (event.request.allowRetry && event.request.txnId == 2)
+                event.RequestRetry();
+        }));
+
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 2, 0x20000, false);
+    request.TraceTag() = 0;
+    driver.node.PushRXREQ(request);
+    driver.Tick();
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
+
+    request.TxnID() = 9;
+    request.AllowRetry() = 0;
+    request.TraceTag() = 1;
+    request.TgtID() = 3;
+    driver.node.PushRXREQ(request);
+    for (size_t beat = 0; beat < 2; ++beat)
+    {
+        const auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+        LUNATIC_CHECK(data.TxnID() == 9);
+        LUNATIC_CHECK(data.TraceTag() == 1);
+    }
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.node.GetPerformanceCounters().creditedResends == 1);
+    LUNATIC_CHECK(driver.node.GetErrors().empty());
+}

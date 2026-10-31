@@ -25,7 +25,7 @@ namespace CHI::Lunatic {
         {
             Event event = std::move(deferred.front());
             deferred.pop_front();
-            Publish(std::move(event));
+            Publish(std::move(event), false);
         }
     }
 
@@ -46,7 +46,7 @@ namespace CHI::Lunatic {
         }
 
         {
-            DispatchScope scope(*this);
+            DispatchScope scope(*this, event.home);
             switch (event.kind)
             {
                 case EventKind::AcceptedRXREQ: Fire<EventKind::AcceptedRXREQ>(std::move(event)); break;
@@ -70,7 +70,7 @@ namespace CHI::Lunatic {
     RequestAdmissionEvent EventHub::Decide(RequestAdmissionEvent event)
     {
         {
-            DispatchScope scope(*this);
+            DispatchScope scope(*this, event.home);
             OnRequestAdmission.Fire(event);
         }
         FlushDeferred();
@@ -80,7 +80,7 @@ namespace CHI::Lunatic {
     TransactionScheduleEvent EventHub::Decide(TransactionScheduleEvent event)
     {
         {
-            DispatchScope scope(*this);
+            DispatchScope scope(*this, event.home);
             OnTransactionSchedule.Fire(event);
         }
         FlushDeferred();
@@ -90,7 +90,7 @@ namespace CHI::Lunatic {
     VictimSelectionEvent EventHub::Decide(VictimSelectionEvent event)
     {
         {
-            DispatchScope scope(*this);
+            DispatchScope scope(*this, event.home);
             OnVictimSelection.Fire(event);
         }
         FlushDeferred();

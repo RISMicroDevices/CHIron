@@ -90,6 +90,7 @@ namespace {
             TransactionId initialTxn = 0;
             TransactionId finalTxn = 0;
             TransactionId activeTxn = 0;
+            uint8_t       creditType = 0;
             LineKey       line{};
             bool          read = false;
             bool          forceRetry = false;
@@ -280,7 +281,7 @@ namespace {
                 auto& operation = operations[index];
                 LUNATIC_CHECK(operation.initialSent && !operation.retryAck);
                 LUNATIC_CHECK(!operation.completed && !operation.canceled);
-                LUNATIC_CHECK(response.PCrdType() == operation.request.PCrdType());
+                operation.creditType = response.PCrdType();
                 operation.retryAck = true;
                 awaitingCredits.push_back(index);
                 ++retryAcks;
@@ -297,7 +298,7 @@ namespace {
                     [&](size_t index) {
                         const auto& operation = operations[index];
                         return operation.source == response.TgtID() &&
-                            operation.request.PCrdType() == response.PCrdType();
+                            operation.creditType == response.PCrdType();
                     });
                 LUNATIC_CHECK(match != awaitingCredits.end());
                 const size_t index = *match;
@@ -313,7 +314,7 @@ namespace {
                     creditReturn.SrcID() = operation.source;
                     creditReturn.TgtID() = driver.node.GetNodeId();
                     creditReturn.Opcode() = CHI::Eb::Opcodes::REQ::PCrdReturn;
-                    creditReturn.PCrdType() = operation.request.PCrdType();
+                    creditReturn.PCrdType() = operation.creditType;
                     controls.push_back(creditReturn);
                     operation.canceled = true;
                     ++canceled;
@@ -325,6 +326,7 @@ namespace {
                 operation.activeTxn = operation.finalTxn;
                 resend.TxnID() = operation.finalTxn;
                 resend.AllowRetry() = 0;
+                resend.PCrdType() = operation.creditType;
                 LUNATIC_CHECK(resend.TxnID() != operation.initialTxn);
                 controls.push_back(resend);
                 ++creditedResends;
@@ -587,7 +589,7 @@ namespace {
                 operation.request = driver.Request(
                     description.read ? CHI::Eb::Opcodes::REQ::ReadNoSnp : CHI::Eb::Opcodes::REQ::WriteNoSnpZero,
                     description.source, initialTxn, description.address, false);
-                operation.request.PCrdType() = index % 4;
+                LUNATIC_CHECK(operation.request.PCrdType() == 0);
                 operation.source = description.source;
                 operation.initialTxn = initialTxn;
                 operation.finalTxn = TransactionId(0x80 + index);

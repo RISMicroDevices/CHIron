@@ -202,8 +202,10 @@ namespace CHI::Lunatic {
     {
         Request left = original;
         Request right = resend;
+        left.target = right.target = 0;
         left.txnId = right.txnId = 0;
         left.qos = right.qos = 0;
+        left.traceTag = right.traceTag = 0;
         left.allowRetry = right.allowRetry = false;
         return left == right;
     }

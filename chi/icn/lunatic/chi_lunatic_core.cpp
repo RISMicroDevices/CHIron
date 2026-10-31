@@ -864,7 +864,7 @@ namespace CHI::Lunatic {
 
     bool Core::Impl::Reentry()
     {
-        if (!events->Dispatching())
+        if (!events->Dispatching(nodeId))
             return false;
 
         const std::string reason = "Lunatic same-node event reentry is prohibited";

@@ -134,15 +134,24 @@ namespace CHI::Lunatic {
     };
 
     class EventHub {
-        size_t           dispatchDepth = 0;
-        std::deque<Event> deferred;
+        size_t              dispatchDepth = 0;
+        std::deque<Event>   deferred;
+        std::vector<NodeId> dispatchHomes;
 
         class DispatchScope {
             EventHub& hub;
 
         public:
-            explicit DispatchScope(EventHub& hub) : hub(hub) { ++hub.dispatchDepth; }
-            ~DispatchScope() { --hub.dispatchDepth; }
+            DispatchScope(EventHub& hub, NodeId home) : hub(hub)
+            {
+                hub.dispatchHomes.push_back(home);
+                ++hub.dispatchDepth;
+            }
+            ~DispatchScope()
+            {
+                hub.dispatchHomes.pop_back();
+                --hub.dispatchDepth;
+            }
         };
 
         template<EventKind kind>
@@ -201,6 +210,13 @@ namespace CHI::Lunatic {
         Gravity::EventBus<VictimSelectionEvent>     OnVictimSelection;
 
         bool Dispatching() const noexcept { return dispatchDepth != 0; }
+        bool Dispatching(NodeId home) const noexcept
+        {
+            for (NodeId active : dispatchHomes)
+                if (active == home)
+                    return true;
+            return false;
+        }
         void Defer(Event event);
         void DispatchDeferred() { FlushDeferred(); }
         void Publish(Event event, bool flush = true);
