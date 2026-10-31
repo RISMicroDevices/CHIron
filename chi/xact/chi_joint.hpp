@@ -2177,15 +2177,29 @@ namespace /*CHI::*/Xact {
 
         if (rspFlit.Opcode() == Opcodes::RSP::Persist && rspFlit.TxnID() == 0)
         {
+            const bool homePersist = firedRspFlit.IsFromHomeToRequester(glbl);
+
             xactionIter = std::find_if(txTransactions.begin(), txTransactions.end(),
                 [&](const auto& entry) {
                     const auto& candidate = entry.second;
                     const auto& first = candidate->GetFirst();
 
-                    return first.IsREQ()
-                        && first.flit.req.Opcode() == Opcodes::REQ::CleanSharedPersistSep
-                        && first.flit.req.SrcID() == rspFlit.TgtID()
+                    if (!first.IsREQ() ||
+                        first.flit.req.Opcode() != Opcodes::REQ::CleanSharedPersistSep)
+                        return false;
+
+                    const auto* comp = candidate->GetFirstRSP({ Opcodes::RSP::Comp });
+                    const bool homeRouteMatches =
+                        !homePersist ||
+                        !glbl.SAM_SCOPE.enable ||
+                        (comp && comp->flit.rsp.SrcID() == rspFlit.SrcID()) ||
+                        (!comp &&
+                            (glbl.SAM_SCOPE.Get(first.flit.req.SrcID()) == SAMScope::BeforeSAM ||
+                             first.flit.req.TgtID() == rspFlit.SrcID()));
+
+                    return first.flit.req.SrcID() == rspFlit.TgtID()
                         && first.flit.req.PGroupID() == rspFlit.PGroupID()
+                        && homeRouteMatches
                         && !candidate->HasRSP({
                             Opcodes::RSP::Persist,
                             Opcodes::RSP::CompPersist
