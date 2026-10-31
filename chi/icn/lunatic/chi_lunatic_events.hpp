@@ -134,7 +134,7 @@ namespace CHI::Lunatic {
     };
 
     class EventHub {
-        size_t              dispatchDepth = 0;
+        size_t             dispatchDepth = 0;
         std::deque<Event>   deferred;
         std::vector<NodeId> dispatchHomes;
 
