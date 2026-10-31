@@ -487,6 +487,9 @@ namespace CHI {
                     if (width == 0)
                         return;
 
+                    if (offset == 0)
+                        flitBits[index] = 0;
+
                     uint32_t mask = (width >= 32)
                         ? 0xFFFFFFFFU
                         : (0xFFFFFFFFU >> (32 - width));
@@ -506,7 +509,6 @@ namespace CHI {
                     }
                     else if (offset + width == 32)
                     {
-                        flitBits[index + 1] = 0;
                         ++index;
                         offset = 0;
                     }
