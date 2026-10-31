@@ -151,7 +151,7 @@ namespace CHI::Lunatic {
                 if (retry.request.source != request.source || retry.request.pCrdType != request.pCrdType)
                     continue;
             }
-            else if (!RetryRequestCompatible(retry.request, request))
+            else if (!RetryRequestCompatible(retry.request, request, nodeId))
                 continue;
 
             if (creditReturn)

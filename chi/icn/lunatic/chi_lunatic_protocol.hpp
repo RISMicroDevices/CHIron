@@ -38,7 +38,8 @@ namespace CHI::Lunatic {
     bool         IsOrderingSupported(uint16_t opcode) noexcept;
     bool         IsOrderedWriteObservation(const Request& request) noexcept;
     bool         RequiresCompAck(const Request& request) noexcept;
-    bool         RetryRequestCompatible(const Request& original, const Request& resend) noexcept;
+    bool         RetryRequestCompatible(const Request& original, const Request& resend,
+                                        NodeId retrySource) noexcept;
     uint64_t     TransferBeatMask(const Request& request, const Options& options) noexcept;
 
 }

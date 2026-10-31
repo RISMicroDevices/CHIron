@@ -198,8 +198,11 @@ namespace CHI::Lunatic {
                 requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ImmediateWrite);
     }
 
-    bool RetryRequestCompatible(const Request& original, const Request& resend) noexcept
+    bool RetryRequestCompatible(const Request& original, const Request& resend, NodeId retrySource) noexcept
     {
+        if (resend.target != original.target && resend.target != retrySource)
+            return false;
+
         Request left = original;
         Request right = resend;
         left.target = right.target = 0;
