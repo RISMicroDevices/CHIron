@@ -37,7 +37,7 @@ namespace CHI::Lunatic {
             Publish(std::move(event));
     }
 
-    void EventHub::Publish(Event event)
+    void EventHub::Publish(Event event, bool flush)
     {
         if (Dispatching())
         {
@@ -63,7 +63,8 @@ namespace CHI::Lunatic {
                 default: Fire<EventKind::Error>(std::move(event)); break;
             }
         }
-        FlushDeferred();
+        if (flush)
+            FlushDeferred();
     }
 
     RequestAdmissionEvent EventHub::Decide(RequestAdmissionEvent event)

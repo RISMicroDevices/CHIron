@@ -202,7 +202,8 @@ namespace CHI::Lunatic {
 
         bool Dispatching() const noexcept { return dispatchDepth != 0; }
         void Defer(Event event);
-        void Publish(Event event);
+        void DispatchDeferred() { FlushDeferred(); }
+        void Publish(Event event, bool flush = true);
         RequestAdmissionEvent Decide(RequestAdmissionEvent event);
         TransactionScheduleEvent Decide(TransactionScheduleEvent event);
         VictimSelectionEvent Decide(VictimSelectionEvent event);

@@ -694,10 +694,11 @@ namespace CHI::Lunatic {
         event.opcode = transaction->request.opcode;
         event.transaction = handle;
         event.line = transaction->request.Line();
-        events->Publish(std::move(event));
+        events->Publish(std::move(event), false);
 
         tracker.Retire(handle);
         flows.erase(handle);
+        events->DispatchDeferred();
     }
 
     void Core::Impl::OnEmitted(const Pending<Request>& pending)

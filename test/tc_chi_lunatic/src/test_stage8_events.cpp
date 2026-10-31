@@ -1,4 +1,4 @@
-#include "common.hpp"
+#include "driver.hpp"
 
 #include <limits>
 
@@ -165,4 +165,29 @@ LUNATIC_TEST(Stage8EventRecursivePublicationIsDeferred)
     event.kind = EventKind::AcceptedRXREQ;
     events->Publish(std::move(event));
     LUNATIC_CHECK((order == std::vector<int>{ 1, 2, 3 }));
+}
+
+LUNATIC_TEST(Stage8EventRetireReentryDefersUntilErasure)
+{
+    Driver<Config256> driver;
+    bool error = false;
+    bool inflightAtError = true;
+    driver.node.GetEvents()->OnRetired.Register(
+        Gravity::MakeListener<RetiredEvent>("retire-reentry", 0, [&](RetiredEvent&) {
+            driver.node.Tick(1000);
+        }));
+    driver.node.GetEvents()->OnError.Register(
+        Gravity::MakeListener<ErrorEvent>("retire-error", 0, [&](ErrorEvent&) {
+            error = true;
+            inflightAtError = driver.node.HasInflight();
+        }));
+
+    driver.node.PushRXREQ(driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 1, 0x10000, false));
+    for (size_t beat = 0; beat < 2; ++beat)
+        driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+    driver.Quiesce();
+    LUNATIC_CHECK(error);
+    LUNATIC_CHECK(!inflightAtError);
+    LUNATIC_CHECK(driver.node.GetTime() < 1000);
+    LUNATIC_CHECK(driver.node.GetErrors().size() == 1);
 }

@@ -240,7 +240,9 @@ namespace CHI::Lunatic {
             event.transaction = handle;
             if constexpr (requires { flit.Line(); })
                 event.line = flit.Line();
-            events->Publish(std::move(event));
+            const bool emitted = kind == EventKind::EmittedTXREQ || kind == EventKind::EmittedTXRSP ||
+                kind == EventKind::EmittedTXDAT || kind == EventKind::EmittedTXSNP;
+            events->Publish(std::move(event), !emitted);
         }
 
         template<typename T>
@@ -295,6 +297,7 @@ namespace CHI::Lunatic {
             std::optional<T> result(std::move(pending.flit));
             Publish(kind, *result, pending.transaction);
             OnEmitted(pending);
+            events->DispatchDeferred();
             return result;
         }
 
@@ -309,6 +312,7 @@ namespace CHI::Lunatic {
             std::optional<T> result(std::move(pending.flit));
             Publish(kind, *result, pending.transaction);
             OnEmitted(pending);
+            events->DispatchDeferred();
             return result;
         }
 
