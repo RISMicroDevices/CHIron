@@ -126,7 +126,10 @@ namespace CHI::Lunatic {
             }
             const auto requestClass = ClassifyRequest(transaction->request.opcode);
             const FlowState& flow = flows.at(transaction->handle);
-            bool responseComplete = transaction->phase == Phase::WaitCompAck && transaction->Complete(COMPLETE_RESPONSE);
+            bool responseComplete = transaction->Complete(COMPLETE_RESPONSE);
+            const bool earlyReadAck = !transaction->canceled && !flow.dmtActive && !flow.separatedResponse &&
+                IsReadRequest(transaction->request.opcode) && flow.readBeatsEmitted != 0 &&
+                !transaction->Complete(COMPLETE_RESPONSE);
             const bool earlyWriteAck = (requestClass == RequestClass::NonCoherentWrite ||
                 requestClass == RequestClass::ImmediateWrite) && flow.dbidEmitted &&
                 !transaction->Complete(COMPLETE_RESPONSE);
@@ -138,8 +141,11 @@ namespace CHI::Lunatic {
                                         : transaction->request.order == 0 || flow.readReceiptEmitted) &&
                 !transaction->Complete(COMPLETE_RESPONSE);
             const bool earlyDCTAck = flow.dctActive && !transaction->Complete(COMPLETE_RESPONSE);
-            if (!RequiresTransactionCompAck(*transaction) || transaction->Complete(COMPLETE_COMPACK) ||
-                (!responseComplete && !earlyWriteAck && !earlySeparatedAck && !dmtResponseReady && !earlyDCTAck))
+            const bool compAckAllowed = !transaction->canceled && (AllowsCompAck(transaction->request) ||
+                (requestClass == RequestClass::WriteEvictOrEvict && flow.evictOrEvictNoData));
+            if (!compAckAllowed || transaction->Complete(COMPLETE_COMPACK) ||
+                (!responseComplete && !earlyReadAck && !earlyWriteAck && !earlySeparatedAck &&
+                 !dmtResponseReady && !earlyDCTAck))
             {
                 Error(transaction->handle, "unexpected or early CompAck");
                 return;

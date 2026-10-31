@@ -198,6 +198,14 @@ namespace CHI::Lunatic {
                 requestClass == RequestClass::NonCoherentWrite || requestClass == RequestClass::ImmediateWrite);
     }
 
+    bool AllowsCompAck(const Request& request) noexcept
+    {
+        if (RequiresCompAck(request))
+            return true;
+        const auto requestClass = ClassifyRequest(request.opcode);
+        return requestClass == RequestClass::NonCoherentRead || requestClass == RequestClass::ReadOnce;
+    }
+
     bool RetryRequestCompatible(const Request& original, const Request& resend, NodeId retrySource) noexcept
     {
         if (resend.target != original.target && resend.target != retrySource)
