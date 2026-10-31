@@ -1286,6 +1286,7 @@ namespace Cohestra {
             int                             txCredits       = 0;
             int                             rxCredits       = 0;
             int                             rxPendingReturns= 0;
+            size_t                          rxCreditCapacity = 0;
 
             bool                            txDriven        = false;
 
@@ -1302,6 +1303,7 @@ namespace Cohestra {
 
             void SetRxCreditCount(size_t count) noexcept
             {
+                rxCreditCapacity = count;
                 rxPendingReturns = static_cast<int>(count);
             }
 
@@ -1416,6 +1418,27 @@ namespace Cohestra {
                 firedObservations.pop_front();
                 return { fired };
             }
+
+            bool IsDrained() const noexcept
+            {
+                return txBuffer.IsEmpty() && rxObservations.empty() && firedObservations.empty() &&
+                    !txDriven && rxPendingReturns == 0;
+            }
+
+            bool ValidateCreditAccounting() const noexcept
+            {
+                if (txCredits < 0 || txCredits > 15 || rxCredits < 0 || rxPendingReturns < 0)
+                    return false;
+                if (rxCreditCapacity > 15 || rxCredits > static_cast<int>(rxCreditCapacity) ||
+                    rxPendingReturns > static_cast<int>(rxCreditCapacity))
+                    return false;
+                if (txBuffer.Count() > txBuffer.Size() || (txDriven && (txBuffer.IsEmpty() || txCredits <= 0)))
+                    return false;
+
+                const uint64_t accounted = static_cast<uint64_t>(rxCredits) +
+                    static_cast<uint64_t>(rxPendingReturns) + rxObservations.size();
+                return accounted == rxCreditCapacity;
+            }
         };
 
 
@@ -1528,7 +1551,7 @@ namespace Cohestra {
     // ----------------------------------------------------------------
 
     template<class VT, template<class, size_t, class> class ChannelPolicy>
-    class V3CHIFromRNInterfaceT : public CHI::CHIFromRNInterface {
+    class V3CHIFromRNInterfaceT : public CHI::CHIFromRNInterface, public CHI::CHITransportStatusInterface {
     public:
         static constexpr bool HasPort0() noexcept { return details::V3CHIModuleRNPort0<VT>; }
         static constexpr bool HasPort1() noexcept { return details::V3CHIModuleRNPort1<VT>; }
@@ -1607,6 +1630,32 @@ namespace Cohestra {
         }
 
         virtual ~V3CHIFromRNInterfaceT() noexcept = default;
+
+    public:
+        virtual bool IsDrained() const noexcept override
+        {
+            for (const auto& entry : ports)
+            {
+                const auto& p = entry.second;
+                if (!p.txreq.IsDrained() || !p.txrsp.IsDrained() || !p.txdat.IsDrained() ||
+                    !p.rxrsp.IsDrained() || !p.rxdat.IsDrained() || !p.rxsnp.IsDrained())
+                    return false;
+            }
+            return true;
+        }
+
+        virtual bool ValidateCreditAccounting() const noexcept override
+        {
+            for (const auto& entry : ports)
+            {
+                const auto& p = entry.second;
+                if (!p.txreq.ValidateCreditAccounting() || !p.txrsp.ValidateCreditAccounting() ||
+                    !p.txdat.ValidateCreditAccounting() || !p.rxrsp.ValidateCreditAccounting() ||
+                    !p.rxdat.ValidateCreditAccounting() || !p.rxsnp.ValidateCreditAccounting())
+                    return false;
+            }
+            return true;
+        }
 
     public:
         virtual void TickPreHandshake(uint64_t time) noexcept override
@@ -1822,7 +1871,7 @@ namespace Cohestra {
     // ----------------------------------------------------------------
 
     template<class VT, template<class, size_t, class> class ChannelPolicy>
-    class V3CHIToRNInterfaceT : public CHI::CHIToRNInterface {
+    class V3CHIToRNInterfaceT : public CHI::CHIToRNInterface, public CHI::CHITransportStatusInterface {
     public:
         static constexpr bool HasPort0() noexcept { return details::V3CHIModuleRNPort0<VT>; }
         static constexpr bool HasPort1() noexcept { return details::V3CHIModuleRNPort1<VT>; }
@@ -1904,6 +1953,32 @@ namespace Cohestra {
         }
 
         virtual ~V3CHIToRNInterfaceT() noexcept = default;
+
+    public:
+        virtual bool IsDrained() const noexcept override
+        {
+            for (const auto& entry : ports)
+            {
+                const auto& p = entry.second;
+                if (!p.rxrsp.IsDrained() || !p.rxdat.IsDrained() || !p.rxsnp.IsDrained() ||
+                    !p.txreq.IsDrained() || !p.txrsp.IsDrained() || !p.txdat.IsDrained())
+                    return false;
+            }
+            return true;
+        }
+
+        virtual bool ValidateCreditAccounting() const noexcept override
+        {
+            for (const auto& entry : ports)
+            {
+                const auto& p = entry.second;
+                if (!p.rxrsp.ValidateCreditAccounting() || !p.rxdat.ValidateCreditAccounting() ||
+                    !p.rxsnp.ValidateCreditAccounting() || !p.txreq.ValidateCreditAccounting() ||
+                    !p.txrsp.ValidateCreditAccounting() || !p.txdat.ValidateCreditAccounting())
+                    return false;
+            }
+            return true;
+        }
 
     public:
         virtual void TickPreHandshake(uint64_t time) noexcept override
@@ -2093,7 +2168,7 @@ namespace Cohestra {
     // ----------------------------------------------------------------
 
     template<class VT, template<class, size_t, class> class ChannelPolicy>
-    class V3CHIFromSNInterfaceT : public CHI::CHIFromSNInterface {
+    class V3CHIFromSNInterfaceT : public CHI::CHIFromSNInterface, public CHI::CHITransportStatusInterface {
     public:
         static constexpr bool HasPort0() noexcept { return details::V3CHIModuleSNPort0<VT>; }
         static constexpr bool HasPort1() noexcept { return details::V3CHIModuleSNPort1<VT>; }
@@ -2167,6 +2242,31 @@ namespace Cohestra {
         }
 
         virtual ~V3CHIFromSNInterfaceT() noexcept = default;
+
+    public:
+        virtual bool IsDrained() const noexcept override
+        {
+            for (const auto& entry : ports)
+            {
+                const auto& p = entry.second;
+                if (!p.txrsp.IsDrained() || !p.txdat.IsDrained() ||
+                    !p.rxreq.IsDrained() || !p.rxdat.IsDrained())
+                    return false;
+            }
+            return true;
+        }
+
+        virtual bool ValidateCreditAccounting() const noexcept override
+        {
+            for (const auto& entry : ports)
+            {
+                const auto& p = entry.second;
+                if (!p.txrsp.ValidateCreditAccounting() || !p.txdat.ValidateCreditAccounting() ||
+                    !p.rxreq.ValidateCreditAccounting() || !p.rxdat.ValidateCreditAccounting())
+                    return false;
+            }
+            return true;
+        }
 
     public:
         virtual void TickPreHandshake(uint64_t time) noexcept override
@@ -2315,7 +2415,7 @@ namespace Cohestra {
     // ----------------------------------------------------------------
 
     template<class VT, template<class, size_t, class> class ChannelPolicy>
-    class V3CHIToSNInterfaceT : public CHI::CHIToSNInterface {
+    class V3CHIToSNInterfaceT : public CHI::CHIToSNInterface, public CHI::CHITransportStatusInterface {
     public:
         static constexpr bool HasPort0() noexcept { return details::V3CHIModuleSNPort0<VT>; }
         static constexpr bool HasPort1() noexcept { return details::V3CHIModuleSNPort1<VT>; }
@@ -2391,6 +2491,31 @@ namespace Cohestra {
         }
 
         virtual ~V3CHIToSNInterfaceT() noexcept = default;
+
+    public:
+        virtual bool IsDrained() const noexcept override
+        {
+            for (const auto& entry : ports)
+            {
+                const auto& p = entry.second;
+                if (!p.rxreq.IsDrained() || !p.rxdat.IsDrained() ||
+                    !p.txrsp.IsDrained() || !p.txdat.IsDrained())
+                    return false;
+            }
+            return true;
+        }
+
+        virtual bool ValidateCreditAccounting() const noexcept override
+        {
+            for (const auto& entry : ports)
+            {
+                const auto& p = entry.second;
+                if (!p.rxreq.ValidateCreditAccounting() || !p.rxdat.ValidateCreditAccounting() ||
+                    !p.txrsp.ValidateCreditAccounting() || !p.txdat.ValidateCreditAccounting())
+                    return false;
+            }
+            return true;
+        }
 
     public:
         virtual void TickPreHandshake(uint64_t time) noexcept override

@@ -89,6 +89,15 @@ namespace Cohestra::CHI {
     using BundleChannelSNP  = BundleChannel<SNPFlit>;
 
 
+    class CHITransportStatusInterface {
+    public:
+        virtual ~CHITransportStatusInterface() noexcept = default;
+
+        virtual bool IsDrained() const noexcept = 0;
+        virtual bool ValidateCreditAccounting() const noexcept = 0;
+    };
+
+
     // A timestamped flit captured at a completed handshake.
     template<class TFlit>
     class FiredFlit {

@@ -326,3 +326,76 @@ LUNATIC_TEST(Stage9FlitPendPrecedesTransfers)
     LUNATIC_CHECK(mock.flitpend);
     LUNATIC_CHECK(!mock.flitv);
 }
+
+LUNATIC_TEST(Stage9TransportDrainAndCreditConservation)
+{
+    CHICreditChannel<Cohestra::CHI::REQFlit> channel;
+    channel.SetBufferSize(1);
+    channel.SetRxCreditCount(2);
+    LUNATIC_CHECK(channel.ValidateCreditAccounting());
+    LUNATIC_CHECK(!channel.IsDrained());
+
+    CreditPinMock mock;
+    for (size_t index = 0; index < 2; ++index)
+    {
+        channel.ReturnCredits<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+        LUNATIC_CHECK(mock.lcrdv);
+        LUNATIC_CHECK(channel.ValidateCreditAccounting());
+    }
+    LUNATIC_CHECK(channel.rxCredits == 2);
+    LUNATIC_CHECK(channel.rxPendingReturns == 0);
+    LUNATIC_CHECK(channel.IsDrained());
+
+    Cohestra::CHI::REQFlit request{};
+    request.TxnID() = 0x51;
+    mock.flitv = 1;
+    mock.flit = request;
+    channel.Observe<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock, 0);
+    LUNATIC_CHECK(channel.rxCredits == 1);
+    LUNATIC_CHECK(channel.rxObservations.size() == 1);
+    LUNATIC_CHECK(channel.ValidateCreditAccounting());
+    LUNATIC_CHECK(!channel.IsDrained());
+
+    const auto* peek = channel.PeekObservation();
+    LUNATIC_CHECK(peek && peek->TxnID() == request.TxnID());
+    LUNATIC_CHECK(channel.PeekObservation() == peek);
+    LUNATIC_CHECK(channel.rxObservations.size() == 1);
+    const auto observed = channel.PopObservation();
+    LUNATIC_CHECK(observed && observed->TxnID() == request.TxnID());
+    LUNATIC_CHECK(channel.rxPendingReturns == 1);
+    LUNATIC_CHECK(channel.ValidateCreditAccounting());
+    LUNATIC_CHECK(!channel.IsDrained());
+
+    channel.ReturnCredits<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+    LUNATIC_CHECK(channel.rxCredits == 2);
+    LUNATIC_CHECK(channel.rxPendingReturns == 0);
+    LUNATIC_CHECK(channel.ValidateCreditAccounting());
+    LUNATIC_CHECK(channel.IsDrained());
+
+    mock.flitv = 0;
+    mock.lcrdv = 0;
+    LUNATIC_CHECK(channel.Push(request));
+    LUNATIC_CHECK(!channel.Push(request));
+    LUNATIC_CHECK(channel.txBuffer.Count() == 1);
+    channel.Drive<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+    LUNATIC_CHECK(!channel.txDriven);
+    mock.lcrdv = 1;
+    channel.Retire<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+    LUNATIC_CHECK(channel.txCredits == 1);
+
+    mock.lcrdv = 0;
+    channel.Drive<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+    LUNATIC_CHECK(channel.txDriven);
+    LUNATIC_CHECK(channel.ValidateCreditAccounting());
+    LUNATIC_CHECK(!channel.IsDrained());
+    channel.Retire<CreditPinMock, CreditPinPolicy, 0, TXREQChannel>(mock);
+    LUNATIC_CHECK(channel.txBuffer.IsEmpty());
+    LUNATIC_CHECK(channel.IsDrained());
+    LUNATIC_CHECK(channel.ValidateCreditAccounting());
+
+    channel.rxCredits = 3;
+    LUNATIC_CHECK(!channel.ValidateCreditAccounting());
+    channel.rxCredits = 2;
+    channel.txCredits = -1;
+    LUNATIC_CHECK(!channel.ValidateCreditAccounting());
+}
