@@ -1,6 +1,6 @@
 #pragma once
 
-#include "chi_lunatic_component.hpp"
+#include "chi_lunatic_core.hpp"
 
 namespace CHI::Lunatic {
 
@@ -36,19 +36,19 @@ namespace CHI::Lunatic {
         bool PushDownstreamRSP(const RSPFlit& flit) { return node.PushRXRSP(flit); }
         bool PushDownstreamDAT(const DATFlit& flit) { return node.PushRXDAT(flit); }
 
-        std::optional<RSPFlit>      PeekUpstreamRSP() const { return node.PeekTXRSP(); }
-        std::optional<DATFlit>      PeekUpstreamDAT() const { return node.PeekTXDAT(); }
+        std::optional<RSPFlit>      PeekUpstreamRSP() const { return node.PeekTXRSP(false); }
+        std::optional<DATFlit>      PeekUpstreamDAT() const { return node.PeekTXDAT(false); }
         std::optional<SNPEmission> PeekUpstreamSNP() const { return node.PeekTXSNP(); }
         std::optional<REQFlit>      PeekDownstreamREQ() const { return node.PeekTXREQ(); }
-        std::optional<RSPFlit>      PeekDownstreamRSP() const { return node.PeekTXRSP(); }
-        std::optional<DATFlit>      PeekDownstreamDAT() const { return node.PeekTXDAT(); }
+        std::optional<RSPFlit>      PeekDownstreamRSP() const { return node.PeekTXRSP(true); }
+        std::optional<DATFlit>      PeekDownstreamDAT() const { return node.PeekTXDAT(true); }
 
-        std::optional<RSPFlit>      PopUpstreamRSP() { return node.PopTXRSP(); }
-        std::optional<DATFlit>      PopUpstreamDAT() { return node.PopTXDAT(); }
+        std::optional<RSPFlit>      PopUpstreamRSP() { return node.PopTXRSP(false); }
+        std::optional<DATFlit>      PopUpstreamDAT() { return node.PopTXDAT(false); }
         std::optional<SNPEmission> PopUpstreamSNP() { return node.PopTXSNP(); }
         std::optional<REQFlit>      PopDownstreamREQ() { return node.PopTXREQ(); }
-        std::optional<RSPFlit>      PopDownstreamRSP() { return node.PopTXRSP(); }
-        std::optional<DATFlit>      PopDownstreamDAT() { return node.PopTXDAT(); }
+        std::optional<RSPFlit>      PopDownstreamRSP() { return node.PopTXRSP(true); }
+        std::optional<DATFlit>      PopDownstreamDAT() { return node.PopTXDAT(true); }
     };
 
 }
