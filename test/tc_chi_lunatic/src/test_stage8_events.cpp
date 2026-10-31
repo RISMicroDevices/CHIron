@@ -55,10 +55,85 @@ LUNATIC_TEST(Stage8EventDecisionPayloads)
         VictimSelectionEvent(3, 2, 9, VictimDomain::Directory, request.Line(), { 0, 1, 3 }));
     LUNATIC_CHECK(victim.GetSelectedVictim() == 3);
 
+    transaction.homeHit = true;
+    events->OnSnoopForwarding.Register(
+        Gravity::MakeListener<SnoopForwardingEvent>("normal", -1, [&](SnoopForwardingEvent& event) {
+            LUNATIC_CHECK(event.IsForwarding());
+            LUNATIC_CHECK(event.request == request);
+            LUNATIC_CHECK(event.provider == 6);
+            LUNATIC_CHECK(event.providerState == CacheState::UD);
+            LUNATIC_CHECK(event.trackedOwners == 1);
+            LUNATIC_CHECK(event.homeHit);
+            LUNATIC_CHECK(!event.homeDirty);
+            event.UseNonForwarding();
+        }));
+    events->OnSnoopForwarding.Register(
+        Gravity::MakeListener<SnoopForwardingEvent>("forward", 1, [&](SnoopForwardingEvent& event) {
+            LUNATIC_CHECK(!event.IsForwarding());
+            event.UseForwarding();
+        }));
+    const auto forwarding = events->Decide(SnoopForwardingEvent(3, 2, transaction, 6, CacheState::UD, 1, false));
+    LUNATIC_CHECK(forwarding.IsForwarding());
+
     events->Clear();
     LUNATIC_CHECK(events->OnRequestAdmission.empty());
     LUNATIC_CHECK(events->OnTransactionSchedule.empty());
     LUNATIC_CHECK(events->OnVictimSelection.empty());
+    LUNATIC_CHECK(events->OnSnoopForwarding.empty());
+}
+
+LUNATIC_TEST(Stage8EventSnoopForwardingReentryRejected)
+{
+    auto events = std::make_shared<EventHub>();
+    HomeNode<Config256> node(2, {}, events);
+    Request request;
+    request.source = 4;
+    request.target = 2;
+    request.opcode = CHI::Eb::Opcodes::REQ::ReadShared;
+    Transaction transaction(9, request, 1);
+    events->OnSnoopForwarding.Register(
+        Gravity::MakeListener<SnoopForwardingEvent>("reentry", 0, [&](SnoopForwardingEvent& event) {
+            node.Tick(99);
+            event.UseNonForwarding();
+        }));
+
+    const auto decision = events->Decide(SnoopForwardingEvent(3, 2, transaction, 6, CacheState::UD, 1, false));
+    LUNATIC_CHECK(!decision.IsForwarding());
+    LUNATIC_CHECK(node.GetTime() == 0);
+    LUNATIC_CHECK(node.GetErrors().size() == 1);
+}
+
+LUNATIC_TEST(Stage8EventDeferredOtherNodeCannotReenterOrigin)
+{
+    auto events = std::make_shared<EventHub>();
+    HomeNode<Config256> first(2, {}, events);
+    HomeNode<Config256> second(3, {}, events);
+    Request request;
+    request.source = 4;
+    request.target = 2;
+    request.opcode = CHI::Eb::Opcodes::REQ::ReadShared;
+    Transaction transaction(9, request, 1);
+    bool deferred = false;
+    events->OnSnoopForwarding.Register(
+        Gravity::MakeListener<SnoopForwardingEvent>("origin", 0, [&](SnoopForwardingEvent&) {
+            Event notification;
+            notification.kind = EventKind::Reset;
+            notification.home = 3;
+            events->Publish(std::move(notification));
+        }));
+    events->OnReset.Register(Gravity::MakeListener<ResetEvent>("other", 0, [&](ResetEvent& event) {
+        if (event.home != 3)
+            return;
+        deferred = true;
+        first.Reset();
+    }));
+
+    const auto decision = events->Decide(SnoopForwardingEvent(3, 2, transaction, 6, CacheState::UD, 1, false));
+    LUNATIC_CHECK(decision.IsForwarding());
+    LUNATIC_CHECK(deferred);
+    LUNATIC_CHECK(first.GetErrors().size() == 1);
+    LUNATIC_CHECK(second.GetErrors().empty());
+    LUNATIC_CHECK(!events->Dispatching());
 }
 
 LUNATIC_TEST(Stage8EventObservationReentryRejected)

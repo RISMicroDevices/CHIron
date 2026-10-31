@@ -160,6 +160,13 @@ namespace CHI::Lunatic {
             flow.dctActive = ForwardingOpcode(transaction.request.opcode) != 0 &&
                 transaction.request.size == 6 && !flow.homeDirty && !inclusiveMiss &&
                 (!uniqueProviderRequired || soleProvider);
+            if (flow.dctActive)
+            {
+                const auto decision = events->Decide(SnoopForwardingEvent(time, nodeId, transaction,
+                    flow.dctTarget, snoopFilter.State(transaction.request.Line(), flow.dctTarget),
+                    owners.size(), flow.homeDirty));
+                flow.dctActive = decision.IsForwarding();
+            }
         }
 
         transaction.snoopTargets = candidates;
@@ -386,35 +393,98 @@ namespace CHI::Lunatic {
             return false;
         const CacheState provider = DecodeSnoopState(transaction, target, resp, false);
         const uint16_t opcode = SnoopOpcode(transaction, flow, target);
-        bool requesterStateLegal = false;
-        bool providerStateLegal = true;
+        const bool passDirty = withData && (resp & CHI::Eb::Resps::PassDirty) != 0;
+        if (passDirty && !IsDirty(initial))
+            return false;
+
+        bool legal = false;
         switch (opcode)
         {
             case CHI::Eb::Opcodes::SNP::SnpOnceFwd:
-                requesterStateLegal = *requester == CacheState::I;
-                break;
-            case CHI::Eb::Opcodes::SNP::SnpSharedFwd:
-                requesterStateLegal = *requester == CacheState::SC || *requester == CacheState::SD ||
-                    *requester == CacheState::UD;
-                providerStateLegal = !IsUnique(provider);
+                if (*requester != CacheState::I)
+                    break;
+                switch (initial)
+                {
+                    case CacheState::UC:
+                        legal = !withData && (provider == CacheState::UC || provider == CacheState::SC ||
+                            provider == CacheState::I);
+                        break;
+                    case CacheState::UD:
+                        legal = (!withData && (provider == CacheState::UD || provider == CacheState::SD)) ||
+                            (withData && passDirty && (provider == CacheState::SC || provider == CacheState::I));
+                        break;
+                    case CacheState::SC:
+                        legal = !withData && (provider == CacheState::SC || provider == CacheState::I);
+                        break;
+                    case CacheState::SD:
+                        legal = (!withData && provider == CacheState::SD) ||
+                            (withData && passDirty && (provider == CacheState::SC || provider == CacheState::I));
+                        break;
+                    default:
+                        break;
+                }
                 break;
             case CHI::Eb::Opcodes::SNP::SnpCleanFwd:
             case CHI::Eb::Opcodes::SNP::SnpNotSharedDirtyFwd:
-                requesterStateLegal = *requester == CacheState::SC;
-                providerStateLegal = !IsUnique(provider);
+                if (*requester != CacheState::SC)
+                    break;
+                if (initial == CacheState::UC || initial == CacheState::SC)
+                    legal = !withData && (provider == CacheState::SC || provider == CacheState::I);
+                else if (initial == CacheState::UD || initial == CacheState::SD)
+                    legal = (!withData && provider == CacheState::SD) ||
+                        (withData && passDirty && (provider == CacheState::SC || provider == CacheState::I));
+                break;
+            case CHI::Eb::Opcodes::SNP::SnpSharedFwd:
+                if (initial == CacheState::UC || initial == CacheState::SC)
+                {
+                    legal = *requester == CacheState::SC && !withData && !passDirty &&
+                        (provider == CacheState::SC || provider == CacheState::I);
+                }
+                else if (initial == CacheState::UD || initial == CacheState::SD)
+                {
+                    if (provider == CacheState::SD)
+                        legal = *requester == CacheState::SC && !withData && !passDirty;
+                    else if (provider == CacheState::SC || provider == CacheState::I)
+                    {
+                        if (*requester == CacheState::SD)
+                            legal = !withData && !passDirty;
+                        else if (*requester == CacheState::SC)
+                            legal = withData && passDirty;
+                    }
+                }
                 break;
             case CHI::Eb::Opcodes::SNP::SnpUniqueFwd:
-                requesterStateLegal = *requester == CacheState::UC || *requester == CacheState::UD;
-                providerStateLegal = provider == CacheState::I;
+                legal = provider == CacheState::I && !withData && !passDirty &&
+                    (((initial == CacheState::UC || initial == CacheState::SC) && *requester == CacheState::UC) ||
+                     ((initial == CacheState::UD || initial == CacheState::SD) && *requester == CacheState::UD));
                 break;
             case CHI::Eb::Opcodes::SNP::SnpPreferUniqueFwd:
-                requesterStateLegal = *requester == CacheState::SC || *requester == CacheState::UC ||
-                    *requester == CacheState::UD;
+                if (provider == CacheState::I)
+                {
+                    legal = !withData && !passDirty &&
+                        (((initial == CacheState::UC || initial == CacheState::SC) && *requester == CacheState::UC) ||
+                         ((initial == CacheState::UD || initial == CacheState::SD) && *requester == CacheState::UD));
+                }
+                else if (initial == CacheState::UC)
+                {
+                    legal = *requester == CacheState::SC && provider == CacheState::SC && !withData && !passDirty;
+                }
+                else if (initial == CacheState::UD || initial == CacheState::SD)
+                {
+                    if (provider == CacheState::SD)
+                        legal = *requester == CacheState::SC && !withData && !passDirty;
+                    else if (provider == CacheState::SC)
+                        legal = *requester == CacheState::SC && withData && passDirty;
+                }
+                else if (initial == CacheState::SC)
+                {
+                    legal = *requester == CacheState::SC && provider == CacheState::SC && !withData && !passDirty;
+                }
                 break;
             default:
                 return false;
         }
-        if (!requesterStateLegal || !providerStateLegal)
+        if (!legal)
             return false;
         if (options.doNotGoToSD && provider == CacheState::SD &&
             opcode != CHI::Eb::Opcodes::SNP::SnpOnceFwd)
@@ -472,7 +542,13 @@ namespace CHI::Lunatic {
                 return false;
             return !IsDirty(initial) || (withData && passDirty);
         }
-        if (options.doNotGoToSD && final == CacheState::SD && opcode != CHI::Eb::Opcodes::SNP::SnpOnce)
+        if (options.doNotGoToSD && final == CacheState::SD && opcode != CHI::Eb::Opcodes::SNP::SnpOnce &&
+            opcode != CHI::Eb::Opcodes::SNP::SnpOnceFwd)
+            return false;
+        if ((opcode == CHI::Eb::Opcodes::SNP::SnpShared || opcode == CHI::Eb::Opcodes::SNP::SnpSharedFwd ||
+             opcode == CHI::Eb::Opcodes::SNP::SnpClean || opcode == CHI::Eb::Opcodes::SNP::SnpCleanFwd ||
+             opcode == CHI::Eb::Opcodes::SNP::SnpNotSharedDirty ||
+             opcode == CHI::Eb::Opcodes::SNP::SnpNotSharedDirtyFwd) && IsUnique(final))
             return false;
         if (opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid ||
             opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash)
@@ -494,13 +570,13 @@ namespace CHI::Lunatic {
             }
         }
         const bool invalidateWithData = opcode == CHI::Eb::Opcodes::SNP::SnpUnique ||
-            opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid;
+            opcode == CHI::Eb::Opcodes::SNP::SnpUniqueFwd || opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid;
         if (invalidateWithData && final != CacheState::I)
             return false;
         if (IsDirty(initial) && invalidateWithData)
             return withData && passDirty;
         if (IsDirty(initial) && opcode != CHI::Eb::Opcodes::SNP::SnpMakeInvalid &&
-            opcode != CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash && !withData)
+            opcode != CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash && !withData && !IsDirty(final))
             return false;
         return true;
     }

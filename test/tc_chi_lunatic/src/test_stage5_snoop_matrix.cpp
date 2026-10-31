@@ -102,7 +102,7 @@ namespace {
                 driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadShared, 5, 12, line.address, true));
                 {
                     auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpShared);
-                    driver.SnoopData(6, snoop.flit.TxnID(), data, CHI::Eb::Resps::SnpRespData_UC_PD);
+                    driver.SnoopData(6, snoop.flit.TxnID(), data, CHI::Eb::Resps::SnpRespData_SC_PD);
                 }
                 LUNATIC_CHECK(ReceiveMatrixData(driver, 5, 12) == data);
                 driver.Quiesce();

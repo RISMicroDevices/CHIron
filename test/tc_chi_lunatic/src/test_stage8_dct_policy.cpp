@@ -210,15 +210,237 @@ LUNATIC_TEST(Stage8DCTDoubleDataCommitsRequesterAndHome)
 
     const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, line,
         CHI::Eb::Opcodes::SNP::SnpSharedFwd);
-    SendDirectData(driver, 6, 4, 1, snoop, expected, CHI::Eb::Resps::CompData_SD_PD);
-    SendForwardedHomeData(driver, 6, snoop, expected, CHI::Eb::Resps::SnpRespData_I,
-        CHI::Eb::FwdStates::SD_PD);
+    SendDirectData(driver, 6, 4, 1, snoop, expected, CHI::Eb::Resps::CompData_SC);
+    SendForwardedHomeData(driver, 6, snoop, expected, CHI::Eb::Resps::SnpRespData_I_PD,
+        CHI::Eb::FwdStates::SC);
     driver.CompAck(4, snoop.flit.TxnID());
     driver.Quiesce();
-    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::SD);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::SC);
     LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::I);
     LUNATIC_CHECK(driver.driver.node.InspectHome(line).valid);
-    LUNATIC_CHECK(!driver.driver.node.InspectHome(line).dirty);
+    LUNATIC_CHECK(driver.driver.node.InspectHome(line).dirty);
     LUNATIC_CHECK(driver.driver.node.InspectHome(line).data == expected);
     LUNATIC_CHECK(!driver.driver.node.PeekTXDAT());
+}
+
+LUNATIC_TEST(Stage8DCTEventForcesNormalSnoop)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x55000, false);
+    const LineData expected{};
+    SeedDirtyProvider(driver, line, expected);
+
+    size_t decisions = 0;
+    driver.driver.node.GetEvents()->OnSnoopForwarding.Register(
+        Gravity::MakeListener<SnoopForwardingEvent>("normal", 0, [&](SnoopForwardingEvent& event) {
+            ++decisions;
+            LUNATIC_CHECK(event.home == 2);
+            LUNATIC_CHECK(event.request.opcode == CHI::Eb::Opcodes::REQ::ReadShared);
+            LUNATIC_CHECK(event.request.source == 4);
+            LUNATIC_CHECK(event.provider == 6);
+            LUNATIC_CHECK(event.providerState == CacheState::UD);
+            LUNATIC_CHECK(event.trackedOwners == 1);
+            LUNATIC_CHECK(!event.homeHit);
+            LUNATIC_CHECK(!event.homeDirty);
+            event.UseNonForwarding();
+        }));
+    const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, line,
+        CHI::Eb::Opcodes::SNP::SnpShared);
+    LUNATIC_CHECK(snoop.flit.FwdNID() == 0);
+    LUNATIC_CHECK(snoop.flit.FwdTxnID() == 0);
+    driver.SnoopData(6, snoop.flit.TxnID(), expected, CHI::Eb::Resps::SnpRespData_SC_PD);
+    ReceiveHomeData(driver, 4);
+    driver.Quiesce();
+    LUNATIC_CHECK(decisions == 1);
+}
+
+LUNATIC_TEST(Stage8DCTEventSelectsForwarding)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x56000, false);
+    const LineData expected{};
+    SeedDirtyProvider(driver, line, expected);
+
+    size_t decisions = 0;
+    driver.driver.node.GetEvents()->OnSnoopForwarding.Register(
+        Gravity::MakeListener<SnoopForwardingEvent>("forward", 0, [&](SnoopForwardingEvent& event) {
+            ++decisions;
+            LUNATIC_CHECK(event.IsForwarding());
+            event.UseForwarding();
+        }));
+    const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, line,
+        CHI::Eb::Opcodes::SNP::SnpSharedFwd);
+    SendDirectData(driver, 6, 4, 1, snoop, expected, CHI::Eb::Resps::CompData_SD_PD);
+    SendForwardedResponse(driver, 6, snoop, CHI::Eb::Resps::SnpResp_I, CHI::Eb::FwdStates::SD_PD);
+    driver.CompAck(4, snoop.flit.TxnID());
+    driver.Quiesce();
+    LUNATIC_CHECK(decisions == 1);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::SD);
+    LUNATIC_CHECK(!driver.driver.node.PeekTXSNP());
+    LUNATIC_CHECK(decisions == 1);
+}
+
+LUNATIC_TEST(Stage8DCTEventDisabledOffersNoChoice)
+{
+    Options options;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x57000, false);
+    const LineData expected{};
+    SeedDirtyProvider(driver, line, expected);
+
+    size_t decisions = 0;
+    driver.driver.node.GetEvents()->OnSnoopForwarding.Register(
+        Gravity::MakeListener<SnoopForwardingEvent>("disabled", 0, [&](SnoopForwardingEvent& event) {
+            ++decisions;
+            event.UseForwarding();
+        }));
+    const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, line,
+        CHI::Eb::Opcodes::SNP::SnpShared);
+    driver.SnoopData(6, snoop.flit.TxnID(), expected, CHI::Eb::Resps::SnpRespData_SC_PD);
+    ReceiveHomeData(driver, 4);
+    driver.Quiesce();
+    LUNATIC_CHECK(decisions == 0);
+}
+
+LUNATIC_TEST(Stage8DCTPreferUniqueForwardsSingleOwner)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x58000, false);
+    const LineData expected{};
+    SeedDirtyProvider(driver, line, expected);
+
+    const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadPreferUnique, 4, 1, line,
+        CHI::Eb::Opcodes::SNP::SnpPreferUniqueFwd);
+    SendDirectData(driver, 6, 4, 1, snoop, expected, CHI::Eb::Resps::CompData_UD_PD);
+    SendForwardedResponse(driver, 6, snoop, CHI::Eb::Resps::SnpResp_I, CHI::Eb::FwdStates::UD_PD);
+    driver.CompAck(4, snoop.flit.TxnID());
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::UD);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::I);
+}
+
+LUNATIC_TEST(Stage8DCTRejectsSharedUniqueForward)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x59000, false);
+    const LineData expected{};
+    SeedDirtyProvider(driver, line, expected);
+
+    const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, line,
+        CHI::Eb::Opcodes::SNP::SnpSharedFwd);
+    SendForwardedResponse(driver, 6, snoop, CHI::Eb::Resps::SnpResp_I, CHI::Eb::FwdStates::UD_PD);
+    LUNATIC_CHECK(!driver.driver.node.GetErrors().empty());
+    LUNATIC_CHECK(driver.driver.node.HasInflight());
+}
+
+LUNATIC_TEST(Stage8DCTRejectsPreferUniqueInvalidCorrelation)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x5a000, false);
+    const LineData expected{};
+    SeedDirtyProvider(driver, line, expected);
+
+    const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadPreferUnique, 4, 1, line,
+        CHI::Eb::Opcodes::SNP::SnpPreferUniqueFwd);
+    SendForwardedResponse(driver, 6, snoop, CHI::Eb::Resps::SnpResp_I, CHI::Eb::FwdStates::SC);
+    LUNATIC_CHECK(!driver.driver.node.GetErrors().empty());
+    LUNATIC_CHECK(driver.driver.node.HasInflight());
+}
+
+LUNATIC_TEST(Stage8DCTForwardedReadAllPoliciesWithEarlyCompAck)
+{
+    for (PolicyKind policy : { PolicyKind::NINE, PolicyKind::Exclusive, PolicyKind::Inclusive })
+    {
+        Options options;
+        options.policy = policy;
+        options.dctEnabled = true;
+        CheckedDriver<Config256> driver(options);
+        const LineKey line = LineKey::FromAddress(0x5b000, false);
+        const LineData expected{};
+        SeedDirtyProvider(driver, line, expected);
+
+        const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, line,
+            CHI::Eb::Opcodes::SNP::SnpSharedFwd);
+        SendDirectData(driver, 6, 4, 1, snoop, expected, CHI::Eb::Resps::CompData_SD_PD);
+        driver.CompAck(4, snoop.flit.TxnID());
+        SendForwardedResponse(driver, 6, snoop, CHI::Eb::Resps::SnpResp_I, CHI::Eb::FwdStates::SD_PD);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::SD);
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::I);
+    }
+}
+
+LUNATIC_TEST(Stage8DCTMixedForwardAndOrdinaryInvalidation)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x5c000, false);
+    const LineData expected{};
+    SeedSharedDirtyPair(driver, line, expected);
+
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid, 4, 1, line.address, true);
+    request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+    request.SnpAttr() = 1;
+    driver.PushRequest(request);
+    const auto forwarded = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpOnceFwd);
+    const auto invalidated = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
+    LUNATIC_CHECK(forwarded.target == 6);
+    LUNATIC_CHECK(invalidated.target == 8);
+    LUNATIC_CHECK(!forwarded.flit.RetToSrc());
+    LUNATIC_CHECK(invalidated.flit.RetToSrc());
+    SendDirectData(driver, 6, 4, 1, forwarded, expected, CHI::Eb::Resps::CompData_I);
+    SendForwardedResponse(driver, 6, forwarded, CHI::Eb::Resps::SnpResp_SC, CHI::Eb::FwdStates::I);
+    driver.SnoopData(8, invalidated.flit.TxnID(), expected, CHI::Eb::Resps::SnpRespData_I_PD);
+    driver.CompAck(4, forwarded.flit.TxnID());
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::SC);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 8) == CacheState::I);
+    LUNATIC_CHECK(driver.driver.node.GetMemory().Read(line) == expected);
+}
+
+LUNATIC_TEST(Stage8DCTRejectsCleanHomeDataReturn)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x5d000, false);
+    const LineData expected{};
+    driver.ReadData(6, 90, line.address, CHI::Eb::Opcodes::REQ::ReadUnique);
+    driver.Quiesce();
+
+    const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, line,
+        CHI::Eb::Opcodes::SNP::SnpSharedFwd);
+    SendForwardedHomeData(driver, 6, snoop, expected, CHI::Eb::Resps::SnpRespData_SC,
+        CHI::Eb::FwdStates::SC);
+    LUNATIC_CHECK(!driver.driver.node.GetErrors().empty());
+    LUNATIC_CHECK(driver.driver.node.HasInflight());
+}
+
+LUNATIC_TEST(Stage8DCTRejectsDirtyHomeCopyWithoutPassDirty)
+{
+    Options options;
+    options.dctEnabled = true;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x5e000, false);
+    const LineData expected{};
+    SeedDirtyProvider(driver, line, expected);
+
+    const auto snoop = StartDCT(driver, CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, line,
+        CHI::Eb::Opcodes::SNP::SnpSharedFwd);
+    SendForwardedHomeData(driver, 6, snoop, expected, CHI::Eb::Resps::SnpRespData_I,
+        CHI::Eb::FwdStates::SD_PD);
+    LUNATIC_CHECK(!driver.driver.node.GetErrors().empty());
+    LUNATIC_CHECK(driver.driver.node.HasInflight());
 }

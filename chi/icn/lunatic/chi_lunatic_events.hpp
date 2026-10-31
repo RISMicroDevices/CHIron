@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chi_lunatic_types.hpp"
+#include "chi_lunatic_state.hpp"
 #include "../../../common/eventbus.hpp"
 
 #include <cstdint>
@@ -133,6 +134,27 @@ namespace CHI::Lunatic {
         std::optional<size_t> GetSelectedVictim() const noexcept { return selectedWay; }
     };
 
+    class SnoopForwardingEvent : public Gravity::Event<SnoopForwardingEvent> {
+        bool forwarding = true;
+
+    public:
+        const Time              time;
+        const NodeId            home;
+        const TransactionHandle transaction;
+        const Request           request;
+        const NodeId            provider;
+        const CacheState        providerState;
+        const size_t            trackedOwners;
+        const bool              homeHit;
+        const bool              homeDirty;
+
+        SnoopForwardingEvent(Time time, NodeId home, const Transaction& transaction, NodeId provider,
+                             CacheState providerState, size_t trackedOwners, bool homeDirty);
+        void UseForwarding() noexcept { forwarding = true; }
+        void UseNonForwarding() noexcept { forwarding = false; }
+        bool IsForwarding() const noexcept { return forwarding; }
+    };
+
     class EventHub {
         size_t             dispatchDepth = 0;
         std::deque<Event>   deferred;
@@ -191,7 +213,8 @@ namespace CHI::Lunatic {
             Bus<kind>().Fire(record);
         }
 
-        void FlushDeferred();
+        void Dispatch(Event event);
+        void FlushDeferred(bool force = false);
 
     public:
         Gravity::EventBus<AcceptedRXREQEvent>       OnAcceptedRXREQ;
@@ -208,6 +231,7 @@ namespace CHI::Lunatic {
         Gravity::EventBus<RequestAdmissionEvent>    OnRequestAdmission;
         Gravity::EventBus<TransactionScheduleEvent> OnTransactionSchedule;
         Gravity::EventBus<VictimSelectionEvent>     OnVictimSelection;
+        Gravity::EventBus<SnoopForwardingEvent>     OnSnoopForwarding;
 
         bool Dispatching() const noexcept { return dispatchDepth != 0; }
         bool Dispatching(NodeId home) const noexcept
@@ -223,6 +247,7 @@ namespace CHI::Lunatic {
         RequestAdmissionEvent Decide(RequestAdmissionEvent event);
         TransactionScheduleEvent Decide(TransactionScheduleEvent event);
         VictimSelectionEvent Decide(VictimSelectionEvent event);
+        SnoopForwardingEvent Decide(SnoopForwardingEvent event);
         void Clear() noexcept;
     };
 

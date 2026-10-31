@@ -97,7 +97,7 @@ namespace {
                 LUNATIC_CHECK(driver.ReadData(6, txnId++, line.address, CHI::Eb::Opcodes::REQ::ReadUnique) == data);
                 driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadShared, 5, txnId++, line.address, true));
                 auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpShared);
-                driver.SnoopData(6, snoop.flit.TxnID(), data, CHI::Eb::Resps::SnpRespData_UC_PD);
+                driver.SnoopData(6, snoop.flit.TxnID(), data, CHI::Eb::Resps::SnpRespData_SC_PD);
                 LUNATIC_CHECK(ReceiveCompData(driver, 5, txnId - 1) == data);
                 cleanPeer = true;
                 break;
