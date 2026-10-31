@@ -58,6 +58,12 @@ namespace Cohestra {
     const ConfigurationEntryBack<bool> FuzzARI::CONFIG_FUZZ_ARI_PREFETCH_STORE_ENABLE
         ("FUZZ_ARI_PREFETCH_STORE_ENABLE", "fuzz.ari.prefetch.store.enable", nullptr, true, DeserializeBool, SerializeBool);
 
+    const ConfigurationEntryBack<bool> FuzzARI::CONFIG_FUZZ_ARI_READONCE_ENABLE
+        ("FUZZ_ARI_READONCE_ENABLE", "fuzz.ari.readonce.enable", nullptr, true, DeserializeBool, SerializeBool);
+
+    const ConfigurationEntryBack<uint64_t> FuzzARI::CONFIG_FUZZ_ARI_READONCE_RATIO
+        ("FUZZ_ARI_READONCE_RATIO", "fuzz.ari.readonce.ratio", nullptr, 8, DeserializeUInt64, SerializeUInt64);
+
     const ConfigurationEntryBack<bool> FuzzARI::CONFIG_FUZZ_ARI_LOAD_ENABLE
         ("FUZZ_ARI_LOAD_ENABLE", "fuzz.ari.load.enable", nullptr, true, DeserializeBool, SerializeBool);
 
@@ -119,6 +125,8 @@ namespace Cohestra {
         , prefetchRatio       (CONFIG_FUZZ_ARI_PREFETCH_RATIO.defaultValue)
         , prefetchLoadEnable  (CONFIG_FUZZ_ARI_PREFETCH_LOAD_ENABLE.defaultValue)
         , prefetchStoreEnable (CONFIG_FUZZ_ARI_PREFETCH_STORE_ENABLE.defaultValue)
+        , readOnceEnable      (CONFIG_FUZZ_ARI_READONCE_ENABLE.defaultValue)
+        , readOnceRatio       (CONFIG_FUZZ_ARI_READONCE_RATIO.defaultValue)
         , loadEnable          (CONFIG_FUZZ_ARI_LOAD_ENABLE.defaultValue)
         , storeEnable         (CONFIG_FUZZ_ARI_STORE_ENABLE.defaultValue)
         , storeLineEnable     (CONFIG_FUZZ_ARI_STORELINE_ENABLE.defaultValue)
@@ -152,6 +160,9 @@ namespace Cohestra {
         , countIssuedPFStore  (0)
         , countIssuedTAR      (0)
         , countDeniedTAR      (0)
+        , countIssuedRO       (0)
+        , countCompletedRO    (0)
+        , countDeniedRO       (0)
         , countStoreCommitted (0)
         , countStoreDropped   (0)
         , pendingStores       ()
@@ -178,6 +189,8 @@ namespace Cohestra {
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_PREFETCH_RATIO, prefetchRatio) &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_PREFETCH_LOAD_ENABLE, prefetchLoadEnable) &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_PREFETCH_STORE_ENABLE, prefetchStoreEnable) &&
+                    LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_READONCE_ENABLE, readOnceEnable) &&
+                    LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_READONCE_RATIO, readOnceRatio) &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_LOAD_ENABLE,   loadEnable)    &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_STORE_ENABLE,  storeEnable)   &&
                     LoadConfigurationEntry(configSource, &CONFIG_FUZZ_ARI_STORELINE_ENABLE, storeLineEnable) &&
@@ -220,6 +233,12 @@ namespace Cohestra {
         if (prefetchEnable && !prefetchRatio)
         {
             GetOwner().GetLogger()->error("FuzzARI {}: fuzz.ari.prefetch.ratio must not be zero when prefetch is enabled.", GetIndex());
+            return false;
+        }
+
+        if (readOnceEnable && !readOnceRatio)
+        {
+            GetOwner().GetLogger()->error("FuzzARI {}: fuzz.ari.readonce.ratio must not be zero when ReadOnce is enabled.", GetIndex());
             return false;
         }
 
@@ -316,10 +335,10 @@ namespace Cohestra {
         {
             finished = true;
 
-            GetOwner().GetLogger()->info("FuzzARI {}: maximum cycle {} reached, stopping at time {}. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}; TAR {}), denied {} (CMO {}, EVT {}, PF {}, TAR {}), stores committed {}, dropped {}.",
+            GetOwner().GetLogger()->info("FuzzARI {}: maximum cycle {} reached, stopping at time {}. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}; TAR {}; RO {}, completed {}, denied {}), denied {} (CMO {}, EVT {}, PF {}, TAR {}), stores committed {}, dropped {}.",
                 GetIndex(), maximumCycle, time,
                 countIssued, countIssuedCMO, countIssuedCMOClean, countIssuedCMOFlush, countIssuedCMOInval, countIssuedEVT,
-                countIssuedPF, countIssuedPFLoad, countIssuedPFStore, countIssuedTAR,
+                countIssuedPF, countIssuedPFLoad, countIssuedPFStore, countIssuedTAR, countIssuedRO, countCompletedRO, countDeniedRO,
                 countDenied, countDeniedCMO, countDeniedEVT, countDeniedPF, countDeniedTAR, countStoreCommitted, countStoreDropped);
 
             return;
@@ -353,10 +372,10 @@ namespace Cohestra {
         {
             finished = true;
 
-            GetOwner().GetLogger()->info("FuzzARI {}: ARI target {} reached at time {}, finished. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}; TAR {}), denied {} (CMO {}, EVT {}, PF {}, TAR {}), stores committed {}, dropped {}.",
+            GetOwner().GetLogger()->info("FuzzARI {}: ARI target {} reached at time {}, finished. Issued {} (CMO {}: clean {}, flush {}, inval {}; EVT {}; PF {}: load {}, store {}; TAR {}; RO {}, completed {}, denied {}), denied {} (CMO {}, EVT {}, PF {}, TAR {}), stores committed {}, dropped {}.",
                 GetIndex(), ariTarget, time,
                 countIssued, countIssuedCMO, countIssuedCMOClean, countIssuedCMOFlush, countIssuedCMOInval, countIssuedEVT,
-                countIssuedPF, countIssuedPFLoad, countIssuedPFStore, countIssuedTAR,
+                countIssuedPF, countIssuedPFLoad, countIssuedPFStore, countIssuedTAR, countIssuedRO, countCompletedRO, countDeniedRO,
                 countDenied, countDeniedCMO, countDeniedEVT, countDeniedPF, countDeniedTAR, countStoreCommitted, countStoreDropped);
         }
     }
@@ -414,8 +433,9 @@ namespace Cohestra {
         const bool evtAvail = evictEnable;
         const bool pfAvail  = prefetchEnable
                            && (prefetchLoadEnable || prefetchStoreEnable);
+        const bool roAvail  = readOnceEnable;
 
-        if (!memAvail && !cmoAvail && !evtAvail && !pfAvail)
+        if (!memAvail && !cmoAvail && !evtAvail && !pfAvail && !roAvail)
             return;
 
         // Evict (TXEVT) class with probability 1/evictRatio: evict a line this
@@ -433,6 +453,11 @@ namespace Cohestra {
         // is skipped entirely when prefetch is disabled, keeping the legacy
         // RNG sequence bit-identical.
         if (pfAvail && (Random64() % prefetchRatio) == 0 && TryDoPrefetch(upstreamIndex))
+            return;
+
+        // ReadOnce class with probability 1/readOnceRatio. The draw is skipped
+        // only when explicitly disabled, preserving opt-out legacy sequences.
+        if (roAvail && (Random64() % readOnceRatio) == 0 && TryDoReadOnce(upstreamIndex))
             return;
 
         // Evict-only configuration (memory and CMO both off) with a missed
@@ -764,6 +789,46 @@ namespace Cohestra {
         {
             countDenied++;
             countDeniedPF++;
+        }
+
+        return true;
+    }
+
+    bool FuzzARI::TryDoReadOnce(uint32_t upstreamIndex) noexcept
+    {
+        auto* upstream = GetOwner().GetType1Upstream(upstreamIndex);
+
+        if (!upstream)
+            return false;
+
+        const FuzzARIRange& range = ranges[rangeOrdinal[rangeIndex]];
+
+        uint64_t aliasDummy;
+        const uint64_t addr = GenerateAddress(range, true, aliasDummy);
+
+        // ReadOnce must start from Invalid. Peer upstreams may still hold the
+        // line, so this does not suppress the required coherence snoops.
+        if (upstream->GetState(addr) != CCHI::Taurus::CacheState::Invalid)
+            return false;
+
+        auto result = upstream->DoLoadThrough(addr);
+
+        if (result && !result->IsRejected())
+        {
+            countIssued++;
+            countIssuedRO++;
+
+            result->BindFuture([this](const auto& event) noexcept {
+                if (event.GetData())
+                    countCompletedRO++;
+                else
+                    countDeniedRO++;
+            });
+        }
+        else
+        {
+            countDenied++;
+            countDeniedRO++;
         }
 
         return true;

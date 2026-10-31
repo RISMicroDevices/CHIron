@@ -65,6 +65,11 @@ namespace Cohestra {
         static const ConfigurationEntryBack<bool>       CONFIG_FUZZ_ARI_PREFETCH_LOAD_ENABLE;
         static const ConfigurationEntryBack<bool>       CONFIG_FUZZ_ARI_PREFETCH_STORE_ENABLE;
 
+        // ReadOnce (DoLoadThrough) stimulus: enabled by default. Explicitly
+        // disabling it adds no RNG draws and preserves the legacy sequence.
+        static const ConfigurationEntryBack<bool>       CONFIG_FUZZ_ARI_READONCE_ENABLE;
+        static const ConfigurationEntryBack<uint64_t>   CONFIG_FUZZ_ARI_READONCE_RATIO;
+
         // Per-source enables: each driven source can be switched off
         // individually. All default true (legacy behavior, legacy RNG draw
         // sequence). A class is available iff its class switch is on AND at
@@ -119,6 +124,9 @@ namespace Cohestra {
         bool                                prefetchLoadEnable;
         bool                                prefetchStoreEnable;
 
+        bool                                readOnceEnable;
+        uint64_t                            readOnceRatio;
+
         bool                                loadEnable;
         bool                                storeEnable;
         bool                                storeLineEnable;
@@ -168,6 +176,10 @@ namespace Cohestra {
 
         uint64_t                            countIssuedTAR;
         uint64_t                            countDeniedTAR;
+
+        uint64_t                            countIssuedRO;
+        uint64_t                            countCompletedRO;
+        uint64_t                            countDeniedRO;
 
         uint64_t                            countStoreCommitted;
         uint64_t                            countStoreDropped;
@@ -224,6 +236,8 @@ namespace Cohestra {
         bool                TryDoEvict(uint32_t upstreamIndex) noexcept;
 
         bool                TryDoPrefetch(uint32_t upstreamIndex) noexcept;
+
+        bool                TryDoReadOnce(uint32_t upstreamIndex) noexcept;
 
         bool                TryDoAliasRead(uint32_t upstreamIndex) noexcept;
 
