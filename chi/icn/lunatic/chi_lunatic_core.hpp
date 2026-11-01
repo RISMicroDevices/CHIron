@@ -133,7 +133,6 @@ namespace CHI::Lunatic {
         Request request;
         bool    ackPopped = false;
         bool    grantQueued = false;
-        bool    grantPopped = false;
     };
 
     struct BackendRetryRecord {
@@ -175,6 +174,10 @@ namespace CHI::Lunatic {
                                   flows;
         std::map<size_t, RetryRecord>
                                   retries;
+        std::map<std::pair<NodeId, uint8_t>, size_t>
+                                  availableCredits;
+        std::map<std::pair<NodeId, uint8_t>, size_t>
+                                  cancellationCredits;
         std::map<TransactionHandle, BackendRetryRecord>
                                   backendRetries;
         std::map<std::pair<NodeId, uint8_t>, size_t>
@@ -368,9 +371,12 @@ namespace CHI::Lunatic {
         void QueueCompPersist(Transaction& transaction);
         void QueueReadReceipt(Transaction& transaction);
         void QueueRespSepData(Transaction& transaction);
-        void QueueRetryCredit(size_t index);
-        bool RetryReservationAvailable() const noexcept;
-        bool ConsumeRetryRequest(const Request& request, bool creditReturn);
+        void   QueueRetryCredit(size_t index);
+        size_t OutstandingRetryCredits(NodeId source, uint8_t pCrdType) const noexcept;
+        size_t RetryOriginals(NodeId source, uint8_t pCrdType) const noexcept;
+        void   PurgeReturnedRetries(NodeId source, uint8_t pCrdType);
+        bool   RetryReservationAvailable() const noexcept;
+        bool   ConsumeRetryRequest(const Request& request, bool creditReturn);
         void FinishResponse(Transaction& transaction);
         bool RequiresTransactionCompAck(const Transaction& transaction) const;
         void RetireFinished();

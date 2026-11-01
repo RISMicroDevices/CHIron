@@ -143,6 +143,102 @@ LUNATIC_TEST(Stage8RetryMultipleForcedCredits)
     driver.Quiesce();
 }
 
+LUNATIC_TEST(Stage8RetryCreditFromOtherOriginal)
+{
+    Options options;
+    options.transactionLimit = 1;
+    CheckedDriver<Config256> driver(options);
+    driver.driver.node.GetEvents()->OnRequestAdmission.Register(
+        Gravity::MakeListener<RequestAdmissionEvent>("force-retry", 0, [&](RequestAdmissionEvent& event) {
+            if (event.request.allowRetry)
+                event.RequestRetry();
+        }));
+
+    auto older = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 3, 0x14000, false);
+    auto younger = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 4, 0x18000, false);
+    driver.PushRequest(older);
+    driver.driver.Tick();
+    driver.PushRequest(younger);
+    driver.driver.Tick();
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
+
+    younger.AllowRetry() = 0;
+    driver.PushRequest(younger);
+    CompleteRead(driver, 4);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
+    older.AllowRetry() = 0;
+    driver.PushRequest(older);
+    CompleteRead(driver, 3);
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.driver.node.GetPerformanceCounters().creditedResends == 2);
+}
+
+LUNATIC_TEST(Stage8RetryCreditFromOriginalWithQueuedGrant)
+{
+    Options options;
+    options.transactionLimit = 2;
+    CheckedDriver<Config256> driver(options);
+    driver.driver.node.GetEvents()->OnRequestAdmission.Register(
+        Gravity::MakeListener<RequestAdmissionEvent>("force-retry", 0, [&](RequestAdmissionEvent& event) {
+            if (event.request.allowRetry)
+                event.RequestRetry();
+        }));
+
+    auto older = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 3, 0x14000, false);
+    auto younger = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 4, 0x18000, false);
+    driver.PushRequest(older);
+    driver.driver.Tick();
+    driver.PushRequest(younger);
+    driver.driver.Tick();
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
+
+    younger.AllowRetry() = 0;
+    driver.PushRequest(younger);
+    CompleteRead(driver, 4);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
+    older.AllowRetry() = 0;
+    driver.PushRequest(older);
+    CompleteRead(driver, 3);
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.driver.node.GetPerformanceCounters().emittedCreditGrants == 2);
+    LUNATIC_CHECK(driver.driver.node.GetPerformanceCounters().creditedResends == 2);
+}
+
+LUNATIC_TEST(Stage8RetryCreditReturnPreservesOtherOriginal)
+{
+    Options options;
+    options.transactionLimit = 2;
+    CheckedDriver<Config256> driver(options);
+    driver.driver.node.GetEvents()->OnRequestAdmission.Register(
+        Gravity::MakeListener<RequestAdmissionEvent>("force-retry", 0, [&](RequestAdmissionEvent& event) {
+            if (event.request.allowRetry)
+                event.RequestRetry();
+        }));
+
+    auto older = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 3, 0x14000, false);
+    auto younger = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 4, 0x18000, false);
+    driver.PushRequest(older);
+    driver.driver.Tick();
+    driver.PushRequest(younger);
+    driver.driver.Tick();
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
+
+    ReturnCredit(driver, 4, older.PCrdType());
+    younger.AllowRetry() = 0;
+    driver.PushRequest(younger);
+    CompleteRead(driver, 4);
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.driver.node.GetPerformanceCounters().returnedCredits == 1);
+    LUNATIC_CHECK(driver.driver.node.GetPerformanceCounters().creditedResends == 1);
+}
+
 LUNATIC_TEST(Stage8RetryBackendWithFlowDecisions)
 {
     Options options;

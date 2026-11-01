@@ -113,6 +113,11 @@ namespace CHI::Lunatic {
         auto it = retries.find(index);
         if (it == retries.end() || !it->second.ackPopped || it->second.grantQueued)
             return;
+
+        const NodeId source = it->second.request.source;
+        const uint8_t pCrdType = it->second.request.pCrdType;
+        if (OutstandingRetryCredits(source, pCrdType) >= RetryOriginals(source, pCrdType))
+            return;
         if (!RetryReservationAvailable())
         {
             pmu.RecordStall(WaitReason::Tracker);
@@ -121,47 +126,103 @@ namespace CHI::Lunatic {
 
         Response response;
         response.source = nodeId;
-        response.target = it->second.request.source;
+        response.target = source;
         response.opcode = CHI::Eb::Opcodes::RSP::PCrdGrant;
-        response.pCrdType = it->second.request.pCrdType;
+        response.pCrdType = pCrdType;
         if (Queue(txrsp, response, INVALID_TRANSACTION, nextAge++, false, false, index))
             it->second.grantQueued = true;
+    }
+
+    size_t Core::Impl::OutstandingRetryCredits(NodeId source, uint8_t pCrdType) const noexcept
+    {
+        size_t count = 0;
+        if (const auto credit = availableCredits.find({ source, pCrdType }); credit != availableCredits.end())
+            count += credit->second;
+        for (const auto& pending : txrsp)
+        {
+            count += pending.flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant &&
+                pending.flit.target == source && pending.flit.pCrdType == pCrdType ? 1 : 0;
+        }
+        return count;
+    }
+
+    size_t Core::Impl::RetryOriginals(NodeId source, uint8_t pCrdType) const noexcept
+    {
+        size_t originals = 0;
+        for (const auto& [index, retry] : retries)
+        {
+            (void)index;
+            originals += retry.request.source == source && retry.request.pCrdType == pCrdType ? 1 : 0;
+        }
+        const auto canceled = cancellationCredits.find({ source, pCrdType });
+        const size_t cancellations = canceled == cancellationCredits.end() ? 0 : canceled->second;
+        return originals > cancellations ? originals - cancellations : 0;
+    }
+
+    void Core::Impl::PurgeReturnedRetries(NodeId source, uint8_t pCrdType)
+    {
+        if (RetryOriginals(source, pCrdType) != 0)
+            return;
+        for (auto iter = retries.begin(); iter != retries.end();)
+        {
+            if (iter->second.request.source == source && iter->second.request.pCrdType == pCrdType)
+                iter = retries.erase(iter);
+            else
+                ++iter;
+        }
+        cancellationCredits.erase({ source, pCrdType });
     }
 
     bool Core::Impl::RetryReservationAvailable() const noexcept
     {
         size_t reserved = 0;
-        for (const auto& [index, retry] : retries)
+        for (const auto& [key, count] : availableCredits)
         {
-            (void)index;
-            reserved += retry.grantQueued ? 1 : 0;
+            (void)key;
+            reserved += count;
         }
+        for (const auto& pending : txrsp)
+            reserved += pending.flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant ? 1 : 0;
         return tracker.Size() + reserved < tracker.Limit();
     }
 
     bool Core::Impl::ConsumeRetryRequest(const Request& request, bool creditReturn)
     {
-        for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
-        {
-            const RetryRecord& retry = iter->second;
-            if (!retry.grantPopped)
-                continue;
-            if (creditReturn)
-            {
-                if (retry.request.source != request.source || retry.request.pCrdType != request.pCrdType)
-                    continue;
-            }
-            else if (!RetryRequestCompatible(retry.request, request, nodeId))
-                continue;
+        const auto creditKey = std::make_pair(request.source, request.pCrdType);
+        auto credit = availableCredits.find(creditKey);
+        if (credit == availableCredits.end() || credit->second == 0)
+            return false;
 
-            if (creditReturn)
-                ++pmu.returnedCredits;
-            else
-                ++pmu.creditedResends;
-            retries.erase(std::next(iter).base());
-            return true;
+        size_t originalIndex = std::numeric_limits<size_t>::max();
+        if (!creditReturn)
+        {
+            for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
+            {
+                if (!RetryRequestCompatible(iter->second.request, request, nodeId))
+                    continue;
+                originalIndex = iter->first;
+                break;
+            }
+            if (originalIndex == std::numeric_limits<size_t>::max())
+                return false;
         }
-        return false;
+        else if (RetryOriginals(request.source, request.pCrdType) == 0)
+            return false;
+
+        if (--credit->second == 0)
+            availableCredits.erase(credit);
+        if (creditReturn)
+        {
+            ++cancellationCredits[creditKey];
+            ++pmu.returnedCredits;
+        }
+        else
+        {
+            retries.erase(originalIndex);
+            ++pmu.creditedResends;
+        }
+        PurgeReturnedRetries(request.source, request.pCrdType);
+        return true;
     }
 
     void Core::Impl::ReturnRead(Transaction& transaction)

@@ -30,6 +30,8 @@ namespace CHI::Lunatic {
         txdat.clear();
         txsnp.clear();
         retries.clear();
+        availableCredits.clear();
+        cancellationCredits.clear();
         backendRetries.clear();
         backendCredits.clear();
         completedBackendReads.clear();
@@ -324,7 +326,7 @@ namespace CHI::Lunatic {
             }
 
             const size_t index = nextRetry++;
-            RetryRecord record{ request, false, false, false };
+            RetryRecord record{ request, false, false };
             Response response;
             response.source = nodeId;
             response.target = request.source;
@@ -726,13 +728,16 @@ namespace CHI::Lunatic {
     {
         if (pending.retry != std::numeric_limits<size_t>::max())
         {
-            auto it = retries.find(pending.retry);
-            if (it == retries.end())
-                return;
-            if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::RetryAck)
-                it->second.ackPopped = true;
             if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant)
-                it->second.grantPopped = true;
+            {
+                if (auto it = retries.find(pending.retry); it != retries.end())
+                    it->second.grantQueued = false;
+                ++availableCredits[{ pending.flit.target, pending.flit.pCrdType }];
+                return;
+            }
+            if (auto it = retries.find(pending.retry);
+                it != retries.end() && pending.flit.opcode == CHI::Eb::Opcodes::RSP::RetryAck)
+                it->second.ackPopped = true;
             return;
         }
 
