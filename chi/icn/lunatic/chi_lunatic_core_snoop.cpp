@@ -312,7 +312,8 @@ namespace CHI::Lunatic {
             Error(transaction.handle, "illegal snoop data response");
 
         const CacheState initial = snoopFilter.State(flow.snoopLine, flit.source);
-        const bool dirty = IsDirty(initial);
+        const bool dirty = IsDirty(initial) ||
+            (flit.resp & CHI::Eb::Resps::PassDirty) != 0;
         if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl)
         {
             if (flow.snoopForVictim)
@@ -534,7 +535,8 @@ namespace CHI::Lunatic {
                 default: return false;
             }
         }
-        if (passDirty && !IsDirty(initial))
+        const bool dirtyTransitionPossible = IsDirty(initial) || initial == CacheState::UC;
+        if (passDirty && !dirtyTransitionPossible)
             return false;
         if (opcode == CHI::Eb::Opcodes::SNP::SnpCleanShared)
         {
@@ -561,7 +563,7 @@ namespace CHI::Lunatic {
             {
                 case CacheState::I:
                 case CacheState::UCE: return !withData;
-                case CacheState::UC:
+                case CacheState::UC: return !partial;
                 case CacheState::SC: return !partial && !passDirty;
                 case CacheState::UD:
                 case CacheState::SD: return withData && !partial && passDirty;

@@ -1,5 +1,7 @@
 #include "chi_lunatic_core.hpp"
 
+#include <algorithm>
+
 namespace CHI::Lunatic {
     namespace {
 
@@ -202,8 +204,10 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         const LineKey line = transaction.request.Line();
         const bool dirty = IsDirtyCopyback(flow.writeResp);
+        const bool hasData = std::any_of(transaction.byteEnables.begin(), transaction.byteEnables.end(),
+            [](uint8_t enabled) { return enabled != 0; });
 
-        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl && !transaction.homeHit)
+        if (hasData && transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl && !transaction.homeHit)
         {
             if (options.backend != BackendKind::Internal && !FetchBaseline(transaction))
                 return false;
@@ -240,23 +244,35 @@ namespace CHI::Lunatic {
         context.requesterValid = flow.requesterWasValid;
         context.requesterDirty = dirty;
         context.requesterRetains = IsValid(flow.requesterFinal);
-        context.evictionHasData = true;
+        context.evictionHasData = hasData;
         const PolicyDecision decision = policy->OnCopyback(context);
-        if (decision.allocateHome && !transaction.homeHit && !PrepareVictim(transaction))
-            return false;
-
-        if (decision.mergeCopyback && (decision.allocateHome || decision.retainHome || transaction.homeHit))
+        bool otherRequesterValid = false;
+        for (NodeId target : snoopFilter.Targets(line))
         {
-            const std::optional<size_t> currentWay = directory.FindWay(line);
-            HomeLine& home = InstallHome(line, currentWay ? *currentWay : flow.victimWay, transaction.data, dirty, time);
-            CopyMetadata(home, transaction, options);
-            if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl)
-                home.validBytes = transaction.byteEnables;
+            if (target != transaction.request.source && IsValid(snoopFilter.State(line, target)))
+                otherRequesterValid = true;
         }
-        else if (!WriteLine(transaction, line, transaction.data, transaction.byteEnables))
+        const bool writeThrough = options.policy == PolicyKind::Exclusive &&
+            !IsValid(flow.requesterFinal) && otherRequesterValid;
+        if (hasData && !writeThrough && decision.allocateHome && !transaction.homeHit && !PrepareVictim(transaction))
             return false;
 
-        if (decision.removeHome && transaction.homeHit)
+        if (hasData)
+        {
+            if (!writeThrough && decision.mergeCopyback &&
+                (decision.allocateHome || decision.retainHome || transaction.homeHit))
+            {
+                const std::optional<size_t> currentWay = directory.FindWay(line);
+                HomeLine& home = InstallHome(line, currentWay ? *currentWay : flow.victimWay, transaction.data, dirty, time);
+                CopyMetadata(home, transaction, options);
+                if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl)
+                    home.validBytes = transaction.byteEnables;
+            }
+            else if (!WriteLine(transaction, line, transaction.data, transaction.byteEnables))
+                return false;
+        }
+
+        if ((decision.removeHome || writeThrough) && transaction.homeHit)
             if (const auto way = directory.FindWay(line); way)
                 directory.Invalidate(directory.SetIndex(line), *way);
         snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
