@@ -156,6 +156,12 @@ namespace Cohestra {
             size_t  rptr    = 0;
 
         public:
+            ResizeableFIFO() noexcept = default;
+            ~ResizeableFIFO() noexcept { delete[] storage; }
+
+            ResizeableFIFO(const ResizeableFIFO&) = delete;
+            ResizeableFIFO& operator=(const ResizeableFIFO&) = delete;
+
             size_t      Size() const noexcept;
             size_t      Count() const noexcept;
             bool        IsEmpty() const noexcept;
