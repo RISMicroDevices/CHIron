@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <concepts>
 #include <cstdint>
 #include <cstring>
@@ -1276,6 +1277,16 @@ namespace Cohestra {
         // from the DUT. Credit counters implement CHI L-Credit flow control.
         // --------------------------------------------------------------------
 
+        struct CHICreditChannelStatus {
+            size_t  txQueue = 0;
+            size_t  rxQueue = 0;
+            size_t  firedQueue = 0;
+            int     txCredits = 0;
+            int     rxCredits = 0;
+            int     rxPendingReturns = 0;
+            bool    txDriven = false;
+        };
+
         template<class TFlit>
         class CHICreditChannel {
         public:
@@ -1417,6 +1428,12 @@ namespace Cohestra {
                 CHI::FiredFlit<TFlit> fired = firedObservations.front();
                 firedObservations.pop_front();
                 return { fired };
+            }
+
+            CHICreditChannelStatus GetStatus() const noexcept
+            {
+                return { txBuffer.Count(), rxObservations.size(), firedObservations.size(),
+                    txCredits, rxCredits, rxPendingReturns, txDriven };
             }
 
             bool IsDrained() const noexcept
@@ -1929,11 +1946,8 @@ namespace Cohestra {
                 portIndices.insert(port);                                   \
                 auto& p = ports[port];                                      \
                 p.rxrsp.SetBufferSize(4);                                   \
-                p.rxrsp.SetRxCreditCount(4);                                \
                 p.rxdat.SetBufferSize(4);                                   \
-                p.rxdat.SetRxCreditCount(4);                                \
                 p.rxsnp.SetBufferSize(4);                                   \
-                p.rxsnp.SetRxCreditCount(4);                                \
                 p.txreq.SetBufferSize(4);                                   \
                 p.txreq.SetRxCreditCount(4);                                \
                 p.txrsp.SetBufferSize(4);                                   \
@@ -1978,6 +1992,13 @@ namespace Cohestra {
                     return false;
             }
             return true;
+        }
+
+        std::array<details::CHICreditChannelStatus, 6> GetPortStatus(size_t index) const noexcept
+        {
+            const auto& p = ports.at(index);
+            return { p.rxrsp.GetStatus(), p.rxdat.GetStatus(), p.rxsnp.GetStatus(),
+                p.txreq.GetStatus(), p.txrsp.GetStatus(), p.txdat.GetStatus() };
         }
 
     public:
@@ -2471,9 +2492,7 @@ namespace Cohestra {
                 portIndices.insert(port);                                   \
                 auto& p = ports[port];                                      \
                 p.rxreq.SetBufferSize(4);                                   \
-                p.rxreq.SetRxCreditCount(4);                                \
                 p.rxdat.SetBufferSize(4);                                   \
-                p.rxdat.SetRxCreditCount(4);                                \
                 p.txrsp.SetBufferSize(4);                                   \
                 p.txrsp.SetRxCreditCount(4);                                \
                 p.txdat.SetBufferSize(4);                                   \

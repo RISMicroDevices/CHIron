@@ -399,3 +399,61 @@ LUNATIC_TEST(Stage9TransportDrainAndCreditConservation)
     channel.txCredits = -1;
     LUNATIC_CHECK(!channel.ValidateCreditAccounting());
 }
+
+namespace {
+
+    struct CreditInitMock {
+        LUNATIC_TEST_CONTROLS(chi_rn0_txreq);
+        LUNATIC_TEST_CONTROLS(chi_rn0_txrsp);
+        LUNATIC_TEST_CONTROLS(chi_rn0_txdat);
+        LUNATIC_TEST_CONTROLS(chi_rn0_rxrsp);
+        LUNATIC_TEST_CONTROLS(chi_rn0_rxdat);
+        LUNATIC_TEST_CONTROLS(chi_rn0_rxsnp);
+        LUNATIC_TEST_CONTROLS(chi_sn0_rxreq);
+        LUNATIC_TEST_CONTROLS(chi_sn0_txrsp);
+        LUNATIC_TEST_CONTROLS(chi_sn0_txdat);
+        LUNATIC_TEST_CONTROLS(chi_sn0_rxdat);
+
+        uint32_t chi_rn0_txreq_bits[(Cohestra::CHI::REQFlit::WIDTH + 31) / 32] = {};
+        uint32_t chi_rn0_txrsp_bits[(Cohestra::CHI::RSPFlit::WIDTH + 31) / 32] = {};
+        uint32_t chi_rn0_txdat_bits[(Cohestra::CHI::DATFlit::WIDTH + 31) / 32] = {};
+        uint32_t chi_rn0_rxrsp_bits[(Cohestra::CHI::RSPFlit::WIDTH + 31) / 32] = {};
+        uint32_t chi_rn0_rxdat_bits[(Cohestra::CHI::DATFlit::WIDTH + 31) / 32] = {};
+        uint32_t chi_rn0_rxsnp_bits[(Cohestra::CHI::SNPFlit::WIDTH + 31) / 32] = {};
+        uint32_t chi_sn0_rxreq_bits[(Cohestra::CHI::REQFlit::WIDTH + 31) / 32] = {};
+        uint32_t chi_sn0_txrsp_bits[(Cohestra::CHI::RSPFlit::WIDTH + 31) / 32] = {};
+        uint32_t chi_sn0_txdat_bits[(Cohestra::CHI::DATFlit::WIDTH + 31) / 32] = {};
+        uint32_t chi_sn0_rxdat_bits[(Cohestra::CHI::DATFlit::WIDTH + 31) / 32] = {};
+    };
+
+    template<class Base>
+    struct InterfaceProbe : Base {
+        using Base::Base;
+
+        const typename Base::Port& Port(size_t index) const
+        {
+            return this->ports.at(index);
+        }
+    };
+
+}
+
+LUNATIC_TEST(Stage9TransmitChannelsHaveNoReceiveCredits)
+{
+    CreditInitMock mock;
+    using RNBase = V3CHIToRNInterfaceT<CreditInitMock, V3CHIPackedRNChannelPolicy>;
+    InterfaceProbe<RNBase> rn(&mock);
+    LUNATIC_CHECK(rn.Port(0).rxrsp.rxPendingReturns == 0);
+    LUNATIC_CHECK(rn.Port(0).rxdat.rxPendingReturns == 0);
+    LUNATIC_CHECK(rn.Port(0).rxsnp.rxPendingReturns == 0);
+    LUNATIC_CHECK(rn.Port(0).txreq.rxPendingReturns == 4);
+    LUNATIC_CHECK(rn.Port(0).txrsp.rxPendingReturns == 4);
+    LUNATIC_CHECK(rn.Port(0).txdat.rxPendingReturns == 4);
+
+    using SNBase = V3CHIToSNInterfaceT<CreditInitMock, V3CHIPackedSNChannelPolicy>;
+    InterfaceProbe<SNBase> sn(&mock);
+    LUNATIC_CHECK(sn.Port(0).rxreq.rxPendingReturns == 0);
+    LUNATIC_CHECK(sn.Port(0).rxdat.rxPendingReturns == 0);
+    LUNATIC_CHECK(sn.Port(0).txrsp.rxPendingReturns == 4);
+    LUNATIC_CHECK(sn.Port(0).txdat.rxPendingReturns == 4);
+}
