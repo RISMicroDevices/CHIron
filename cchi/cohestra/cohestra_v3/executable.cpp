@@ -7,6 +7,7 @@
 #include "interface.hpp"
 #include "interface_axi.hpp"
 #include "interface_chi.hpp"
+#include "interface_chi_link.hpp"
 #include "logging.hpp"
 #include "waves.hpp"
 #include "event_upstream.hpp"
@@ -20,6 +21,7 @@
 #include "../cohestra_cchi_flit_logger.hpp"
 #include "../cohestra_simperf.hpp"
 #include "../cohestra_clogb.hpp"
+#include "../cohestra_lunatic_config.hpp"
 #include "../cohestra_boot.hpp"
 #include "../cohestra_bootings/boot_delay.hpp"
 #include "../cohestra_bootings/boot_avocado.hpp"
@@ -277,6 +279,36 @@ int main(const int argc, const char* argv[])
         spdlog::warn("No external configuration file specified, skipping post-init configuration.");
         spdlog::warn("Stimulators may not be initialized properly without external configuration.");
     }
+
+    Cohestra::LunaticIntegrationConfiguration lunaticConfiguration;
+    if (configurationLoader && !Cohestra::LoadLunaticIntegrationConfiguration(
+        *configurationLoader, lunaticConfiguration))
+        return 1;
+
+    std::unique_ptr<Cohestra::LunaticModel> lunatic;
+    Cohestra::V3CHILinkControl<VerilatedTop> lunaticLink(&top);
+    if (lunaticConfiguration.enabled)
+    {
+        for (const auto& route : lunaticConfiguration.model.rnPorts)
+        {
+            if (!Cohestra::V3CHILinkControl<VerilatedTop>::HasPort(route.port))
+            {
+                spdlog::error("Lunatic RN port {} has no link-control pins.", route.port);
+                return 1;
+            }
+        }
+        try
+        {
+            lunatic = std::make_unique<Cohestra::LunaticModel>(
+                *chiToRNInterface, lunaticConfiguration.model);
+        }
+        catch (const std::exception& error)
+        {
+            spdlog::error("Failed to initialize Lunatic: {}.", error.what());
+            return 1;
+        }
+    }
+    lunaticLink.Reset();
 
     spdlog::info("CCHI instance initialized.");
 
@@ -710,9 +742,13 @@ int main(const int argc, const char* argv[])
     }
 
     spdlog::info("Reset released.");
+    if (lunatic)
+        lunaticLink.SetActive(true);
 
     // arm the throughput meter after reset, so reset cycles are not measured
     simPerfMeter.Start(time);
+
+    bool lunaticCycleLimit = false;
 
     // One simulation cycle, shared by the boot stage and the test stimulation
     // stage below; only the instance tick differs between the stages. Returns
@@ -742,10 +778,16 @@ int main(const int argc, const char* argv[])
         for (auto& master : axiMasters)
             master->TickPreHandshake(time);
 
-        chiFromRNInterface->TickPreHandshake(time);
+        if (lunatic)
+            lunaticLink.TickPreHandshake();
+        if (!lunatic)
+            chiFromRNInterface->TickPreHandshake(time);
         chiToRNInterface->TickPreHandshake(time);
-        chiFromSNInterface->TickPreHandshake(time);
-        chiToSNInterface->TickPreHandshake(time);
+        if (!lunatic)
+        {
+            chiFromSNInterface->TickPreHandshake(time);
+            chiToSNInterface->TickPreHandshake(time);
+        }
 
         top.clock = 0;
         top.eval();
@@ -761,10 +803,16 @@ int main(const int argc, const char* argv[])
             master->TickPostHandshake(time);
 
         // CHI interfaces sample/retire after the clock=0 eval.
-        chiFromRNInterface->TickPostHandshake(time);
+        if (!lunatic)
+            chiFromRNInterface->TickPostHandshake(time);
         chiToRNInterface->TickPostHandshake(time);
-        chiFromSNInterface->TickPostHandshake(time);
-        chiToSNInterface->TickPostHandshake(time);
+        if (!lunatic)
+        {
+            chiFromSNInterface->TickPostHandshake(time);
+            chiToSNInterface->TickPostHandshake(time);
+        }
+        if (lunatic)
+            lunatic->Tick(time);
         chiMonitorInterface->TickPostHandshake(time);
         clogbWriter.DrainAndWrite(chiMonitorInterface.get(), time);
 
@@ -782,6 +830,7 @@ int main(const int argc, const char* argv[])
 
         if (arguments.maximumCycles > 0 && time >= arguments.maximumCycles)
         {
+            lunaticCycleLimit = lunatic != nullptr;
             instance.SetFinished({"Simulation reached maximum cycle count."});
             return false;
         }
@@ -831,10 +880,34 @@ int main(const int argc, const char* argv[])
             spdlog::info("Simulation started, no maximum cycle limit.");
     }
 
+    bool lunaticStimulusComplete = false;
     while (instance.IsAlive())
     {
+        if (lunatic)
+        {
+            lunaticStimulusComplete = instance.GetStimulatorCount() != 0;
+            for (size_t index = 0; index < instance.GetStimulatorCount(); ++index)
+            {
+                const auto* stimulator = instance.GetStimulator(index);
+                if (stimulator && !stimulator->IsFinished())
+                    lunaticStimulusComplete = false;
+            }
+            if (lunaticStimulusComplete)
+                break;
+        }
         if (!runCycle([&] () { return instance.Tick(time); }))
             break;
+    }
+
+    if (lunatic && lunaticStimulusComplete && !lunaticCycleLimit)
+    {
+        const uint64_t drainStart = time;
+        while (!lunatic->IsDrained() && !lunatic->HasErrors() &&
+            time - drainStart < 2ULL * lunaticConfiguration.drainCycleLimit)
+        {
+            if (!runCycle([&] () { return instance.Tick(time); }))
+                break;
+        }
     }
 
     // CLog.B log teardown: flush the pending records and close the file
@@ -911,13 +984,66 @@ int main(const int argc, const char* argv[])
         instance.GetState() == Cohestra::InstanceState::FINISHED ? "FINISHED" :
         instance.GetState() == Cohestra::InstanceState::FAILED ? "FAILED" : "UNKNOWN");
 
+    bool lunaticFailed = false;
+    if (lunatic)
+    {
+        const auto pmu = lunatic->GetNode().GetPerformanceCounters();
+        const bool activity = !lunaticConfiguration.requireActivity || pmu.acceptedRXREQ != 0;
+        bool linksActive = true;
+        for (const auto& route : lunaticConfiguration.model.rnPorts)
+            linksActive &= lunaticLink.IsRun(route.port);
+
+        const bool drained = lunatic->Drain() && lunatic->IsDrained();
+        const bool valid = lunatic->Validate() && !lunatic->HasErrors();
+        const bool noWatchdogResidue = watchdog.GetOutstandingCount() == 0;
+        lunaticFailed = lunaticCycleLimit || !lunaticStimulusComplete || !activity ||
+            !linksActive || !drained || !valid || !noWatchdogResidue;
+
+        spdlog::info("Lunatic summary: accepted {} request(s), emitted {} response(s), {} data flit(s), {} snoop(s).",
+            pmu.acceptedRXREQ, pmu.emittedTXRSP, pmu.emittedTXDAT, pmu.emittedTXSNP);
+        spdlog::info("Lunatic state: home inflight {}, transport drained {}, admitted {}, retired {}, retry acks {}, resends {}, credit returns {}.",
+            lunatic->GetNode().HasInflight(), chiToRNInterface->IsDrained(), pmu.admittedTransactions,
+            pmu.retiredTransactions, pmu.emittedRetryAcks, pmu.creditedResends, pmu.returnedCredits);
+        if (!chiToRNInterface->IsDrained())
+        {
+            static const char* channels[] = { "RXRSP", "RXDAT", "RXSNP", "TXREQ", "TXRSP", "TXDAT" };
+            for (const auto& route : lunaticConfiguration.model.rnPorts)
+            {
+                const auto status = chiToRNInterface->GetPortStatus(route.port);
+                for (size_t index = 0; index < status.size(); ++index)
+                    spdlog::info("Lunatic transport: port {} {} txq {} rxq {} fired {} driven {} txCredits {} rxCredits {} pendingReturns {}.",
+                        route.port, channels[index], status[index].txQueue, status[index].rxQueue,
+                        status[index].firedQueue, status[index].txDriven, status[index].txCredits,
+                        status[index].rxCredits, status[index].rxPendingReturns);
+            }
+        }
+        if (lunaticCycleLimit)
+            spdlog::error("Lunatic verdict: cycle limit is not a passing integration result.");
+        if (!lunaticStimulusComplete)
+            spdlog::error("Lunatic verdict: stimulus did not complete.");
+        if (!activity)
+            spdlog::error("Lunatic verdict: no intended request activity was observed.");
+        if (!linksActive)
+            spdlog::error("Lunatic verdict: one or more RN links did not reach RUN.");
+        if (!drained)
+            spdlog::error("Lunatic verdict: home or CHI transport did not drain.");
+        if (!valid)
+            spdlog::error("Lunatic verdict: protocol errors, invariants, or credit accounting failed.");
+        if (!noWatchdogResidue)
+            spdlog::error("Lunatic verdict: {} watchdog transaction(s) remain outstanding.", watchdog.GetOutstandingCount());
+        for (const auto& error : lunatic->GetIntegrationErrors())
+            spdlog::error("Lunatic integration error: {}.", error);
+        for (const auto& error : lunatic->GetNode().GetErrors())
+            spdlog::error("Lunatic protocol error: {}.", error.reason);
+    }
+
     if (cacheLineDataMonitor.GetMismatchCount())
     {
         spdlog::error("Simulation verdict: FAILED, {} cache-line data mismatch(es) reported by the monitor.",
             cacheLineDataMonitor.GetMismatchCount());
     }
 
-    if (instance.IsFailed() || cacheLineDataMonitor.GetMismatchCount())
+    if (instance.IsFailed() || cacheLineDataMonitor.GetMismatchCount() || lunaticFailed)
         return 2;
 
     return 0;

@@ -59,6 +59,9 @@ file(GLOB_RECURSE COHESTRA_V3_HEADERS CONFIGURE_DEPENDS
     "${COHES_TRA_ROOT}/*.h"
     "${COHES_TRA_ROOT}/*.hpp"
 )
+file(GLOB COHESTRA_V3_LUNATIC_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_LIST_DIR}/../../../chi/icn/lunatic/chi_lunatic_*.cpp"
+)
 
 # RTL selection. Default is the combinational dummy top.
 #   -DCOHESTRA_V3_RTL=DUMMY         (default)  top_dummy.sv
@@ -217,6 +220,7 @@ add_executable(cohestra_v3)
 target_sources(cohestra_v3 PRIVATE
     ${COHESTRA_V3_SOURCES}
     ${COHESTRA_V3_HEADERS}
+    ${COHESTRA_V3_LUNATIC_SOURCES}
 )
 
 target_include_directories(cohestra_v3 PRIVATE
