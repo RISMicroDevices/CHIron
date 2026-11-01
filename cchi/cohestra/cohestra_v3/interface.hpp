@@ -162,6 +162,35 @@ namespace Cohestra {
             ResizeableFIFO(const ResizeableFIFO&) = delete;
             ResizeableFIFO& operator=(const ResizeableFIFO&) = delete;
 
+            ResizeableFIFO(ResizeableFIFO&& other) noexcept
+                : size(other.size), count(other.count), storage(other.storage), wptr(other.wptr), rptr(other.rptr)
+            {
+                other.size = 0;
+                other.count = 0;
+                other.storage = nullptr;
+                other.wptr = 0;
+                other.rptr = 0;
+            }
+
+            ResizeableFIFO& operator=(ResizeableFIFO&& other) noexcept
+            {
+                if (this != &other)
+                {
+                    delete[] storage;
+                    size = other.size;
+                    count = other.count;
+                    storage = other.storage;
+                    wptr = other.wptr;
+                    rptr = other.rptr;
+                    other.size = 0;
+                    other.count = 0;
+                    other.storage = nullptr;
+                    other.wptr = 0;
+                    other.rptr = 0;
+                }
+                return *this;
+            }
+
             size_t      Size() const noexcept;
             size_t      Count() const noexcept;
             bool        IsEmpty() const noexcept;

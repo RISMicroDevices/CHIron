@@ -457,3 +457,23 @@ LUNATIC_TEST(Stage9TransmitChannelsHaveNoReceiveCredits)
     LUNATIC_CHECK(sn.Port(0).txrsp.rxPendingReturns == 4);
     LUNATIC_CHECK(sn.Port(0).txdat.rxPendingReturns == 4);
 }
+
+LUNATIC_TEST(Stage9FIFOMoveOwnership)
+{
+    Cohestra::CHI::REQFlit request{};
+    request.TxnID() = 0x61;
+    ResizeableFIFO<Cohestra::CHI::REQFlit> source;
+    LUNATIC_CHECK(source.TryResize(2));
+    LUNATIC_CHECK(source.Push(request));
+
+    auto moved = std::move(source);
+    LUNATIC_CHECK(moved.Count() == 1);
+    LUNATIC_CHECK(moved.Peek()->TxnID() == request.TxnID());
+    LUNATIC_CHECK(source.Count() == 0);
+
+    ResizeableFIFO<Cohestra::CHI::REQFlit> assigned;
+    assigned = std::move(moved);
+    LUNATIC_CHECK(assigned.Count() == 1);
+    LUNATIC_CHECK(assigned.Peek()->TxnID() == request.TxnID());
+    LUNATIC_CHECK(moved.Count() == 0);
+}
