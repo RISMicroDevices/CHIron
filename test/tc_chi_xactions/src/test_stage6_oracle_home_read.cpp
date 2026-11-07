@@ -63,7 +63,7 @@ namespace {
 
     void CompleteOrderedHomeRead(SNFixture& fixture, uint16_t requestOpcode, uint16_t txnId = 1)
     {
-        StartHomeRead(fixture, requestOpcode, false, 2, txnId, txnId * 8);
+        StartHomeRead(fixture, requestOpcode, false, 1, txnId, txnId * 8);
         SendHomeReadData(fixture, requestOpcode, txnId, txnId * 8 + 2);
     }
 
@@ -117,24 +117,28 @@ XACT_TEST(Stage6OracleHomeReadNoSnpSepDMTAcceptsDataSepResp)
     AcceptDMTDataForm(Opcodes::REQ::ReadNoSnpSep, Opcodes::DAT::DataSepResp);
 }
 
-XACT_TEST(Stage6OracleHomeReadOrderedNoSnpCompletesWithoutReadReceipt)
+XACT_TEST(Stage6OracleHomeReadOrderedNoSnpWaitsForReadReceipt)
 {
     SNFixture fixture;
     CompleteOrderedHomeRead(fixture, Opcodes::REQ::ReadNoSnp);
+    XACT_CHECK(fixture.joint.HasInflight());
+    XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 20, SubordinateReadReceipt()));
     XACT_CHECK(!fixture.joint.HasInflight());
 }
 
-XACT_TEST(Stage6OracleHomeReadOrderedNoSnpSepCompletesWithoutReadReceipt)
+XACT_TEST(Stage6OracleHomeReadOrderedNoSnpSepWaitsForReadReceipt)
 {
     SNFixture fixture;
     CompleteOrderedHomeRead(fixture, Opcodes::REQ::ReadNoSnpSep);
+    XACT_CHECK(fixture.joint.HasInflight());
+    XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 20, SubordinateReadReceipt()));
     XACT_CHECK(!fixture.joint.HasInflight());
 }
 
 XACT_TEST(Stage6OracleHomeReadOrderedReadReceiptBeforeData)
 {
     SNFixture fixture;
-    StartHomeRead(fixture, Opcodes::REQ::ReadNoSnp, false, 2);
+    StartHomeRead(fixture, Opcodes::REQ::ReadNoSnp, false, 1);
     XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 2, SubordinateReadReceipt()));
     SendHomeReadData(fixture, Opcodes::REQ::ReadNoSnp, 1, 3);
     XACT_CHECK(!fixture.joint.HasInflight());
@@ -144,8 +148,9 @@ XACT_TEST(Stage6OracleHomeReadOrderedNoSnpAcceptsOneLateReadReceipt)
 {
     SNFixture fixture;
     CompleteOrderedHomeRead(fixture, Opcodes::REQ::ReadNoSnp);
-    XACT_CHECK(!fixture.joint.HasInflight());
+    XACT_CHECK(fixture.joint.HasInflight());
     XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 20, SubordinateReadReceipt()));
+    XACT_CHECK(!fixture.joint.HasInflight());
     XACT_CHECK(fixture.joint.NextTXRSP(fixture.global, 21, SubordinateReadReceipt()) ==
         XactDenial::DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED);
 }
@@ -154,8 +159,9 @@ XACT_TEST(Stage6OracleHomeReadOrderedNoSnpSepAcceptsOneLateReadReceipt)
 {
     SNFixture fixture;
     CompleteOrderedHomeRead(fixture, Opcodes::REQ::ReadNoSnpSep);
-    XACT_CHECK(!fixture.joint.HasInflight());
+    XACT_CHECK(fixture.joint.HasInflight());
     XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 20, SubordinateReadReceipt()));
+    XACT_CHECK(!fixture.joint.HasInflight());
     XACT_CHECK(fixture.joint.NextTXRSP(fixture.global, 21, SubordinateReadReceipt()) ==
         XactDenial::DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED);
 }
@@ -187,47 +193,56 @@ XACT_TEST(Stage6OracleHomeReadInvalidLateReadReceiptPreservesHistory)
 {
     SNFixture fixture;
     CompleteOrderedHomeRead(fixture, Opcodes::REQ::ReadNoSnp);
-    XACT_CHECK(!fixture.joint.HasInflight());
+    XACT_CHECK(fixture.joint.HasInflight());
 
     XACT_CHECK(fixture.joint.NextTXRSP(fixture.global, 20, SubordinateReadReceipt(2)) ==
         XactDenial::DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED);
     XACT_CHECK(fixture.joint.NextTXRSP(fixture.global, 21, Response(6, 3, Opcodes::RSP::ReadReceipt, 1)) ==
         XactDenial::DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED);
     XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 23, SubordinateReadReceipt()));
+    XACT_CHECK(!fixture.joint.HasInflight());
 }
 
 XACT_TEST(Stage6OracleHomeReadCompletedTxnIDCanBeReused)
 {
     SNFixture fixture;
     CompleteOrderedHomeRead(fixture, Opcodes::REQ::ReadNoSnp);
+    XACT_CHECK(fixture.joint.HasInflight());
+
+    XACT_CHECK(fixture.joint.NextRXREQ(fixture.global, 20,
+        HomeReadRequest(Opcodes::REQ::ReadNoSnpSep, false, 1)) == XactDenial::DENIED_REQ_TXNID_IN_USE);
+    XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 21, SubordinateReadReceipt()));
     XACT_CHECK(!fixture.joint.HasInflight());
 
-    StartHomeRead(fixture, Opcodes::REQ::ReadNoSnpSep, false, 2, 1, 20);
-    SendHomeReadData(fixture, Opcodes::REQ::ReadNoSnpSep, 1, 22);
+    StartHomeRead(fixture, Opcodes::REQ::ReadNoSnpSep, false, 1, 1, 22);
+    SendHomeReadData(fixture, Opcodes::REQ::ReadNoSnpSep, 1, 24);
+    XACT_CHECK(fixture.joint.HasInflight());
+    XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 28, SubordinateReadReceipt()));
     XACT_CHECK(!fixture.joint.HasInflight());
-    XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 25, SubordinateReadReceipt()));
 }
 
-XACT_TEST(Stage6OracleHomeReadCompletedHistoryEvictsOldest)
+XACT_TEST(Stage6OracleHomeReadOrderedGenerationsRemainLiveUntilReceipt)
 {
     SNFixture fixture;
     for (uint16_t txnId = 1; txnId <= 65; ++txnId)
     {
         CompleteOrderedHomeRead(fixture, Opcodes::REQ::ReadNoSnp, txnId);
-        XACT_CHECK(!fixture.joint.HasInflight());
+        XACT_CHECK(fixture.joint.HasInflight());
     }
 
-    XACT_CHECK(fixture.joint.NextTXRSP(fixture.global, 1001, SubordinateReadReceipt(1)) ==
-        XactDenial::DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED);
-    XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 1002, SubordinateReadReceipt(2)));
-    XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 1065, SubordinateReadReceipt(65)));
+    for (uint16_t txnId = 65; txnId != 0; --txnId)
+    {
+        XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 1000 + txnId,
+            SubordinateReadReceipt(txnId)));
+        XACT_CHECK(fixture.joint.HasInflight() == (txnId != 1));
+    }
 }
 
-XACT_TEST(Stage6OracleHomeReadCompletedHistoryCopyForkAndClear)
+XACT_TEST(Stage6OracleHomeReadLiveTransactionCopyForkAndClear)
 {
     SNFixture source;
     CompleteOrderedHomeRead(source, Opcodes::REQ::ReadNoSnp);
-    XACT_CHECK(!source.joint.HasInflight());
+    XACT_CHECK(source.joint.HasInflight());
 
     Xact::SNFJoint<config> copied(source.joint);
     Xact::SNFJoint<config> assigned;
@@ -237,6 +252,9 @@ XACT_TEST(Stage6OracleHomeReadCompletedHistoryCopyForkAndClear)
     XACT_ACCEPT(copied.NextTXRSP(source.global, 20, SubordinateReadReceipt()));
     XACT_ACCEPT(assigned.NextTXRSP(source.global, 20, SubordinateReadReceipt()));
     XACT_ACCEPT(source.joint.NextTXRSP(source.global, 20, SubordinateReadReceipt()));
+    XACT_CHECK(!copied.HasInflight());
+    XACT_CHECK(!assigned.HasInflight());
+    XACT_CHECK(!source.joint.HasInflight());
 
     source.joint.Clear();
     XACT_CHECK(source.joint.NextTXRSP(source.global, 21, SubordinateReadReceipt()) ==
@@ -259,9 +277,13 @@ XACT_TEST(Stage6OracleHomeReadLateReadReceiptDoesNotRepeatEvents)
         }));
 
     CompleteOrderedHomeRead(fixture, Opcodes::REQ::ReadNoSnp);
+    XACT_CHECK(completeCount == 0);
+    XACT_CHECK(txnIdFreeCount == 0);
+    XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 20, SubordinateReadReceipt()));
     XACT_CHECK(completeCount == 1);
     XACT_CHECK(txnIdFreeCount == 1);
-    XACT_ACCEPT(fixture.joint.NextTXRSP(fixture.global, 20, SubordinateReadReceipt()));
+    XACT_CHECK(fixture.joint.NextTXRSP(fixture.global, 21, SubordinateReadReceipt()) ==
+        XactDenial::DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED);
     XACT_CHECK(completeCount == 1);
     XACT_CHECK(txnIdFreeCount == 1);
 }

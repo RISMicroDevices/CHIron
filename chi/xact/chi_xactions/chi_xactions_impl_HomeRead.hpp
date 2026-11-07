@@ -140,7 +140,8 @@ namespace /*CHI::*/Xact {
     template<FlitConfigurationConcept config>
     inline bool XactionHomeRead<config>::IsResponseComplete(const Global<config>& glbl) const noexcept
     {
-        return true;
+        return this->first.flit.req.Order() == 0 ||
+               this->HasRSP({ Opcodes::RSP::ReadReceipt });
     }
 
     template<FlitConfigurationConcept config>
