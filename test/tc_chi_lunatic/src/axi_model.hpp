@@ -51,6 +51,7 @@ namespace LunaticTest {
             readResponses.clear();
             completedWrites.clear();
             completedReads.clear();
+            accessedReadAddresses.clear();
             writeResponseScripts.clear();
             readResponseScripts.clear();
             writeResponseOrder.clear();
@@ -110,6 +111,7 @@ namespace LunaticTest {
         const std::map<uint64_t, CHI::Lunatic::LineData>& Memory() const noexcept { return memory; }
         const std::vector<CompletedWrite>& CompletedWrites() const noexcept { return completedWrites; }
         const std::vector<CompletedRead>& CompletedReads() const noexcept { return completedReads; }
+        const std::vector<uint64_t>& AccessedReadAddresses() const noexcept { return accessedReadAddresses; }
         const std::vector<std::string>& Errors() const noexcept { return errors; }
 
         template<typename Endpoint>
@@ -217,9 +219,17 @@ namespace LunaticTest {
 
         uint64_t BeatAddress(const CHI::Lunatic::AXIAddress& address, size_t beat) const noexcept
         {
-            if (address.burst == CHI::Lunatic::AXIBurst::FIXED)
+            if (address.burst == CHI::Lunatic::AXIBurst::FIXED || beat == 0)
                 return address.address;
-            return address.address + beat * bytesPerBeat;
+            const size_t transferBytes = size_t(1) << address.size;
+            return (address.address & ~uint64_t(transferBytes - 1)) + beat * transferBytes;
+        }
+
+        size_t ActiveBytes(const CHI::Lunatic::AXIAddress& address, size_t beat) const noexcept
+        {
+            const size_t transferBytes = size_t(1) << address.size;
+            return beat == 0 && address.burst != CHI::Lunatic::AXIBurst::FIXED
+                ? transferBytes - address.address % transferBytes : transferBytes;
         }
 
         uint8_t ReadByte(uint64_t address) const
@@ -247,13 +257,16 @@ namespace LunaticTest {
         void AcceptW(const CHI::Lunatic::AXIWriteData& data)
         {
             auto& write = writes.front();
-            const uint64_t base = BeatAddress(write.address, write.beats.size());
-            for (size_t index = 0; index < bytesPerBeat; ++index)
+            const size_t beat = write.beats.size();
+            const uint64_t base = BeatAddress(write.address, beat);
+            const size_t lane = base % bytesPerBeat;
+            const size_t activeBytes = ActiveBytes(write.address, beat);
+            for (size_t index = 0; index < activeBytes; ++index)
             {
-                if (!data.strobes[index])
+                if (!data.strobes[lane + index])
                     continue;
                 const uint64_t address = base + index;
-                memory[LineAddress(address)][address % CHI::Lunatic::LINE_SIZE] = data.data[index];
+                memory[LineAddress(address)][address % CHI::Lunatic::LINE_SIZE] = data.data[lane + index];
             }
             write.beats.push_back(data);
             if (data.last)
@@ -286,8 +299,13 @@ namespace LunaticTest {
                 data.resp = response;
                 data.last = beat + 1 == read.beats.size();
                 const uint64_t base = BeatAddress(address, beat);
-                for (size_t index = 0; index < bytesPerBeat; ++index)
-                    data.data[index] = ReadByte(base + index);
+                const size_t lane = base % bytesPerBeat;
+                const size_t activeBytes = ActiveBytes(address, beat);
+                for (size_t index = 0; index < activeBytes; ++index)
+                {
+                    accessedReadAddresses.push_back(base + index);
+                    data.data[lane + index] = ReadByte(base + index);
+                }
             }
             readResponses.push_back(std::move(read));
         }
@@ -321,6 +339,7 @@ namespace LunaticTest {
         std::deque<CompletedRead>                   readResponses;
         std::vector<CompletedWrite>                 completedWrites;
         std::vector<CompletedRead>                  completedReads;
+        std::vector<uint64_t>                       accessedReadAddresses;
         std::deque<CHI::Lunatic::AXIResp>           writeResponseScripts;
         std::deque<CHI::Lunatic::AXIResp>           readResponseScripts;
         std::deque<uint32_t>                        writeResponseOrder;

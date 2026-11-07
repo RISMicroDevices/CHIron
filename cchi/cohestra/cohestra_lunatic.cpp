@@ -138,8 +138,11 @@ namespace Cohestra {
             bool accepted = false;
             if (flit->TgtID() == configuration.homeNodeId)
                 accepted = Home().PushRXRSP(*flit);
-            else if (const auto target = FindPort(flit->TgtID()))
-                accepted = rnInterface->PushRXRSP(*target, *flit);
+            else if (FindPort(flit->TgtID()))
+            {
+                ReportError("Lunatic RN response cannot target a peer");
+                return;
+            }
             else
             {
                 ReportError("Lunatic RN response targets an unknown node");
@@ -167,7 +170,14 @@ namespace Cohestra {
             if (flit->TgtID() == configuration.homeNodeId)
                 accepted = Home().PushRXDAT(*flit);
             else if (const auto target = FindPort(flit->TgtID()))
+            {
+                if (flit->Opcode() != ::CHI::Eb::Opcodes::DAT::CompData)
+                {
+                    ReportError("Lunatic RN data opcode cannot target a peer");
+                    return;
+                }
                 accepted = rnInterface->PushRXDAT(*target, *flit);
+            }
             else
             {
                 ReportError("Lunatic RN data targets an unknown node");

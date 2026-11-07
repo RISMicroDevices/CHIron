@@ -567,6 +567,27 @@ namespace Cohestra {
         inline void V3CHISeparateFieldDriveRSP(VT& verilated, const Cohestra::CHI::RSPFlit& flit) noexcept
         {
             V3_CHI_RSP_FIELDS(V3_CHI_RSP_FIELD_DRIVE)
+            namespace Opcodes = ::CHI::Eb::Opcodes::RSP;
+            switch (flit.Opcode())
+            {
+                case Opcodes::Persist:
+                case Opcodes::CompPersist:
+                    if constexpr (requires { Traits::PGroupID(verilated) = flit.PGroupID().decay(); })
+                        Traits::PGroupID(verilated) = flit.PGroupID().decay();
+                    break;
+                case Opcodes::CompStashDone:
+                    if constexpr (requires { Traits::StashGroupID(verilated) = flit.StashGroupID().decay(); })
+                        Traits::StashGroupID(verilated) = flit.StashGroupID().decay();
+                    break;
+                case Opcodes::TagMatch:
+                    if constexpr (requires { Traits::TagGroupID(verilated) = flit.TagGroupID().decay(); })
+                        Traits::TagGroupID(verilated) = flit.TagGroupID().decay();
+                    break;
+                default:
+                    if constexpr (requires { Traits::DBID(verilated) = flit.DBID(); })
+                        Traits::DBID(verilated) = flit.DBID();
+                    break;
+            }
         }
 
         template<class VT, class Traits>
@@ -591,6 +612,27 @@ namespace Cohestra {
         inline void V3CHISeparateFieldSampleRSP(VT& verilated, Cohestra::CHI::RSPFlit& flit) noexcept
         {
             V3_CHI_RSP_FIELDS(V3_CHI_RSP_FIELD_SAMPLE)
+            namespace Opcodes = ::CHI::Eb::Opcodes::RSP;
+            switch (flit.Opcode())
+            {
+                case Opcodes::Persist:
+                case Opcodes::CompPersist:
+                    if constexpr (requires { flit.PGroupID() = Traits::PGroupID(verilated); })
+                        flit.PGroupID() = Traits::PGroupID(verilated);
+                    break;
+                case Opcodes::CompStashDone:
+                    if constexpr (requires { flit.StashGroupID() = Traits::StashGroupID(verilated); })
+                        flit.StashGroupID() = Traits::StashGroupID(verilated);
+                    break;
+                case Opcodes::TagMatch:
+                    if constexpr (requires { flit.TagGroupID() = Traits::TagGroupID(verilated); })
+                        flit.TagGroupID() = Traits::TagGroupID(verilated);
+                    break;
+                default:
+                    if constexpr (requires { flit.DBID() = Traits::DBID(verilated); })
+                        flit.DBID() = Traits::DBID(verilated);
+                    break;
+            }
         }
 
         template<class VT, class Traits>

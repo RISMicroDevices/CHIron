@@ -28,16 +28,23 @@ namespace {
 
         std::map<LineKey, LineData> lines;
         std::vector<uint16_t>       opcodes;
+        std::vector<uint8_t>        writeExcl;
+        bool                        retryWrite = false;
         SNOracle<config>            oracle{ 2, 6 };
 
         void SendRead(Base& driver, const typename Base::REQ& request)
         {
             constexpr size_t bytes = config::dataWidth / 8;
-            LUNATIC_CHECK(CHI::Eb::MemAttrs::ExtractEWA(request.MemAttr()) == 0);
+            LUNATIC_CHECK(CHI::Eb::MemAttrs::ExtractEWA(request.MemAttr()) == 1);
             const LineKey line = LineKey::FromAddress(request.Addr(), request.NS());
             const LineData data = Read(line);
-            for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
+            const size_t transfer = std::min<size_t>(LINE_SIZE, size_t(1) << request.Size());
+            const size_t first = ((request.Addr() & ~(transfer - 1)) % LINE_SIZE) / bytes;
+            const size_t count = std::max<size_t>(1, (transfer + bytes - 1) / bytes);
+            for (size_t packet = 0; packet < count; ++packet)
             {
+                const size_t beat = first + packet;
+                LUNATIC_CHECK(beat < LINE_SIZE / bytes);
                 typename Base::DAT response{};
                 response.SrcID() = 6;
                 response.TgtID() = 2;
@@ -209,6 +216,10 @@ namespace {
 
         const std::vector<uint16_t>& Opcodes() const { return opcodes; }
 
+        const std::vector<uint8_t>& WriteExcl() const { return writeExcl; }
+
+        void RetryNextWrite() { retryWrite = true; }
+
         void Step(Base& driver)
         {
             if (!driver.node.PeekTXREQ())
@@ -221,7 +232,7 @@ namespace {
             {
                 LUNATIC_CHECK(request->Order() == 0 && request->SnpAttr() == 0);
                 LUNATIC_CHECK(request->SnoopMe() == 0 && request->DoDWT() == 0 && request->ExpCompAck() == 0);
-                LUNATIC_CHECK(CHI::Eb::MemAttrs::ExtractEWA(request->MemAttr()) == 0);
+                LUNATIC_CHECK(CHI::Eb::MemAttrs::ExtractEWA(request->MemAttr()) == 1);
                 HandleAtomic(driver, *request);
                 return;
             }
@@ -233,6 +244,30 @@ namespace {
             if (request->Opcode() == CHI::Eb::Opcodes::REQ::WriteNoSnpFull ||
                 request->Opcode() == CHI::Eb::Opcodes::REQ::WriteNoSnpPtl)
             {
+                writeExcl.push_back(request->Excl());
+                if (retryWrite)
+                {
+                    retryWrite = false;
+                    typename Base::RSP retry{};
+                    retry.SrcID() = 6;
+                    retry.TgtID() = 2;
+                    retry.TxnID() = request->TxnID();
+                    retry.Opcode() = CHI::Eb::Opcodes::RSP::RetryAck;
+                    retry.PCrdType() = request->PCrdType();
+                    oracle.Response(driver.now, retry);
+                    LUNATIC_CHECK(driver.node.PushRXRSP(retry));
+                    driver.Tick();
+
+                    typename Base::RSP grant{};
+                    grant.SrcID() = 6;
+                    grant.TgtID() = 2;
+                    grant.Opcode() = CHI::Eb::Opcodes::RSP::PCrdGrant;
+                    grant.PCrdType() = request->PCrdType();
+                    oracle.Response(driver.now, grant);
+                    LUNATIC_CHECK(driver.node.PushRXRSP(grant));
+                    driver.Tick();
+                    return;
+                }
                 HandleWrite(driver, *request);
                 return;
             }
@@ -295,6 +330,16 @@ namespace {
                 }
                 driver.Tick();
             }
+            std::cerr << "external drain state: req=" << bool(driver.node.PeekTXREQ())
+                      << " rsp=" << bool(driver.node.PeekTXRSP()) << " dat=" << bool(driver.node.PeekTXDAT())
+                      << " snp=" << bool(driver.node.PeekTXSNP()) << " errors=" << driver.node.GetErrors().size()
+                      << " inflight=" << driver.node.HasInflight() << '\n';
+            if (driver.node.PeekTXRSP())
+                std::cerr << "pending response opcode=" << uint16_t(driver.node.PeekTXRSP()->Opcode()) << '\n';
+            if (driver.node.PeekTXREQ())
+                std::cerr << "pending request opcode=" << uint16_t(driver.node.PeekTXREQ()->Opcode()) << '\n';
+            for (const auto& error : driver.node.GetErrors())
+                std::cerr << "node error transaction=" << error.transaction << " reason=" << error.reason << '\n';
             throw std::runtime_error("external backend failed to drain");
         }
     };
@@ -341,11 +386,18 @@ namespace {
 
     template<typename config>
     void ExternalWriteback(CheckedDriver<config>& driver, const LineKey& line, const LineData& data,
-                           uint16_t opcode = CHI::Eb::Opcodes::REQ::WriteBackFull)
+                           uint16_t opcode = CHI::Eb::Opcodes::REQ::WriteBackFull, bool partial = false)
     {
-        driver.PushRequest(driver.Request(opcode, 4, 1, line.address));
+        if (partial)
+            driver.driver.node.GetMemory().WriteFull(line, data);
+        const uint16_t requestOpcode = partial ? uint16_t(CHI::Eb::Opcodes::REQ::WriteBackPtl) : uint16_t(opcode);
+        driver.PushRequest(driver.Request(requestOpcode, 4, 1, line.address));
         auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
-        driver.WriteData(4, 1, dbid.DBID(), data, ExternalEnables(), CHI::Eb::Opcodes::DAT::CopyBackWrData,
+        ByteEnables enables = ExternalEnables();
+        if (partial)
+            for (size_t index = 0; index < enables.size(); ++index)
+                enables[index] = index % 32 < 16;
+        driver.WriteData(4, 1, dbid.DBID(), data, enables, CHI::Eb::Opcodes::DAT::CopyBackWrData,
                          CHI::Eb::Resps::CopyBackWrData_UD_PD);
     }
 
@@ -459,10 +511,11 @@ LUNATIC_TEST(Stage4ExternalPartialSnoopUsesSubordinateBaseline)
     BackendModel<Config256> backend;
     const LineKey line = LineKey::FromAddress(0x24000, false);
     const LineData data = ExternalData(37);
-    backend.Write(line, ExternalData(5));
-    ExternalWriteback(driver, line, data);
+    backend.Write(line, data);
+    ExternalWriteback(driver, line, data, CHI::Eb::Opcodes::REQ::WriteBackFull, true);
     LUNATIC_CHECK(ExternalReadData(driver, backend, 5, 8, line.address, CHI::Eb::Opcodes::REQ::ReadUnique) == data);
     backend.Run(driver.driver);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 5) == CacheState::UDP);
 
     driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 6, 9, line.address, true));
     auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
@@ -659,6 +712,49 @@ LUNATIC_TEST(Stage5ExternalWriteUniquePartialAllocationBaseline)
         expected[index] = update[index];
     LUNATIC_CHECK(driver.driver.node.InspectHome(line).data == expected);
     LUNATIC_CHECK(backend.Read(line) == initial);
+}
+
+LUNATIC_TEST(Stage5ExternalWriteUniqueNarrowAllocationBaseline)
+{
+    const auto run = [](PolicyKind policy) {
+        Options options;
+        options.policy = policy;
+        options.backend = BackendKind::CHI;
+        options.subordinateId = 6;
+        CheckedDriver<Config256> driver(options);
+        BackendModel<Config256> backend;
+        const LineKey line = LineKey::FromAddress(0x43180, false);
+        const LineData initial = ExternalData(23);
+        const LineData update = ExternalData(181);
+        backend.Write(line, initial);
+
+        auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniquePtl, 4, 1, line.address);
+        request.Size() = 4;
+        driver.PushRequest(request);
+        const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+        ByteEnables enables{};
+        for (size_t index = 0; index < 16; ++index)
+            enables[index] = 1;
+        driver.WriteData(4, 1, dbid, update, enables, CHI::Eb::Opcodes::DAT::NonCopyBackWrData, 0, 1);
+        LUNATIC_CHECK(ExternalNextRSP(driver, backend, CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);
+        backend.Run(driver.driver);
+        driver.Quiesce();
+
+        LineData expected = initial;
+        for (size_t index = 0; index < 16; ++index)
+            expected[index] = update[index];
+        const HomeLineInfo home = driver.driver.node.InspectHome(line);
+        LUNATIC_CHECK(home.data == expected);
+        LUNATIC_CHECK(std::all_of(home.validBytes.begin(), home.validBytes.end(),
+            [](uint8_t valid) { return valid != 0; }));
+        LUNATIC_CHECK(backend.Read(line) == initial);
+        LUNATIC_CHECK(ExternalReadData(driver, backend, 5, 2, line.address,
+            CHI::Eb::Opcodes::REQ::ReadUnique) == expected);
+        backend.Run(driver.driver);
+        driver.Quiesce();
+    };
+    for (PolicyKind policy : { PolicyKind::NINE, PolicyKind::Exclusive, PolicyKind::Inclusive })
+        run(policy);
 }
 
 LUNATIC_TEST(Stage5ExternalWriteUniqueStash)
@@ -908,7 +1004,7 @@ namespace {
     void ExternalAtomicDrive(CheckedDriver<config>& driver, BackendModel<config>& backend,
                              const typename Driver<config>::REQ& request, const LineData& operands,
                              const LineData& oldData, std::optional<NodeId> peer = std::nullopt,
-                             bool reverse = false)
+                             bool reverse = false, bool partialPeer = false)
     {
         const bool store = CHI::Eb::Opcodes::REQ::AtomicStore::Is(request.Opcode());
         driver.PushRequest(request);
@@ -916,7 +1012,9 @@ namespace {
         {
             auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
             LUNATIC_CHECK(snoop.target == *peer && snoop.flit.RetToSrc() == 0);
-            driver.SnoopData(*peer, snoop.flit.TxnID(), oldData, CHI::Eb::Resps::SnpRespData_I_PD);
+            driver.SnoopData(*peer, snoop.flit.TxnID(), oldData,
+                partialPeer ? CHI::Eb::Resps::SnpRespDataPtl_I_PD : CHI::Eb::Resps::SnpRespData_I_PD, partialPeer,
+                (request.Addr() >> 4) & 3);
         }
         driver.driver.Until([&] { return static_cast<bool>(driver.driver.node.PeekTXRSP()); });
         const uint16_t firstOpcode = driver.driver.node.PeekTXRSP()->Opcode();
@@ -1015,7 +1113,11 @@ namespace {
                 SetExternalInteger(operands, (address ^ 8) % LINE_SIZE, 8, 9);
             backend.Write(line, initial);
             const Request executionRequest = ExternalAtomicRequest(opcode, size, address);
-            const auto expected = ExecuteAtomic(executionRequest, initial, operands);
+            AtomicExecution expected = compare ? AtomicExecution{ initial, true }
+                : ExecuteAtomic(executionRequest, initial, operands);
+            if (compare)
+                for (size_t index = 0; index < 8; ++index)
+                    expected.data[address % LINE_SIZE + index] = operands[(address ^ 8) % LINE_SIZE + index];
             LUNATIC_CHECK(expected.write);
             ExternalAtomicDrive(driver, backend, request, operands, initial);
             LUNATIC_CHECK(backend.Read(line) == expected.data);
@@ -1057,6 +1159,80 @@ namespace {
         LUNATIC_CHECK(backend.Opcodes()[backend.Opcodes().size() - 2] == CHI::Eb::Opcodes::REQ::WriteNoSnpFull);
     }
 
+    template<typename config>
+    void RunExternalAtomicSpillExcl(uint16_t opcode, bool peer, bool retry)
+    {
+        Options options;
+        options.backend = BackendKind::CHI;
+        options.subordinateId = 6;
+        CheckedDriver<config> driver(options);
+        BackendModel<config> backend;
+        const LineKey line = LineKey::FromAddress(0x51500, false);
+        const uint64_t address = line.address + 0x20;
+        const bool compare = opcode == CHI::Eb::Opcodes::REQ::AtomicCompare;
+        LineData initial = ExternalData(37);
+        LineData operands{};
+        SetExternalInteger(initial, 0x20, compare ? 8 : 4, 5);
+        SetExternalInteger(operands, 0x20, compare ? 8 : 4, compare ? 5 : 7);
+        if (compare)
+            SetExternalInteger(operands, 0x28, 8, 9);
+
+        ExternalWriteback(driver, line, initial);
+        if (peer)
+            LUNATIC_CHECK(ExternalReadData(driver, backend, 6, 91, line.address,
+                CHI::Eb::Opcodes::REQ::ReadUnique) == initial);
+        backend.Run(driver.driver);
+        driver.Quiesce();
+
+        auto request = driver.Request(opcode, 4, 100, address);
+        request.Size() = compare ? 4 : 2;
+        request.SnpAttr() = 1;
+        request.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+        request.SnoopMe() = 1;
+        const size_t firstSpill = backend.WriteExcl().size();
+        const size_t spillCount = retry ? 2 : 1;
+        if (retry)
+            backend.RetryNextWrite();
+        ExternalAtomicDrive(driver, backend, request, operands, initial,
+            peer ? std::optional<NodeId>{ 6 } : std::nullopt);
+
+        LUNATIC_CHECK(backend.WriteExcl().size() == firstSpill + spillCount);
+        for (size_t index = firstSpill; index < backend.WriteExcl().size(); ++index)
+            LUNATIC_CHECK(backend.WriteExcl()[index] == 0);
+        LUNATIC_CHECK(backend.Opcodes().back() == opcode);
+        for (size_t index = 0; index < spillCount; ++index)
+            LUNATIC_CHECK(backend.Opcodes()[backend.Opcodes().size() - 2 - index] ==
+                CHI::Eb::Opcodes::REQ::WriteNoSnpFull);
+        const Request executionRequest = ExternalAtomicRequest(opcode, request.Size(), address);
+        LUNATIC_CHECK(backend.Read(line) == ExecuteAtomic(executionRequest, initial, operands).data);
+    }
+
+    template<typename config>
+    void RunExternalAtomicSpillExclMatrix()
+    {
+        for (uint16_t opcode : { CHI::Eb::Opcodes::REQ::AtomicStore::ADD,
+                 CHI::Eb::Opcodes::REQ::AtomicLoad::ADD, CHI::Eb::Opcodes::REQ::AtomicSwap,
+                 CHI::Eb::Opcodes::REQ::AtomicCompare })
+            for (bool peer : { false, true })
+                for (bool retry : { false, true })
+                    RunExternalAtomicSpillExcl<config>(opcode, peer, retry);
+    }
+
+}
+
+LUNATIC_TEST(Stage5ExternalAtomicSpillExcl128)
+{
+    RunExternalAtomicSpillExclMatrix<Config128>();
+}
+
+LUNATIC_TEST(Stage5ExternalAtomicSpillExcl256)
+{
+    RunExternalAtomicSpillExclMatrix<Config256>();
+}
+
+LUNATIC_TEST(Stage5ExternalAtomicSpillExcl512)
+{
+    RunExternalAtomicSpillExclMatrix<Config512>();
 }
 
 LUNATIC_TEST(Stage5ExternalAtomicMatrix128)
@@ -1107,6 +1283,108 @@ LUNATIC_TEST(Stage5ExternalAtomicCompare128ReversedPackets)
     }
     backend.Write(line, initial);
     ExternalAtomicDrive(driver, backend, request, operands, initial, std::nullopt, true);
-    const Request executionRequest = ExternalAtomicRequest(request.Opcode(), request.Size(), address);
-    LUNATIC_CHECK(backend.Read(line) == ExecuteAtomic(executionRequest, initial, operands).data);
+    LineData expected = initial;
+    for (size_t index = 0; index < 16; ++index)
+        expected[0x30 + index] = operands[0x20 + index];
+    LUNATIC_CHECK(backend.Read(line) == expected);
+}
+
+namespace {
+
+    template<typename config>
+    void RunExternalPartialDirtyAtomic(PolicyKind policy, uint16_t opcode)
+    {
+        Options options;
+        options.policy = policy;
+        options.backend = BackendKind::CHI;
+        options.subordinateId = 6;
+        options.slcSets = 1;
+        options.slcWays = 1;
+        CheckedDriver<config> driver(options);
+        BackendModel<config> backend;
+        const LineKey a = LineKey::FromAddress(0x51400, false);
+        const LineKey b = LineKey::FromAddress(0x51440, false);
+        const LineData initial = ExternalData(37);
+        const LineData dirty = ExternalData(167);
+        const LineData replacement = ExternalData(213);
+        constexpr size_t bytes = config::dataWidth / 8;
+        ByteEnables partialEnables{};
+        LineData merged = initial;
+        for (size_t index = 0; index < LINE_SIZE; ++index)
+            if (index % bytes < bytes / 2)
+            {
+                partialEnables[index] = 1;
+                merged[index] = dirty[index];
+            }
+        backend.Write(a, initial);
+
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackPtl, 6, 90, a.address));
+        const auto partial = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
+        driver.WriteData(6, 90, partial.DBID(), dirty, partialEnables,
+            CHI::Eb::Opcodes::DAT::CopyBackWrData, CHI::Eb::Resps::CopyBackWrData_UD_PD);
+        backend.Run(driver.driver);
+        driver.Quiesce();
+        LUNATIC_CHECK(ExternalReadData(driver, backend, 6, 91, a.address,
+            CHI::Eb::Opcodes::REQ::ReadUnique) == merged);
+        backend.Run(driver.driver);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(a, 6) == CacheState::UDP);
+
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackFull, 5, 92, b.address));
+        const auto evict = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
+        driver.WriteData(5, 92, evict.DBID(), replacement, ExternalEnables(),
+            CHI::Eb::Opcodes::DAT::CopyBackWrData, CHI::Eb::Resps::CopyBackWrData_UD_PD);
+        backend.Run(driver.driver);
+        driver.Quiesce();
+        LUNATIC_CHECK(!driver.driver.node.InspectHome(a).valid);
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(a, 6) == CacheState::UDP);
+        LUNATIC_CHECK(backend.Read(a) == (policy == PolicyKind::Exclusive ? merged : initial));
+
+        const auto integer = [&](size_t offset, size_t size) {
+            uint64_t value = 0;
+            for (size_t index = 0; index < size; ++index)
+                value |= uint64_t(merged[offset + index]) << (index * 8);
+            return value;
+        };
+        const bool compare = opcode == CHI::Eb::Opcodes::REQ::AtomicCompare;
+        const uint64_t address = a.address + 0x20;
+        auto request = driver.Request(opcode, 4, 100, address);
+        request.Size() = compare ? 4 : 2;
+        LineData operands{};
+        if (compare)
+        {
+            SetExternalInteger(operands, 0x20, 8, integer(0x20, 8) ^ 1);
+            SetExternalInteger(operands, 0x28, 8, 9);
+        }
+        else
+            SetExternalInteger(operands, 0x20, 4, 7);
+        ExternalAtomicDrive(driver, backend, request, operands, merged, 6, false, true);
+
+        LineData expected = merged;
+        if (!compare)
+            SetExternalInteger(expected, 0x20, 4,
+                opcode == CHI::Eb::Opcodes::REQ::AtomicSwap ? 7 : integer(0x20, 4) + 7);
+        LUNATIC_CHECK(backend.Read(a) == expected);
+        LUNATIC_CHECK(backend.Opcodes().back() == request.Opcode());
+        LUNATIC_CHECK(backend.Opcodes()[backend.Opcodes().size() - 2] == CHI::Eb::Opcodes::REQ::WriteNoSnpFull);
+    }
+
+}
+
+LUNATIC_TEST(Stage5ExternalAtomicPartialDirtyPreservesBaseline)
+{
+    RunExternalPartialDirtyAtomic<Config256>(PolicyKind::NINE, CHI::Eb::Opcodes::REQ::AtomicLoad::ADD);
+}
+
+LUNATIC_TEST(Stage5ExternalAtomicPartialDirtyMatrix)
+{
+    for (PolicyKind policy : { PolicyKind::NINE, PolicyKind::Exclusive })
+        for (uint16_t opcode : { CHI::Eb::Opcodes::REQ::AtomicLoad::ADD,
+                 CHI::Eb::Opcodes::REQ::AtomicStore::ADD, CHI::Eb::Opcodes::REQ::AtomicSwap,
+                 CHI::Eb::Opcodes::REQ::AtomicCompare })
+        {
+            RunExternalPartialDirtyAtomic<Config128>(policy, opcode);
+            RunExternalPartialDirtyAtomic<Config256>(policy, opcode);
+            RunExternalPartialDirtyAtomic<Config512>(policy, opcode);
+        }
 }

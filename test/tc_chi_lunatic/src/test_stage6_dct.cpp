@@ -40,11 +40,14 @@ LUNATIC_TEST(Stage6DCTForwardedRead)
     options.dctEnabled = true;
     CheckedDriver<Config256> driver(options);
     const LineKey line = LineKey::FromAddress(0x10000, false);
-    const LineData expected{};
+    LineData expected{};
+    for (size_t index = 0; index < expected.size(); ++index)
+        expected[index] = uint8_t(0x5a + index * 13);
     SeedDirtyProvider(driver, line, expected);
     const auto snoop = StartDCT(driver, line);
 
     constexpr size_t bytes = Config256::dataWidth / 8;
+    LineData observed{};
     for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
     {
         typename CheckedDriver<Config256>::DAT data{};
@@ -57,9 +60,18 @@ LUNATIC_TEST(Stage6DCTForwardedRead)
         data.Resp() = CHI::Eb::Resps::CompData_SD_PD;
         data.DataID() = beat * bytes / 16;
         data.CCID() = 0;
+        data.BE() = ~uint64_t(0);
+        for (size_t index = 0; index < bytes; ++index)
+        {
+            const size_t lineOffset = beat * bytes + index;
+            data.Data()[index / 8] |= uint64_t(expected[lineOffset]) << ((index % 8) * 8);
+            observed[lineOffset] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
+            LUNATIC_CHECK(observed[lineOffset] == expected[lineOffset]);
+        }
         driver.Oracle(6).SnoopData(driver.driver.now, data);
         driver.Oracle(4).Data(driver.driver.now, data);
     }
+    LUNATIC_CHECK(observed == expected);
 
     typename CheckedDriver<Config256>::RSP response{};
     response.SrcID() = 6;
@@ -71,6 +83,7 @@ LUNATIC_TEST(Stage6DCTForwardedRead)
     driver.Oracle(6).SnoopResponse(driver.driver.now, response);
     LUNATIC_CHECK(driver.driver.node.PushRXRSP(response));
     driver.driver.Tick();
+    LUNATIC_CHECK(!driver.driver.node.PeekTXDAT());
     driver.CompAck(4, snoop.flit.TxnID());
     driver.Quiesce();
     LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::SD);

@@ -59,7 +59,8 @@ namespace {
         uint64_t checkBits = 0;
         for (size_t index = 0; index < LINE_SIZE; ++index)
         {
-            flit.Data()[index / 8] |= uint64_t(data[index]) << ((index % 8) * 8);
+            if (enables[index])
+                flit.Data()[index / 8] |= uint64_t(data[index]) << ((index % 8) * 8);
             byteEnables |= uint64_t(bool(enables[index])) << index;
             checkBits |= uint64_t(check[index] & 1) << index;
         }
@@ -117,6 +118,36 @@ LUNATIC_TEST(Stage7ProfileCapabilitiesAndUnsupportedFeatures)
     options = {};
     options.dvmEnabled = true;
     CheckThrows([&] { ValidateOptions(options); });
+}
+
+LUNATIC_TEST(Stage7DVMRequestIsContained)
+{
+    Options options;
+    options.backend = BackendKind::CHI;
+    options.subordinateId = 6;
+    Driver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x73000, false);
+    const LineData initial = MetadataPattern(61);
+    driver.node.GetMemory().WriteFull(line, initial);
+
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::DVMOp, 4, 44, line.address);
+    request.Size() = 3;
+    request.AllowRetry() = 0;
+    LUNATIC_CHECK(driver.node.PushRXREQ(request));
+    const auto response = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+    LUNATIC_CHECK(response.TgtID() == 4 && response.TxnID() == 44);
+    LUNATIC_CHECK(response.RespErr() != CHI::Eb::RespErrs::OK);
+    for (size_t cycle = 0; cycle < 16; ++cycle)
+    {
+        LUNATIC_CHECK(!driver.node.PeekTXREQ());
+        LUNATIC_CHECK(!driver.node.PeekTXSNP());
+        LUNATIC_CHECK(!driver.node.PeekTXDAT());
+        driver.Tick();
+    }
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.node.GetMemory().Read(line) == initial);
+    LUNATIC_CHECK(!driver.node.InspectHome(line).valid);
+    LUNATIC_CHECK(!driver.node.GetErrors().empty());
 }
 
 LUNATIC_TEST(Stage7MetadataSurvivesMemoryAndPartialWrites)

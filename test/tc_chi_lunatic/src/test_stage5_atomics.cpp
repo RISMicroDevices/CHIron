@@ -113,35 +113,38 @@ LUNATIC_TEST(Stage5AtomicALUAllOperationsAndWidths)
 LUNATIC_TEST(Stage5AtomicComparePlacementMatchAndMismatch)
 {
     for (size_t bytes : { size_t(1), size_t(2), size_t(4), size_t(8), size_t(16) })
-    {
-        const uint8_t size = bytes == 1 ? 1 : bytes == 2 ? 2 : bytes == 4 ? 3 : bytes == 8 ? 4 : 5;
-        const size_t address = 0x20 + bytes;
-        const size_t swapAddress = address ^ bytes;
-        Request request = AtomicRequest(CHI::Eb::Opcodes::REQ::AtomicCompare, size, address);
-        LineData initial{};
-        LineData operands{};
-        initial.fill(0x22);
-        for (size_t index = 0; index < bytes; ++index)
+        for (bool upperHalf : { false, true })
         {
-            initial[address + index] = 0x66;
-            initial[swapAddress + index] = 0x44;
-            operands[address + index] = 0x66;
-            operands[swapAddress + index] = 0x99;
-        }
-        const auto match = ExecuteAtomic(request, initial, operands);
-        LUNATIC_CHECK(match.write);
-        for (size_t index = 0; index < bytes; ++index)
-        {
-            LUNATIC_CHECK(match.data[swapAddress + index] == 0x99);
-            LUNATIC_CHECK(match.data[address + index] == 0x66);
-        }
-        LUNATIC_CHECK(match.data[0] == initial[0]);
+            const uint8_t size = bytes == 1 ? 1 : bytes == 2 ? 2 : bytes == 4 ? 3 : bytes == 8 ? 4 : 5;
+            const size_t address = 0x20 + (upperHalf ? bytes : 0);
+            const size_t swapAddress = address ^ bytes;
+            Request request = AtomicRequest(CHI::Eb::Opcodes::REQ::AtomicCompare, size, address);
+            LineData initial{};
+            LineData operands{};
+            initial.fill(0x22);
+            for (size_t index = 0; index < bytes; ++index)
+            {
+                initial[address + index] = 0x66;
+                initial[swapAddress + index] = 0x44;
+                operands[address + index] = 0x66;
+                operands[swapAddress + index] = 0x99;
+            }
+            const auto match = ExecuteAtomic(request, initial, operands);
+            LUNATIC_CHECK(match.write);
+            LineData expected = initial;
+            for (size_t index = 0; index < bytes; ++index)
+            {
+                expected[address + index] = 0x99;
+                LUNATIC_CHECK(match.data[address + index] == 0x99);
+                LUNATIC_CHECK(match.data[swapAddress + index] == 0x44);
+            }
+            LUNATIC_CHECK(match.data == expected);
 
-        operands[address] ^= 1;
-        const auto mismatch = ExecuteAtomic(request, initial, operands);
-        LUNATIC_CHECK(!mismatch.write);
-        LUNATIC_CHECK(mismatch.data == initial);
-    }
+            operands[address] ^= 1;
+            const auto mismatch = ExecuteAtomic(request, initial, operands);
+            LUNATIC_CHECK(!mismatch.write);
+            LUNATIC_CHECK(mismatch.data == initial);
+        }
 }
 
 LUNATIC_TEST(Stage5AtomicGeometryAndBeatMasks)

@@ -290,13 +290,14 @@ LUNATIC_TEST(Stage8PMUSnoopAndBackInvalidateStalls)
     LUNATIC_CHECK(waiting.GetStalls(WaitReason::BackInvalidate) > 0);
     LUNATIC_CHECK(waiting.GetStalls(WaitReason::Snoop) > 0);
 
-    driver.SnoopData(4, snoop.flit.TxnID(), dataA, CHI::Eb::Resps::SnpRespData_I);
+    driver.SnoopResponse(4, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
     ReceiveUnique(driver, 5, 2);
     driver.Quiesce();
     const auto pmu = driver.driver.node.GetPerformanceCounters();
     LUNATIC_CHECK(pmu.emittedTXSNP == 1);
     LUNATIC_CHECK(pmu.completedSnoopTargets == 1);
-    LUNATIC_CHECK(pmu.acceptedRXDAT == 2);
+    LUNATIC_CHECK(pmu.acceptedRXRSP == waiting.acceptedRXRSP + 2);
+    LUNATIC_CHECK(pmu.acceptedRXDAT == waiting.acceptedRXDAT);
     LUNATIC_CHECK(pmu.emittedTXDAT == 4);
     LUNATIC_CHECK(pmu.retiredTransactions == 2);
 }

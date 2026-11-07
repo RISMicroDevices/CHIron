@@ -82,11 +82,14 @@ namespace LunaticTest {
 
         void WriteData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
                        CHI::Lunatic::DataBufferId dbid, const CHI::Lunatic::LineData& line,
-                       const CHI::Lunatic::ByteEnables& enables, uint16_t opcode, uint8_t resp = 0)
+                       const CHI::Lunatic::ByteEnables& enables, uint16_t opcode, uint8_t resp = 0,
+                       uint64_t beatMask = ~uint64_t(0), uint8_t ccid = 0)
         {
             constexpr size_t bytes = config::dataWidth / 8;
             for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
             {
+                if (!(beatMask & (uint64_t(1) << beat)))
+                    continue;
                 DAT data{};
                 data.BE() = 0;
                 data.SrcID() = source;
@@ -97,12 +100,14 @@ namespace LunaticTest {
                 data.Opcode() = opcode;
                 data.Resp() = resp;
                 data.DataID() = beat * bytes / 16;
-                data.CCID() = (beat * bytes / 16) % 2;
+                data.CCID() = ccid;
                 for (size_t index = 0; index < bytes; ++index)
                 {
-                    data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);
                     if (enables[beat * bytes + index])
+                    {
+                        data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);
                         data.BE() = uint64_t(data.BE()) | (uint64_t(1) << index);
+                    }
                 }
                 Oracle(source).WriteData(driver.now, data);
                 LUNATIC_CHECK(driver.node.PushRXDAT(data));
@@ -124,7 +129,7 @@ namespace LunaticTest {
         }
 
         void SnoopData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
-                       const CHI::Lunatic::LineData& line, uint8_t resp, bool partial = false)
+                       const CHI::Lunatic::LineData& line, uint8_t resp, bool partial = false, uint8_t ccid = 0)
         {
             constexpr size_t bytes = config::dataWidth / 8;
             for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
@@ -138,12 +143,14 @@ namespace LunaticTest {
                 data.Opcode() = partial ? CHI::Eb::Opcodes::DAT::SnpRespDataPtl : CHI::Eb::Opcodes::DAT::SnpRespData;
                 data.Resp() = resp;
                 data.DataID() = beat * bytes / 16;
-                data.CCID() = (beat * bytes / 16) % 2;
+                data.CCID() = ccid;
                 for (size_t index = 0; index < bytes; ++index)
                 {
-                    data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);
                     if (!partial || index < bytes / 2)
+                    {
+                        data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);
                         data.BE() = uint64_t(data.BE()) | (uint64_t(1) << index);
+                    }
                 }
                 Oracle(source).SnoopData(driver.now, data);
                 LUNATIC_CHECK(driver.node.PushRXDAT(data));

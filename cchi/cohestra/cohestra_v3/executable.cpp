@@ -22,6 +22,8 @@
 #include "../cohestra_simperf.hpp"
 #include "../cohestra_clogb.hpp"
 #include "../cohestra_lunatic_config.hpp"
+#include "../cohestra_lunatic_axi.hpp"
+#include "../cohestra_lunatic_link.hpp"
 #include "../cohestra_boot.hpp"
 #include "../cohestra_bootings/boot_delay.hpp"
 #include "../cohestra_bootings/boot_avocado.hpp"
@@ -173,7 +175,7 @@ int main(const int argc, const char* argv[])
 
     // CHI interface instantiation
     auto chiFromRNInterface = std::make_shared<Cohestra::V3CHIFromRNInterface<VerilatedTop>>(&top);
-    auto chiToRNInterface   = std::make_shared<Cohestra::V3CHIToRNInterface<VerilatedTop>>(&top);
+    auto chiToRNInterface   = std::make_shared<Cohestra::LunaticCHIToRNInterface<VerilatedTop>>(&top);
     auto chiFromSNInterface = std::make_shared<Cohestra::V3CHIFromSNInterface<VerilatedTop>>(&top);
     auto chiToSNInterface   = std::make_shared<Cohestra::V3CHIToSNInterface<VerilatedTop>>(&top);
 
@@ -286,6 +288,8 @@ int main(const int argc, const char* argv[])
         return 1;
 
     std::unique_ptr<Cohestra::LunaticModel> lunatic;
+    auto forceRetry = std::make_shared<bool>(lunaticConfiguration.retryForceOnce);
+    auto dctDecisions = std::make_shared<size_t>(0);
     Cohestra::V3CHILinkControl<VerilatedTop> lunaticLink(&top);
     if (lunaticConfiguration.enabled)
     {
@@ -306,6 +310,32 @@ int main(const int argc, const char* argv[])
         {
             spdlog::error("Failed to initialize Lunatic: {}.", error.what());
             return 1;
+        }
+        if (lunaticConfiguration.retryForceOnce)
+        {
+            lunatic->GetNode().GetEvents()->OnRequestAdmission.Register(
+                Gravity::MakeListener<::CHI::Lunatic::RequestAdmissionEvent>("Cohestra.RetryOnce", 0,
+                    [forceRetry](::CHI::Lunatic::RequestAdmissionEvent& event) {
+                        if (*forceRetry && event.request.allowRetry &&
+                            event.request.opcode != ::CHI::Eb::Opcodes::REQ::PCrdReturn)
+                        {
+                            *forceRetry = false;
+                            event.RequestRetry();
+                        }
+                    }));
+        }
+        if (lunaticConfiguration.dctChoice != Cohestra::LunaticDCTChoice::Default)
+        {
+            const auto choice = lunaticConfiguration.dctChoice;
+            lunatic->GetNode().GetEvents()->OnSnoopForwarding.Register(
+                Gravity::MakeListener<::CHI::Lunatic::SnoopForwardingEvent>("Cohestra.DCTChoice", 0,
+                    [choice, dctDecisions](::CHI::Lunatic::SnoopForwardingEvent& event) {
+                        ++*dctDecisions;
+                        if (choice == Cohestra::LunaticDCTChoice::Forward)
+                            event.UseForwarding();
+                        else
+                            event.UseNonForwarding();
+                    }));
         }
     }
     lunaticLink.Reset();
@@ -348,6 +378,23 @@ int main(const int argc, const char* argv[])
         axiMemories.push_back(memory);
 
         spdlog::info(" - AXI Slave Port {}: memory model attached ({}-bit data).", index, memory->GetDataBits());
+    }
+
+    std::unique_ptr<Cohestra::AXIMemory> lunaticAxiMemory;
+    std::unique_ptr<Cohestra::LunaticAXIAdapter> lunaticAxiAdapter;
+    if (lunatic && lunaticConfiguration.model.options.backend == ::CHI::Lunatic::BackendKind::AXI)
+    {
+        lunaticAxiMemory = std::make_unique<Cohestra::AXIMemory>(
+            lunaticConfiguration.model.options.dataWidth,
+            static_cast<unsigned int>(lunaticConfiguration.model.options.seed));
+        if (configurationLoader && !lunaticAxiMemory->LoadConfiguration(*configurationLoader))
+        {
+            spdlog::error("Failed to load Lunatic AXI memory configuration from {}.", *arguments.configurationPath);
+            return 1;
+        }
+        lunaticAxiAdapter = std::make_unique<Cohestra::LunaticAXIAdapter>(
+            lunatic->GetNode(), *lunaticAxiMemory);
+        spdlog::info("Lunatic AXI memory attached ({}-bit data).", lunaticAxiMemory->GetDataBits());
     }
 
     for (size_t index : axiMasterInterface->GetPortIndices())
@@ -774,6 +821,8 @@ int main(const int argc, const char* argv[])
 
         for (auto& memory : axiMemories)
             memory->TickPreHandshake(time);
+        if (lunaticAxiMemory)
+            lunaticAxiMemory->TickPreHandshake(time);
 
         for (auto& master : axiMasters)
             master->TickPreHandshake(time);
@@ -798,6 +847,8 @@ int main(const int argc, const char* argv[])
 
         for (auto& memory : axiMemories)
             memory->TickPostHandshake(time);
+        if (lunaticAxiMemory)
+            lunaticAxiMemory->TickPostHandshake(time);
 
         for (auto& master : axiMasters)
             master->TickPostHandshake(time);
@@ -811,6 +862,8 @@ int main(const int argc, const char* argv[])
             chiFromSNInterface->TickPostHandshake(time);
             chiToSNInterface->TickPostHandshake(time);
         }
+        if (lunaticAxiAdapter)
+            lunaticAxiAdapter->Tick();
         if (lunatic)
             lunatic->Tick(time);
         chiMonitorInterface->TickPostHandshake(time);
@@ -902,7 +955,7 @@ int main(const int argc, const char* argv[])
     if (lunatic && lunaticStimulusComplete && !lunaticCycleLimit)
     {
         const uint64_t drainStart = time;
-        while (!lunatic->IsDrained() && !lunatic->HasErrors() &&
+        while ((!lunatic->IsDrained() || watchdog.GetOutstandingCount() != 0) && !lunatic->HasErrors() &&
             time - drainStart < 2ULL * lunaticConfiguration.drainCycleLimit)
         {
             if (!runCycle([&] () { return instance.Tick(time); }))
@@ -994,16 +1047,33 @@ int main(const int argc, const char* argv[])
             linksActive &= lunaticLink.IsRun(route.port);
 
         const bool drained = lunatic->Drain() && lunatic->IsDrained();
-        const bool valid = lunatic->Validate() && !lunatic->HasErrors();
+        const bool axiValid = !lunaticAxiAdapter || lunaticAxiAdapter->Validate();
+        const bool valid = lunatic->Validate() && !lunatic->HasErrors() && axiValid;
         const bool noWatchdogResidue = watchdog.GetOutstandingCount() == 0;
+        const bool retryCovered = !lunaticConfiguration.retryForceOnce ||
+            (!*forceRetry && pmu.emittedRetryAcks != 0 && pmu.creditedResends != 0);
+        const bool dctCovered = lunaticConfiguration.dctChoice == Cohestra::LunaticDCTChoice::Default ||
+            *dctDecisions != 0;
+        const bool axiActive = lunaticConfiguration.model.options.backend != ::CHI::Lunatic::BackendKind::AXI ||
+            (pmu.emittedTXAW != 0 && pmu.emittedTXW != 0 && pmu.emittedTXAR != 0 &&
+             pmu.acceptedRXB != 0 && pmu.acceptedRXR != 0);
         lunaticFailed = lunaticCycleLimit || !lunaticStimulusComplete || !activity ||
-            !linksActive || !drained || !valid || !noWatchdogResidue;
+            !linksActive || !drained || !valid || !noWatchdogResidue ||
+            !retryCovered || !dctCovered || !axiActive;
 
         spdlog::info("Lunatic summary: accepted {} request(s), emitted {} response(s), {} data flit(s), {} snoop(s).",
             pmu.acceptedRXREQ, pmu.emittedTXRSP, pmu.emittedTXDAT, pmu.emittedTXSNP);
         spdlog::info("Lunatic state: home inflight {}, transport drained {}, admitted {}, retired {}, retry acks {}, resends {}, credit returns {}.",
             lunatic->GetNode().HasInflight(), chiToRNInterface->IsDrained(), pmu.admittedTransactions,
             pmu.retiredTransactions, pmu.emittedRetryAcks, pmu.creditedResends, pmu.returnedCredits);
+        if (lunaticConfiguration.retryForceOnce)
+            spdlog::info("Lunatic forced retry pending: {}.", *forceRetry);
+        if (lunaticConfiguration.dctChoice != Cohestra::LunaticDCTChoice::Default)
+            spdlog::info("Lunatic DCT decisions: {}.", *dctDecisions);
+        if (lunaticAxiMemory)
+            spdlog::info("Lunatic AXI: AW {}, W {}, AR {}, B {}, R {}, protocol denials {}.",
+                pmu.emittedTXAW, pmu.emittedTXW, pmu.emittedTXAR, pmu.acceptedRXB, pmu.acceptedRXR,
+                lunaticAxiMemory->GetProtocolDenialCount());
         if (!chiToRNInterface->IsDrained())
         {
             static const char* channels[] = { "RXRSP", "RXDAT", "RXSNP", "TXREQ", "TXRSP", "TXDAT" };
@@ -1031,6 +1101,14 @@ int main(const int argc, const char* argv[])
             spdlog::error("Lunatic verdict: protocol errors, invariants, or credit accounting failed.");
         if (!noWatchdogResidue)
             spdlog::error("Lunatic verdict: {} watchdog transaction(s) remain outstanding.", watchdog.GetOutstandingCount());
+        if (!retryCovered)
+            spdlog::error("Lunatic verdict: forced retry did not complete a credited resend.");
+        if (!dctCovered)
+            spdlog::error("Lunatic verdict: no legal DCT policy decision was observed.");
+        if (!axiActive)
+            spdlog::error("Lunatic verdict: AXI read and write channel activity is incomplete.");
+        if (lunaticAxiAdapter && !lunaticAxiAdapter->Validate())
+            spdlog::error("Lunatic verdict: AXI memory reported a protocol denial.");
         for (const auto& error : lunatic->GetIntegrationErrors())
             spdlog::error("Lunatic integration error: {}.", error);
         for (const auto& error : lunatic->GetNode().GetErrors())

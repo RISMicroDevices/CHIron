@@ -54,6 +54,7 @@ list(FILTER COHESTRA_V3_SOURCES EXCLUDE REGEX "/cohestra_earth/")
 # The VCS sibling harness has its own CMake project (and its own DPI/entry
 # sources that must never link into the Verilator executable).
 list(FILTER COHESTRA_V3_SOURCES EXCLUDE REGEX "/cohestra_vcs/")
+list(FILTER COHESTRA_V3_SOURCES EXCLUDE REGEX "-KUMON-S1-HALO\\.cpp$")
 
 file(GLOB_RECURSE COHESTRA_V3_HEADERS CONFIGURE_DEPENDS
     "${COHES_TRA_ROOT}/*.h"
@@ -62,6 +63,7 @@ file(GLOB_RECURSE COHESTRA_V3_HEADERS CONFIGURE_DEPENDS
 file(GLOB COHESTRA_V3_LUNATIC_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_LIST_DIR}/../../../chi/icn/lunatic/chi_lunatic_*.cpp"
 )
+list(FILTER COHESTRA_V3_LUNATIC_SOURCES EXCLUDE REGEX "-KUMON-S1-HALO\\.cpp$")
 
 # RTL selection. Default is the combinational dummy top.
 #   -DCOHESTRA_V3_RTL=DUMMY         (default)  top_dummy.sv

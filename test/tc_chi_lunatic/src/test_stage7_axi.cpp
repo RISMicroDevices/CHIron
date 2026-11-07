@@ -152,11 +152,14 @@ namespace {
         }
 
         void WriteData(NodeId source, DataBufferId dbid, const LineData& data, const ByteEnables& enables,
-                       uint16_t opcode = CHI::Eb::Opcodes::DAT::NonCopyBackWrData, uint8_t resp = 0)
+                       uint16_t opcode = CHI::Eb::Opcodes::DAT::NonCopyBackWrData, uint8_t resp = 0,
+                       uint64_t beatMask = ~uint64_t(0), uint8_t ccid = 0)
         {
             constexpr size_t bytes = config::dataWidth / 8;
             for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
             {
+                if (!(beatMask & (uint64_t(1) << beat)))
+                    continue;
                 DAT flit{};
                 flit.SrcID() = source;
                 flit.TgtID() = 2;
@@ -164,12 +167,41 @@ namespace {
                 flit.Opcode() = opcode;
                 flit.Resp() = resp;
                 flit.DataID() = beat * bytes / 16;
-                flit.CCID() = (beat * bytes / 16) % 2;
+                flit.CCID() = ccid;
                 for (size_t index = 0; index < bytes; ++index)
                 {
-                    flit.Data()[index / 8] |= uint64_t(data[beat * bytes + index]) << ((index % 8) * 8);
                     if (enables[beat * bytes + index])
+                    {
+                        flit.Data()[index / 8] |= uint64_t(data[beat * bytes + index]) << ((index % 8) * 8);
                         flit.BE() = uint64_t(flit.BE()) | (uint64_t(1) << index);
+                    }
+                }
+                LUNATIC_CHECK(bridge.PushUpstreamDAT(flit));
+            }
+            Tick();
+        }
+
+        void SnoopData(NodeId source, TransactionId txnId, const LineData& data, uint8_t resp,
+                       bool partial = false, uint8_t ccid = 0)
+        {
+            constexpr size_t bytes = config::dataWidth / 8;
+            for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
+            {
+                DAT flit{};
+                flit.SrcID() = source;
+                flit.TgtID() = 2;
+                flit.TxnID() = txnId;
+                flit.Opcode() = partial ? CHI::Eb::Opcodes::DAT::SnpRespDataPtl : CHI::Eb::Opcodes::DAT::SnpRespData;
+                flit.Resp() = resp;
+                flit.DataID() = beat * bytes / 16;
+                flit.CCID() = ccid;
+                for (size_t index = 0; index < bytes; ++index)
+                {
+                    if (!partial || index < bytes / 2)
+                    {
+                        flit.Data()[index / 8] |= uint64_t(data[beat * bytes + index]) << ((index % 8) * 8);
+                        flit.BE() = uint64_t(flit.BE()) | (uint64_t(1) << index);
+                    }
                 }
                 LUNATIC_CHECK(bridge.PushUpstreamDAT(flit));
             }
@@ -186,7 +218,7 @@ namespace {
             const uint16_t dataOpcode = IsCopybackRequest(opcode) ? CHI::Eb::Opcodes::DAT::CopyBackWrData
                                                                   : CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
             const uint8_t resp = IsCopybackRequest(opcode) ? uint8_t(CHI::Eb::Resps::CopyBackWrData_UD_PD) : uint8_t(0);
-            WriteData(4, dbid, data, enables, dataOpcode, resp);
+            WriteData(4, dbid, data, enables, dataOpcode, resp, ~uint64_t(0), (address >> 4) & 3);
             if (!IsCopybackRequest(opcode))
                 NextRSP(CHI::Eb::Opcodes::RSP::Comp);
         }
@@ -248,6 +280,55 @@ namespace {
     }
 
     template<typename config>
+    void CheckDeviceReadGeometry(uint64_t address, uint8_t size)
+    {
+        AXIBridgeDriver<config> driver;
+        const LineData data = AXIPattern(uint8_t(config::dataWidth / 2));
+        driver.memory.SetLine(address, data);
+        auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 60 + size, address);
+        request.Size() = size;
+        request.MemAttr() = CHI::Eb::MemAttrs::Device_nEWA;
+        request.SnpAttr() = 0;
+
+        const size_t busBytes = config::dataWidth / 8;
+        const size_t transferBytes = size_t(1) << size;
+        const size_t rawOffset = address % transferBytes;
+        const size_t validBytes = transferBytes - rawOffset;
+        const size_t axiBytes = std::min(busBytes, transferBytes);
+        const size_t axiBeats = (validBytes + axiBytes - 1) / axiBytes;
+        const size_t chiBeats = (transferBytes + busBytes - 1) / busBytes;
+        const LineData result = driver.Read(request, chiBeats);
+        const size_t lineOffset = address % LINE_SIZE;
+        for (size_t index = 0; index < LINE_SIZE; ++index)
+        {
+            const bool valid = index >= lineOffset && index < lineOffset + validBytes;
+            LUNATIC_CHECK(result[index] == (valid ? data[index] : 0));
+        }
+        driver.Quiesce();
+
+        LUNATIC_CHECK(driver.memory.CompletedReads().size() == 1);
+        const auto& read = driver.memory.CompletedReads().front();
+        LUNATIC_CHECK(driver.memory.AccessedReadAddresses().size() == validBytes);
+        LUNATIC_CHECK(read.address.address == address);
+        LUNATIC_CHECK(read.address.size == std::countr_zero(axiBytes));
+        LUNATIC_CHECK(size_t(read.address.len) + 1 == axiBeats);
+        LUNATIC_CHECK(read.beats.size() == axiBeats);
+        for (size_t index = 0; index < validBytes; ++index)
+            LUNATIC_CHECK(driver.memory.AccessedReadAddresses()[index] == address + index);
+    }
+
+    template<typename config>
+    void CheckDeviceReadSweep(uint64_t base)
+    {
+        for (uint8_t size = 0; size <= 6; ++size)
+        {
+            const size_t transferBytes = size_t(1) << size;
+            for (const size_t offset : { size_t(0), transferBytes / 3, transferBytes - 1 })
+                CheckDeviceReadGeometry<config>(base + offset, size);
+        }
+    }
+
+    template<typename config>
     void CheckCoherentWidth(uint64_t address)
     {
         AXIBridgeDriver<config> driver;
@@ -262,6 +343,59 @@ namespace {
         LUNATIC_CHECK(driver.memory.CompletedReads().size() == 2);
     }
 
+    template<typename config>
+    void CheckNarrowWriteUniqueBaseline(PolicyKind policy)
+    {
+        Options options;
+        options.policy = policy;
+        AXIBridgeDriver<config> driver(options);
+        const uint64_t address = 0x90300;
+        const LineKey line = LineKey::FromAddress(address, false);
+        const LineData initial = AXIPattern(23);
+        const LineData update = AXIPattern(181);
+        driver.memory.SetLine(address, initial);
+
+        auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniquePtl, 4, 1, address);
+        request.Size() = 4;
+        driver.PushRequest(request);
+        const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+        ByteEnables enables{};
+        for (size_t index = 0; index < 16; ++index)
+            enables[index] = 1;
+        driver.WriteData(4, dbid, update, enables, CHI::Eb::Opcodes::DAT::NonCopyBackWrData, 0, 1);
+        driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+        driver.Quiesce();
+
+        LineData expected = initial;
+        for (size_t index = 0; index < 16; ++index)
+            expected[index] = update[index];
+        const HomeLineInfo home = driver.bridge.GetNode().InspectHome(line);
+        LUNATIC_CHECK(home.valid && home.data == expected);
+        LUNATIC_CHECK(std::all_of(home.validBytes.begin(), home.validBytes.end(),
+            [](uint8_t valid) { return valid != 0; }));
+        LUNATIC_CHECK(driver.memory.ReadLine(address) == initial);
+        LUNATIC_CHECK(driver.memory.CompletedReads().size() == 1);
+        const auto& baseline = driver.memory.CompletedReads().front();
+        LUNATIC_CHECK(baseline.address.address == address);
+        LUNATIC_CHECK(baseline.address.len + 1 == LINE_SIZE / (config::dataWidth / 8));
+        LUNATIC_CHECK(baseline.address.size == std::countr_zero(config::dataWidth / 8));
+        LUNATIC_CHECK(baseline.beats.size() == LINE_SIZE / (config::dataWidth / 8));
+
+        LUNATIC_CHECK(driver.Read(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 5, 2, address, true)) == expected);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.memory.CompletedReads().size() == 1);
+    }
+
+}
+
+LUNATIC_TEST(Stage7AXIBridgeWriteUniqueNarrowBaselineAllWidths)
+{
+    for (PolicyKind policy : { PolicyKind::NINE, PolicyKind::Exclusive, PolicyKind::Inclusive })
+    {
+        CheckNarrowWriteUniqueBaseline<Config128>(policy);
+        CheckNarrowWriteUniqueBaseline<Config256>(policy);
+        CheckNarrowWriteUniqueBaseline<Config512>(policy);
+    }
 }
 
 LUNATIC_TEST(Stage7AXIBridgeReadNoSnpAllWidths)
@@ -287,12 +421,19 @@ LUNATIC_TEST(Stage7AXIBridgeNarrowReadUsesExactBurst)
     auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 2, address);
     request.Size() = 5;
     const LineData result = driver.Read(request, 2);
-    for (size_t index = 16; index < 48; ++index)
+    for (size_t index = 0; index < 32; ++index)
         LUNATIC_CHECK(result[index] == data[index]);
     driver.Quiesce();
     const auto& read = driver.memory.CompletedReads().front();
-    LUNATIC_CHECK(read.address.address == 0x91010);
-    LUNATIC_CHECK(read.address.len == 1);
+    LUNATIC_CHECK(read.address.address == 0x91000);
+    LUNATIC_CHECK(read.address.len == 1 && read.beats.size() == 2);
+}
+
+LUNATIC_TEST(Stage7AXIBridgeDeviceReadsPreserveAddressAndLanes)
+{
+    CheckDeviceReadSweep<Config128>(0x91200);
+    CheckDeviceReadSweep<Config256>(0x91400);
+    CheckDeviceReadSweep<Config512>(0x91600);
 }
 
 LUNATIC_TEST(Stage7AXIBridgeSparseWriteAndZero)
@@ -369,6 +510,8 @@ LUNATIC_TEST(Stage7AXIBridgeCopybackDirtyVictimAndAtomic)
     }
     driver.WriteData(4, dbid, operands, enables);
     const auto old = driver.NextDAT();
+    LUNATIC_CHECK(!driver.memory.CompletedReads().empty());
+    LUNATIC_CHECK(driver.memory.CompletedReads().back().address.address == a);
     for (size_t index = 8; index < 16; ++index)
         LUNATIC_CHECK(uint8_t(old.Data()[index / 8] >> ((index % 8) * 8)) == dataA[index]);
     driver.Quiesce();
@@ -384,6 +527,80 @@ LUNATIC_TEST(Stage7AXIBridgeCopybackDirtyVictimAndAtomic)
     driver.Quiesce();
     LUNATIC_CHECK(driver.memory.ReadLine(a) == expected);
     LUNATIC_CHECK(driver.bridge.GetNode().InspectHome(LineKey::FromAddress(a + 0x80, false)).valid);
+}
+
+LUNATIC_TEST(Stage7AXIBridgeAtomicPartialDirtyPreservesBaseline)
+{
+    Options options;
+    options.policy = PolicyKind::NINE;
+    options.slcSets = 1;
+    options.slcWays = 1;
+    AXIBridgeDriver<Config256> driver(options);
+    const uint64_t a = 0x93100;
+    const uint64_t b = 0x93140;
+    const LineData initial = AXIPattern(37);
+    const LineData dirty = AXIPattern(167);
+    const LineData replacement = AXIPattern(213);
+    ByteEnables partialEnables{};
+    LineData merged = initial;
+    for (size_t index = 0; index < LINE_SIZE; ++index)
+        if (index % 32 < 16)
+        {
+            partialEnables[index] = 1;
+            merged[index] = dirty[index];
+        }
+    driver.memory.SetLine(a, initial);
+
+    driver.Write(CHI::Eb::Opcodes::REQ::WriteBackPtl, 90, a, dirty, partialEnables);
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.Read(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 4, 91, a, true)) == merged);
+    driver.Quiesce();
+    const LineKey line = LineKey::FromAddress(a, false);
+    LUNATIC_CHECK(driver.bridge.GetNode().InspectRequester(line, 4) == CacheState::UDP);
+
+    driver.Write(CHI::Eb::Opcodes::REQ::WriteBackFull, 92, b, replacement, FullEnables());
+    driver.Quiesce();
+    LUNATIC_CHECK(!driver.bridge.GetNode().InspectHome(line).valid);
+    LUNATIC_CHECK(driver.bridge.GetNode().InspectRequester(line, 4) == CacheState::UDP);
+    LUNATIC_CHECK(driver.memory.ReadLine(a) == initial);
+
+    auto atomic = driver.Request(CHI::Eb::Opcodes::REQ::AtomicLoad::ADD, 5, 100, a + 0x20);
+    atomic.Size() = 2;
+    driver.PushRequest(atomic);
+    const auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
+    LUNATIC_CHECK(snoop.target == 4);
+    driver.SnoopData(4, snoop.flit.TxnID(), merged, CHI::Eb::Resps::SnpRespDataPtl_I_PD, true,
+        ((a + 0x20) >> 4) & 3);
+    const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+    LineData operands{};
+    ByteEnables enables{};
+    for (size_t index = 0x20; index < 0x24; ++index)
+    {
+        operands[index] = uint8_t(7 >> ((index - 0x20) * 8));
+        enables[index] = 1;
+    }
+    driver.WriteData(5, dbid, operands, enables, CHI::Eb::Opcodes::DAT::NonCopyBackWrData, 0, 2, 2);
+    const auto old = driver.NextDAT();
+    LUNATIC_CHECK(old.DataID() == 2);
+    for (size_t index = 0; index < 4; ++index)
+        LUNATIC_CHECK(uint8_t(old.Data()[index / 8] >> ((index % 8) * 8)) == merged[0x20 + index]);
+    driver.Quiesce();
+
+    uint64_t oldValue = 0;
+    for (size_t index = 0; index < 4; ++index)
+        oldValue |= uint64_t(merged[0x20 + index]) << (index * 8);
+    LineData expected = merged;
+    for (size_t index = 0; index < 4; ++index)
+        expected[0x20 + index] = uint8_t((oldValue + 7) >> (index * 8));
+    const HomeLineInfo home = driver.bridge.GetNode().InspectHome(line);
+    if (home.valid)
+        LUNATIC_CHECK(home.data == expected);
+    else
+        LUNATIC_CHECK(driver.memory.ReadLine(a) == expected);
+    LUNATIC_CHECK(!driver.memory.CompletedReads().empty());
+    const auto& baseline = driver.memory.CompletedReads().back();
+    LUNATIC_CHECK(baseline.address.address == a);
+    LUNATIC_CHECK(baseline.address.len == 1 && baseline.beats.size() == 2);
 }
 
 LUNATIC_TEST(Stage7AXIBridgeResponseBackpressureAndReordering)
@@ -551,4 +768,79 @@ LUNATIC_TEST(Stage7AXIBridgeSeededTraffic)
     }
     for (size_t line = 0; line < lines; ++line)
         LUNATIC_CHECK(driver.memory.ReadLine(0x98000 + line * LINE_SIZE) == expected[line]);
+}
+
+LUNATIC_TEST(Stage7AXIBridgeReadSubmissionRefusalRetries)
+{
+    Options options;
+    options.axiOutstandingLimit = 1;
+    AXIBridgeDriver<Config256> driver(options);
+    const uint64_t a = 0x60000;
+    const uint64_t b = 0x60040;
+    const auto dataA = AXIPattern(31);
+    const auto dataB = AXIPattern(107);
+    driver.memory.SetLine(a, dataA);
+    driver.memory.SetLine(b, dataB);
+    driver.memory.Stall(AXIChannel::R, 20);
+
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 1, a));
+    driver.Until([&] { return !driver.memory.AccessedReadAddresses().empty(); });
+    const size_t acceptedBytes = driver.memory.AccessedReadAddresses().size();
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 5, 2, b));
+    for (size_t cycle = 0; cycle < 4; ++cycle)
+        driver.Tick();
+    LUNATIC_CHECK(driver.memory.AccessedReadAddresses().size() == acceptedBytes);
+
+    for (size_t beat = 0; beat < 2; ++beat)
+        LUNATIC_CHECK(driver.NextDAT().TgtID() == 4);
+    for (size_t beat = 0; beat < 2; ++beat)
+        LUNATIC_CHECK(driver.NextDAT().TgtID() == 5);
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.memory.CompletedReads().size() == 2);
+}
+
+LUNATIC_TEST(Stage7AXIBridgeSpillSubmissionRefusalDoesNotUseReadDone)
+{
+    Options options;
+    options.axiOutstandingLimit = 1;
+    AXIBridgeDriver<Config256> driver(options);
+    const uint64_t blocker = 0x61000;
+    const uint64_t atomicAddress = 0x61100;
+    const auto blockerData = AXIPattern(17);
+    LineData initial{};
+    initial[0] = 1;
+    driver.memory.SetLine(blocker, blockerData);
+    driver.memory.SetLine(atomicAddress, initial);
+    driver.memory.Stall(AXIChannel::B, 100);
+
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteNoSnpFull, 5, 50, blocker));
+    const auto blockerDBID = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+    driver.WriteData(5, blockerDBID, blockerData, FullEnables(), CHI::Eb::Opcodes::DAT::NonCopyBackWrData,
+        0, ~uint64_t(0), 0);
+    driver.Until([&] { return driver.memory.ReadLine(blocker) == blockerData; });
+    LUNATIC_CHECK(driver.memory.CompletedWrites().empty());
+
+    auto atomic = driver.Request(CHI::Eb::Opcodes::REQ::AtomicStore::ADD, 4, 2, atomicAddress);
+    atomic.Size() = 0;
+    atomic.MemAttr() = CHI::Eb::MemAttrs::WriteBack_NoAllocate;
+    driver.PushRequest(atomic);
+    const auto atomicDBID = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+    LineData operands{};
+    operands[0] = 2;
+    ByteEnables enables{};
+    enables[0] = 1;
+    driver.WriteData(4, atomicDBID, operands, enables, CHI::Eb::Opcodes::DAT::NonCopyBackWrData, 0, 1, 0);
+
+    for (size_t cycle = 0; cycle < 30; ++cycle)
+        driver.Tick();
+    LUNATIC_CHECK(!driver.bridge.PeekUpstreamRSP());
+    LUNATIC_CHECK(driver.memory.ReadLine(atomicAddress) == initial);
+    LUNATIC_CHECK(driver.memory.CompletedWrites().empty());
+
+    driver.memory.Stall(AXIChannel::B, 0);
+    LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).TxnID() == 50);
+    LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).TxnID() == 2);
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.memory.CompletedWrites().size() == 2);
+    LUNATIC_CHECK(driver.memory.ReadLine(atomicAddress)[0] == 3);
 }

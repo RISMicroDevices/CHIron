@@ -73,7 +73,7 @@ namespace {
         auto invalidate = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanInvalid);
         LUNATIC_CHECK(invalidate.flit.DoNotGoToSD() == 1);
         LUNATIC_CHECK(invalidate.flit.RetToSrc() == 0);
-        driver.SnoopData(5, invalidate.flit.TxnID(), dirty, CHI::Eb::Resps::SnpRespData_I);
+        driver.SnoopResponse(5, invalidate.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
         driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
         driver.Quiesce();
         LUNATIC_CHECK(!driver.driver.node.InspectHome(line).valid);
@@ -116,7 +116,7 @@ namespace {
             auto victim = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanInvalid);
             LUNATIC_CHECK(victim.target == 4);
             LUNATIC_CHECK(uint64_t(victim.flit.Addr()) << 3 == a.address);
-            driver.SnoopData(4, victim.flit.TxnID(), dataA, CHI::Eb::Resps::SnpRespData_I);
+            driver.SnoopResponse(4, victim.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
         }
         CMOReceiveUnique(driver, 5, 31);
         driver.Quiesce();

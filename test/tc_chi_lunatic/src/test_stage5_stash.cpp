@@ -210,6 +210,8 @@ LUNATIC_TEST(Stage5IndependentStashReportsDataPull)
     LUNATIC_CHECK(driver.node.PushRXREQ(request));
     auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpStashUnique);
     RawSnoopResponse(driver, 5, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I, 1);
+    LUNATIC_CHECK(!driver.node.GetErrors().empty());
+    RawSnoopResponse(driver, 5, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
     LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).TxnID() == 7);
     driver.Quiesce();
     LUNATIC_CHECK(!driver.node.GetErrors().empty());
@@ -234,6 +236,8 @@ namespace {
                                            uint64_t address, bool compAck = false)
     {
         auto request = driver.Request(opcode, 4, txnId, address, compAck);
+        if (compAck)
+            request.Order() = 2;
         request.ReturnNID() = 5;
         request.StashNIDValid() = 1;
         request.StashLPIDValid() = 1;
@@ -405,7 +409,7 @@ LUNATIC_TEST(Stage5WriteStashAcceptsPostDBIDEarlyCompAck)
     driver.PushRequest(WriteStashRequest(driver, CHI::Eb::Opcodes::REQ::WriteUniqueFullStash, 1, line.address, true));
     auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash);
     driver.SnoopResponse(5, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
-    const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+    const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDRespOrd).DBID();
     driver.CompAck(4, dbid);
     driver.WriteData(4, 1, dbid, data, StashEnables(), CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
     LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);

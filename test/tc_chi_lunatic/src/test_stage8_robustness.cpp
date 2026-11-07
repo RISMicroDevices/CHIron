@@ -758,3 +758,80 @@ LUNATIC_TEST(Stage8RobustnessPersistentAdmissionBackpressureBlocksDrain)
     LUNATIC_CHECK(driver.node.GetErrors().empty());
     LUNATIC_CHECK(driver.node.ValidateInvariants());
 }
+
+LUNATIC_TEST(Stage8RobustnessLateAdmissionCannotBypassSameLineHazard)
+{
+    Driver<Config256> driver;
+    const LineKey line = LineKey::FromAddress(0x58000, false);
+    bool holdOlderAdmit = true;
+    bool holdOlderAction = true;
+    bool olderAdmitSeen = false;
+    bool olderActionSeen = false;
+    bool youngerActionSeen = false;
+
+    driver.node.GetEvents()->OnTransactionSchedule.Register(
+        Gravity::MakeListener<TransactionScheduleEvent>("late-admission-hazard", 0,
+            [&](TransactionScheduleEvent& event) {
+                if (event.transaction == 0 && event.phase == Phase::Admit && holdOlderAdmit)
+                {
+                    olderAdmitSeen = true;
+                    event.Backpressure();
+                }
+                if (event.transaction == 0 && event.phase == Phase::Action && holdOlderAction)
+                {
+                    olderActionSeen = true;
+                    event.Backpressure();
+                }
+                if (event.transaction == 1 && event.phase == Phase::Action)
+                    youngerActionSeen = true;
+            }));
+
+    LUNATIC_CHECK(driver.node.PushRXREQ(
+        driver.Request(CHI::Eb::Opcodes::REQ::MakeUnique, 4, 40, line.address)));
+    driver.Until([&] { return olderAdmitSeen; });
+    LUNATIC_CHECK(driver.node.PushRXREQ(
+        driver.Request(CHI::Eb::Opcodes::REQ::MakeUnique, 5, 41, line.address)));
+
+    for (size_t cycle = 0; cycle < 12; ++cycle)
+    {
+        driver.Tick();
+        LUNATIC_CHECK(!youngerActionSeen);
+        LUNATIC_CHECK(!driver.node.PeekTXRSP());
+        LUNATIC_CHECK(!driver.node.PeekTXSNP());
+    }
+
+    holdOlderAdmit = false;
+    driver.Until([&] { return olderActionSeen; });
+    LUNATIC_CHECK(!youngerActionSeen);
+    holdOlderAction = false;
+
+    const auto first = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+    LUNATIC_CHECK(first.TgtID() == 4);
+    LUNATIC_CHECK(first.Resp() == CHI::Eb::Resps::Comp_UC);
+    for (size_t cycle = 0; cycle < 4; ++cycle)
+    {
+        driver.Tick();
+        LUNATIC_CHECK(!youngerActionSeen);
+        LUNATIC_CHECK(!driver.node.PeekTXSNP());
+    }
+    driver.CompAck(4, first.DBID());
+
+    const auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
+    LUNATIC_CHECK(snoop.target == 4);
+    const LineData discarded{};
+    ByteEnables enables{};
+    enables.fill(1);
+    driver.WriteData(4, snoop.flit.TxnID(), snoop.flit.TxnID(), discarded, enables,
+        CHI::Eb::Opcodes::DAT::SnpRespData, CHI::Eb::Resps::SnpRespData_I_PD);
+
+    const auto second = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+    LUNATIC_CHECK(second.TgtID() == 5);
+    LUNATIC_CHECK(second.Resp() == CHI::Eb::Resps::Comp_UC);
+    driver.CompAck(5, second.DBID());
+    driver.Quiesce();
+
+    LUNATIC_CHECK(driver.node.InspectRequester(line, 4) == CacheState::I);
+    LUNATIC_CHECK(driver.node.InspectRequester(line, 5) == CacheState::UD);
+    LUNATIC_CHECK(driver.node.GetErrors().empty());
+    LUNATIC_CHECK(driver.node.ValidateInvariants());
+}

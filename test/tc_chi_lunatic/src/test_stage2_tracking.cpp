@@ -288,6 +288,32 @@ LUNATIC_TEST(Stage2HazardAgeOrderAndHeadOnlyRelease)
     LUNATIC_CHECK(graph.Validate());
 }
 
+LUNATIC_TEST(Stage2HazardVictimDependencyLifetime)
+{
+    HazardGraph graph;
+    const LineKey line = LineKey::FromAddress(0x3234, false);
+    LUNATIC_CHECK(graph.Add(8, line, 20));
+    LUNATIC_CHECK(graph.Append(3, line, 10));
+    LUNATIC_CHECK(!graph.Append(3, line, 10));
+    LUNATIC_CHECK(!graph.Append(INVALID_TRANSACTION, line, 0));
+    LUNATIC_CHECK((graph.Order(line) == std::vector<TransactionHandle>{ 8, 3 }));
+    LUNATIC_CHECK(graph.IsHead(8, line));
+    LUNATIC_CHECK(!graph.IsHead(3, line));
+    LUNATIC_CHECK(graph.Release(8, line));
+    LUNATIC_CHECK(graph.Release(3, line));
+    LUNATIC_CHECK(graph.Empty());
+    LUNATIC_CHECK(graph.Validate());
+
+    LUNATIC_CHECK(graph.Add(8, line, 20));
+    LUNATIC_CHECK(graph.Append(3, line, 10));
+    LUNATIC_CHECK(graph.Remove(3, line));
+    LUNATIC_CHECK(!graph.Remove(3, line));
+    LUNATIC_CHECK((graph.Order(line) == std::vector<TransactionHandle>{ 8 }));
+    LUNATIC_CHECK(graph.Release(8, line));
+    LUNATIC_CHECK(graph.Empty());
+    LUNATIC_CHECK(graph.Validate());
+}
+
 LUNATIC_TEST(Stage2ArbiterUsesDeterministicAgeOrder)
 {
     Arbiter arbiter;

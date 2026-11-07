@@ -41,7 +41,7 @@ namespace {
             data.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
             data.Resp() = CHI::Eb::Resps::CompData_I;
             data.DataID() = beat * bytes / 16;
-            data.CCID() = (beat * bytes / 16) % 2;
+            data.CCID() = 0;
             for (size_t index = 0; index < bytes; ++index)
                 data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);
             LUNATIC_CHECK(driver.node.PushRXDAT(data));

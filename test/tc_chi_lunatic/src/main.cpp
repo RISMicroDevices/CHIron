@@ -22,6 +22,11 @@ int main(int argc, char** argv)
         }
     }
 
+    if (executed == 0)
+    {
+        std::cerr << "No test cases matched filter '" << filter << "'.\n";
+        return 2;
+    }
     std::cout << "Finished " << executed << " test case(s), "
               << failures << " failure(s).\n";
     return failures ? 1 : 0;

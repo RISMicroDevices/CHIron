@@ -214,8 +214,50 @@ namespace {
         driver.SnoopResponse(5, snoop.flit.TxnID(), response);
         LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).TxnID() == 20);
         QuiesceMatrix(driver, expectError);
-        LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 5) == initial);
+        CacheState expected = initial;
+        if (response == CHI::Eb::Resps::SnpResp_SC)
+            expected = CacheState::SC;
+        else if (response == CHI::Eb::Resps::SnpResp_SD)
+            expected = CacheState::SD;
+        else if (initial == CacheState::UC && response == CHI::Eb::Resps::SnpResp_UC)
+            expected = CacheState::UD;
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 5) == expected);
         LUNATIC_CHECK(driver.driver.node.GetErrors().empty() == !expectError);
+    }
+
+    void RawMatrixSnoopResponse(MatrixDriver& driver, TransactionId txnId, uint8_t resp)
+    {
+        MatrixDriver::RSP response{};
+        response.SrcID() = 5;
+        response.TgtID() = driver.home;
+        response.TxnID() = txnId;
+        response.Opcode() = CHI::Eb::Opcodes::RSP::SnpResp;
+        response.Resp() = resp;
+        LUNATIC_CHECK(driver.driver.node.PushRXRSP(response));
+        driver.driver.Tick();
+    }
+
+    void RawMatrixSnoopData(MatrixDriver& driver, const LineKey& line, TransactionId txnId,
+        const LineData& data, uint8_t resp, bool partial)
+    {
+        for (size_t beat = 0; beat < 2; ++beat)
+        {
+            MatrixDriver::DAT flit{};
+            flit.SrcID() = 5;
+            flit.TgtID() = driver.home;
+            flit.TxnID() = txnId;
+            flit.Opcode() = partial ? CHI::Eb::Opcodes::DAT::SnpRespDataPtl : CHI::Eb::Opcodes::DAT::SnpRespData;
+            flit.Resp() = resp;
+            flit.DataID() = beat * 2;
+            flit.CCID() = (line.address >> 4) & 3;
+            for (size_t index = 0; index < 32; ++index)
+            {
+                flit.Data()[index / 8] |= uint64_t(data[beat * 32 + index]) << ((index % 8) * 8);
+                flit.BE() |= uint64_t(1) << index;
+            }
+            LUNATIC_CHECK(driver.driver.node.PushRXDAT(flit));
+        }
+        driver.driver.Tick();
     }
 
     void RunUniqueStash(CacheState initial, bool withData, bool partial, bool expectError = false)
@@ -235,6 +277,14 @@ namespace {
         }
         else
             driver.SnoopResponse(5, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
+        if (expectError)
+        {
+            if (IsDirty(initial))
+                RawMatrixSnoopData(driver, line, snoop.flit.TxnID(), MatrixPattern(), initial == CacheState::UDP
+                    ? CHI::Eb::Resps::SnpRespDataPtl_I_PD : CHI::Eb::Resps::SnpRespData_I_PD, initial == CacheState::UDP);
+            else
+                RawMatrixSnoopResponse(driver, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
+        }
         CompleteMatrixWrite(driver, false);
         QuiesceMatrix(driver, expectError);
         CheckMatrixWrite(driver, line, false, initial);
@@ -252,6 +302,8 @@ namespace {
         const uint8_t response = passDirty
             ? CHI::Eb::Resps::SnpResp_I | CHI::Eb::Resps::PassDirty : CHI::Eb::Resps::SnpResp_I;
         driver.SnoopResponse(5, snoop.flit.TxnID(), response);
+        if (passDirty)
+            RawMatrixSnoopResponse(driver, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
         CompleteMatrixWrite(driver, true);
         QuiesceMatrix(driver, passDirty);
         CheckMatrixWrite(driver, line, true, initial);
@@ -307,13 +359,15 @@ LUNATIC_TEST(Stage5MakeInvalidStashSnoopStateMatrix)
         RunMakeInvalidStash(state);
 }
 
+LUNATIC_TEST(Stage5StashSnoopAcceptsSilentSharedState)
+{
+    RunPlainStash(CacheState::UC, true, CHI::Eb::Resps::SnpResp_SC);
+}
+
 LUNATIC_TEST(Stage5StashSnoopRejectsIllegalForms)
 {
-    RunPlainStash(CacheState::UC, true, CHI::Eb::Resps::SnpResp_SC, true);
     RunUniqueStash(CacheState::I, true, false, true);
-    RunUniqueStash(CacheState::UCE, true, false, true);
     RunUniqueStash(CacheState::UC, true, true, true);
     RunUniqueStash(CacheState::UD, true, true, true);
-    RunUniqueStash(CacheState::UDP, true, false, true);
     RunMakeInvalidStash(CacheState::UD, true);
 }

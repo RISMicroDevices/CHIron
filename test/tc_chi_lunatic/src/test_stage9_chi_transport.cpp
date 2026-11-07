@@ -133,6 +133,22 @@ LUNATIC_TEST(Stage9SeparateFieldRXPinMapping)
     LUNATIC_CHECK(sampledResponse.TxnID() == response.TxnID());
     LUNATIC_CHECK(sampledResponse.DBID() == response.DBID());
 
+    auto persistence = response;
+    persistence.Opcode() = ::CHI::Eb::Opcodes::RSP::CompPersist;
+    persistence.PGroupID() = 0x5a;
+    RNResponse::DriveFlit(mock, &persistence, true);
+    LUNATIC_CHECK(mock.chi_rn0_rxrsp_bits_PGroupID == persistence.PGroupID());
+    LUNATIC_CHECK(RNResponse::SampleFlit(mock, &sampledResponse));
+    LUNATIC_CHECK(sampledResponse.PGroupID() == persistence.PGroupID());
+
+    auto stash = response;
+    stash.Opcode() = ::CHI::Eb::Opcodes::RSP::CompStashDone;
+    stash.StashGroupID() = 0x6b;
+    RNResponse::DriveFlit(mock, &stash, true);
+    LUNATIC_CHECK(mock.chi_rn0_rxrsp_bits_StashGroupID == stash.StashGroupID());
+    LUNATIC_CHECK(RNResponse::SampleFlit(mock, &sampledResponse));
+    LUNATIC_CHECK(sampledResponse.StashGroupID() == stash.StashGroupID());
+
     using RNData = V3CHISeparateFieldRNChannelPolicy<SeparatePinMock, 0, RXDATChannel>;
     RNData::DriveFlit(mock, &data, true);
     LUNATIC_CHECK(mock.chi_rn0_rxdat_bits_HomeNID == data.HomeNID());

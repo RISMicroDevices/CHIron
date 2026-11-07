@@ -60,11 +60,17 @@ namespace LunaticTest {
             request.Addr() = address;
             request.Size() = 6;
             request.AllowRetry() = 1;
-            request.ExpCompAck() = expCompAck;
-            request.SnpAttr() = CHI::Lunatic::IsCoherentRequest(opcode) || opcode == CHI::Eb::Opcodes::REQ::ReadOnce ? 1 : 0;
+            const auto requestClass = CHI::Lunatic::ClassifyRequest(opcode);
+            request.ExpCompAck() = expCompAck || requestClass == CHI::Lunatic::RequestClass::CoherentRead ||
+                requestClass == CHI::Lunatic::RequestClass::MakeUnique ||
+                requestClass == CHI::Lunatic::RequestClass::MakeReadUnique ||
+                requestClass == CHI::Lunatic::RequestClass::CleanUnique;
+            const bool atomic = requestClass == CHI::Lunatic::RequestClass::Atomic;
+            request.SnpAttr() = !atomic &&
+                (CHI::Lunatic::IsCoherentRequest(opcode) || opcode == CHI::Eb::Opcodes::REQ::ReadOnce) ? 1 : 0;
             request.MemAttr() = opcode == CHI::Eb::Opcodes::REQ::Evict
                 ? CHI::Eb::MemAttrs::WriteBack_NoAllocate
-                : CHI::Lunatic::IsCoherentRequest(opcode) || opcode == CHI::Eb::Opcodes::REQ::ReadOnce
+                : !atomic && (CHI::Lunatic::IsCoherentRequest(opcode) || opcode == CHI::Eb::Opcodes::REQ::ReadOnce)
                     ? CHI::Eb::MemAttrs::WriteBack_Allocate : CHI::Eb::MemAttrs::NonCacheable_Bufferable;
             return request;
         }
@@ -120,7 +126,8 @@ namespace LunaticTest {
 
         void WriteData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
                        CHI::Lunatic::DataBufferId dbid, const CHI::Lunatic::LineData& line,
-                       const CHI::Lunatic::ByteEnables& enables, uint16_t opcode, uint8_t resp = 0)
+                       const CHI::Lunatic::ByteEnables& enables, uint16_t opcode, uint8_t resp = 0,
+                       uint8_t ccid = 0, std::vector<DAT>* generated = nullptr)
         {
             constexpr size_t bytes = config::dataWidth / 8;
             for (size_t beat = 0; beat < CHI::Lunatic::LINE_SIZE / bytes; ++beat)
@@ -128,26 +135,30 @@ namespace LunaticTest {
                 DAT data{};
                 data.SrcID() = source;
                 data.TgtID() = node.GetNodeId();
-                data.HomeNID() = node.GetNodeId();
+                data.HomeNID() = 0;
                 data.TxnID() = dbid;
                 data.DBID() = 0;
                 data.Opcode() = opcode;
                 data.Resp() = resp;
                 data.DataID() = beat * bytes / 16;
-                data.CCID() = (beat * bytes / 16) % 2;
+                data.CCID() = ccid;
                 for (size_t index = 0; index < bytes; ++index)
                 {
-                    data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);
                     if (enables[beat * bytes + index])
+                    {
+                        data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);
                         data.BE() = uint64_t(data.BE()) | (uint64_t(1) << index);
+                    }
                 }
+                if (generated)
+                    generated->push_back(data);
                 LUNATIC_CHECK(node.PushRXDAT(data));
             }
             Tick();
         }
 
         CHI::Lunatic::LineData ReadData(CHI::Lunatic::NodeId source, CHI::Lunatic::TransactionId txnId,
-                                        uint64_t address, uint16_t opcode, bool compAck = false)
+                                        uint64_t address, uint16_t opcode, bool compAck = true)
         {
             LUNATIC_CHECK(node.PushRXREQ(Request(opcode, source, txnId, address, compAck)));
             CHI::Lunatic::LineData result{};

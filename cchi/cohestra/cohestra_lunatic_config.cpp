@@ -174,6 +174,32 @@ namespace {
 
         ReadOptions(loader, configuration.model.options, ok);
 
+        ReadBool(loader, "retry.force", configuration.retryForceOnce, ok);
+        if (configuration.retryForceOnce && !configuration.model.options.retryEnabled)
+        {
+            spdlog::error("Lunatic configuration: retry.force requires retry.enable=1.");
+            ok = false;
+        }
+
+        std::string dctChoice;
+        ReadString(loader, "dct.choice", dctChoice, ok);
+        if (dctChoice.empty() || dctChoice == "default")
+            configuration.dctChoice = LunaticDCTChoice::Default;
+        else if (dctChoice == "normal")
+            configuration.dctChoice = LunaticDCTChoice::Normal;
+        else if (dctChoice == "forward")
+            configuration.dctChoice = LunaticDCTChoice::Forward;
+        else
+        {
+            spdlog::error("Lunatic configuration: unknown [lunatic] dct.choice: {}.", dctChoice);
+            ok = false;
+        }
+        if (configuration.dctChoice != LunaticDCTChoice::Default && !configuration.model.options.dctEnabled)
+        {
+            spdlog::error("Lunatic configuration: a non-default dct.choice requires dct.enable=1.");
+            ok = false;
+        }
+
         bool mte = false;
         bool dvm = false;
         ReadBool(loader, "mte.enable", mte, ok);

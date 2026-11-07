@@ -208,6 +208,44 @@ LUNATIC_TEST(Stage8RetryCreditFromOriginalWithQueuedGrant)
     LUNATIC_CHECK(driver.driver.node.GetPerformanceCounters().creditedResends == 2);
 }
 
+LUNATIC_TEST(Stage8RetryGrantAndResendProgressPastFullTracker)
+{
+    Options options;
+    options.transactionLimit = 1;
+    options.inputQueueLimit = 4;
+    options.outputQueueLimit = 4;
+    CheckedDriver<Config256> driver(options);
+    const LineKey line = LineKey::FromAddress(0x1c000, false);
+    const LineData data{};
+
+    driver.ReadData(5, 1, line.address, CHI::Eb::Opcodes::REQ::ReadUnique);
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::MakeUnique, 4, 2, line.address, true));
+    const auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
+    LUNATIC_CHECK(snoop.target == 5);
+
+    auto retried = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 5, 3, 0x20000, false);
+    driver.PushRequest(retried);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
+
+    retried.AllowRetry() = 0;
+    driver.PushRequest(retried);
+    for (size_t cycle = 0; cycle < 4; ++cycle)
+    {
+        driver.driver.Tick();
+        LUNATIC_CHECK(driver.driver.node.GetErrors().empty());
+        LUNATIC_CHECK(!driver.driver.node.PeekTXDAT());
+    }
+
+    driver.SnoopData(5, snoop.flit.TxnID(), data, CHI::Eb::Resps::SnpRespData_I);
+    const auto comp = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+    LUNATIC_CHECK(comp.TgtID() == 4);
+    driver.CompAck(4, comp.DBID());
+    CompleteRead(driver, 3);
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.driver.node.GetPerformanceCounters().creditedResends == 1);
+}
+
 LUNATIC_TEST(Stage8RetryCreditReturnPreservesOtherOriginal)
 {
     Options options;

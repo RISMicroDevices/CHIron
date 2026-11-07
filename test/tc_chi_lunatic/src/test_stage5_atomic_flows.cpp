@@ -91,7 +91,8 @@ namespace {
             auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
             LUNATIC_CHECK(snoop.target == *peer && snoop.flit.RetToSrc() == 0);
             if (dirtyPeer)
-                driver.SnoopData(*peer, snoop.flit.TxnID(), oldData, CHI::Eb::Resps::SnpRespData_I_PD);
+                driver.SnoopData(*peer, snoop.flit.TxnID(), oldData, CHI::Eb::Resps::SnpRespData_I_PD,
+                    false, (request.Addr() >> 4) & 3);
             else
                 driver.SnoopResponse(*peer, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
         }
@@ -183,7 +184,11 @@ namespace {
                 SetFlowInteger(operands, (address ^ 8) % LINE_SIZE, 8, 9);
             driver.driver.node.GetMemory().WriteFull(line, initial);
             const Request executionRequest = FlowRequest(opcode, size, address);
-            const auto expected = ExecuteAtomic(executionRequest, initial, operands);
+            AtomicExecution expected = compare ? AtomicExecution{ initial, true }
+                : ExecuteAtomic(executionRequest, initial, operands);
+            if (compare)
+                for (size_t index = 0; index < 8; ++index)
+                    expected.data[address % LINE_SIZE + index] = operands[(address ^ 8) % LINE_SIZE + index];
             LUNATIC_CHECK(expected.write);
             DriveAtomic(driver, request, operands, initial);
             CheckAtomicLine(driver, line, expected.data);

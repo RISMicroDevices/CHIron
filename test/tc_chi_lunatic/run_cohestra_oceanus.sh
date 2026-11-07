@@ -4,16 +4,19 @@ set -euo pipefail
 CHIRON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 : "${OCEANUS_SNAPSHOT:?set OCEANUS_SNAPSHOT to the detached Stage 9 Oceanus snapshot}"
 OCEANUS_SNAPSHOT="$(realpath "$OCEANUS_SNAPSHOT")"
-EXPECTED_OCEANUS_REV="419853c2bd55c8c7cf0774602c6f03d2abac26bc"
+EXPECTED_OCEANUS_REV="${EXPECTED_OCEANUS_REV:-419853c2bd55c8c7cf0774602c6f03d2abac26bc}"
 ACTUAL_OCEANUS_REV="$(git -C "$OCEANUS_SNAPSHOT" rev-parse HEAD)"
 if [[ "$ACTUAL_OCEANUS_REV" != "$EXPECTED_OCEANUS_REV" ]]; then
     echo "Oceanus snapshot must be $EXPECTED_OCEANUS_REV, got $ACTUAL_OCEANUS_REV" >&2
     exit 2
 fi
 if [[ -n "$(git -C "$OCEANUS_SNAPSHOT" status --porcelain)" ]]; then
-    echo "Oceanus snapshot has uncommitted source changes" >&2
-    git -C "$OCEANUS_SNAPSHOT" status --short >&2
-    exit 2
+    if [[ "${ALLOW_DIRTY_OCEANUS:-0}" != 1 ]]; then
+        echo "Oceanus snapshot has uncommitted source changes" >&2
+        git -C "$OCEANUS_SNAPSHOT" status --short >&2
+        exit 2
+    fi
+    echo "Oceanus snapshot is dirty; ALLOW_DIRTY_OCEANUS=1 selected for pre-commit verification." >&2
 fi
 
 CONFIG="${CONFIG:-$CHIRON_ROOT/test/tc_chi_lunatic/config.cohestra_oceanus.ini}"

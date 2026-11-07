@@ -191,9 +191,11 @@ LUNATIC_TEST(Stage5CleanUniqueRejectsInvalidRequests)
     {
         Driver<Config256> driver;
         auto request = driver.Request(CHI::Eb::Opcodes::REQ::CleanUnique, 5, 2, 0x4a300, false);
+        request.ExpCompAck() = 0;
         LUNATIC_CHECK(driver.node.PushRXREQ(request));
         auto comp = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-        LUNATIC_CHECK(comp.RespErr() == 0b10);
+        LUNATIC_CHECK(comp.RespErr() == CHI::Eb::RespErrs::NDERR);
+        driver.CompAck(5, comp.DBID());
         driver.Quiesce();
         LUNATIC_CHECK(!driver.node.GetErrors().empty());
     }
@@ -325,7 +327,7 @@ LUNATIC_TEST(Stage5PersistenceImpreciseFilterSnoopsCleanPeers)
     driver.SnoopResponse(6, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_UC);
     CheckPersistenceResponse(driver, CHI::Eb::Opcodes::REQ::CleanSharedPersistSep, 31, 0x66);
     driver.Quiesce();
-    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::UC);
+    LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 6) == CacheState::UD);
 }
 
 LUNATIC_TEST(Stage5PersistenceRejectsInvalidRequests)
@@ -334,8 +336,9 @@ LUNATIC_TEST(Stage5PersistenceRejectsInvalidRequests)
         Driver<Config256> driver;
         auto request = PersistenceRequest(driver, CHI::Eb::Opcodes::REQ::CleanSharedPersist, 40, 0x4b300, 0x77);
         LUNATIC_CHECK(driver.node.PushRXREQ(request));
-        auto comp = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-        LUNATIC_CHECK(comp.RespErr() == 0b10);
+        auto comp = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompPersist);
+        LUNATIC_CHECK(comp.RespErr() == CHI::Eb::RespErrs::NDERR);
+        LUNATIC_CHECK(comp.PGroupID() == 0x77);
         driver.Quiesce();
         LUNATIC_CHECK(!driver.node.GetErrors().empty());
     }

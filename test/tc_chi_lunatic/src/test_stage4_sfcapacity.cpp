@@ -61,7 +61,7 @@ namespace {
         driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 5, 3, b.address, true));
         auto victim = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanInvalid);
         LUNATIC_CHECK(victim.target == 4);
-        driver.SnoopData(4, victim.flit.TxnID(), dataA, CHI::Eb::Resps::SnpRespData_I);
+        driver.SnoopResponse(4, victim.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
         SFReceiveUnique(driver, 5, 3);
         driver.Quiesce();
         LUNATIC_CHECK(driver.driver.node.InspectRequester(a, 4) == CacheState::I);
@@ -71,7 +71,7 @@ namespace {
         driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 6, 4, a.address, true));
         victim = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanInvalid);
         LUNATIC_CHECK(victim.target == 5);
-        driver.SnoopData(5, victim.flit.TxnID(), dataB, CHI::Eb::Resps::SnpRespData_I);
+        driver.SnoopResponse(5, victim.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
         SFReceiveUnique(driver, 6, 4);
         driver.Quiesce();
         LUNATIC_CHECK(driver.driver.node.InspectRequester(b, 5) == CacheState::I);
@@ -118,4 +118,85 @@ LUNATIC_TEST(Stage4SnoopFilterDirtyCapacityPreciseAndLossy)
 {
     DirtyCapacity(true);
     DirtyCapacity(false);
+}
+
+namespace {
+
+    void RunVictimActiveLine(bool directoryVictim)
+    {
+        Options options;
+        if (directoryVictim)
+        {
+            options.policy = PolicyKind::Inclusive;
+            options.slcSets = 1;
+            options.slcWays = 1;
+        }
+        else
+        {
+            options.policy = PolicyKind::NINE;
+            options.snoopFilterSets = 1;
+            options.snoopFilterWays = 1;
+        }
+        CheckedDriver<Config256> driver(options);
+        const LineKey a = LineKey::FromAddress(0x20100, false);
+        const LineKey b = LineKey::FromAddress(0x20140, false);
+        const LineData dataA = SFData(41);
+        const LineData dataB = SFData(149);
+        driver.driver.node.GetMemory().WriteFull(a, dataA);
+        driver.driver.node.GetMemory().WriteFull(b, dataB);
+
+        bool holdOlder = true;
+        bool olderAction = false;
+        driver.driver.node.GetEvents()->OnTransactionSchedule.Register(
+            Gravity::MakeListener<TransactionScheduleEvent>("victim-active-line", 0,
+                [&](TransactionScheduleEvent& event) {
+                    if (event.transaction == 0 && event.phase == Phase::Action && holdOlder)
+                    {
+                        olderAction = true;
+                        event.Backpressure();
+                    }
+                }));
+
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 4, 1, a.address, true));
+        driver.driver.Until([&] { return olderAction; });
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 5, 2, b.address, true));
+        DataBufferId youngerDbid = 0;
+        for (size_t beat = 0; beat < 2; ++beat)
+            youngerDbid = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData).DBID();
+
+        holdOlder = false;
+        for (size_t cycle = 0; cycle < 12; ++cycle)
+        {
+            driver.driver.Tick();
+            LUNATIC_CHECK(!driver.driver.node.PeekTXSNP());
+        }
+        driver.CompAck(5, youngerDbid);
+
+        const auto victim = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanInvalid);
+        LUNATIC_CHECK(victim.target == 5);
+        driver.SnoopResponse(5, victim.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
+        SFReceiveUnique(driver, 4, 1);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(b, 5) == CacheState::I);
+        LUNATIC_CHECK(driver.driver.node.InspectHome(a).data == dataA);
+
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 6, 3, b.address, true));
+        const auto later = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanInvalid);
+        LUNATIC_CHECK(later.target == 4);
+        driver.SnoopResponse(4, later.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
+        SFReceiveUnique(driver, 6, 3);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.driver.node.InspectHome(b).data == dataB);
+    }
+
+}
+
+LUNATIC_TEST(Stage4SnoopFilterVictimWaitsForActiveLine)
+{
+    RunVictimActiveLine(false);
+}
+
+LUNATIC_TEST(Stage4DirectoryVictimWaitsForActiveLine)
+{
+    RunVictimActiveLine(true);
 }

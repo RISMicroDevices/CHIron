@@ -1,10 +1,26 @@
 #include "cohestra_lunatic_mock.hpp"
+#include "cohestra_lunatic_config.hpp"
 #include "common.hpp"
+
+#include <map>
 
 using namespace Cohestra;
 using namespace LunaticTest;
 
 namespace {
+
+    class MapLoader final : public StringLoaderBase {
+    public:
+        std::map<std::string, std::string> values;
+
+        std::optional<std::string> GetRawString(ConfigurationEntryBase entry,
+            const std::string& defaultSection = "global") const noexcept override
+        {
+            const std::string key = std::string(entry->section ? entry->section : defaultSection.c_str()) + "." + entry->key;
+            const auto iter = values.find(key);
+            return iter == values.end() ? std::nullopt : std::optional<std::string>(iter->second);
+        }
+    };
 
     LunaticModel::Configuration MakeConfiguration(::CHI::Lunatic::Options options = {})
     {
@@ -194,10 +210,9 @@ LUNATIC_TEST(Stage9CohestraPeerDataAndUnknownTarget)
     data.Opcode() = ::CHI::Eb::Opcodes::DAT::SnpRespDataFwded;
     transport.InjectDAT(0, data);
     model.Tick(2);
-    const auto forwarded = transport.TakeDAT(1);
-    LUNATIC_CHECK(forwarded && forwarded->TgtID() == 2);
-    LUNATIC_CHECK(!transport.HasTXDAT(0));
-    LUNATIC_CHECK(!model.HasErrors());
+    LUNATIC_CHECK(!transport.TakeDAT(1));
+    LUNATIC_CHECK(transport.HasTXDAT(0));
+    LUNATIC_CHECK(model.HasErrors());
 
     data.TgtID() = 7;
     transport.InjectDAT(0, data);
@@ -244,4 +259,34 @@ LUNATIC_TEST(Stage9CohestraRetryAndCreditGrant)
     DrainOutputs(transport);
     LUNATIC_CHECK(model.Drain());
     LUNATIC_CHECK(model.Validate());
+}
+
+LUNATIC_TEST(Stage9EventConfigurationValidation)
+{
+    MapLoader loader;
+    LunaticIntegrationConfiguration configuration;
+    LUNATIC_CHECK(LoadLunaticIntegrationConfiguration(loader, configuration));
+    LUNATIC_CHECK(!configuration.retryForceOnce);
+    LUNATIC_CHECK(configuration.dctChoice == LunaticDCTChoice::Default);
+
+    loader.values["lunatic.retry.force"] = "1";
+    loader.values["lunatic.retry.enable"] = "0";
+    LUNATIC_CHECK(!LoadLunaticIntegrationConfiguration(loader, configuration));
+
+    loader.values.clear();
+    configuration = LunaticIntegrationConfiguration{};
+    loader.values["lunatic.dct.choice"] = "forward";
+    LUNATIC_CHECK(!LoadLunaticIntegrationConfiguration(loader, configuration));
+    loader.values["lunatic.dct.enable"] = "1";
+    LUNATIC_CHECK(LoadLunaticIntegrationConfiguration(loader, configuration));
+    LUNATIC_CHECK(configuration.dctChoice == LunaticDCTChoice::Forward);
+
+    loader.values["lunatic.dct.choice"] = "normal";
+    LUNATIC_CHECK(LoadLunaticIntegrationConfiguration(loader, configuration));
+    LUNATIC_CHECK(configuration.dctChoice == LunaticDCTChoice::Normal);
+    loader.values["lunatic.dct.choice"] = "default";
+    LUNATIC_CHECK(LoadLunaticIntegrationConfiguration(loader, configuration));
+    LUNATIC_CHECK(configuration.dctChoice == LunaticDCTChoice::Default);
+    loader.values["lunatic.dct.choice"] = "invalid";
+    LUNATIC_CHECK(!LoadLunaticIntegrationConfiguration(loader, configuration));
 }

@@ -89,7 +89,7 @@ namespace {
             data.Resp() = resp;
             data.FwdState() = fwdState;
             data.DataID() = beat * bytes / 16;
-            data.CCID() = (beat * bytes / 16) % 2;
+            data.CCID() = (snoop.flit.Addr() >> 1) & 3;
             data.BE() = ~uint64_t(0);
             for (size_t index = 0; index < bytes; ++index)
                 data.Data()[index / 8] |= uint64_t(line[beat * bytes + index]) << ((index % 8) * 8);

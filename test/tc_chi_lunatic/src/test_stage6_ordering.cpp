@@ -47,8 +47,15 @@ LUNATIC_TEST(Stage6OrderingRejectsUnsupportedOrderedOpcode)
     auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadShared, 4, 1, 0x10000, true);
     request.Order() = 2;
     LUNATIC_CHECK(driver.node.PushRXREQ(request));
-    const auto response = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-    LUNATIC_CHECK(response.RespErr() == CHI::Eb::RespErrs::DERR);
+    LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::ReadReceipt).RespErr() == CHI::Eb::RespErrs::OK);
+    DataBufferId dbid = 0;
+    for (size_t beat = 0; beat < 2; ++beat)
+    {
+        const auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+        LUNATIC_CHECK(data.RespErr() == CHI::Eb::RespErrs::NDERR);
+        dbid = data.DBID();
+    }
+    driver.CompAck(4, dbid);
     LUNATIC_CHECK(!driver.node.GetErrors().empty());
     driver.Quiesce();
 }
@@ -148,7 +155,6 @@ LUNATIC_TEST(Stage6OrderingOWOWaitsForCompAck)
     enables.fill(1);
     driver.WriteData(4, 1, firstDBID.DBID(), data, enables,
         CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
-    driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
     for (size_t cycle = 0; cycle < 4; ++cycle)
     {
         LUNATIC_CHECK(!driver.driver.node.PeekTXRSP());
@@ -158,10 +164,12 @@ LUNATIC_TEST(Stage6OrderingOWOWaitsForCompAck)
 
     const auto secondDBID = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDRespOrd);
     LUNATIC_CHECK(secondDBID.TxnID() == 2);
+    const auto firstComp = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+    LUNATIC_CHECK(firstComp.TxnID() == 1);
     driver.WriteData(4, 2, secondDBID.DBID(), data, enables,
         CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
-    driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
     driver.CompAck(4, secondDBID.DBID());
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
     driver.Quiesce();
 }
 
@@ -198,4 +206,69 @@ LUNATIC_TEST(Stage6OrderingBackendRequestAcceptedAndLateReceipt)
     driver.driver.Tick();
     driver.Quiesce();
     LUNATIC_CHECK(!oracle.HasInflight());
+}
+
+LUNATIC_TEST(Stage6OrderingOWOVisibilityWaitsForCompAck)
+{
+    for (const uint16_t opcode : { CHI::Eb::Opcodes::REQ::WriteNoSnpFull, CHI::Eb::Opcodes::REQ::WriteUniqueFull })
+        for (size_t ackForm = 0; ackForm < 3; ++ackForm)
+        {
+            CheckedDriver<Config256> driver;
+            const uint64_t address = 0x18000;
+            const LineKey line = LineKey::FromAddress(address, false);
+            auto request = driver.Request(opcode, 4, 1, address, true);
+            request.Order() = 2;
+            driver.PushRequest(request);
+            const auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDRespOrd);
+            LineData data{};
+            data.fill(0x5c);
+            ByteEnables enables{};
+            enables.fill(1);
+            if (ackForm == 0)
+                driver.CompAck(4, dbid.DBID());
+            const uint16_t dataOpcode = ackForm == 1 ? CHI::Eb::Opcodes::DAT::NCBWrDataCompAck
+                                                     : CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
+            driver.WriteData(4, 1, dbid.DBID(), data, enables, dataOpcode);
+            for (size_t cycle = 0; cycle < 8; ++cycle)
+                driver.driver.Tick();
+            if (ackForm == 2)
+            {
+                if (opcode == CHI::Eb::Opcodes::REQ::WriteUniqueFull)
+                    LUNATIC_CHECK(!driver.driver.node.InspectHome(line).valid);
+                else
+                    LUNATIC_CHECK(driver.driver.node.GetMemory().Read(line) == LineData{});
+                LUNATIC_CHECK(!driver.driver.node.PeekTXRSP());
+                driver.CompAck(4, dbid.DBID());
+            }
+
+            driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+            driver.Quiesce();
+            if (opcode == CHI::Eb::Opcodes::REQ::WriteUniqueFull)
+                LUNATIC_CHECK(driver.driver.node.InspectHome(line).data == data);
+            else
+                LUNATIC_CHECK(driver.driver.node.GetMemory().Read(line) == data);
+        }
+}
+
+LUNATIC_TEST(Stage6OrderingOWOCancelRetainsCompAckLifetime)
+{
+    CheckedDriver<Config256> driver;
+    const uint64_t address = 0x19000;
+    const LineKey line = LineKey::FromAddress(address, false);
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteNoSnpPtl, 4, 1, address, true);
+    request.Order() = 2;
+    request.Size() = 4;
+    driver.PushRequest(request);
+    const auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDRespOrd);
+    driver.WriteData(4, 1, dbid.DBID(), LineData{}, ByteEnables{},
+        CHI::Eb::Opcodes::DAT::WriteDataCancel, 0, 1);
+    for (size_t cycle = 0; cycle < 8; ++cycle)
+        driver.driver.Tick();
+    LUNATIC_CHECK(driver.driver.node.GetMemory().Read(line) == LineData{});
+    LUNATIC_CHECK(!driver.driver.node.PeekTXRSP());
+
+    driver.CompAck(4, dbid.DBID());
+    driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.driver.node.GetMemory().Read(line) == LineData{});
 }

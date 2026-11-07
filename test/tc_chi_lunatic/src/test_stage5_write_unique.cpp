@@ -30,14 +30,14 @@ namespace {
         {
             const LineKey line = LineKey::FromAddress(0x40000 + form * LINE_SIZE, false);
             const LineData expected = WritePattern(41 + form * 29);
-            auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniqueFull, 4, form + 1, line.address, true);
+            auto request = driver.Request(CHI::Eb::Opcodes::REQ::WriteUniqueFull, 4, form + 1, line.address, false);
             driver.PushRequest(request);
             DataBufferId dbid = 0;
             if (form == 0)
             {
                 dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
                 driver.WriteData(4, form + 1, dbid, expected, FullWriteEnables(),
-                    CHI::Eb::Opcodes::DAT::NCBWrDataCompAck);
+                    CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
                 LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).TxnID() == form + 1);
             }
             else if (form == 1)
@@ -49,7 +49,7 @@ namespace {
                 dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp).DBID();
             if (form != 0)
                 driver.WriteData(4, form + 1, dbid, expected, FullWriteEnables(),
-                    CHI::Eb::Opcodes::DAT::NCBWrDataCompAck);
+                    CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
             driver.Quiesce();
             LUNATIC_CHECK(driver.driver.node.InspectHome(line).data == expected);
             LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 4) == CacheState::I);
@@ -96,8 +96,13 @@ namespace {
         cancel.TgtID() = 2;
         cancel.TxnID() = dbid;
         cancel.Opcode() = CHI::Eb::Opcodes::DAT::WriteDataCancel;
-        driver.Oracle(4).WriteData(driver.driver.now, cancel);
-        LUNATIC_CHECK(driver.driver.node.PushRXDAT(cancel));
+        constexpr size_t bytes = config::dataWidth / 8;
+        for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
+        {
+            cancel.DataID() = beat * bytes / 16;
+            driver.Oracle(4).WriteData(driver.driver.now, cancel);
+            LUNATIC_CHECK(driver.driver.node.PushRXDAT(cancel));
+        }
         driver.driver.Tick();
         LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).TxnID() == 4);
         driver.Quiesce();
@@ -158,6 +163,57 @@ namespace {
         LUNATIC_CHECK(!driver.driver.node.InspectHome(empty).valid);
     }
 
+    void RunDirtyVictim(PolicyKind policy, uint16_t opcode)
+    {
+        Options options;
+        options.policy = policy;
+        options.slcSets = 1;
+        options.slcWays = 1;
+        CheckedDriver<Config256> driver(options);
+        const LineKey a = LineKey::FromAddress(0x43000, false);
+        const LineKey b = LineKey::FromAddress(0x43040, false);
+        const LineData initial = WritePattern(31);
+        const LineData update = WritePattern(101);
+        const LineData replacement = WritePattern(197);
+        ByteEnables enables = FullWriteEnables();
+        LineData expected = update;
+        if (opcode == CHI::Eb::Opcodes::REQ::WriteUniquePtl)
+        {
+            enables.fill(0);
+            expected = initial;
+            for (size_t index = 9; index < 25; ++index)
+            {
+                enables[index] = 1;
+                expected[index] = update[index];
+            }
+        }
+        else if (opcode == CHI::Eb::Opcodes::REQ::WriteUniqueZero)
+            expected.fill(0);
+
+        driver.driver.node.GetMemory().WriteFull(a, initial);
+        driver.PushRequest(driver.Request(opcode, 4, 1, a.address));
+        const DataBufferId dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp).DBID();
+        if (opcode != CHI::Eb::Opcodes::REQ::WriteUniqueZero)
+            driver.WriteData(4, 1, dbid, update, enables, CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
+        LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).TxnID() == 1);
+        driver.Quiesce();
+        const HomeLineInfo installed = driver.driver.node.InspectHome(a);
+        LUNATIC_CHECK(installed.valid);
+        LUNATIC_CHECK(installed.data == expected);
+
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackFull, 4, 2, b.address));
+        const auto writeback = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
+        driver.WriteData(4, 2, writeback.DBID(), replacement, FullWriteEnables(),
+            CHI::Eb::Opcodes::DAT::CopyBackWrData, CHI::Eb::Resps::CopyBackWrData_UD_PD);
+        driver.Quiesce();
+
+        LUNATIC_CHECK(driver.driver.node.GetMemory().Read(a) == expected);
+        LUNATIC_CHECK(!driver.driver.node.InspectHome(a).valid);
+        LUNATIC_CHECK(installed.dirty);
+        LUNATIC_CHECK(driver.ReadData(5, 3, a.address, CHI::Eb::Opcodes::REQ::ReadUnique) == expected);
+        driver.Quiesce();
+    }
+
 }
 
 LUNATIC_TEST(Stage5WriteUniqueResponseForms128)
@@ -193,4 +249,12 @@ LUNATIC_TEST(Stage5WriteEvictOrEvictAlternatives)
     RunEvictOrEvict<Config256>(PolicyKind::NINE);
     RunEvictOrEvict<Config256>(PolicyKind::Exclusive);
     RunEvictOrEvict<Config256>(PolicyKind::Inclusive);
+}
+
+LUNATIC_TEST(Stage5WriteUniqueDirtyVictimAllPolicies)
+{
+    for (PolicyKind policy : { PolicyKind::NINE, PolicyKind::Exclusive, PolicyKind::Inclusive })
+        for (uint16_t opcode : { CHI::Eb::Opcodes::REQ::WriteUniqueFull,
+                 CHI::Eb::Opcodes::REQ::WriteUniquePtl, CHI::Eb::Opcodes::REQ::WriteUniqueZero })
+            RunDirtyVictim(policy, opcode);
 }

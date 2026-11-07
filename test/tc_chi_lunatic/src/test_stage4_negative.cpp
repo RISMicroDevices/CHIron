@@ -20,11 +20,19 @@ namespace {
         return enables;
     }
 
-    void NegativeWriteback(CheckedDriver<Config256>& driver, const LineKey& line, const LineData& data)
+    void NegativeWriteback(CheckedDriver<Config256>& driver, const LineKey& line, const LineData& data,
+        bool partial = false)
     {
-        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackFull, 4, 70, line.address));
+        if (partial)
+            driver.driver.node.GetMemory().WriteFull(line, data);
+        const uint16_t opcode = partial ? CHI::Eb::Opcodes::REQ::WriteBackPtl : CHI::Eb::Opcodes::REQ::WriteBackFull;
+        driver.PushRequest(driver.Request(opcode, 4, 70, line.address));
         auto dbid = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
-        driver.WriteData(4, 70, dbid.DBID(), data, NegativeEnables(), CHI::Eb::Opcodes::DAT::CopyBackWrData,
+        ByteEnables enables = NegativeEnables();
+        if (partial)
+            for (size_t index = 0; index < enables.size(); ++index)
+                enables[index] = index % 32 < 16;
+        driver.WriteData(4, 70, dbid.DBID(), data, enables, CHI::Eb::Opcodes::DAT::CopyBackWrData,
                          CHI::Eb::Resps::CopyBackWrData_UD_PD);
         driver.Quiesce();
     }
@@ -77,9 +85,10 @@ namespace {
         CheckedDriver<Config256> driver(options);
         const LineKey line = LineKey::FromAddress(0x11000, false);
         const LineData expected = NegativeData(37);
-        NegativeWriteback(driver, line, expected);
+        NegativeWriteback(driver, line, expected, true);
         LUNATIC_CHECK(driver.ReadData(5, 71, line.address, CHI::Eb::Opcodes::REQ::ReadUnique) == expected);
         driver.Quiesce();
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(line, 5) == CacheState::UDP);
 
         driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 6, 72, line.address, true));
         auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
@@ -97,7 +106,7 @@ LUNATIC_TEST(Stage4PartialDirtySnoopAllPolicies)
     PartialDirtyMatrix(PolicyKind::Inclusive);
 }
 
-LUNATIC_TEST(Stage4DoNotGoToSDViolationIsReported)
+LUNATIC_TEST(Stage4DoNotGoToSDAcceptsPriorSilentSD)
 {
     Options options;
     options.doNotGoToSD = true;
@@ -115,7 +124,7 @@ LUNATIC_TEST(Stage4DoNotGoToSDViolationIsReported)
     driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
     driver.CompAck(5, first.DBID());
     driver.Quiesce();
-    LUNATIC_CHECK(!driver.node.GetErrors().empty());
+    LUNATIC_CHECK(driver.node.GetErrors().empty());
 }
 
 LUNATIC_TEST(Stage4SnpOnceMayRetainSD)

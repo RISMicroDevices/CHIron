@@ -26,18 +26,18 @@ LUNATIC_TEST(Stage9CompAckAfterFirstReadDataBeat)
 
 LUNATIC_TEST(Stage9CompAckOptionalReadNoSnp)
 {
-    ExerciseEarlyReadAck(CHI::Eb::Opcodes::REQ::ReadNoSnp, false);
+    ExerciseEarlyReadAck(CHI::Eb::Opcodes::REQ::ReadNoSnp, true);
 }
 
 LUNATIC_TEST(Stage9CompAckOptionalReadOnce)
 {
-    ExerciseEarlyReadAck(CHI::Eb::Opcodes::REQ::ReadOnce, false);
+    ExerciseEarlyReadAck(CHI::Eb::Opcodes::REQ::ReadOnce, true);
 }
 
 LUNATIC_TEST(Stage9CompAckOptionalAfterFinalDataBeat)
 {
     Driver<Config256> driver;
-    LUNATIC_CHECK(driver.node.PushRXREQ(driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 2, 0x18000, false)));
+    LUNATIC_CHECK(driver.node.PushRXREQ(driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 2, 0x18000, true)));
     const auto first = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
     const auto second = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
     LUNATIC_CHECK(second.DBID() == first.DBID());
