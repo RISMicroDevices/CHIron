@@ -78,6 +78,15 @@ namespace CHI::Lunatic {
 
     template<CHI::Eb::FlitConfigurationConcept config>
     class HomeNode {
+        static_assert(config::nodeIdWidth >= 7 && config::nodeIdWidth <= 11,
+                      "Lunatic NodeID width must be between 7 and 11 bits");
+        static_assert(config::reqAddrWidth >= 44 && config::reqAddrWidth <= 52,
+                      "Lunatic request address width must be between 44 and 52 bits");
+        static_assert(config::snpAddrWidth + 3 == config::reqAddrWidth,
+                      "Lunatic snoop address width must be request address width minus three");
+        static_assert(config::dataWidth == 128 || config::dataWidth == 256 || config::dataWidth == 512,
+                      "Lunatic data width must be 128, 256, or 512 bits");
+
     public:
         using REQFlit = CHI::Eb::Flits::REQ<config>;
         using RSPFlit = CHI::Eb::Flits::RSP<config>;
@@ -122,6 +131,11 @@ namespace CHI::Lunatic {
             result.deep = flit.Deep();
             result.doDwt = flit.DoDWT();
             result.snoopMe = flit.SnoopMe();
+            if constexpr (REQFlit::hasMPAM)
+                result.mpam = flit.MPAM();
+            result.tagOp = flit.TagOp();
+            if (result.tagOp == CHI::Eb::TagOp::MatchFetch)
+                result.tagGroupId = flit.TagGroupID();
             return result;
         }
 
@@ -142,6 +156,8 @@ namespace CHI::Lunatic {
             result.qos = flit.QoS();
             result.cBusy = flit.CBusy();
             result.traceTag = flit.TraceTag();
+            result.tagOp = flit.TagOp();
+            result.tagGroupId = flit.TagGroupID();
             return result;
         }
 
@@ -225,6 +241,11 @@ namespace CHI::Lunatic {
             else if (value.opcode == CHI::Eb::Opcodes::REQ::StashOnceSepUnique ||
                      value.opcode == CHI::Eb::Opcodes::REQ::StashOnceSepShared)
                 flit.StashGroupID() = value.stashGroupId;
+            else if (value.tagOp == CHI::Eb::TagOp::MatchFetch)
+                flit.TagGroupID() = value.tagGroupId;
+            else if (IsLPIDApplicable(value))
+                flit.LPID() = value.pGroupId;
+            flit.TagOp() = value.tagOp;
             if (IsAtomicRequest(value.opcode))
                 flit.Endian() = value.endian;
             else if (value.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersist ||
@@ -233,6 +254,8 @@ namespace CHI::Lunatic {
             flit.DoDWT() = value.doDwt;
             flit.SnoopMe() = value.snoopMe;
             flit.TraceTag() = value.traceTag;
+            if constexpr (REQFlit::hasMPAM)
+                flit.MPAM() = value.mpam;
             return flit;
         }
 
@@ -253,9 +276,12 @@ namespace CHI::Lunatic {
             else if (value.opcode == CHI::Eb::Opcodes::RSP::StashDone ||
                      value.opcode == CHI::Eb::Opcodes::RSP::CompStashDone)
                 flit.StashGroupID() = value.stashGroupId;
+            else if (value.opcode == CHI::Eb::Opcodes::RSP::TagMatch)
+                flit.TagGroupID() = value.tagGroupId;
             else
                 flit.DBID() = value.dbid;
             flit.PCrdType() = value.pCrdType;
+            flit.TagOp() = value.tagOp;
             flit.TraceTag() = value.traceTag;
             return flit;
         }
@@ -344,12 +370,19 @@ namespace CHI::Lunatic {
                 emission.flit.StashLPID() = value.stashLpid;
             }
             emission.flit.TraceTag() = value.traceTag;
+            if constexpr (SNPFlit::hasMPAM)
+                emission.flit.MPAM() = value.mpam;
             return emission;
         }
 
     public:
         explicit HomeNode(NodeId nodeId, Options options = {}, std::shared_ptr<EventHub> events = nullptr)
-            : core(nodeId, [&options] {
+            : core(nodeId, [&options, nodeId] {
+                const uint64_t nodeIdLimit = uint64_t(1) << config::nodeIdWidth;
+                if (uint64_t(nodeId) >= nodeIdLimit)
+                    throw std::invalid_argument("Lunatic Home node ID exceeds the flit NodeID width");
+                if (options.backend == BackendKind::CHI && uint64_t(options.subordinateId) >= nodeIdLimit)
+                    throw std::invalid_argument("Lunatic Subordinate node ID exceeds the flit NodeID width");
                 if (options.dataWidth != config::dataWidth)
                     throw std::invalid_argument("Lunatic options and flit data widths differ");
                 if (options.poisonEnabled && !DATFlit::hasPoison)

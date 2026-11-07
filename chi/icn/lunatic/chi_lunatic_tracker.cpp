@@ -130,6 +130,16 @@ namespace CHI::Lunatic {
         return memoryMap.erase({ subordinate, txnId }) != 0;
     }
 
+    bool Tracker::ReleaseRequestId(TransactionHandle handle)
+    {
+        Transaction* transaction = Find(handle);
+        if (!transaction || transaction->requestIdReleased)
+            return false;
+        transaction->requestIdReleased = true;
+        EraseHandle(requestMap, handle);
+        return true;
+    }
+
     bool Tracker::Retire(TransactionHandle handle)
     {
         auto it = transactions.find(handle);
@@ -166,7 +176,9 @@ namespace CHI::Lunatic {
 
             const RequestKey key{ transaction->request.source, transaction->request.txnId };
             auto requestIt = requestMap.find(key);
-            if (requestIt == requestMap.end() || requestIt->second != handle)
+            if (!transaction->requestIdReleased && (requestIt == requestMap.end() || requestIt->second != handle))
+                return false;
+            if (transaction->requestIdReleased && requestIt != requestMap.end() && requestIt->second == handle)
                 return false;
 
             if (transaction->dbid != 0) {

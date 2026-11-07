@@ -5,7 +5,6 @@
 #include <utility>
 
 namespace CHI::Lunatic {
-
     Core::Impl::Impl(NodeId nodeId, Options options, std::shared_ptr<EventHub> events)
         : nodeId(nodeId)
         , options(std::move(options))
@@ -112,9 +111,11 @@ namespace CHI::Lunatic {
 
         if (flit.opcode == RSP::RetryAck)
         {
-            Transaction* transaction = tracker.FindMemory(flit.source, flit.txnId);
+            Transaction* transaction = FindBackendTransaction(flit.source, flit.target, flit.txnId);
             if (!transaction || !HandleBackendRetry(*transaction, flit))
                 Error(transaction ? transaction->handle : INVALID_TRANSACTION, "unexpected downstream RetryAck");
+            else
+                RecordBackendResponder(*transaction, flit.source);
             return;
         }
 
@@ -142,9 +143,12 @@ namespace CHI::Lunatic {
                 (flow.separatedResponse ? flow.respSepEmitted
                                         : transaction->request.order == 0 || flow.readReceiptEmitted) &&
                 !transaction->Complete(COMPLETE_RESPONSE);
-            const bool earlyDCTAck = flow.dctActive && !transaction->Complete(COMPLETE_RESPONSE);
-            const bool compAckAllowed = !transaction->canceled && (AllowsCompAck(transaction->request) ||
-                (requestClass == RequestClass::WriteEvictOrEvict && flow.evictOrEvictNoData));
+            const bool earlyDCTAck = flow.dctActive && flow.dctSnoopEmitted &&
+                (!flow.dctProviderResponded || flow.dctForwarded) && !transaction->Complete(COMPLETE_RESPONSE);
+            const bool orderedWrite = IsOrderedWriteObservation(transaction->request);
+            const bool compAckAllowed = (!transaction->canceled || orderedWrite) &&
+                (AllowsCompAck(transaction->request) ||
+                 (requestClass == RequestClass::WriteEvictOrEvict && flow.evictOrEvictNoData));
             if (!compAckAllowed || transaction->Complete(COMPLETE_COMPACK) ||
                 (!responseComplete && !earlyReadAck && !earlyWriteAck && !earlySeparatedAck &&
                  !dmtResponseReady && !earlyDCTAck))
@@ -162,9 +166,15 @@ namespace CHI::Lunatic {
                 responseComplete = true;
             }
             transaction->Mark(COMPLETE_COMPACK);
-            if (IsOrderedWriteObservation(transaction->request))
+            ordering.ReleaseDMT(transaction->handle);
+            if (orderedWrite)
+            {
                 ordering.Release(transaction->handle);
-            if (responseComplete)
+                transaction->phase = responseComplete ? Phase::Commit : Phase::Action;
+                transaction->readyTime = time;
+                transaction->wait = WaitReason::None;
+            }
+            else if (responseComplete)
             {
                 transaction->phase = Phase::Commit;
                 transaction->readyTime = time;
@@ -181,7 +191,18 @@ namespace CHI::Lunatic {
                 Error(INVALID_TRANSACTION, "unmatched SnpRespFwded");
                 return;
             }
-            if (!AcceptForwardedResponse(*transaction, flit.source, flit.resp, flit.fwdState, false))
+            FlowState& flow = flows.at(transaction->handle);
+            const bool nderr = flit.respErr == CHI::Eb::RespErrs::NDERR;
+            if ((flit.respErr != CHI::Eb::RespErrs::OK && !nderr) ||
+                (nderr && (!flow.dctActive || flow.dctTarget != flit.source || flow.dctForwarded ||
+                           flit.resp != CHI::Eb::Resps::SnpResp_I)))
+            {
+                Error(transaction->handle, "illegal forwarding snoop error response");
+                return;
+            }
+            if (nderr)
+                transaction->responseRespErr = MergeResponseErrors(transaction->responseRespErr, flit.respErr);
+            else if (!AcceptForwardedResponse(*transaction, flit.source, flit.resp, flit.fwdState, false))
             {
                 Error(transaction->handle, "unexpected or illegal forwarding snoop response");
                 return;
@@ -214,10 +235,41 @@ namespace CHI::Lunatic {
             }
         }
 
-        if (Transaction* transaction = tracker.FindMemory(flit.source, flit.txnId))
+        if (flit.opcode == RSP::Persist && flit.target == nodeId)
+        {
+            Transaction* persistence = nullptr;
+            for (const auto& [handle, flow] : flows)
+            {
+                Transaction* candidate = tracker.Find(handle);
+                if (!candidate || candidate->request.opcode != CHI::Eb::Opcodes::REQ::CleanSharedPersistSep ||
+                    flow.directPersistActive || flow.backendPersistReceived ||
+                    candidate->request.pGroupId != flit.pGroupId ||
+                    (flow.backendResponderKnown && flow.backendResponder != flit.source) ||
+                    !tracker.FindMemory(options.subordinateId, handle))
+                    continue;
+                if (persistence)
+                {
+                    Error(INVALID_TRANSACTION, "ambiguous downstream persistence response");
+                    return;
+                }
+                persistence = candidate;
+            }
+            if (persistence)
+            {
+                if (!HandleBackendRSP(*persistence, flit))
+                    Error(persistence->handle, "unexpected downstream response");
+                else
+                    RecordBackendResponder(*persistence, flit.source);
+                return;
+            }
+        }
+
+        if (Transaction* transaction = FindBackendTransaction(flit.source, flit.target, flit.txnId))
         {
             if (!HandleBackendRSP(*transaction, flit))
                 Error(transaction->handle, "unexpected downstream response");
+            else
+                RecordBackendResponder(*transaction, flit.source);
             return;
         }
 
@@ -230,10 +282,12 @@ namespace CHI::Lunatic {
 
         if (flit.opcode == DAT::CompData || flit.opcode == DAT::DataSepResp)
         {
-            if (Transaction* transaction = tracker.FindMemory(flit.source, flit.txnId))
+            if (Transaction* transaction = FindBackendTransaction(flit.source, flit.target, flit.txnId))
             {
                 if (!HandleBackendDAT(*transaction, flit))
                     Error(transaction->handle, "unexpected downstream data");
+                else
+                    RecordBackendResponder(*transaction, flit.source);
                 return;
             }
         }
@@ -273,6 +327,12 @@ namespace CHI::Lunatic {
         if (rxreq.empty())
             return;
 
+        if (rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PrefetchTgt)
+        {
+            rxreq.pop_front();
+            return;
+        }
+
         const auto decision = events->Decide(RequestAdmissionEvent(time, nodeId, rxreq.front()));
         if (decision.IsBackpressured())
         {
@@ -292,6 +352,11 @@ namespace CHI::Lunatic {
         {
             Request request = std::move(rxreq.front());
             rxreq.pop_front();
+            if (!IsPCrdReturnValid(request))
+            {
+                Deny(request, "invalid PCrdReturn fields");
+                return;
+            }
             if (!ConsumeRetryRequest(request, true))
                 Deny(request, "PCrdReturn has no matching credit");
             return;
@@ -299,7 +364,7 @@ namespace CHI::Lunatic {
 
         if (!rxreq.front().allowRetry)
         {
-            if (!ordering.CanAdmit(rxreq.front()))
+            if (tracker.Size() >= tracker.Limit() || !ordering.CanAdmit(rxreq.front()))
             {
                 pmu.RecordStall(WaitReason::InputQueue);
                 return;
@@ -379,7 +444,7 @@ namespace CHI::Lunatic {
         FlowState flow;
         flow.separatedResponse = separatedLegal && options.separatedReadResponse;
         flow.separatedBackendRead = separatedLegal && options.separatedBackendRead;
-        flow.dmtActive = options.dmtEnabled && options.backend == BackendKind::CHI && separatedEligible &&
+        flow.dmtActive = options.dmtEnabled && options.backend == BackendKind::CHI && separatedLegal &&
             CHI::Eb::MemAttrs::ExtractAllocate(request.memAttr) == 0;
         flow.dctActive = options.dctEnabled &&
             (requestClass == RequestClass::ReadOnce || requestClass == RequestClass::CoherentRead) &&
@@ -391,6 +456,14 @@ namespace CHI::Lunatic {
         flow.directPersistActive = options.directPersistEnabled && options.backend == BackendKind::CHI &&
             request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
         flows.emplace(transaction->handle, std::move(flow));
+        if (!hazards.Add(transaction->handle, transaction->request.Line(), transaction->actionAge))
+        {
+            Error(transaction->handle, "duplicate requester hazard gate");
+            transaction->canceled = true;
+            transaction->phase = Phase::Commit;
+            transaction->readyTime = time;
+            return;
+        }
         transaction->readyTime = pipeline.SaturatingAdd(time, 1);
         transaction->phase = Phase::Receive;
     }
@@ -528,14 +601,12 @@ namespace CHI::Lunatic {
                         QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC, CHI::Eb::RespErrs::NDERR);
                     return;
                 }
-                if (!IsSupportedRequest(transaction.request.opcode) || transaction.request.size > 6 ||
+                if (!IsSupportedRequest(transaction.request.opcode) || !IsRequestAttributeValid(transaction.request) ||
+                    !IsTagOperationValid(transaction.request) || transaction.request.size > 6 ||
                     (requestClass == RequestClass::ZeroWrite && transaction.request.size != 6) || invalidStash ||
                     invalidCleanUnique || invalidPersistence || invalidAtomic || invalidOrder)
                 {
-                    Deny(transaction.request, "unsupported request opcode or transfer geometry");
-                    transaction.canceled = true;
-                    transaction.dbid = transaction.handle;
-                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_I, 0b10);
+                    CompleteErrorTransaction(transaction);
                     return;
                 }
                 pipeline.Advance(transaction, Phase::Admit, time);
@@ -551,7 +622,6 @@ namespace CHI::Lunatic {
                     return;
                 }
                 transaction.dbid = transaction.handle;
-                hazards.Add(transaction.handle, transaction.request.Line(), transaction.actionAge);
                 transaction.phase = Phase::Hazard;
                 transaction.readyTime = time;
                 return;
@@ -596,6 +666,13 @@ namespace CHI::Lunatic {
                 Resolve(transaction);
                 return;
             case Phase::Action:
+                if (transaction.request.tagOp == CHI::Eb::TagOp::MatchFetch &&
+                    IsTagOperationValid(transaction.request) && IsWriteRequest(transaction.request.opcode) &&
+                    !flow.tagMatchSent)
+                {
+                    QueueTagMatch(transaction);
+                    return;
+                }
                 Action(transaction);
                 return;
             case Phase::WaitMemory:
@@ -657,7 +734,8 @@ namespace CHI::Lunatic {
         for (TransactionHandle handle : tracker.Handles())
         {
             const Transaction* transaction = tracker.Find(handle);
-            if (transaction->phase == Phase::Commit && transaction->readyTime <= time)
+            if (transaction->phase == Phase::Commit && transaction->readyTime <= time &&
+                !RequiresBackendReadReceipt(flows.at(handle)))
                 handles.push_back(handle);
         }
         for (TransactionHandle handle : handles)
@@ -671,9 +749,10 @@ namespace CHI::Lunatic {
             return;
 
         FlowState& flow = flows.at(handle);
-        if (flow.dmtActive && !flow.backendReadReceiptReceived)
+        if (flow.dmtActive && flow.backendRequest.order == 0 && !flow.backendReadReceiptReceived)
         {
-            const RequestKey key{ options.subordinateId, flow.backendRequest.txnId };
+            const RequestKey key{ flow.backendResponderKnown ? flow.backendResponder : options.subordinateId,
+                                  flow.backendRequest.txnId };
             completedBackendReads[key] = flow.backendRequest;
             completedBackendReadOrder.remove(key);
             completedBackendReadOrder.push_back(key);
@@ -684,9 +763,10 @@ namespace CHI::Lunatic {
             }
         }
         ordering.Release(handle);
-        hazards.Release(handle, transaction->request.Line());
+        ordering.ReleaseDMT(handle);
+        hazards.Remove(handle, transaction->request.Line());
         if (flow.victimLinked)
-            hazards.Release(handle, flow.victimLine);
+            hazards.Remove(handle, flow.victimLine);
         ++pmu.retiredTransactions;
 
         Event event;
@@ -715,8 +795,12 @@ namespace CHI::Lunatic {
         if (flow.backendPhase == BackendPhase::WaitRequestEmission)
         {
             flow.backendRequest = pending.flit;
+            flow.backendRetryAckReceived = false;
+            flow.backendResponderKnown = false;
+            flow.backendDBIDSource = 0;
             flow.backendPhase = flow.dwtActive || (!flow.spillPending &&
-                (IsReadRequest(transaction->request.opcode) || IsCMORequest(transaction->request.opcode)))
+                (flow.baselineFetch || IsReadRequest(transaction->request.opcode) ||
+                 IsCMORequest(transaction->request.opcode)))
                 ? BackendPhase::WaitComp : BackendPhase::WaitDBID;
             if (!flow.dmtActive)
                 transaction->phase = Phase::WaitMemory;
@@ -756,12 +840,16 @@ namespace CHI::Lunatic {
         {
             flows.at(transaction->handle).respSepEmitted = true;
             ordering.Release(transaction->handle);
+            if (flows.at(transaction->handle).dmtActive)
+                (void)tracker.ReleaseRequestId(transaction->handle);
             FinishResponse(*transaction);
             return;
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::StashDone)
         {
             flows.at(transaction->handle).stashDoneEmitted = true;
+            if (flows.at(transaction->handle).compEmitted)
+                (void)tracker.ReleaseRequestId(transaction->handle);
             FinishResponse(*transaction);
             return;
         }
@@ -769,6 +857,7 @@ namespace CHI::Lunatic {
         {
             flows.at(transaction->handle).compEmitted = true;
             flows.at(transaction->handle).stashDoneEmitted = true;
+            (void)tracker.ReleaseRequestId(transaction->handle);
             FinishResponse(*transaction);
             return;
         }
@@ -788,6 +877,8 @@ namespace CHI::Lunatic {
             pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
         {
             flows.at(transaction->handle).compEmitted = true;
+            if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp && flows.at(transaction->handle).dwtActive)
+                (void)tracker.ReleaseRequestId(transaction->handle);
             if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
             {
                 flows.at(transaction->handle).dbidEmitted = true;
@@ -797,15 +888,51 @@ namespace CHI::Lunatic {
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp && IsCopybackRequest(transaction->request.opcode))
         {
+            (void)tracker.ReleaseRequestId(transaction->handle);
             transaction->Mark(COMPLETE_RESPONSE);
             transaction->phase = Phase::WaitWriteData;
             transaction->wait = WaitReason::WriteData;
             transaction->readyTime = time;
             return;
         }
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp &&
+            ClassifyRequest(transaction->request.opcode) == RequestClass::WriteEvictOrEvict &&
+            flows.at(transaction->handle).evictOrEvictNoData)
+            (void)tracker.ReleaseRequestId(transaction->handle);
+        const auto requestClass = ClassifyRequest(transaction->request.opcode);
+        const bool compDbidWrite = requestClass == RequestClass::NonCoherentWrite ||
+            requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::ZeroWrite ||
+            requestClass == RequestClass::WriteUniqueZero ||
+            (requestClass == RequestClass::Atomic &&
+             CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction->request.opcode));
+        if (compDbidWrite && flows.at(transaction->handle).dbidEmitted && flows.at(transaction->handle).compEmitted)
+            (void)tracker.ReleaseRequestId(transaction->handle);
+        const FlowState& responseFlow = flows.at(transaction->handle);
+        const bool persistenceComplete = requestClass == RequestClass::Persistence &&
+            (transaction->request.opcode != CHI::Eb::Opcodes::REQ::CleanSharedPersistSep ||
+             (!responseFlow.separatedPersistResponse && !responseFlow.directPersistActive));
+        const bool datalessResponse = requestClass == RequestClass::MakeUnique ||
+            requestClass == RequestClass::CMO || requestClass == RequestClass::CleanUnique ||
+            requestClass == RequestClass::Evict ||
+            (requestClass == RequestClass::Stash && !IsSeparatedStashRequest(transaction->request.opcode)) ||
+            persistenceComplete;
+        const bool separatedStashComplete = requestClass == RequestClass::Stash &&
+            IsSeparatedStashRequest(transaction->request.opcode) &&
+            responseFlow.compEmitted && responseFlow.stashDoneEmitted;
+        if ((datalessResponse && responseFlow.compEmitted) || separatedStashComplete)
+            (void)tracker.ReleaseRequestId(transaction->handle);
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Persist)
+            flows.at(transaction->handle).persistEmitted = true;
+        const bool separatedPersistenceComplete = requestClass == RequestClass::Persistence &&
+            transaction->request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep &&
+            responseFlow.separatedPersistResponse && !responseFlow.directPersistActive &&
+            responseFlow.compEmitted && responseFlow.persistEmitted;
+        if (separatedPersistenceComplete)
+            (void)tracker.ReleaseRequestId(transaction->handle);
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp ||
             pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompPersist ||
-            pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
+            pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp ||
+            pending.flit.opcode == CHI::Eb::Opcodes::RSP::Persist)
             FinishResponse(*transaction);
     }
 
@@ -859,15 +986,31 @@ namespace CHI::Lunatic {
             ++flow.readBeatsEmitted;
         if (pending.last)
         {
-            if (IsAtomicRequest(transaction->request.opcode) &&
-                !CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction->request.opcode))
+            const bool nonStoreAtomic = IsAtomicRequest(transaction->request.opcode) &&
+                !CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction->request.opcode);
+            if (nonStoreAtomic)
                 flow.atomic.returnEmitted = true;
+            if (nonStoreAtomic && flow.dbidEmitted)
+                (void)tracker.ReleaseRequestId(transaction->handle);
+            const bool readOrderingComplete = flow.separatedResponse
+                ? flow.respSepEmitted : transaction->request.order == 0 || flow.readReceiptEmitted;
+            if (IsReadRequest(transaction->request.opcode) && !flow.dmtActive && readOrderingComplete)
+                (void)tracker.ReleaseRequestId(transaction->handle);
             FinishResponse(*transaction);
         }
     }
 
-    void Core::Impl::OnEmitted(const Pending<Snoop>&)
+    void Core::Impl::OnEmitted(const Pending<Snoop>& pending)
     {
+        Transaction* transaction = tracker.Find(pending.transaction);
+        if (!transaction)
+            return;
+        FlowState& flow = flows.at(transaction->handle);
+        if (flow.dctActive && pending.flit.target == flow.dctTarget &&
+            pending.flit.txnId == transaction->handle &&
+            pending.flit.fwdNid == transaction->request.source &&
+            pending.flit.fwdTxnId == transaction->request.txnId)
+            flow.dctSnoopEmitted = true;
     }
 
     bool Core::Impl::Reentry()

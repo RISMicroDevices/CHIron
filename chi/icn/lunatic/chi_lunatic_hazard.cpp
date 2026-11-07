@@ -27,6 +27,22 @@ namespace CHI::Lunatic {
         return true;
     }
 
+    bool HazardGraph::Append(TransactionHandle handle, const LineKey& line, Time age)
+    {
+        if (handle == INVALID_TRANSACTION)
+            return false;
+
+        auto [lineIt, inserted] = lines.try_emplace(line);
+        (void)inserted;
+        auto& entries = lineIt->second;
+        for (const Entry& entry : entries)
+            if (entry.handle == handle)
+                return false;
+
+        entries.push_back(Entry{ handle, age, true });
+        return true;
+    }
+
     bool HazardGraph::IsHead(TransactionHandle handle, const LineKey& line) const noexcept
     {
         auto it = lines.find(line);
@@ -60,6 +76,23 @@ namespace CHI::Lunatic {
         return handles;
     }
 
+    bool HazardGraph::Remove(TransactionHandle handle, const LineKey& line) noexcept
+    {
+        auto lineIt = lines.find(line);
+        if (lineIt == lines.end())
+            return false;
+
+        auto& entries = lineIt->second;
+        const auto entry = std::find_if(entries.begin(), entries.end(),
+            [handle](const Entry& candidate) { return candidate.handle == handle; });
+        if (entry == entries.end())
+            return false;
+        entries.erase(entry);
+        if (entries.empty())
+            lines.erase(lineIt);
+        return true;
+    }
+
     bool HazardGraph::Release(TransactionHandle handle, const LineKey& line) noexcept
     {
         auto lineIt = lines.find(line);
@@ -80,17 +113,20 @@ namespace CHI::Lunatic {
             if (entries.empty())
                 return false;
 
+            std::optional<Entry> previous;
             for (size_t index = 0; index < entries.size(); ++index) {
-                if (entries[index].handle == INVALID_TRANSACTION)
-                    return false;
-                if (index == 0)
-                    continue;
-
-                const Entry& previous = entries[index - 1];
                 const Entry& current = entries[index];
-                if (previous.age > current.age ||
-                    (previous.age == current.age && previous.handle >= current.handle))
+                if (current.handle == INVALID_TRANSACTION)
                     return false;
+                for (size_t earlier = 0; earlier < index; ++earlier)
+                    if (entries[earlier].handle == current.handle)
+                        return false;
+                if (current.victim)
+                    continue;
+                if (previous && (previous->age > current.age ||
+                    (previous->age == current.age && previous->handle >= current.handle)))
+                    return false;
+                previous = current;
             }
         }
         return true;

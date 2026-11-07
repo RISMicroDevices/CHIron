@@ -51,7 +51,17 @@ namespace CHI::Lunatic {
             return;
 
         if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep && !flow.directPersistActive)
-            QueueCompPersist(transaction);
+        {
+            if (flow.separatedPersistResponse)
+            {
+                if (!flow.compSent)
+                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC, flow.backendCompRespErr);
+                else if (!flow.persistSent)
+                    QueuePersist(transaction);
+            }
+            else
+                QueueCompPersist(transaction);
+        }
         else
             QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC);
     }
@@ -75,6 +85,28 @@ namespace CHI::Lunatic {
         if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
         {
             flow.compSent = true;
+            transaction.phase = Phase::Return;
+            transaction.readyTime = time;
+        }
+    }
+
+    void Core::Impl::QueuePersist(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.persistSent)
+            return;
+
+        Response response;
+        response.source = nodeId;
+        response.target = transaction.request.source;
+        response.opcode = CHI::Eb::Opcodes::RSP::Persist;
+        response.respErr = flow.backendPersistRespErr;
+        response.pGroupId = transaction.request.pGroupId;
+        response.qos = transaction.request.qos;
+        response.traceTag = transaction.request.traceTag;
+        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        {
+            flow.persistSent = true;
             transaction.phase = Phase::Return;
             transaction.readyTime = time;
         }

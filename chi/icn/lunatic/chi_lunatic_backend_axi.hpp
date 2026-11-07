@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chi_lunatic_config.hpp"
+#include "chi_lunatic_protocol.hpp"
 #include "chi_lunatic_types.hpp"
 
 #include <deque>
@@ -62,9 +63,11 @@ namespace CHI::Lunatic {
         LineData          data{};
         ByteEnables       enables{};
         uint64_t          beatMask = 0;
+        TransferGeometry  geometry{};
         uint8_t           memAttr = 0;
         uint8_t           qos = 0;
         bool              write = false;
+        bool              atomic = false;
     };
 
     struct AXICompletion {

@@ -12,18 +12,21 @@ namespace CHI::Lunatic {
         struct Entry {
             TransactionHandle handle = INVALID_TRANSACTION;
             Time              age = 0;
+            bool              victim = false;
         };
 
         std::map<LineKey, std::vector<Entry>> lines;
 
     public:
         bool                         Add(TransactionHandle handle, const LineKey& line, Time age);
+        bool                         Append(TransactionHandle handle, const LineKey& line, Time age);
         bool                         IsHead(TransactionHandle handle, const LineKey& line) const noexcept;
         bool                         Has(const LineKey& line) const noexcept;
         std::optional<TransactionHandle>
                                      Next(const LineKey& line) const;
         std::vector<TransactionHandle>
                                      Order(const LineKey& line) const;
+        bool                         Remove(TransactionHandle handle, const LineKey& line) noexcept;
         bool                         Release(TransactionHandle handle, const LineKey& line) noexcept;
         bool                         Empty() const noexcept { return lines.empty(); }
         bool                         Validate() const noexcept;

@@ -35,9 +35,35 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         const bool store = CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction.request.opcode);
-        if (store && (!flow.dbidSent || (options.backend != BackendKind::AXI && !flow.compSent)))
+        if (flow.suppressArchitecturalEffects)
         {
-            QueueImmediateResponse(transaction);
+            if (!flow.dbidSent)
+            {
+                QueueDBID(transaction);
+                return;
+            }
+            if (!transaction.Complete(COMPLETE_WRITE_DATA))
+            {
+                transaction.phase = Phase::WaitWriteData;
+                transaction.wait = WaitReason::WriteData;
+                transaction.readyTime = time;
+                return;
+            }
+            flow.directoryCommitted = true;
+            if (store)
+                QueueComp(transaction, false, CHI::Eb::Resps::Comp_I, CHI::Eb::RespErrs::NDERR);
+            else
+            {
+                transaction.responseResp = CHI::Eb::Resps::CompData_I;
+                transaction.sentBeats = 0;
+                transaction.phase = Phase::Return;
+                transaction.readyTime = ScheduleData();
+            }
+            return;
+        }
+        if (store && !flow.dbidSent)
+        {
+            QueueDBID(transaction);
             return;
         }
         if (!store && !flow.dbidSent)
@@ -62,6 +88,9 @@ namespace CHI::Lunatic {
             transaction.readyTime = time;
             return;
         }
+        if (store)
+            transaction.responseRespErr = MergeResponseErrors(transaction.responseRespErr,
+                                                                    flow.atomic.operandRespErr);
         if (options.backend == BackendKind::AXI && transaction.responseRespErr)
         {
             flow.directoryCommitted = true;
@@ -91,7 +120,7 @@ namespace CHI::Lunatic {
             transaction.readyTime = ScheduleData();
             return;
         }
-        if (options.backend == BackendKind::AXI && !flow.compSent)
+        if (!flow.compSent)
         {
             QueueComp(transaction);
             return;
@@ -125,7 +154,8 @@ namespace CHI::Lunatic {
         data.dbid = transaction.dbid;
         data.opcode = CHI::Eb::Opcodes::DAT::CompData;
         data.resp = CHI::Eb::Resps::CompData_I;
-        data.respErr = transaction.responseRespErr;
+        data.respErr = MergeResponseErrors(transaction.responseRespErr,
+            MergeResponseErrors(flow.atomic.operandRespErr, flow.atomic.backendResultRespErr));
         data.dataId = offset / 16;
         data.ccid = (transaction.request.address >> 4) & 3;
         data.qos = transaction.request.qos;
@@ -147,7 +177,7 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         const bool dataPhase = transaction.phase == Phase::WaitWriteData ||
-            (transaction.phase == Phase::Action && flow.dbidEmitted);
+            ((transaction.phase == Phase::Action || transaction.phase == Phase::WaitMemory) && flow.dbidEmitted);
         if (!dataPhase || !flow.dbidEmitted || flit.opcode != CHI::Eb::Opcodes::DAT::NonCopyBackWrData ||
             flit.txnId != transaction.dbid || flit.ccid != ((transaction.request.address >> 4) & 3))
             return false;
@@ -182,6 +212,9 @@ namespace CHI::Lunatic {
         const ByteEnables enables = ExpandedEnables(flit.byteEnables, offset, bytes);
         MergeMetadata(flow.atomic.operandsPoison, flow.atomic.operandsDataCheck,
                       flit.poison, flit.dataCheck, enables, offset, 0, bytes, options);
+        flow.writeRespErr[beat] = flit.respErr;
+        flow.writeRespErrMask |= bit;
+        flow.atomic.operandRespErr = MergeResponseErrors(flow.atomic.operandRespErr, flit.respErr);
 
         transaction.receivedBeats |= bit;
         if ((transaction.receivedBeats & flow.expectedBeatMask) != flow.expectedBeatMask)
@@ -218,6 +251,7 @@ namespace CHI::Lunatic {
                 home->data = commitImage.data;
                 CopyMetadata(*home, commitImage, options);
                 home->dirty = true;
+                directory.Touch(line);
             }
         }
         else if (flow.atomic.execution.write || flow.dataDirty)

@@ -98,6 +98,148 @@ namespace CHI::Lunatic {
         }
     }
 
+    uint8_t MergeResponseErrors(uint8_t first, uint8_t second) noexcept
+    {
+        if (first == CHI::Eb::RespErrs::OK)
+            return second;
+        if (second == CHI::Eb::RespErrs::OK)
+            return first;
+        if (first == CHI::Eb::RespErrs::NDERR || second == CHI::Eb::RespErrs::NDERR)
+            return CHI::Eb::RespErrs::NDERR;
+        if (first == CHI::Eb::RespErrs::DERR || second == CHI::Eb::RespErrs::DERR)
+            return CHI::Eb::RespErrs::DERR;
+        return first;
+    }
+
+    bool IsTagOperationValid(const Request& request) noexcept
+    {
+        namespace REQ = CHI::Eb::Opcodes::REQ;
+        if (request.tagOp == CHI::Eb::TagOp::Invalid)
+            return true;
+        if (IsReadRequest(request.opcode))
+            return request.tagOp == CHI::Eb::TagOp::Transfer ||
+                (request.tagOp == CHI::Eb::TagOp::MatchFetch &&
+                 (request.opcode == REQ::ReadUnique || request.opcode == REQ::ReadNoSnp));
+        if (IsAtomicRequest(request.opcode))
+            return request.tagOp == CHI::Eb::TagOp::MatchFetch;
+        switch (request.opcode)
+        {
+            case REQ::WriteNoSnpFull:
+            case REQ::WriteNoSnpPtl:
+            case REQ::WriteUniqueFull:
+            case REQ::WriteUniqueFullStash:
+            case REQ::WriteUniquePtl:
+            case REQ::WriteUniquePtlStash:
+            case REQ::WriteBackFull:
+            case REQ::WriteCleanFull:
+                return request.tagOp == CHI::Eb::TagOp::MatchFetch;
+            default:
+                return false;
+        }
+    }
+
+    bool IsLPIDApplicable(const Request& request) noexcept
+    {
+        namespace REQ = CHI::Eb::Opcodes::REQ;
+        const bool nonCacheableOrDevice = request.memAttr == CHI::Eb::MemAttrs::Device_nEWA ||
+            request.memAttr == CHI::Eb::MemAttrs::Device_EWA ||
+            request.memAttr == CHI::Eb::MemAttrs::NonCacheable_NonBufferable ||
+            request.memAttr == CHI::Eb::MemAttrs::NonCacheable_Bufferable;
+        switch (request.opcode)
+        {
+            case REQ::ReadNoSnp:
+            case REQ::WriteNoSnpPtl:
+            case REQ::WriteNoSnpFull:
+            case REQ::WriteNoSnpZero:
+                return request.snoopMe || nonCacheableOrDevice;
+            case REQ::ReadClean:
+            case REQ::ReadShared:
+            case REQ::ReadNotSharedDirty:
+            case REQ::ReadPreferUnique:
+            case REQ::MakeReadUnique:
+            case REQ::CleanUnique:
+                return request.snoopMe;
+            default:
+                return false;
+        }
+    }
+
+    bool IsRequestAttributeValid(const Request& request) noexcept
+    {
+        namespace REQ = CHI::Eb::Opcodes::REQ;
+        const auto requestClass = ClassifyRequest(request.opcode);
+        const bool nonCacheable = request.memAttr == CHI::Eb::MemAttrs::Device_nEWA ||
+            request.memAttr == CHI::Eb::MemAttrs::Device_EWA ||
+            request.memAttr == CHI::Eb::MemAttrs::NonCacheable_NonBufferable ||
+            request.memAttr == CHI::Eb::MemAttrs::NonCacheable_Bufferable;
+        const bool writeBack = request.memAttr == CHI::Eb::MemAttrs::WriteBack_NoAllocate ||
+            request.memAttr == CHI::Eb::MemAttrs::WriteBack_Allocate;
+        const bool normalAttributes = nonCacheable || writeBack;
+        const bool device = request.memAttr == CHI::Eb::MemAttrs::Device_nEWA ||
+            request.memAttr == CHI::Eb::MemAttrs::Device_EWA;
+        const bool orderedClass = requestClass == RequestClass::NonCoherentRead ||
+            requestClass == RequestClass::ReadOnce || requestClass == RequestClass::NonCoherentWrite ||
+            requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::ZeroWrite ||
+            requestClass == RequestClass::WriteUniqueZero || requestClass == RequestClass::Atomic;
+        if (request.order == 1 || (request.order == 2 && !orderedClass) ||
+            (request.order == 3 && (!device ||
+             (requestClass != RequestClass::NonCoherentRead && requestClass != RequestClass::NonCoherentWrite &&
+              requestClass != RequestClass::ZeroWrite && requestClass != RequestClass::Atomic))))
+            return false;
+
+        switch (requestClass)
+        {
+            case RequestClass::NonCoherentRead:
+                return !request.snpAttr && normalAttributes && (request.order != 3 || !request.expCompAck);
+            case RequestClass::ReadOnce:
+                return request.snpAttr && writeBack &&
+                    (request.opcode != REQ::ReadOnceMakeInvalid ||
+                     request.memAttr == CHI::Eb::MemAttrs::WriteBack_NoAllocate);
+            case RequestClass::CoherentRead:
+            case RequestClass::MakeUnique:
+            case RequestClass::MakeReadUnique:
+                return request.snpAttr && writeBack && request.size == 6 && request.expCompAck &&
+                    (request.opcode != REQ::ReadUnique || !request.likelyShared);
+            case RequestClass::NonCoherentWrite:
+                return !request.snpAttr && normalAttributes &&
+                    (request.opcode != REQ::WriteNoSnpFull || request.size == 6) &&
+                    (!request.expCompAck || request.order == 2);
+            case RequestClass::ImmediateWrite:
+                return request.snpAttr && writeBack &&
+                    ((request.opcode != REQ::WriteUniqueFull && request.opcode != REQ::WriteUniqueFullStash) ||
+                     request.size == 6) && (!request.expCompAck || request.order == 2);
+            case RequestClass::ZeroWrite:
+                return !request.snpAttr && normalAttributes && request.size == 6 && !request.expCompAck;
+            case RequestClass::WriteUniqueZero:
+                return request.snpAttr && writeBack && request.size == 6 && !request.expCompAck;
+            case RequestClass::CopybackWrite:
+                if (!request.snpAttr || request.size != 6 || request.expCompAck)
+                    return false;
+                if (request.opcode == REQ::WriteEvictFull)
+                    return request.memAttr == CHI::Eb::MemAttrs::WriteBack_Allocate;
+                return writeBack;
+            case RequestClass::Evict:
+                return request.snpAttr && request.memAttr == CHI::Eb::MemAttrs::WriteBack_NoAllocate &&
+                    request.size == 6 && !request.expCompAck;
+            case RequestClass::WriteEvictOrEvict:
+                return request.snpAttr && request.memAttr == CHI::Eb::MemAttrs::WriteBack_Allocate &&
+                    request.size == 6 && request.expCompAck;
+            case RequestClass::CMO:
+            case RequestClass::Persistence:
+                return normalAttributes && (writeBack || !request.snpAttr) && request.size == 6 &&
+                    !request.expCompAck && request.order == 0;
+            case RequestClass::CleanUnique:
+                return request.snpAttr && writeBack && request.size == 6 && request.expCompAck;
+            case RequestClass::Stash:
+                return request.snpAttr && writeBack && request.size == 6 && !request.expCompAck;
+            case RequestClass::Atomic:
+                return (request.snpAttr ? writeBack : normalAttributes && !request.snoopMe) &&
+                    !request.expCompAck;
+            default:
+                return false;
+        }
+    }
+
     bool IsCoherentRequest(uint16_t opcode) noexcept
     {
         const auto requestClass = ClassifyRequest(opcode);
@@ -173,6 +315,8 @@ namespace CHI::Lunatic {
             case REQ::WriteNoSnpZero:
             case REQ::WriteUniquePtl:
             case REQ::WriteUniqueFull:
+            case REQ::WriteUniquePtlStash:
+            case REQ::WriteUniqueFullStash:
             case REQ::WriteUniqueZero:
                 return true;
             default:
@@ -200,10 +344,7 @@ namespace CHI::Lunatic {
 
     bool AllowsCompAck(const Request& request) noexcept
     {
-        if (RequiresCompAck(request))
-            return true;
-        const auto requestClass = ClassifyRequest(request.opcode);
-        return requestClass == RequestClass::NonCoherentRead || requestClass == RequestClass::ReadOnce;
+        return RequiresCompAck(request);
     }
 
     bool RetryRequestCompatible(const Request& original, const Request& resend, NodeId retrySource) noexcept
@@ -221,16 +362,60 @@ namespace CHI::Lunatic {
         return left == right;
     }
 
+    bool IsPCrdReturnValid(const Request& request) noexcept
+    {
+        return request.opcode == CHI::Eb::Opcodes::REQ::PCrdReturn && request.txnId == 0 &&
+            request.returnNid == 0 && request.returnTxnId == 0 && request.address == 0 &&
+            request.size == 0 && request.order == 0 && request.memAttr == 0 && request.snpAttr == 0 &&
+            request.pGroupId == 0 && request.stashGroupId == 0 && request.stashLpid == 0 &&
+            !request.nonSecure && !request.allowRetry && !request.expCompAck && !request.likelyShared &&
+            !request.stashNidValid && !request.stashLpidValid && !request.endian && !request.deep &&
+            !request.doDwt && !request.snoopMe && request.mpam == 0 &&
+            request.tagOp == CHI::Eb::TagOp::Invalid && request.tagGroupId == 0;
+    }
+
+    Request MakePCrdReturnRequest(NodeId source, NodeId target, uint8_t pCrdType,
+                                  uint8_t qos, uint8_t traceTag) noexcept
+    {
+        Request request;
+        request.source = source;
+        request.target = target;
+        request.opcode = CHI::Eb::Opcodes::REQ::PCrdReturn;
+        request.size = 0;
+        request.allowRetry = false;
+        request.pCrdType = pCrdType;
+        request.qos = qos;
+        request.traceTag = traceTag;
+        return request;
+    }
+
+    TransferGeometry GetTransferGeometry(const Request& request, const Options& options) noexcept
+    {
+        TransferGeometry geometry;
+        if (request.size > 6)
+            return geometry;
+
+        geometry.transferBytes = size_t(1) << request.size;
+        geometry.alignedAddress = request.address & ~(geometry.transferBytes - 1);
+        geometry.windowOffset = geometry.alignedAddress % LINE_SIZE;
+        geometry.rawOffset = request.address % LINE_SIZE;
+        const bool device = CHI::Eb::MemAttrs::ExtractDevice(request.memAttr) != 0;
+        geometry.validOffset = device ? geometry.rawOffset : geometry.windowOffset;
+        geometry.validBytes = device
+            ? geometry.windowOffset + geometry.transferBytes - geometry.rawOffset : geometry.transferBytes;
+        geometry.ccid = (request.address >> 4) & 3;
+
+        const size_t bytes = BytesPerBeat(options);
+        const size_t first = geometry.windowOffset / bytes;
+        const size_t count = std::max<size_t>(1, (geometry.transferBytes + bytes - 1) / bytes);
+        for (size_t beat = 0; beat < count && first + beat < BeatsPerLine(options); ++beat)
+            geometry.beatMask |= uint64_t(1) << (first + beat);
+        return geometry;
+    }
+
     uint64_t TransferBeatMask(const Request& request, const Options& options) noexcept
     {
-        const size_t bytes = BytesPerBeat(options);
-        const size_t transfer = std::min<size_t>(LINE_SIZE, size_t(1) << request.size);
-        const size_t first = (request.address % LINE_SIZE) / bytes;
-        const size_t count = std::max<size_t>(1, (transfer + bytes - 1) / bytes);
-        uint64_t mask = 0;
-        for (size_t beat = 0; beat < count && first + beat < BeatsPerLine(options); ++beat)
-            mask |= uint64_t(1) << (first + beat);
-        return mask;
+        return GetTransferGeometry(request, options).beatMask;
     }
 
 }

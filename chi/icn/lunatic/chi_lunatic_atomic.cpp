@@ -95,7 +95,7 @@ namespace CHI::Lunatic {
             if (equal)
             {
                 for (size_t index = 0; index < bytes; ++index)
-                    result.data[swapAddress + index] = operands[swapAddress + index];
+                    result.data[address + index] = operands[swapAddress + index];
                 result.write = true;
             }
             return result;

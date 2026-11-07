@@ -1,6 +1,14 @@
 #include "chi_lunatic_core.hpp"
 
 namespace CHI::Lunatic {
+    namespace {
+
+        uint8_t StashCompResp(const Transaction& transaction) noexcept
+        {
+            return transaction.homeHit ? uint8_t(CHI::Eb::Resps::Comp_SC) : uint8_t(CHI::Eb::Resps::Comp_I);
+        }
+
+    }
 
     void Core::Impl::ResolveStash(Transaction& transaction)
     {
@@ -23,7 +31,7 @@ namespace CHI::Lunatic {
         if (!IsSeparatedStashRequest(transaction.request.opcode))
         {
             if (!flow.compSent)
-                QueueComp(transaction, false, CHI::Eb::Resps::Comp_I);
+                QueueComp(transaction, false, StashCompResp(transaction));
             return;
         }
         if (flow.compSent && flow.stashDoneSent)
@@ -37,7 +45,7 @@ namespace CHI::Lunatic {
         {
             case 0:
                 if (!flow.compSent)
-                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_I);
+                    QueueComp(transaction, false, StashCompResp(transaction));
                 if (!flow.stashDoneSent)
                     QueueStashDone(transaction);
                 break;
@@ -45,7 +53,7 @@ namespace CHI::Lunatic {
                 if (!flow.stashDoneSent)
                     QueueStashDone(transaction);
                 if (!flow.compSent)
-                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_I);
+                    QueueComp(transaction, false, StashCompResp(transaction));
                 break;
             default:
                 if (!flow.compSent)
@@ -65,7 +73,8 @@ namespace CHI::Lunatic {
         response.target = transaction.request.source;
         response.txnId = withComp ? transaction.request.txnId : 0;
         response.opcode = withComp ? CHI::Eb::Opcodes::RSP::CompStashDone : CHI::Eb::Opcodes::RSP::StashDone;
-        response.resp = withComp ? uint8_t(CHI::Eb::Resps::Comp_I) : uint8_t(0);
+        response.resp = withComp ? uint8_t(StashCompResp(transaction)) : uint8_t(0);
+        response.respErr = transaction.responseRespErr;
         response.stashGroupId = transaction.request.stashGroupId;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;

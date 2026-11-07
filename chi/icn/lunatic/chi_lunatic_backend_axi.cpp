@@ -45,9 +45,23 @@ namespace CHI::Lunatic {
     {
         AXIAddress result;
         result.id = id;
-        result.address = operation.line.address + size_t(std::countr_zero(operation.beatMask)) * BytesPerBeat(options);
-        result.len = uint8_t(std::popcount(operation.beatMask) - 1);
-        result.size = uint8_t(std::countr_zero(BytesPerBeat(options)));
+        const bool deviceRead = !operation.write && !operation.atomic && operation.geometry.transferBytes &&
+            CHI::Eb::MemAttrs::ExtractDevice(operation.memAttr);
+        if (deviceRead)
+        {
+            const size_t transferBytes = std::min(BytesPerBeat(options), operation.geometry.transferBytes);
+            result.address = operation.line.address + operation.geometry.rawOffset;
+            result.len = uint8_t((operation.geometry.validBytes + transferBytes - 1) / transferBytes - 1);
+            result.size = uint8_t(std::countr_zero(transferBytes));
+        }
+        else
+        {
+            result.address = !operation.atomic && operation.geometry.transferBytes
+                ? operation.geometry.alignedAddress
+                : operation.line.address + size_t(std::countr_zero(operation.beatMask)) * BytesPerBeat(options);
+            result.len = uint8_t(std::popcount(operation.beatMask) - 1);
+            result.size = uint8_t(std::countr_zero(BytesPerBeat(options)));
+        }
         result.burst = AXIBurst::INCR;
         result.cache = operation.write ? AXIWriteCache(operation.memAttr) : AXIReadCache(operation.memAttr);
         result.qos = operation.qos;
@@ -296,7 +310,7 @@ namespace CHI::Lunatic {
         Record& record = it->second;
         if (!record.addressEmitted && record.protocolError.empty())
             record.protocolError = "AXI read data arrived before AR acceptance";
-        const size_t expected = BeatCount(record);
+        const size_t expected = size_t(record.address.len) + 1;
         if (record.receivedBeats >= expected)
         {
             record.protocolError = "extra AXI read data beat";
@@ -305,9 +319,27 @@ namespace CHI::Lunatic {
         }
 
         const size_t bytes = BytesPerBeat(options);
-        const size_t offset = (FirstBeat(record) + record.receivedBeats) * bytes;
-        for (size_t index = 0; index < bytes; ++index)
-            record.readData[offset + index] = response.data[index];
+        const bool deviceRead = !record.operation.atomic && record.operation.geometry.transferBytes &&
+            CHI::Eb::MemAttrs::ExtractDevice(record.operation.memAttr);
+        if (deviceRead)
+        {
+            const size_t transferBytes = size_t(1) << record.address.size;
+            const uint64_t start = record.address.address;
+            const uint64_t transferAddress = record.receivedBeats == 0 ? start
+                : (start & ~uint64_t(transferBytes - 1)) + record.receivedBeats * transferBytes;
+            const size_t activeBytes = record.receivedBeats == 0
+                ? transferBytes - start % transferBytes : transferBytes;
+            const size_t offset = transferAddress - record.operation.line.address;
+            const size_t lane = transferAddress % bytes;
+            for (size_t index = 0; index < activeBytes; ++index)
+                record.readData[offset + index] = response.data[lane + index];
+        }
+        else
+        {
+            const size_t offset = (FirstBeat(record) + record.receivedBeats) * bytes;
+            for (size_t index = 0; index < bytes; ++index)
+                record.readData[offset + index] = response.data[index];
+        }
         if (response.resp == AXIResp::EXOKAY)
             record.protocolError = "AXI read returned EXOKAY to a non-exclusive request";
         else if (response.resp != AXIResp::OKAY)

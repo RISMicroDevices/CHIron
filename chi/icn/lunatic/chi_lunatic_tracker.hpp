@@ -42,6 +42,7 @@ namespace CHI::Lunatic {
         bool BindSnoop(TransactionHandle handle, NodeId target, TransactionId txnId);
         bool BindMemory(TransactionHandle handle, NodeId subordinate, TransactionId txnId);
         bool UnbindMemory(NodeId subordinate, TransactionId txnId);
+        bool ReleaseRequestId(TransactionHandle handle);
         bool Retire(TransactionHandle handle);
 
         std::vector<TransactionHandle> Handles() const;

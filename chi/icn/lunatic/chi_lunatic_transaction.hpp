@@ -38,6 +38,7 @@ namespace CHI::Lunatic {
         bool                           allocateHome = false;
         bool                           memoryRequired = false;
         bool                           snoopsRequired = false;
+        bool                           requestIdReleased = false;
         bool                           canceled = false;
         std::vector<NodeId>            snoopTargets;
         std::vector<NodeId>            pendingSnoops;

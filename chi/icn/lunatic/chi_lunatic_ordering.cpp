@@ -27,9 +27,38 @@ namespace CHI::Lunatic {
         return false;
     }
 
+    bool OrderingTracker::CanIssueDMT(const Transaction& transaction) const noexcept
+    {
+        const auto iter = downstreamDmtEntries.find(transaction.request.source);
+        return iter == downstreamDmtEntries.end() || iter->second == transaction.handle;
+    }
+
+    void OrderingTracker::HoldDMT(const Transaction& transaction) noexcept
+    {
+        downstreamDmtEntries.emplace(transaction.request.source, transaction.handle);
+    }
+
+    void OrderingTracker::ReleaseDMT(TransactionHandle handle) noexcept
+    {
+        for (auto iter = downstreamDmtEntries.begin(); iter != downstreamDmtEntries.end(); ++iter)
+        {
+            if (iter->second == handle)
+            {
+                downstreamDmtEntries.erase(iter);
+                return;
+            }
+        }
+    }
+
     bool OrderingTracker::Validate() const noexcept
     {
         for (const auto& [source, handle] : entries)
+        {
+            (void)source;
+            if (handle == INVALID_TRANSACTION)
+                return false;
+        }
+        for (const auto& [source, handle] : downstreamDmtEntries)
         {
             (void)source;
             if (handle == INVALID_TRANSACTION)

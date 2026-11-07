@@ -46,7 +46,7 @@ namespace CHI::Lunatic {
             data.resp = CHI::Eb::Resps::CompData_I;
             data.respErr = failed ? uint8_t(CHI::Eb::RespErrs::NDERR) : uint8_t(CHI::Eb::RespErrs::OK);
             data.dataId = offset / 16;
-            data.ccid = (transaction->request.address >> 4) & 3;
+            data.ccid = flow.baselineFetch ? 0 : (transaction->request.address >> 4) & 3;
             for (size_t index = 0; index < bytes; ++index)
                 data.bytes[index] = completion.data[offset + index];
             if (!HandleBackendDAT(*transaction, data))

@@ -34,6 +34,9 @@ namespace CHI::Lunatic {
         const LineKey line = transaction.request.Line();
         if (!flow.atomic.backendDirtyCommitted)
         {
+            if ((flow.dataDirty || flow.homeDirty) && flow.snoopDataPartial && !transaction.homeHit &&
+                !FetchBaseline(transaction))
+                return false;
             if ((flow.dataDirty || flow.homeDirty) && !WriteLine(transaction, line, transaction.data,
                                                                  BackendAtomicFullEnables()))
                 return false;
@@ -64,7 +67,6 @@ namespace CHI::Lunatic {
         request.stashNidValid = false;
         request.stashLpidValid = false;
         request.likelyShared = false;
-        request.memAttr &= ~CHI::Eb::MemAttrs::EWA;
         if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
         {
             transaction.readyTime = time;
@@ -83,6 +85,7 @@ namespace CHI::Lunatic {
         flow.backendCompReceived = false;
         flow.backendDataEmitted = false;
         flow.atomic.backendResultReceived = false;
+        flow.atomic.backendResultDBID = 0;
         flow.backendPhase = BackendPhase::WaitRequestEmission;
         transaction.phase = Phase::WaitMemory;
         transaction.wait = WaitReason::Memory;
@@ -124,7 +127,11 @@ namespace CHI::Lunatic {
         flow.directoryCommitted = true;
         if (CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction.request.opcode))
         {
-            if (flow.compEmitted)
+            transaction.responseRespErr = MergeResponseErrors(transaction.responseRespErr,
+                MergeResponseErrors(flow.atomic.operandRespErr, flow.backendCompRespErr));
+            if (!flow.compSent)
+                QueueComp(transaction);
+            else if (flow.compEmitted)
                 FinishResponse(transaction);
         }
         else
@@ -160,15 +167,16 @@ namespace CHI::Lunatic {
         const size_t offset = beat * bytes;
         Data data;
         data.source = nodeId;
-        data.target = options.subordinateId;
+        data.target = flow.backendDBIDSource;
         data.homeNid = 0;
         data.txnId = flow.backendDBID;
         data.dbid = 0;
         data.opcode = CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
+        data.respErr = (flow.writeRespErrMask & (uint64_t(1) << beat)) ? flow.writeRespErr[beat] : 0;
         data.dataId = offset / 16;
         data.ccid = (transaction.request.address >> 4) & 3;
         data.qos = transaction.request.qos;
-        data.traceTag = transaction.request.traceTag;
+        data.traceTag = flow.backendWriteTraceTag;
         for (size_t index = 0; index < bytes; ++index)
         {
             const size_t lineOffset = offset + index;
@@ -204,10 +212,15 @@ namespace CHI::Lunatic {
         const bool store = CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction.request.opcode);
         if (flit.opcode == RSP::DBIDResp || flit.opcode == RSP::CompDBIDResp)
         {
-            if (flow.backendPhase != BackendPhase::WaitDBID || (!store && flit.opcode != RSP::DBIDResp))
+            if (flow.backendPhase != BackendPhase::WaitDBID || (!store && flit.opcode != RSP::DBIDResp) ||
+                (flow.atomic.backendResultReceived && flow.atomic.backendResultDBID != flit.dbid))
                 return false;
             flow.backendDBID = flit.dbid;
+            flow.backendDBIDSource = flit.source;
+            flow.backendWriteTraceTag = flit.traceTag;
             flow.backendCompReceived |= flit.opcode == RSP::CompDBIDResp;
+            if (flit.opcode == RSP::CompDBIDResp)
+                flow.backendCompRespErr = flit.respErr;
             flow.backendPhase = BackendPhase::SendData;
             transaction.phase = Phase::Action;
             transaction.readyTime = time;
@@ -219,6 +232,7 @@ namespace CHI::Lunatic {
                 flow.backendPhase != BackendPhase::WaitDataEmission)
                 return false;
             flow.backendCompReceived = true;
+            flow.backendCompRespErr = flit.respErr;
             CompleteAtomicBackendIfReady(*this, transaction);
             return true;
         }
@@ -230,12 +244,15 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         if (CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction.request.opcode) ||
             flit.opcode != CHI::Eb::Opcodes::DAT::CompData ||
-            (flow.backendPhase != BackendPhase::SendData && flow.backendPhase != BackendPhase::WaitDataEmission &&
-             flow.backendPhase != BackendPhase::WaitComp) ||
-            flit.txnId != transaction.handle || flit.dbid != flow.backendDBID ||
+            (flow.backendPhase != BackendPhase::WaitDBID && flow.backendPhase != BackendPhase::SendData &&
+             flow.backendPhase != BackendPhase::WaitDataEmission && flow.backendPhase != BackendPhase::WaitComp) ||
+            flit.txnId != transaction.handle ||
+            (flow.backendPhase != BackendPhase::WaitDBID && flit.dbid != flow.backendDBID) ||
             flit.ccid != ((transaction.request.address >> 4) & 3) ||
             flit.resp != CHI::Eb::Resps::CompData_I || flow.atomic.backendResultReceived)
             return false;
+        if (flow.backendPhase == BackendPhase::WaitDBID)
+            flow.atomic.backendResultDBID = flit.dbid;
 
         AtomicGeometry geometry;
         if (!GetAtomicGeometry(transaction.request, geometry))
@@ -254,6 +271,7 @@ namespace CHI::Lunatic {
         }
         MergeMetadata(transaction.poison, transaction.dataCheck, flit.poison, flit.dataCheck,
                       enables, address, address - offset, geometry.operandBytes, options);
+        flow.atomic.backendResultRespErr = flit.respErr;
         flow.atomic.backendResultReceived = true;
         CompleteAtomicBackendIfReady(*this, transaction);
         return true;

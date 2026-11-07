@@ -43,6 +43,14 @@ namespace CHI::Lunatic {
     void Core::Impl::QueueImmediateResponse(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (IsOrderedWriteObservation(transaction.request))
+        {
+            if (!flow.dbidSent)
+                QueueDBID(transaction);
+            else if (transaction.Complete(COMPLETE_COMPACK) && !flow.compSent)
+                QueueComp(transaction);
+            return;
+        }
         if (options.backend == BackendKind::AXI)
         {
             if (!flow.dbidSent)
@@ -76,6 +84,24 @@ namespace CHI::Lunatic {
     void Core::Impl::ActionImmediateWrite(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (flow.suppressArchitecturalEffects)
+        {
+            if (!flow.dbidSent)
+            {
+                QueueDBID(transaction);
+                return;
+            }
+            if (!transaction.Complete(COMPLETE_WRITE_DATA))
+            {
+                transaction.phase = Phase::WaitWriteData;
+                transaction.wait = WaitReason::WriteData;
+                transaction.readyTime = time;
+                return;
+            }
+            flow.directoryCommitted = true;
+            QueueComp(transaction, false, CHI::Eb::Resps::Comp_I, CHI::Eb::RespErrs::NDERR);
+            return;
+        }
         if (flow.dwtActive)
         {
             if (!flow.compSent)
@@ -94,7 +120,9 @@ namespace CHI::Lunatic {
                 FinishResponse(transaction);
             return;
         }
-        if (!flow.dbidSent || (options.backend != BackendKind::AXI && !flow.compSent))
+        const bool orderedWritePending = IsOrderedWriteObservation(transaction.request) &&
+            !transaction.Complete(COMPLETE_COMPACK);
+        if (!flow.dbidSent || (options.backend != BackendKind::AXI && !flow.compSent && !orderedWritePending))
         {
             QueueImmediateResponse(transaction);
             return;
@@ -103,6 +131,13 @@ namespace CHI::Lunatic {
         {
             transaction.phase = Phase::WaitWriteData;
             transaction.wait = WaitReason::WriteData;
+            transaction.readyTime = time;
+            return;
+        }
+        if (orderedWritePending)
+        {
+            transaction.phase = Phase::WaitCompAck;
+            transaction.wait = WaitReason::CompAck;
             transaction.readyTime = time;
             return;
         }

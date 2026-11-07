@@ -4,28 +4,92 @@
 
 namespace CHI::Lunatic {
 
-    bool Core::Impl::HandleBackendRetry(Transaction& transaction, const Response&)
+    Transaction* Core::Impl::FindBackendTransaction(NodeId source, NodeId target,
+                                                     TransactionId txnId) noexcept
+    {
+        if (target != nodeId || source == nodeId)
+            return nullptr;
+
+        Transaction* result = nullptr;
+        for (auto& [handle, flow] : flows)
+        {
+            if (flow.backendPhase == BackendPhase::None ||
+                flow.backendPhase == BackendPhase::WaitRequestEmission || flow.backendRequest.txnId != txnId ||
+                (flow.backendResponderKnown && flow.backendResponder != source))
+                continue;
+            Transaction* candidate = tracker.Find(handle);
+            if (!candidate || !tracker.FindMemory(options.subordinateId, handle))
+                continue;
+            if (result)
+                return nullptr;
+            result = candidate;
+        }
+        return result;
+    }
+
+    void Core::Impl::RecordBackendResponder(Transaction& transaction, NodeId source) noexcept
     {
         FlowState& flow = flows.at(transaction.handle);
-        if (!transaction.memoryRequired || !flow.backendRequest.allowRetry ||
+        if (flow.backendResponderKnown)
+            return;
+        flow.backendResponder = source;
+        flow.backendResponderKnown = true;
+    }
+
+    bool RequiresBackendReadReceipt(const FlowState& flow) noexcept
+    {
+        return !flow.backendRetryAckReceived &&
+            (flow.backendRequest.opcode == CHI::Eb::Opcodes::REQ::ReadNoSnp ||
+             flow.backendRequest.opcode == CHI::Eb::Opcodes::REQ::ReadNoSnpSep) &&
+            flow.backendRequest.order != 0 && !flow.backendReadReceiptReceived;
+    }
+
+    bool Core::Impl::HandleBackendRetry(Transaction& transaction, const Response& flit)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        const bool awaitingWriteAcceptance = flow.backendPhase == BackendPhase::WaitDBID &&
+            !flow.backendCompReceived && !flow.atomic.backendResultReceived;
+        if ((!transaction.memoryRequired && !awaitingWriteAcceptance) || !flow.backendRequest.allowRetry ||
             backendRetries.contains(transaction.handle))
             return false;
 
-        BackendRetryRecord record{ flow.backendRequest, transaction.handle, nextBackendRetry++, false };
+        BackendRetryRecord record{ flow.backendRequest, transaction.handle, nextBackendRetry++, flit.pCrdType,
+                                   flit.source, 0, false };
         backendRetries.emplace(transaction.handle, record);
         tracker.UnbindMemory(options.subordinateId, record.request.txnId);
         flow.backendPhase = BackendPhase::WaitRetry;
+        flow.backendWriteTraceTag = 0;
         flow.backendBeatMask = 0;
         flow.backendCompReceived = false;
+        flow.backendPersistReceived = false;
+        flow.backendCompRespErr = 0;
+        flow.backendPersistRespErr = 0;
+        flow.separatedPersistResponse = false;
+        flow.backendSeparatedCompReceived = false;
+        flow.backendSeparatedPersistReceived = false;
+        flow.persistSent = false;
+        flow.persistEmitted = false;
         flow.backendDataEmitted = false;
+        flow.backendReadRespErrMask = 0;
+        flow.backendReadResp = 0;
+        flow.backendReadRespValid = false;
         flow.backendReadReceiptReceived = false;
+        flow.backendRetryAckReceived = true;
         flow.atomic.backendResultReceived = false;
+        flow.atomic.backendResultDBID = 0;
+        flow.atomic.backendResultRespErr = 0;
         flow.atomic.backendDirtyCommitted = false;
         transaction.receivedBeats = 0;
         transaction.wait = WaitReason::Memory;
         transaction.phase = Phase::WaitMemory;
         transaction.readyTime = time;
         return true;
+    }
+
+    Request MakeBackendCreditReturnRequest(const BackendRetryRecord& retry, NodeId home) noexcept
+    {
+        return MakePCrdReturnRequest(home, retry.creditSource, retry.retryAckPCrdType,
+                                     retry.request.qos, retry.request.traceTag);
     }
 
     void Core::Impl::AdvanceBackendRetries()
@@ -38,14 +102,15 @@ namespace CHI::Lunatic {
                 for (auto iter = backendRetries.begin(); iter != backendRetries.end(); ++iter)
                 {
                     BackendRetryRecord& retry = iter->second;
-                    if (retry.creditReceived || retry.request.target != credit->first.first ||
-                        retry.request.pCrdType != credit->first.second)
+                    if (retry.creditReceived || retry.retryAckSource != credit->first.first ||
+                        retry.retryAckPCrdType != credit->first.second)
                         continue;
                     if (selected == backendRetries.end() || retry.serial > selected->second.serial)
                         selected = iter;
                 }
                 if (selected == backendRetries.end())
                     break;
+                selected->second.creditSource = credit->first.first;
                 selected->second.creditReceived = true;
                 --credit->second;
             }
@@ -75,15 +140,13 @@ namespace CHI::Lunatic {
             Request request;
             if (canceled)
             {
-                request.source = nodeId;
-                request.target = options.subordinateId;
-                request.opcode = CHI::Eb::Opcodes::REQ::PCrdReturn;
-                request.pCrdType = retry.request.pCrdType;
+                request = MakeBackendCreditReturnRequest(retry, nodeId);
             }
             else
             {
                 request = retry.request;
                 request.allowRetry = false;
+                request.pCrdType = retry.retryAckPCrdType;
             }
 
             if (!Queue(txreq, request, retry.transaction, transaction->actionAge, false, true))
@@ -112,9 +175,28 @@ namespace CHI::Lunatic {
         }
     }
 
+    void Core::Impl::RetryBackendSubmission(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        transaction.memoryRequired = false;
+        transaction.wait = WaitReason::None;
+        transaction.readyTime = time;
+        flow.backendCompReceived = false;
+        flow.backendDataEmitted = false;
+        flow.backendPhase = BackendPhase::None;
+        flow.directoryCommitted = false;
+    }
+
     void Core::Impl::StartMemoryRead(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        const bool orderedSeparatedDMT = flow.dmtActive && flow.separatedResponse && transaction.request.order != 0;
+        if (orderedSeparatedDMT && !ordering.CanIssueDMT(transaction))
+        {
+            transaction.wait = WaitReason::Memory;
+            transaction.readyTime = time;
+            return;
+        }
         if (transaction.memoryRequired)
         {
             transaction.phase = Phase::WaitMemory;
@@ -139,6 +221,8 @@ namespace CHI::Lunatic {
         transaction.memoryRequired = true;
         flow.memoryWrite = false;
         flow.backendBeatMask = 0;
+        flow.backendReadResp = 0;
+        flow.backendReadRespValid = false;
         if (options.backend == BackendKind::Internal)
         {
             flow.memoryReady = pipeline.SaturatingAdd(time, memory.NextLatency(options.memoryLatency));
@@ -152,13 +236,24 @@ namespace CHI::Lunatic {
             AXIOperation operation;
             operation.transaction = transaction.handle;
             operation.line = flow.baselineFetch ? flow.baselineLine : transaction.request.Line();
-            operation.beatMask = flow.expectedBeatMask
-                ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+            operation.beatMask = flow.baselineFetch
+                ? (uint64_t(1) << BeatsPerLine(options)) - 1
+                : flow.expectedBeatMask
+                    ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+            Request geometryRequest = transaction.request;
+            if (flow.baselineFetch)
+            {
+                geometryRequest.address = operation.line.address;
+                geometryRequest.nonSecure = operation.line.nonSecure;
+                geometryRequest.size = 6;
+            }
+            operation.geometry = GetTransferGeometry(geometryRequest, options);
             operation.memAttr = transaction.request.memAttr;
             operation.qos = transaction.request.qos;
+            operation.atomic = IsAtomicRequest(transaction.request.opcode);
             if (!axi.Submit(operation))
             {
-                transaction.readyTime = time;
+                RetryBackendSubmission(transaction);
                 return;
             }
             flow.backendCompReceived = false;
@@ -185,12 +280,12 @@ namespace CHI::Lunatic {
         }
         request.opcode = flow.separatedBackendRead
             ? CHI::Eb::Opcodes::REQ::ReadNoSnpSep : CHI::Eb::Opcodes::REQ::ReadNoSnp;
-        if (flow.victimPending && flow.victimDataPartial)
+        if (flow.baselineFetch)
         {
-            request.address = flow.victimLine.address;
-            request.nonSecure = flow.victimLine.nonSecure;
+            request.address = flow.baselineLine.address;
+            request.nonSecure = flow.baselineLine.nonSecure;
+            request.size = 6;
         }
-        request.memAttr &= ~CHI::Eb::MemAttrs::EWA;
         request.allowRetry = true;
         request.expCompAck = false;
         request.snpAttr = 0;
@@ -199,9 +294,11 @@ namespace CHI::Lunatic {
         request.stashLpidValid = false;
         if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
         {
-            transaction.readyTime = time;
+            RetryBackendSubmission(transaction);
             return;
         }
+        if (orderedSeparatedDMT)
+            ordering.HoldDMT(transaction);
         const RequestKey completedKey{ options.subordinateId, request.txnId };
         completedBackendReads.erase(completedKey);
         completedBackendReadOrder.remove(completedKey);
@@ -299,13 +396,23 @@ namespace CHI::Lunatic {
             operation.beatMask = fullSpill ? (uint64_t(1) << BeatsPerLine(options)) - 1 : flow.expectedBeatMask;
             if (!operation.beatMask)
                 operation.beatMask = (uint64_t(1) << BeatsPerLine(options)) - 1;
-            operation.memAttr = fullSpill ? uint8_t(CHI::Eb::MemAttrs::NonCacheable_Bufferable)
-                                          : transaction.request.memAttr;
+            Request geometryRequest = transaction.request;
+            if (flow.spillPending)
+            {
+                geometryRequest.address = operation.line.address;
+                geometryRequest.nonSecure = operation.line.nonSecure;
+                if (fullSpill)
+                    geometryRequest.size = 6;
+            }
+            geometryRequest.memAttr = flow.spillGeneratedEviction ? uint8_t(CHI::Eb::MemAttrs::WriteBack_Allocate)
+                                                                  : transaction.request.memAttr;
+            operation.geometry = GetTransferGeometry(geometryRequest, options);
+            operation.memAttr = geometryRequest.memAttr;
             operation.qos = transaction.request.qos;
             operation.write = true;
             if (!axi.Submit(operation))
             {
-                transaction.readyTime = time;
+                RetryBackendSubmission(transaction);
                 return;
             }
             flow.backendCompReceived = false;
@@ -355,12 +462,14 @@ namespace CHI::Lunatic {
                 (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteUniqueZero);
             request.address = flow.spillLine.address;
             request.nonSecure = flow.spillLine.nonSecure;
-            request.memAttr = CHI::Eb::MemAttrs::NonCacheable_Bufferable;
+            request.memAttr = flow.spillGeneratedEviction ? uint8_t(CHI::Eb::MemAttrs::WriteBack_Allocate)
+                                                          : transaction.request.memAttr;
             request.snpAttr = 0;
             if (!sameLineImmediate)
             {
                 request.opcode = CHI::Eb::Opcodes::REQ::WriteNoSnpFull;
                 request.size = 6;
+                request.snoopMe = false;
                 flow.expectedBeatMask = (uint64_t(1) << BeatsPerLine(options)) - 1;
             }
             flow.backendBeat = transaction.receivedBeats ? std::countr_zero(flow.expectedBeatMask) : 0;
@@ -372,7 +481,7 @@ namespace CHI::Lunatic {
             flow.backendBeat = transaction.receivedBeats ? std::countr_zero(flow.expectedBeatMask) : 0;
         if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
         {
-            transaction.readyTime = time;
+            RetryBackendSubmission(transaction);
             return;
         }
         if (!tracker.BindMemory(transaction.handle, options.subordinateId, transaction.handle))
@@ -407,15 +516,27 @@ namespace CHI::Lunatic {
         const size_t offset = beat * bytes;
         Data data;
         data.source = nodeId;
-        data.target = options.subordinateId;
+        data.target = flow.backendDBIDSource;
         data.homeNid = 0;
         data.txnId = flow.backendDBID;
         data.dbid = 0;
         data.opcode = CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
+        const bool originalWriteData = !flow.spillPending ||
+            (!flow.spillGeneratedEviction && flow.spillLine == transaction.request.Line());
+        data.respErr = originalWriteData && (flow.writeRespErrMask & (uint64_t(1) << beat))
+            ? flow.writeRespErr[beat] : 0;
+        const bool snoopWriteData = flow.spillPending && !flow.spillGeneratedEviction &&
+            flow.spillLine == transaction.request.Line() && flow.snoopDataValid && !flow.snoopForVictim;
+        if (snoopWriteData && (flow.snoopDataRespErrMask & (uint64_t(1) << beat)))
+            data.respErr = MergeResponseErrors(data.respErr, flow.snoopDataRespErr[beat]);
+        const bool victimWriteData = flow.spillPending && flow.spillGeneratedEviction &&
+            flow.spillLine == flow.victimLine && flow.victimDataValid;
+        if (victimWriteData && (flow.victimDataRespErrMask & (uint64_t(1) << beat)))
+            data.respErr = MergeResponseErrors(data.respErr, flow.victimDataRespErr[beat]);
         data.dataId = offset / 16;
         data.ccid = flow.spillPending ? (flow.spillLine.address >> 4) & 3 : (transaction.request.address >> 4) & 3;
         data.qos = transaction.request.qos;
-        data.traceTag = transaction.request.traceTag;
+        data.traceTag = flow.backendWriteTraceTag;
         const LineData& payload = flow.spillPending ? flow.spillData : transaction.data;
         const ByteEnables& enables = flow.spillPending ? flow.spillEnables : transaction.byteEnables;
         const LinePoison& poison = flow.spillPending ? flow.spillPoison : transaction.poison;
@@ -458,7 +579,7 @@ namespace CHI::Lunatic {
         if (flit.opcode == RSP::ReadReceipt)
         {
             if (!IsReadRequest(transaction.request.opcode) ||
-                (!flow.dmtActive && transaction.request.order == 0) || flow.backendReadReceiptReceived)
+                flow.backendRequest.order == 0 || flow.backendReadReceiptReceived)
                 return false;
             flow.backendReadReceiptReceived = true;
             if (flow.dmtActive && !transaction.Complete(COMPLETE_MEMORY))
@@ -479,17 +600,58 @@ namespace CHI::Lunatic {
 
         if (IsCMORequest(transaction.request.opcode) && !flow.spillPending)
         {
-            const bool separatedPersistence = transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
-            const bool persistenceResponse = flow.directPersistActive
-                ? flit.opcode == RSP::Comp
-                : flit.opcode == RSP::CompPersist && flit.pGroupId == transaction.request.pGroupId;
-            if ((separatedPersistence && !persistenceResponse) ||
-                (!separatedPersistence && flit.opcode != RSP::Comp))
+            if (flow.directPersistActive || transaction.request.opcode != CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+            {
+                if (flit.opcode != RSP::Comp)
+                    return false;
+                flow.backendCompReceived = true;
+                flow.backendCompRespErr = flit.respErr;
+                transaction.responseRespErr = flit.respErr;
+                flow.backendPhase = BackendPhase::Done;
+                tracker.UnbindMemory(options.subordinateId, transaction.handle);
+                transaction.phase = Phase::Action;
+                transaction.readyTime = time;
+                return true;
+            }
+
+            if (flit.opcode == RSP::CompPersist)
+            {
+                if (flow.separatedPersistResponse || flow.backendPersistReceived ||
+                    flit.pGroupId != transaction.request.pGroupId)
+                    return false;
+                flow.backendCompReceived = true;
+                flow.backendPersistReceived = true;
+                flow.backendCompRespErr = flit.respErr;
+                flow.backendPersistRespErr = flit.respErr;
+                transaction.responseRespErr = flit.respErr;
+            }
+            else if (flit.opcode == RSP::Comp)
+            {
+                if (flow.backendSeparatedCompReceived)
+                    return false;
+                flow.backendCompReceived = true;
+                flow.backendCompRespErr = flit.respErr;
+                flow.backendSeparatedCompReceived = true;
+                flow.separatedPersistResponse = true;
+            }
+            else if (flit.opcode == RSP::Persist)
+            {
+                if (flow.backendSeparatedPersistReceived || flit.pGroupId != transaction.request.pGroupId)
+                    return false;
+                flow.backendPersistReceived = true;
+                flow.backendPersistRespErr = flit.respErr;
+                flow.backendSeparatedPersistReceived = true;
+                flow.separatedPersistResponse = true;
+            }
+            else
                 return false;
-            flow.backendCompReceived = true;
-            flow.backendPhase = BackendPhase::Done;
-            tracker.UnbindMemory(options.subordinateId, transaction.handle);
-            transaction.phase = Phase::Action;
+
+            if (flow.backendCompReceived && flow.backendPersistReceived)
+            {
+                flow.backendPhase = BackendPhase::Done;
+                tracker.UnbindMemory(options.subordinateId, transaction.handle);
+                transaction.phase = Phase::Action;
+            }
             transaction.readyTime = time;
             return true;
         }
@@ -502,7 +664,9 @@ namespace CHI::Lunatic {
             if (flow.backendPhase != BackendPhase::WaitDBID)
                 return false;
             flow.backendDBID = flit.dbid;
-            flow.backendCompReceived = flit.opcode == RSP::CompDBIDResp;
+            flow.backendDBIDSource = flit.source;
+            flow.backendWriteTraceTag = flit.traceTag;
+            flow.backendCompReceived |= flit.opcode == RSP::CompDBIDResp;
             if (ClassifyRequest(transaction.request.opcode) == RequestClass::ZeroWrite ||
                 ClassifyRequest(transaction.request.opcode) == RequestClass::WriteUniqueZero)
             {
@@ -532,6 +696,7 @@ namespace CHI::Lunatic {
             if (flow.dwtActive)
             {
                 flow.backendCompReceived = true;
+                transaction.responseRespErr = flit.respErr;
                 flow.backendPhase = BackendPhase::Done;
                 tracker.UnbindMemory(options.subordinateId, transaction.handle);
                 transaction.phase = Phase::Action;
@@ -544,22 +709,26 @@ namespace CHI::Lunatic {
                 if (flow.backendPhase != BackendPhase::WaitComp)
                     return false;
                 flow.backendCompReceived = true;
+                transaction.responseRespErr = flit.respErr;
                 flow.backendPhase = BackendPhase::Done;
                 tracker.UnbindMemory(options.subordinateId, transaction.handle);
                 transaction.phase = Phase::Action;
                 transaction.readyTime = time;
                 return true;
             }
-            if (flow.backendPhase != BackendPhase::WaitComp && flow.backendPhase != BackendPhase::WaitDataEmission)
+            if (flow.backendCompReceived ||
+                (flow.backendPhase != BackendPhase::WaitDBID && flow.backendPhase != BackendPhase::SendData &&
+                 flow.backendPhase != BackendPhase::WaitComp && flow.backendPhase != BackendPhase::WaitDataEmission))
                 return false;
             flow.backendCompReceived = true;
+            transaction.responseRespErr = MergeResponseErrors(transaction.responseRespErr, flit.respErr);
             if (flow.backendDataEmitted)
             {
                 flow.backendPhase = BackendPhase::Done;
                 tracker.UnbindMemory(options.subordinateId, transaction.handle);
                 transaction.phase = Phase::Action;
-                transaction.readyTime = time;
             }
+            transaction.readyTime = time;
             return true;
         }
 
@@ -569,7 +738,8 @@ namespace CHI::Lunatic {
     bool Core::Impl::HandleBackendDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
-        if (options.backend == BackendKind::CHI && IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
+        if (options.backend == BackendKind::CHI && IsAtomicRequest(transaction.request.opcode) &&
+            !flow.spillPending && !flow.baselineFetch)
             return HandleAtomicBackendDAT(transaction, flit);
         const bool localAtomicRead = options.backend != BackendKind::CHI && IsAtomicRequest(transaction.request.opcode);
         if (!transaction.memoryRequired || flow.memoryWrite ||
@@ -589,9 +759,18 @@ namespace CHI::Lunatic {
             return false;
         const size_t beat = offset / bytes;
         const uint64_t bit = uint64_t(1) << beat;
+        const uint64_t complete = flow.baselineFetch
+            ? (uint64_t(1) << BeatsPerLine(options)) - 1
+            : flow.expectedBeatMask
+                ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+        const uint64_t backendAddress = flow.baselineFetch ? flow.baselineLine.address
+            : options.backend == BackendKind::CHI ? flow.backendRequest.address : transaction.request.address;
         uint64_t& received = flow.baselineFetch || localAtomicRead ? flow.backendBeatMask : transaction.receivedBeats;
-        if (received & bit)
+        if (!(complete & bit) || (received & bit) || flit.ccid != ((backendAddress >> 4) & 3) ||
+            (flow.backendReadRespValid && flow.backendReadResp != flit.resp))
             return false;
+        flow.backendReadResp = flit.resp;
+        flow.backendReadRespValid = true;
 
         const bool victimBaseline = flow.baselineFetch && flow.victimPending && flow.victimDataPartial;
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
@@ -612,16 +791,25 @@ namespace CHI::Lunatic {
             }
             if (!flow.baselineFetch || !IsCopybackRequest(transaction.request.opcode))
                 transaction.byteEnables[offset + index] = 1;
+            if (flow.baselineFetch)
+            {
+                if (victimBaseline)
+                    flow.victimValidBytes[offset + index] = 1;
+                else
+                    flow.validBytes[offset + index] = 1;
+            }
         }
         LinePoison& poison = victimBaseline ? flow.victimPoison : transaction.poison;
         LineDataCheck& dataCheck = victimBaseline ? flow.victimDataCheck : transaction.dataCheck;
         MergeMetadata(poison, dataCheck, flit.poison, flit.dataCheck,
                       enables, offset, 0, bytes, options);
-        transaction.responseRespErr = flit.respErr;
+        flow.backendReadRespErr[beat] = flit.respErr;
+        flow.backendReadRespErrMask |= bit;
+        if (transaction.responseRespErr == CHI::Eb::RespErrs::OK ||
+            flit.respErr == CHI::Eb::RespErrs::NDERR)
+            transaction.responseRespErr = flit.respErr;
         received |= bit;
 
-        const uint64_t complete = flow.expectedBeatMask
-            ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
         if ((received & complete) != complete)
             return true;
 
@@ -634,7 +822,7 @@ namespace CHI::Lunatic {
             flow.baselineFetched = true;
             flow.baselineFetch = false;
         }
-        if (transaction.request.order == 0 || flow.backendReadReceiptReceived)
+        if (flow.backendRequest.order == 0 || flow.backendReadReceiptReceived)
             tracker.UnbindMemory(options.subordinateId, transaction.handle);
         transaction.phase = Phase::Action;
         transaction.readyTime = ScheduleData();
@@ -649,7 +837,7 @@ namespace CHI::Lunatic {
     }
 
     bool Core::Impl::WriteLineImage(Transaction& transaction, const LineKey& line, const LineImage& image,
-                                    const ByteEnables& enables)
+                                    const ByteEnables& enables, bool generatedEviction)
     {
         FlowState& flow = flows.at(transaction.handle);
         if (options.backend == BackendKind::Internal)
@@ -660,6 +848,11 @@ namespace CHI::Lunatic {
 
         if (flow.spillPending)
         {
+            if (flow.backendPhase == BackendPhase::None)
+            {
+                StartBackendWrite(transaction);
+                return false;
+            }
             if (flow.backendPhase != BackendPhase::Done)
                 return false;
             LineImage spill;
@@ -669,11 +862,13 @@ namespace CHI::Lunatic {
             if (!transaction.responseRespErr)
                 memory.WriteImage(flow.spillLine, spill, flow.spillEnables, options);
             flow.spillPending = false;
+            flow.spillGeneratedEviction = false;
             flow.backendPhase = BackendPhase::None;
             return true;
         }
 
         flow.spillPending = true;
+        flow.spillGeneratedEviction = generatedEviction;
         flow.spillLine = line;
         flow.spillData = image.data;
         flow.spillPoison = image.poison;

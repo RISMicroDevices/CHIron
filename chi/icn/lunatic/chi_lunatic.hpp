@@ -10,6 +10,7 @@
 #include "chi_lunatic_bridge.hpp"
 #include "chi_lunatic_directory.hpp"
 #include "chi_lunatic_snoop_filter.hpp"
+#include "chi_lunatic_snoop_response.hpp"
 #include "chi_lunatic_policy.hpp"
 #include "chi_lunatic_memory.hpp"
 #include "chi_lunatic_metadata.hpp"

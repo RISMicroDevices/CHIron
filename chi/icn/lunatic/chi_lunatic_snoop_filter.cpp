@@ -103,6 +103,7 @@ namespace CHI::Lunatic {
     {
         if (SnoopFilterEntry* current = Find(key)) {
             current->age = age;
+            current->generation = ++nextGeneration;
             return *current;
         }
 
@@ -110,8 +111,10 @@ namespace CHI::Lunatic {
             throw std::overflow_error("Lunatic snoop-filter replacement requires core back-invalidation");
         SnoopFilterEntry& entry = At(SetIndex(key), ChooseVictim(key));
         entry.requesters.clear();
+        entry.possiblyClean.clear();
         entry.key = key;
         entry.age = age;
+        entry.generation = ++nextGeneration;
         entry.valid = true;
         return entry;
     }
@@ -130,14 +133,18 @@ namespace CHI::Lunatic {
         At(set, way) = SnoopFilterEntry{};
     }
 
-    void SnoopFilter::Track(const LineKey& key, NodeId requester, CacheState state, uint64_t age)
+    void SnoopFilter::Track(const LineKey& key, NodeId requester, CacheState state, uint64_t age,
+                            bool ambiguousUnique)
     {
         if (state == CacheState::I && (precise || !Find(key))) {
             Remove(key, requester);
             return;
         }
 
-        Acquire(key, age).requesters[requester] = state;
+        SnoopFilterEntry& entry = Acquire(key, age);
+        entry.requesters[requester] = state;
+        entry.possiblyClean[requester] = ambiguousUnique;
+        entry.generation = ++nextGeneration;
     }
 
     void SnoopFilter::Remove(const LineKey& key, NodeId requester)
@@ -146,7 +153,9 @@ namespace CHI::Lunatic {
         if (!entry)
             return;
 
-        entry->requesters.erase(requester);
+        if (entry->requesters.erase(requester))
+            entry->generation = ++nextGeneration;
+        entry->possiblyClean.erase(requester);
         if (entry->requesters.empty()) {
             entry->key = LineKey{};
             entry->age = 0;
@@ -160,7 +169,9 @@ namespace CHI::Lunatic {
             if (!entry.valid)
                 continue;
 
-            entry.requesters.erase(requester);
+            if (entry.requesters.erase(requester))
+                entry.generation = ++nextGeneration;
+            entry.possiblyClean.erase(requester);
             if (entry.requesters.empty()) {
                 entry.key = LineKey{};
                 entry.age = 0;
@@ -177,6 +188,23 @@ namespace CHI::Lunatic {
 
         const auto requesterIt = entry->requesters.find(requester);
         return requesterIt == entry->requesters.end() ? CacheState::I : requesterIt->second;
+    }
+
+    bool SnoopFilter::PossiblyDirty(const LineKey& key, NodeId requester) const noexcept
+    {
+        const CacheState state = State(key, requester);
+        return state == CacheState::UC || state == CacheState::UCE || state == CacheState::UDP || IsDirty(state);
+    }
+
+    bool SnoopFilter::PossiblyClean(const LineKey& key, NodeId requester) const noexcept
+    {
+        if (!IsDirty(State(key, requester)))
+            return true;
+        const SnoopFilterEntry* entry = Find(key);
+        if (!entry)
+            return false;
+        const auto it = entry->possiblyClean.find(requester);
+        return it != entry->possiblyClean.end() && it->second;
     }
 
     std::vector<NodeId> SnoopFilter::Sharers(const LineKey& key) const
@@ -215,8 +243,10 @@ namespace CHI::Lunatic {
 
     void SnoopFilter::Clear() noexcept
     {
+        nextGeneration = 0;
         for (SnoopFilterEntry& entry : entries) {
             entry.requesters.clear();
+            entry.possiblyClean.clear();
             entry.key = LineKey{};
             entry.age = 0;
             entry.valid = false;

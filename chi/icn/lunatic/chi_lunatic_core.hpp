@@ -39,9 +39,12 @@ namespace CHI::Lunatic {
         LineDataCheck   operandsDataCheck{};
         AtomicExecution execution{};
         uint64_t        resultBeatMask = 0;
+        DataBufferId    backendResultDBID = 0;
         bool            returnSent = false;
         bool            returnEmitted = false;
         bool            backendResultReceived = false;
+        uint8_t         operandRespErr = 0;
+        uint8_t         backendResultRespErr = 0;
         bool            backendDirtyCommitted = false;
     };
 
@@ -55,13 +58,20 @@ namespace CHI::Lunatic {
         Time                       memoryReady = 0;
         bool                       memoryWrite = false;
         DataBufferId               backendDBID = 0;
+        NodeId                     backendResponder = 0;
+        NodeId                     backendDBIDSource = 0;
+        bool                       backendResponderKnown = false;
+        uint8_t                    backendWriteTraceTag = 0;
         uint64_t                   expectedBeatMask = 0;
+        uint64_t                   cancelBeatMask = 0;
         uint64_t                   backendBeatMask = 0;
         size_t                     backendBeat = 0;
         size_t                     nextSnoop = 0;
         uint8_t                    writeResp = 0;
         std::map<NodeId, uint64_t> snoopBeatMasks;
         std::map<NodeId, uint8_t>  snoopResponses;
+        std::map<NodeId, bool>     snoopRetToSrc;
+        std::map<NodeId, bool>     snoopDoNotGoToSD;
         bool                       readReceiptSent = false;
         bool                       readReceiptEmitted = false;
         bool                       separatedResponse = false;
@@ -69,6 +79,8 @@ namespace CHI::Lunatic {
         bool                       dmtActive = false;
         bool                       dctActive = false;
         bool                       dctForwarded = false;
+        bool                       dctSnoopEmitted = false;
+        bool                       dctProviderResponded = false;
         NodeId                     dctTarget = 0;
         uint8_t                    dctFwdState = 0;
         bool                       retToSrcUsed = false;
@@ -77,7 +89,17 @@ namespace CHI::Lunatic {
         bool                       respSepSent = false;
         bool                       respSepEmitted = false;
         size_t                     readBeatsEmitted = 0;
+        std::array<uint8_t, 4>     backendReadRespErr{};
+        uint64_t                   backendReadRespErrMask = 0;
+        std::array<uint8_t, 4>     snoopDataRespErr{};
+        uint64_t                   snoopDataRespErrMask = 0;
+        std::array<uint8_t, 4>     victimDataRespErr{};
+        uint64_t                   victimDataRespErrMask = 0;
+        uint8_t                    backendReadResp = 0;
+        bool                       backendReadRespValid = false;
         bool                       backendReadReceiptReceived = false;
+        bool                       backendRetryAckReceived = false;
+        bool                       suppressArchitecturalEffects = false;
         bool                       directoryCommitted = false;
         bool                       baselineFetch = false;
         bool                       baselineFetched = false;
@@ -86,22 +108,34 @@ namespace CHI::Lunatic {
         ByteEnables                snoopValidBytes{};
         ByteEnables                validBytes{};
         bool                       spillPending = false;
+        bool                       spillGeneratedEviction = false;
         LineKey                    spillLine{};
         LineData                   spillData{};
         LinePoison                 spillPoison{};
         LineDataCheck              spillDataCheck{};
         ByteEnables                spillEnables{};
+        std::array<uint8_t, 4>     writeRespErr{};
+        uint64_t                   writeRespErrMask = 0;
         bool                       victimSnoopFilterOnly = false;
         bool                       dbidSent = false;
         bool                       compSent = false;
+        bool                       persistSent = false;
         uint8_t                    responseForm = 0;
         bool                       compEmitted = false;
+        bool                       tagMatchSent = false;
+        bool                       persistEmitted = false;
         bool                       dbidEmitted = false;
         bool                       stashDoneSent = false;
         bool                       stashDoneEmitted = false;
         bool                       evictOrEvictNoData = false;
         bool                       mergeImmediateHome = false;
         bool                       backendCompReceived = false;
+        bool                       backendPersistReceived = false;
+        uint8_t                    backendCompRespErr = 0;
+        uint8_t                    backendPersistRespErr = 0;
+        bool                       separatedPersistResponse = false;
+        bool                       backendSeparatedCompReceived = false;
+        bool                       backendSeparatedPersistReceived = false;
         bool                       backendDataEmitted = false;
         bool                       snoopDataValid = false;
         bool                       dataDirty = false;
@@ -116,6 +150,8 @@ namespace CHI::Lunatic {
         bool                       victimDataValid = false;
         bool                       victimDataPartial = false;
         ByteEnables                victimValidBytes{};
+        uint64_t                   victimGeneration = 0;
+        bool                       victimResponseUpdated = false;
         bool                       victimDirty = false;
         size_t                     victimWay = 0;
         LineKey                    victimLine{};
@@ -129,6 +165,8 @@ namespace CHI::Lunatic {
         AtomicFlowState            atomic;
     };
 
+    bool RequiresBackendReadReceipt(const FlowState& flow) noexcept;
+
     struct RetryRecord {
         Request request;
         bool    ackPopped = false;
@@ -139,8 +177,13 @@ namespace CHI::Lunatic {
         Request           request;
         TransactionHandle transaction = INVALID_TRANSACTION;
         uint64_t          serial = 0;
+        uint8_t           retryAckPCrdType = 0;
+        NodeId            retryAckSource = 0;
+        NodeId            creditSource = 0;
         bool              creditReceived = false;
     };
+
+    Request MakeBackendCreditReturnRequest(const BackendRetryRecord& retry, NodeId home) noexcept;
 
     template<typename T>
     struct Pending {
@@ -345,6 +388,7 @@ namespace CHI::Lunatic {
         void AdmitRequest(const Request& request);
         void AdvanceTransactions();
         void Advance(Transaction& transaction);
+        void CompleteErrorTransaction(Transaction& transaction);
         Time ScheduleTag();
         Time ScheduleData();
         void Resolve(Transaction& transaction);
@@ -369,6 +413,8 @@ namespace CHI::Lunatic {
                        uint8_t respErr = 0);
         void QueueStashDone(Transaction& transaction, bool withComp = false);
         void QueueCompPersist(Transaction& transaction);
+        void QueuePersist(Transaction& transaction);
+        void QueueTagMatch(Transaction& transaction);
         void QueueReadReceipt(Transaction& transaction);
         void QueueRespSepData(Transaction& transaction);
         void   QueueRetryCredit(size_t index);
@@ -383,6 +429,9 @@ namespace CHI::Lunatic {
         void Retire(TransactionHandle handle);
 
         void StartMemoryRead(Transaction& transaction);
+        Transaction* FindBackendTransaction(NodeId source, NodeId target, TransactionId txnId) noexcept;
+        void RecordBackendResponder(Transaction& transaction, NodeId source) noexcept;
+        void RetryBackendSubmission(Transaction& transaction);
         void AdvanceBackendRetries();
         bool HandleBackendRetry(Transaction& transaction, const Response& flit);
         void StartBackendWrite(Transaction& transaction);
@@ -402,7 +451,7 @@ namespace CHI::Lunatic {
         bool WriteLine(Transaction& transaction, const LineKey& line, const LineData& data,
                        const ByteEnables& enables);
         bool WriteLineImage(Transaction& transaction, const LineKey& line, const LineImage& image,
-                            const ByteEnables& enables);
+                            const ByteEnables& enables, bool generatedEviction = false);
         bool FetchBaseline(Transaction& transaction);
 
         uint16_t   SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const;
@@ -414,7 +463,7 @@ namespace CHI::Lunatic {
         void       CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp,
                                        bool withData, bool partial = false);
         CacheState DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp,
-                                    bool partial = false) const;
+                                    bool withData, bool partial = false) const;
         bool       ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp,
                                          bool withData, bool partial = false, uint8_t dataPull = 0) const;
         bool       AcceptForwardedResponse(Transaction& transaction, NodeId target, uint8_t resp,

@@ -13,7 +13,9 @@ namespace CHI::Lunatic {
     struct SnoopFilterEntry {
         LineKey                       key{};
         std::map<NodeId, CacheState> requesters;
+        std::map<NodeId, bool>       possiblyClean;
         uint64_t                     age = 0;
+        uint64_t                     generation = 0;
         bool                         valid = false;
     };
 
@@ -22,6 +24,7 @@ namespace CHI::Lunatic {
         size_t                        ways;
         bool                          precise;
         std::vector<SnoopFilterEntry> entries;
+        uint64_t                      nextGeneration = 0;
 
         size_t            Index(size_t set, size_t way) const noexcept;
         SnoopFilterEntry& Acquire(const LineKey& key, uint64_t age);
@@ -44,10 +47,13 @@ namespace CHI::Lunatic {
         bool                   HasInvalidWay(const LineKey& key) const noexcept;
         void                   Invalidate(size_t set, size_t way) noexcept;
 
-        void                Track(const LineKey& key, NodeId requester, CacheState state, uint64_t age);
+        void                Track(const LineKey& key, NodeId requester, CacheState state, uint64_t age,
+                                  bool ambiguousUnique = false);
         void                Remove(const LineKey& key, NodeId requester);
         void                RemoveRequester(NodeId requester) noexcept;
         CacheState          State(const LineKey& key, NodeId requester) const noexcept;
+        bool                PossiblyDirty(const LineKey& key, NodeId requester) const noexcept;
+        bool                PossiblyClean(const LineKey& key, NodeId requester) const noexcept;
         std::vector<NodeId> Sharers(const LineKey& key) const;
         std::vector<NodeId> Targets(const LineKey& key) const;
         bool                HasRequester(const LineKey& key, NodeId requester) const noexcept;

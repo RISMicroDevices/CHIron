@@ -16,6 +16,7 @@ namespace CHI::Lunatic {
         LinePoison    poison{};
         LineDataCheck dataCheck{};
         uint64_t      age = 0;
+        uint64_t      generation = 0;
         bool          valid = false;
         bool          dirty = false;
     };
@@ -24,6 +25,7 @@ namespace CHI::Lunatic {
         size_t                sets;
         size_t                ways;
         std::vector<HomeLine> lines;
+        uint64_t              nextGeneration = 0;
 
         size_t Index(size_t set, size_t way) const noexcept;
 
@@ -45,6 +47,7 @@ namespace CHI::Lunatic {
         size_t                ChooseVictim(const LineKey& key) const;
 
         HomeLine& Install(const LineKey& key, size_t way, uint64_t age);
+        void      Touch(const LineKey& key) noexcept;
         void      Invalidate(size_t set, size_t way) noexcept;
         void      Clear() noexcept;
         size_t    ValidCount() const noexcept;

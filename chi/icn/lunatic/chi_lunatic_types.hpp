@@ -104,6 +104,9 @@ namespace CHI::Lunatic {
         bool          deep = false;
         bool          doDwt = false;
         bool          snoopMe = false;
+        uint16_t      mpam = 0;
+        uint8_t       tagOp = 0;
+        uint16_t      tagGroupId = 0;
 
         LineKey Line() const noexcept { return LineKey::FromAddress(address, nonSecure); }
         bool operator==(const Request&) const = default;
@@ -124,6 +127,8 @@ namespace CHI::Lunatic {
         uint8_t       qos = 0;
         uint8_t       cBusy = 0;
         uint8_t       traceTag = 0;
+        uint8_t       tagOp = 0;
+        uint16_t      tagGroupId = 0;
     };
 
     struct Data {
@@ -165,6 +170,7 @@ namespace CHI::Lunatic {
         bool          doNotGoToSD = false;
         bool          retToSrc = false;
         bool          stashLpidValid = false;
+        uint16_t      mpam = 0;
 
         LineKey Line() const noexcept { return LineKey::FromAddress(address, nonSecure); }
     };

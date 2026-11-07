@@ -7,14 +7,7 @@ namespace CHI::Lunatic {
 
         uint64_t CopybackMask(const Request& request, const Options& options)
         {
-            const size_t bytes = BytesPerBeat(options);
-            const size_t transfer = std::min<size_t>(LINE_SIZE, size_t(1) << request.size);
-            const size_t first = (request.address % LINE_SIZE) / bytes;
-            const size_t count = std::max<size_t>(1, (transfer + bytes - 1) / bytes);
-            uint64_t mask = 0;
-            for (size_t beat = 0; beat < count && first + beat < BeatsPerLine(options); ++beat)
-                mask |= uint64_t(1) << (first + beat);
-            return mask;
+            return TransferBeatMask(request, options);
         }
 
     }
@@ -24,7 +17,18 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         flow.snoopLine = transaction.request.Line();
         if (IsReadRequest(transaction.request.opcode))
+        {
             flow.expectedBeatMask = TransferBeatMask(transaction.request, options);
+            if (transaction.request.order != 0 && !flow.separatedResponse && !flow.readReceiptSent)
+            {
+                QueueReadReceipt(transaction);
+                if (!flow.readReceiptSent)
+                {
+                    transaction.readyTime = time;
+                    return;
+                }
+            }
+        }
         switch (ClassifyRequest(transaction.request.opcode))
         {
             case RequestClass::ReadOnce:
@@ -79,6 +83,11 @@ namespace CHI::Lunatic {
 
         if (flow.victimPending)
         {
+            if (flow.victimLinked && !hazards.IsHead(transaction.handle, flow.victimLine))
+            {
+                transaction.readyTime = time;
+                return;
+            }
             if (flow.nextSnoop < transaction.snoopTargets.size())
             {
                 EmitSnoops(transaction);
@@ -87,11 +96,6 @@ namespace CHI::Lunatic {
             if (!transaction.pendingSnoops.empty())
             {
                 transaction.phase = Phase::WaitSnoop;
-                transaction.readyTime = time;
-                return;
-            }
-            if (flow.victimLinked && !hazards.IsHead(transaction.handle, flow.victimLine))
-            {
                 transaction.readyTime = time;
                 return;
             }
@@ -226,6 +230,26 @@ namespace CHI::Lunatic {
                 QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC);
                 return;
             case RequestClass::CopybackWrite:
+                if (flow.suppressArchitecturalEffects)
+                {
+                    if (!flow.dbidSent)
+                    {
+                        QueueComp(transaction, true, CHI::Eb::Resps::Comp_I, CHI::Eb::RespErrs::NDERR);
+                        flow.dbidSent = flow.compSent;
+                        return;
+                    }
+                    if (!transaction.Complete(COMPLETE_WRITE_DATA))
+                    {
+                        transaction.phase = Phase::WaitWriteData;
+                        transaction.readyTime = time;
+                        return;
+                    }
+                    flow.directoryCommitted = true;
+                    transaction.Mark(COMPLETE_COMMIT);
+                    transaction.phase = Phase::Commit;
+                    transaction.readyTime = time;
+                    return;
+                }
                 if (!flow.dbidSent)
                 {
                     QueueComp(transaction, true);

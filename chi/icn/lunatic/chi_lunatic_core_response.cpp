@@ -69,6 +69,27 @@ namespace CHI::Lunatic {
         }
     }
 
+    void Core::Impl::QueueTagMatch(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.tagMatchSent)
+            return;
+
+        Response response;
+        response.source = nodeId;
+        response.target = transaction.request.source;
+        response.txnId = transaction.request.txnId;
+        response.opcode = CHI::Eb::Opcodes::RSP::TagMatch;
+        response.resp = CHI::Eb::Resps::Fail;
+        response.respErr = CHI::Eb::RespErrs::OK;
+        response.tagOp = CHI::Eb::TagOp::Invalid;
+        response.tagGroupId = transaction.request.tagGroupId;
+        response.qos = transaction.request.qos;
+        response.traceTag = transaction.request.traceTag;
+        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+            flow.tagMatchSent = true;
+    }
+
     void Core::Impl::QueueReadReceipt(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
@@ -101,7 +122,7 @@ namespace CHI::Lunatic {
         response.opcode = CHI::Eb::Opcodes::RSP::RespSepData;
         response.resp = 0;
         response.respErr = transaction.responseRespErr == CHI::Eb::RespErrs::DERR
-            ? uint8_t(CHI::Eb::RespErrs::NDERR) : transaction.responseRespErr;
+            ? uint8_t(CHI::Eb::RespErrs::OK) : transaction.responseRespErr;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
         if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
@@ -118,17 +139,13 @@ namespace CHI::Lunatic {
         const uint8_t pCrdType = it->second.request.pCrdType;
         if (OutstandingRetryCredits(source, pCrdType) >= RetryOriginals(source, pCrdType))
             return;
-        if (!RetryReservationAvailable())
-        {
-            pmu.RecordStall(WaitReason::Tracker);
-            return;
-        }
 
         Response response;
         response.source = nodeId;
         response.target = source;
         response.opcode = CHI::Eb::Opcodes::RSP::PCrdGrant;
         response.pCrdType = pCrdType;
+        response.traceTag = it->second.request.traceTag;
         if (Queue(txrsp, response, INVALID_TRANSACTION, nextAge++, false, false, index))
             it->second.grantQueued = true;
     }
@@ -272,13 +289,25 @@ namespace CHI::Lunatic {
             ? CHI::Eb::Opcodes::DAT::DataSepResp : CHI::Eb::Opcodes::DAT::CompData;
         data.resp = transaction.responseResp;
         data.respErr = transaction.responseRespErr;
+        const bool snoopErrorValid = flow.snoopDataRespErrMask & (uint64_t(1) << beat);
+        const bool backendErrorValid = flow.backendReadRespErrMask & (uint64_t(1) << beat);
+        if (snoopErrorValid || backendErrorValid)
+        {
+            data.respErr = transaction.responseRespErr == CHI::Eb::RespErrs::NDERR
+                ? uint8_t(CHI::Eb::RespErrs::NDERR) : uint8_t(CHI::Eb::RespErrs::OK);
+            if (snoopErrorValid)
+                data.respErr = MergeResponseErrors(data.respErr, flow.snoopDataRespErr[beat]);
+            if (backendErrorValid)
+                data.respErr = MergeResponseErrors(data.respErr, flow.backendReadRespErr[beat]);
+        }
         data.dataId = offset / 16;
         data.ccid = (transaction.request.address >> 4) & 3;
         data.qos = transaction.request.qos;
         data.traceTag = transaction.request.traceTag;
+        const bool device = CHI::Eb::MemAttrs::ExtractDevice(transaction.request.memAttr) != 0;
         for (size_t index = 0; index < bytes; ++index)
         {
-            data.bytes[index] = transaction.data[offset + index];
+            data.bytes[index] = device && !flow.validBytes[offset + index] ? 0 : transaction.data[offset + index];
             data.byteEnables[index] = flow.validBytes[offset + index];
             data.dataCheck[index] = transaction.dataCheck[offset + index];
         }
@@ -332,6 +361,15 @@ namespace CHI::Lunatic {
             transaction.readyTime = time;
             return;
         }
+        if (!transaction.canceled && requestClass == RequestClass::Persistence &&
+            transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep &&
+            flow.separatedPersistResponse && !flow.directPersistActive &&
+            (!flow.compEmitted || !flow.persistEmitted))
+        {
+            transaction.phase = Phase::Action;
+            transaction.readyTime = time;
+            return;
+        }
         if (!transaction.canceled && flow.dctForwarded)
         {
             if (!flow.directoryCommitted)
@@ -376,7 +414,7 @@ namespace CHI::Lunatic {
 
     bool Core::Impl::RequiresTransactionCompAck(const Transaction& transaction) const
     {
-        if (transaction.canceled)
+        if (transaction.canceled && !IsOrderedWriteObservation(transaction.request))
             return false;
         if (ClassifyRequest(transaction.request.opcode) == RequestClass::WriteEvictOrEvict &&
             flows.at(transaction.handle).evictOrEvictNoData)

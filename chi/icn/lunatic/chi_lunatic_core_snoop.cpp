@@ -1,4 +1,5 @@
 #include "chi_lunatic_core.hpp"
+#include "chi_lunatic_snoop_response.hpp"
 
 #include <algorithm>
 
@@ -120,7 +121,7 @@ namespace CHI::Lunatic {
                  transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadClean ||
                  transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty ||
                  transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadPreferUnique);
-            if (needsUnique || needsDowngrade || IsDirty(state))
+            if (needsUnique || needsDowngrade || snoopFilter.PossiblyDirty(transaction.request.Line(), target))
                 candidates.push_back(target);
         }
 
@@ -184,10 +185,10 @@ namespace CHI::Lunatic {
         {
             if (target == transaction.request.source)
                 continue;
-            const CacheState state = snoopFilter.State(transaction.request.Line(), target);
             const bool cleanShared = transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanShared ||
                 ClassifyRequest(transaction.request.opcode) == RequestClass::Persistence;
-            if (!cleanShared || IsDirty(state) || !options.preciseSnoopFilter)
+            if (!cleanShared || snoopFilter.PossiblyDirty(transaction.request.Line(), target) ||
+                !options.preciseSnoopFilter)
                 transaction.snoopTargets.push_back(target);
         }
         transaction.pendingSnoops.clear();
@@ -222,13 +223,18 @@ namespace CHI::Lunatic {
             snoop.fwdNid = transaction.request.source;
             snoop.fwdTxnId = transaction.request.txnId;
         }
-        snoop.address = flow.snoopLine.address;
+        snoop.address = flow.snoopLine.address + (flow.snoopForVictim ? 0 : (transaction.request.address & 0x30));
         snoop.nonSecure = flow.snoopLine.nonSecure;
         snoop.opcode = SnoopOpcode(transaction, flow, target);
         snoop.qos = transaction.request.qos;
         snoop.traceTag = transaction.request.traceTag;
-        snoop.stashLpid = IsStashRequest(transaction.request.opcode) ? transaction.request.stashLpid : 0;
-        snoop.stashLpidValid = IsStashRequest(transaction.request.opcode) && transaction.request.stashLpidValid;
+        const bool stashSnoop = snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUniqueStash ||
+            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash ||
+            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
+            snoop.opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
+        snoop.stashLpid = stashSnoop ? transaction.request.stashLpid : 0;
+        snoop.stashLpidValid = stashSnoop && transaction.request.stashLpidValid;
+        snoop.mpam = stashSnoop ? transaction.request.mpam : uint16_t(snoop.nonSecure) << 10;
         snoop.doNotGoToSD = options.doNotGoToSD ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUnique ||
             snoop.opcode == CHI::Eb::Opcodes::SNP::SnpUniqueFwd ||
@@ -251,6 +257,8 @@ namespace CHI::Lunatic {
         }
         if (!Queue(txsnp, snoop, transaction.handle, transaction.actionAge, index + 1 == transaction.snoopTargets.size()))
             return false;
+        flow.snoopRetToSrc[target] = snoop.retToSrc;
+        flow.snoopDoNotGoToSD[target] = snoop.doNotGoToSD;
         if (snoop.retToSrc)
             flow.retToSrcUsed = true;
         if (!tracker.BindSnoop(transaction.handle, target, snoop.txnId))
@@ -272,24 +280,49 @@ namespace CHI::Lunatic {
     void Core::Impl::ProcessSnoopRSP(Transaction& transaction, const Response& flit)
     {
         if (!ValidateSnoopResponse(transaction, flit.source, flit.resp, false, false, flit.fwdState))
+        {
             Error(transaction.handle, "illegal snoop response");
+            return;
+        }
+        if ((flit.respErr != CHI::Eb::RespErrs::OK && flit.respErr != CHI::Eb::RespErrs::NDERR) ||
+            (flit.respErr == CHI::Eb::RespErrs::NDERR && flit.resp != CHI::Eb::Resps::SnpResp_I))
+        {
+            Error(transaction.handle, "illegal snoop error response");
+            return;
+        }
+        if (flit.respErr == CHI::Eb::RespErrs::NDERR)
+            transaction.responseRespErr = MergeResponseErrors(transaction.responseRespErr, flit.respErr);
         CompleteSnoopTarget(transaction, flit.source, flit.resp, false);
     }
 
     void Core::Impl::ProcessSnoopDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
-        if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataFwded &&
-            !AcceptForwardedResponse(transaction, flit.source, flit.resp, flit.fwdState, true))
+        if (flit.respErr != CHI::Eb::RespErrs::OK && flit.respErr != CHI::Eb::RespErrs::DERR)
         {
-            Error(transaction.handle, "unexpected or illegal forwarding snoop data");
+            Error(transaction.handle, "illegal snoop data error response");
             return;
         }
         const size_t bytes = BytesPerBeat(options);
         const size_t offset = flit.ByteOffset();
-        if (offset + bytes > LINE_SIZE || offset % bytes != 0)
+        const uint64_t snoopAddress = flow.snoopLine.address +
+            (flow.snoopForVictim ? 0 : (transaction.request.address & 0x30));
+        if (offset + bytes > LINE_SIZE || offset % bytes != 0 || flit.ccid != ((snoopAddress >> 4) & 3))
         {
-            Error(transaction.handle, "invalid snoop data offset");
+            Error(transaction.handle, "invalid snoop data packet position");
+            return;
+        }
+        const bool partial = flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl;
+        for (size_t index = 0; index < bytes; ++index)
+            if ((!partial && !flit.byteEnables[index]) || (!flit.byteEnables[index] && flit.bytes[index] != 0))
+            {
+                Error(transaction.handle, "invalid snoop data byte enables");
+                return;
+            }
+        if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataFwded &&
+            !AcceptForwardedResponse(transaction, flit.source, flit.resp, flit.fwdState, true))
+        {
+            Error(transaction.handle, "unexpected or illegal forwarding snoop data");
             return;
         }
         const size_t beat = offset / bytes;
@@ -305,15 +338,29 @@ namespace CHI::Lunatic {
             Error(transaction.handle, "inconsistent snoop response state");
             return;
         }
-        flow.snoopResponses[flit.source] = flit.resp;
         if (flit.opcode != CHI::Eb::Opcodes::DAT::SnpRespDataFwded &&
-            !ValidateSnoopResponse(transaction, flit.source, flit.resp, true,
-                flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl, flit.dataSource))
+            !ValidateSnoopResponse(transaction, flit.source, flit.resp, true, partial, flit.dataSource))
+        {
             Error(transaction.handle, "illegal snoop data response");
+            return;
+        }
+        flow.snoopResponses[flit.source] = flit.resp;
 
         const CacheState initial = snoopFilter.State(flow.snoopLine, flit.source);
         const bool dirty = IsDirty(initial) ||
             (flit.resp & CHI::Eb::Resps::PassDirty) != 0;
+        const bool dirtyError = dirty && flit.respErr == CHI::Eb::RespErrs::DERR;
+        auto& errorValues = flow.snoopForVictim ? flow.victimDataRespErr : flow.snoopDataRespErr;
+        uint64_t& errorMask = flow.snoopForVictim ? flow.victimDataRespErrMask : flow.snoopDataRespErrMask;
+        if (!(errorMask & bit))
+            errorValues[beat] = CHI::Eb::RespErrs::OK;
+        if (dirtyError)
+        {
+            errorValues[beat] = MergeResponseErrors(errorValues[beat], flit.respErr);
+            if (!IsReadRequest(transaction.request.opcode))
+                transaction.responseRespErr = MergeResponseErrors(transaction.responseRespErr, flit.respErr);
+        }
+        errorMask |= bit;
         if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl)
         {
             if (flow.snoopForVictim)
@@ -383,114 +430,22 @@ namespace CHI::Lunatic {
         const std::optional<CacheState> requester = DecodeForwardedState(fwdState);
         if (!requester)
             return false;
-        const bool validPair = withData
-            ? CHI::Eb::RespAndFwdStates::IsSnpRespDataFwdedValid(resp, fwdState)
-            : CHI::Eb::RespAndFwdStates::IsSnpRespFwdedValid(resp, fwdState);
-        if (!validPair)
-            return false;
-
         const CacheState initial = snoopFilter.State(flow.snoopLine, target);
-        if (initial == CacheState::I || initial == CacheState::UCE || initial == CacheState::UDP)
-            return false;
-        const CacheState provider = DecodeSnoopState(transaction, target, resp, false);
-        const uint16_t opcode = SnoopOpcode(transaction, flow, target);
-        const bool passDirty = withData && (resp & CHI::Eb::Resps::PassDirty) != 0;
-        if (passDirty && !IsDirty(initial))
-            return false;
-
-        bool legal = false;
-        switch (opcode)
+        std::vector<CacheState> possibleInitial = PossibleSnoopStates(initial);
+        if (initial == CacheState::UD && snoopFilter.PossiblyClean(flow.snoopLine, target))
         {
-            case CHI::Eb::Opcodes::SNP::SnpOnceFwd:
-                if (*requester != CacheState::I)
-                    break;
-                switch (initial)
-                {
-                    case CacheState::UC:
-                        legal = !withData && (provider == CacheState::UC || provider == CacheState::SC ||
-                            provider == CacheState::I);
-                        break;
-                    case CacheState::UD:
-                        legal = (!withData && (provider == CacheState::UD || provider == CacheState::SD)) ||
-                            (withData && passDirty && (provider == CacheState::SC || provider == CacheState::I));
-                        break;
-                    case CacheState::SC:
-                        legal = !withData && (provider == CacheState::SC || provider == CacheState::I);
-                        break;
-                    case CacheState::SD:
-                        legal = (!withData && provider == CacheState::SD) ||
-                            (withData && passDirty && (provider == CacheState::SC || provider == CacheState::I));
-                        break;
-                    default:
-                        break;
-                }
-                break;
-            case CHI::Eb::Opcodes::SNP::SnpCleanFwd:
-            case CHI::Eb::Opcodes::SNP::SnpNotSharedDirtyFwd:
-                if (*requester != CacheState::SC)
-                    break;
-                if (initial == CacheState::UC || initial == CacheState::SC)
-                    legal = !withData && (provider == CacheState::SC || provider == CacheState::I);
-                else if (initial == CacheState::UD || initial == CacheState::SD)
-                    legal = (!withData && provider == CacheState::SD) ||
-                        (withData && passDirty && (provider == CacheState::SC || provider == CacheState::I));
-                break;
-            case CHI::Eb::Opcodes::SNP::SnpSharedFwd:
-                if (initial == CacheState::UC || initial == CacheState::SC)
-                {
-                    legal = *requester == CacheState::SC && !withData && !passDirty &&
-                        (provider == CacheState::SC || provider == CacheState::I);
-                }
-                else if (initial == CacheState::UD || initial == CacheState::SD)
-                {
-                    if (provider == CacheState::SD)
-                        legal = *requester == CacheState::SC && !withData && !passDirty;
-                    else if (provider == CacheState::SC || provider == CacheState::I)
-                    {
-                        if (*requester == CacheState::SD)
-                            legal = !withData && !passDirty;
-                        else if (*requester == CacheState::SC)
-                            legal = withData && passDirty;
-                    }
-                }
-                break;
-            case CHI::Eb::Opcodes::SNP::SnpUniqueFwd:
-                legal = provider == CacheState::I && !withData && !passDirty &&
-                    (((initial == CacheState::UC || initial == CacheState::SC) && *requester == CacheState::UC) ||
-                     ((initial == CacheState::UD || initial == CacheState::SD) && *requester == CacheState::UD));
-                break;
-            case CHI::Eb::Opcodes::SNP::SnpPreferUniqueFwd:
-                if (provider == CacheState::I)
-                {
-                    legal = !withData && !passDirty &&
-                        (((initial == CacheState::UC || initial == CacheState::SC) && *requester == CacheState::UC) ||
-                         ((initial == CacheState::UD || initial == CacheState::SD) && *requester == CacheState::UD));
-                }
-                else if (initial == CacheState::UC)
-                {
-                    legal = *requester == CacheState::SC && provider == CacheState::SC && !withData && !passDirty;
-                }
-                else if (initial == CacheState::UD || initial == CacheState::SD)
-                {
-                    if (provider == CacheState::SD)
-                        legal = *requester == CacheState::SC && !withData && !passDirty;
-                    else if (provider == CacheState::SC)
-                        legal = *requester == CacheState::SC && withData && passDirty;
-                }
-                else if (initial == CacheState::SC)
-                {
-                    legal = *requester == CacheState::SC && provider == CacheState::SC && !withData && !passDirty;
-                }
-                break;
-            default:
-                return false;
+            const std::vector<CacheState> cleanInitial = PossibleSnoopStates(CacheState::UC);
+            possibleInitial.insert(possibleInitial.end(), cleanInitial.begin(), cleanInitial.end());
         }
-        if (!legal)
-            return false;
-        if (options.doNotGoToSD && provider == CacheState::SD &&
-            opcode != CHI::Eb::Opcodes::SNP::SnpOnceFwd)
-            return false;
-        if (IsDirty(initial) && !withData && !IsDirty(provider) && !IsDirty(*requester))
+        const ForwardedSnoopResponse response{
+            .opcode = SnoopOpcode(transaction, flow, target),
+            .resp = resp,
+            .fwdState = fwdState,
+            .withData = withData,
+            .retToSrc = flow.snoopRetToSrc.contains(target) && flow.snoopRetToSrc.at(target),
+            .doNotGoToSD = flow.snoopDoNotGoToSD.contains(target) && flow.snoopDoNotGoToSD.at(target)
+        };
+        if (!IsForwardedSnoopResponseLegal(possibleInitial, response))
             return false;
         if (flow.dctForwarded && flow.dctFwdState != fwdState)
             return false;
@@ -510,86 +465,44 @@ namespace CHI::Lunatic {
         const FlowState& flow = flows.at(transaction.handle);
         if (std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target) == transaction.pendingSnoops.end())
             return false;
-        if (dataPull != 0)
-            return false;
+
         const CacheState initial = snoopFilter.State(flow.snoopLine, target);
-        const uint16_t opcode = SnoopOpcode(transaction, flow, target);
-        const CacheState final = DecodeSnoopState(transaction, target, resp, partial);
-        const bool passDirty = (resp & CHI::Eb::Resps::PassDirty) != 0;
-        const bool stashRead = opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
-            opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
-        if (stashRead)
+        std::vector<CacheState> possibleInitial = PossibleSnoopStates(initial);
+        if (initial == CacheState::UD && snoopFilter.PossiblyClean(flow.snoopLine, target))
         {
-            if (withData || partial || passDirty)
-                return false;
-            if (resp == CHI::Eb::Resps::SnpResp_I)
-                return true;
-            switch (initial)
-            {
-                case CacheState::UC:
-                case CacheState::UCE: return resp == CHI::Eb::Resps::SnpResp_UC;
-                case CacheState::UD:
-                case CacheState::UDP: return resp == CHI::Eb::Resps::SnpResp_UD;
-                case CacheState::SC: return resp == CHI::Eb::Resps::SnpResp_SC;
-                case CacheState::SD: return resp == CHI::Eb::Resps::SnpResp_SD;
-                default: return false;
-            }
+            const std::vector<CacheState> cleanInitial = PossibleSnoopStates(CacheState::UC);
+            possibleInitial.insert(possibleInitial.end(), cleanInitial.begin(), cleanInitial.end());
         }
-        const bool dirtyTransitionPossible = IsDirty(initial) || initial == CacheState::UC;
-        if (passDirty && !dirtyTransitionPossible)
-            return false;
-        if (opcode == CHI::Eb::Opcodes::SNP::SnpCleanShared)
-        {
-            if (IsDirty(final) || (initial == CacheState::UCE && final != CacheState::I))
-                return false;
-            return !IsDirty(initial) || (withData && passDirty);
-        }
-        if (options.doNotGoToSD && final == CacheState::SD && opcode != CHI::Eb::Opcodes::SNP::SnpOnce &&
-            opcode != CHI::Eb::Opcodes::SNP::SnpOnceFwd)
-            return false;
-        if ((opcode == CHI::Eb::Opcodes::SNP::SnpShared || opcode == CHI::Eb::Opcodes::SNP::SnpSharedFwd ||
-             opcode == CHI::Eb::Opcodes::SNP::SnpClean || opcode == CHI::Eb::Opcodes::SNP::SnpCleanFwd ||
-             opcode == CHI::Eb::Opcodes::SNP::SnpNotSharedDirty ||
-             opcode == CHI::Eb::Opcodes::SNP::SnpNotSharedDirtyFwd) && IsUnique(final))
-            return false;
-        if (opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalid ||
-            opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash)
-            return !withData && resp == CHI::Eb::Resps::SnpResp_I;
-        if (opcode == CHI::Eb::Opcodes::SNP::SnpUniqueStash)
-        {
-            if (final != CacheState::I)
-                return false;
-            switch (initial)
-            {
-                case CacheState::I:
-                case CacheState::UCE: return !withData;
-                case CacheState::UC: return !partial;
-                case CacheState::SC: return !partial && !passDirty;
-                case CacheState::UD:
-                case CacheState::SD: return withData && !partial && passDirty;
-                case CacheState::UDP: return withData && partial && passDirty;
-                default: return false;
-            }
-        }
-        const bool invalidateWithData = opcode == CHI::Eb::Opcodes::SNP::SnpUnique ||
-            opcode == CHI::Eb::Opcodes::SNP::SnpUniqueFwd || opcode == CHI::Eb::Opcodes::SNP::SnpCleanInvalid;
-        if (invalidateWithData && final != CacheState::I)
-            return false;
-        if (IsDirty(initial) && invalidateWithData)
-            return withData && passDirty;
-        if (IsDirty(initial) && opcode != CHI::Eb::Opcodes::SNP::SnpMakeInvalid &&
-            opcode != CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash && !withData && !IsDirty(final))
-            return false;
-        return true;
+
+        const OrdinarySnoopResponse response{
+            .opcode = SnoopOpcode(transaction, flow, target),
+            .resp = resp,
+            .dataPull = dataPull,
+            .withData = withData,
+            .partial = partial,
+            .retToSrc = flow.snoopRetToSrc.contains(target) && flow.snoopRetToSrc.at(target),
+            .doNotGoToSD = flow.snoopDoNotGoToSD.contains(target) && flow.snoopDoNotGoToSD.at(target)
+        };
+        return IsOrdinarySnoopResponseLegal(possibleInitial, response);
     }
 
-    CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp, bool partial) const
+    CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp,
+                                            bool withData, bool partial) const
     {
         const FlowState& flow = flows.at(transaction.handle);
         const CacheState initial = snoopFilter.State(flow.snoopLine, target);
         const uint16_t opcode = SnoopOpcode(transaction, flow, target);
-        if (opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique || opcode == CHI::Eb::Opcodes::SNP::SnpStashShared)
+        const bool stashRead = opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
+            opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
+        if (stashRead && resp == CHI::Eb::Resps::SnpResp_I)
             return initial;
+        if (!withData && (resp & 0b011) == 0b010 && !(resp & CHI::Eb::Resps::PassDirty))
+        {
+            if (initial == CacheState::UCE)
+                return CacheState::UCE;
+            if (initial == CacheState::UDP)
+                return CacheState::UDP;
+        }
         switch (resp & 0b011)
         {
             case 0b000: return CacheState::I;
@@ -598,18 +511,33 @@ namespace CHI::Lunatic {
             default:
                 if (partial)
                     return CacheState::UDP;
-                if (IsDirty(initial) && !(resp & CHI::Eb::Resps::PassDirty) &&
-                    opcode != CHI::Eb::Opcodes::SNP::SnpCleanShared && opcode != CHI::Eb::Opcodes::SNP::SnpCleanInvalid)
-                    return CacheState::UD;
-                return CacheState::UC;
+                if (resp & CHI::Eb::Resps::PassDirty)
+                    return CacheState::UC;
+                return CacheState::UD;
         }
     }
 
-    void Core::Impl::CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp, bool, bool partial)
+    void Core::Impl::CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp,
+                                         bool withData, bool partial)
     {
         FlowState& flow = flows.at(transaction.handle);
-        const CacheState final = DecodeSnoopState(transaction, target, resp, partial);
-        snoopFilter.Track(flow.snoopLine, target, final, time);
+        if (flow.dctActive && target == flow.dctTarget)
+            flow.dctProviderResponded = true;
+        const CacheState final = DecodeSnoopState(transaction, target, resp, withData, partial);
+        const bool ambiguousUnique = final == CacheState::UD && !partial && (resp & 0b011) == 0b010 &&
+            !(resp & CHI::Eb::Resps::PassDirty) && snoopFilter.PossiblyClean(flow.snoopLine, target);
+        if (flow.victimSnoopFilterOnly && flow.victimPending && flow.snoopLine == flow.victimLine)
+        {
+            const SnoopFilterEntry& current = snoopFilter.At(snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
+            if (current.valid && current.key == flow.victimLine && current.generation == flow.victimGeneration)
+            {
+                snoopFilter.Track(flow.snoopLine, target, final, time, ambiguousUnique);
+                flow.victimGeneration = current.generation;
+                flow.victimResponseUpdated = true;
+            }
+        }
+        else
+            snoopFilter.Track(flow.snoopLine, target, final, time, ambiguousUnique);
         auto it = std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target);
         if (it != transaction.pendingSnoops.end())
         {
