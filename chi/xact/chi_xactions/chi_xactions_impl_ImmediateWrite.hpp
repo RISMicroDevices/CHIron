@@ -213,7 +213,10 @@ namespace /*CHI::*/Xact {
                     this->first.flit.req.Size(), iter->flit.dat.DataID());
             }
             else if (iter->flit.dat.Opcode() == Opcodes::DAT::WriteDataCancel)
-                return true;
+            {
+                collectedDataID |= details::CollectDataID<config>(
+                    this->first.flit.req.Size(), iter->flit.dat.DataID());
+            }
         }
 
         return (completeDataIDMask & ~collectedDataID).none();
@@ -674,6 +677,9 @@ namespace /*CHI::*/Xact {
 
                 if (this->HasDAT({ Opcodes::DAT::NCBWrDataCompAck }))
                     return XactDenial::DENIED_WRITEDATACANCEL_AFTER_NCBWRDATACOMPACK;
+
+                if (!this->NextREQDataID(datFlit))
+                    return XactDenial::DENIED_DUPLICATED_DATAID;
 
                 // check DMT consistency
                 if (auto optDMTTgtID = this->GetDMTTgtID(glbl))

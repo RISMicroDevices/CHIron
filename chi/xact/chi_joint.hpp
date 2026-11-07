@@ -2207,6 +2207,55 @@ namespace /*CHI::*/Xact {
                 });
         }
 
+        if (rspFlit.Opcode() == Opcodes::RSP::StashDone)
+        {
+            // StashDone is group-correlated and its TxnID is inapplicable.
+            // Use stable request order only for deterministic checker bookkeeping.
+            const bool homeStashDone = firedRspFlit.IsFromHomeToRequester(glbl);
+            auto groupCandidate = txTransactions.end();
+
+            for (auto iter = txTransactions.begin(); iter != txTransactions.end(); ++iter)
+            {
+                const auto& candidate = iter->second;
+                const auto& first = candidate->GetFirst();
+                if (!first.IsREQ())
+                    continue;
+
+                const bool separatedStash =
+                    first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepUnique ||
+                    first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepShared;
+                if (!separatedStash ||
+                    first.flit.req.SrcID() != rspFlit.TgtID() ||
+                    first.flit.req.StashGroupID() != rspFlit.StashGroupID() ||
+                    candidate->HasRSP({
+                        Opcodes::RSP::StashDone,
+                        Opcodes::RSP::CompStashDone
+                    }))
+                    continue;
+
+                const auto* comp = candidate->GetFirstRSP({ Opcodes::RSP::Comp });
+                const bool homeRouteMatches =
+                    !homeStashDone ||
+                    !glbl.SAM_SCOPE.enable ||
+                    (comp && comp->flit.rsp.SrcID() == rspFlit.SrcID()) ||
+                    (!comp &&
+                        (glbl.SAM_SCOPE.Get(first.flit.req.SrcID()) == SAMScope::BeforeSAM ||
+                         first.flit.req.TgtID() == rspFlit.SrcID()));
+                if (!homeRouteMatches)
+                    continue;
+
+                if (groupCandidate == txTransactions.end() ||
+                    first.time < groupCandidate->second->GetFirst().time ||
+                    (first.time == groupCandidate->second->GetFirst().time &&
+                     first.flit.req.TxnID() <
+                        groupCandidate->second->GetFirst().flit.req.TxnID()))
+                    groupCandidate = iter;
+            }
+
+            if (groupCandidate != txTransactions.end())
+                xactionIter = groupCandidate;
+        }
+
         if (xactionIter == txTransactions.end())
             return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_TXNID_NOT_EXIST, firedRspFlit);
 
