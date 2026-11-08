@@ -196,6 +196,8 @@ namespace CHI::Lunatic {
             for (size_t byte = 0; byte < bytes; ++byte)
                 result.byteEnables[byte] = uint8_t((enables >> byte) & 1);
 
+            result.poisonPresent = DATFlit::hasPoison;
+            result.dataCheckPresent = DATFlit::hasDataCheck;
             if constexpr (DATFlit::hasPoison)
             {
                 const uint64_t poison = flit.Poison();

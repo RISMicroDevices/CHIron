@@ -212,9 +212,11 @@ namespace CHI::Lunatic {
         const ByteEnables enables = ExpandedEnables(flit.byteEnables, offset, bytes);
         MergeMetadata(flow.atomic.operandsPoison, flow.atomic.operandsDataCheck,
                       flit.poison, flit.dataCheck, enables, offset, 0, bytes, options);
-        flow.writeRespErr[beat] = flit.respErr;
+        flow.writeRespErr[beat] = MergeResponseErrors(flit.respErr,
+            HasUnsupportedMetadataError(flit, enables, offset, 0, bytes, options)
+                ? uint8_t(CHI::Eb::RespErrs::DERR) : uint8_t(CHI::Eb::RespErrs::OK));
         flow.writeRespErrMask |= bit;
-        flow.atomic.operandRespErr = MergeResponseErrors(flow.atomic.operandRespErr, flit.respErr);
+        flow.atomic.operandRespErr = MergeResponseErrors(flow.atomic.operandRespErr, flow.writeRespErr[beat]);
 
         transaction.receivedBeats |= bit;
         if ((transaction.receivedBeats & flow.expectedBeatMask) != flow.expectedBeatMask)

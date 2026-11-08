@@ -271,7 +271,9 @@ namespace CHI::Lunatic {
         }
         MergeMetadata(transaction.poison, transaction.dataCheck, flit.poison, flit.dataCheck,
                       enables, address, address - offset, geometry.operandBytes, options);
-        flow.atomic.backendResultRespErr = flit.respErr;
+        flow.atomic.backendResultRespErr = MergeResponseErrors(flit.respErr,
+            HasUnsupportedMetadataError(flit, enables, address, address - offset, geometry.operandBytes, options)
+                ? uint8_t(CHI::Eb::RespErrs::DERR) : uint8_t(CHI::Eb::RespErrs::OK));
         flow.atomic.backendResultReceived = true;
         CompleteAtomicBackendIfReady(*this, transaction);
         return true;

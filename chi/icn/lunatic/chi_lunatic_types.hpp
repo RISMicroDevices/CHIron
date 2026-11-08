@@ -154,6 +154,8 @@ namespace CHI::Lunatic {
         ByteEnables                    byteEnables{};
         LinePoison                     poison{};
         LineDataCheck                  dataCheck{};
+        bool                           poisonPresent = false;
+        bool                           dataCheckPresent = false;
 
         size_t ByteOffset() const noexcept { return size_t(dataId) * 16; }
     };

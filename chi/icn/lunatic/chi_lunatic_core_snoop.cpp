@@ -447,16 +447,20 @@ namespace CHI::Lunatic {
         const CacheState initial = snoopFilter.State(flow.snoopLine, flit.source);
         const bool dirty = IsDirty(initial) ||
             (flit.resp & CHI::Eb::Resps::PassDirty) != 0;
-        const bool dirtyError = dirty && flit.respErr == CHI::Eb::RespErrs::DERR;
+        const ByteEnables enables = ExpandedEnables(flit.byteEnables, offset, bytes);
+        const uint8_t respErr = MergeResponseErrors(flit.respErr,
+            HasUnsupportedMetadataError(flit, enables, offset, 0, bytes, options)
+                ? uint8_t(CHI::Eb::RespErrs::DERR) : uint8_t(CHI::Eb::RespErrs::OK));
+        const bool dirtyError = dirty && respErr == CHI::Eb::RespErrs::DERR;
         auto& errorValues = flow.snoopForVictim ? flow.victimDataRespErr : flow.snoopDataRespErr;
         uint64_t& errorMask = flow.snoopForVictim ? flow.victimDataRespErrMask : flow.snoopDataRespErrMask;
         if (!(errorMask & bit))
             errorValues[beat] = CHI::Eb::RespErrs::OK;
         if (dirtyError)
         {
-            errorValues[beat] = MergeResponseErrors(errorValues[beat], flit.respErr);
+            errorValues[beat] = MergeResponseErrors(errorValues[beat], respErr);
             if (!IsReadRequest(transaction.request.opcode))
-                transaction.responseRespErr = MergeResponseErrors(transaction.responseRespErr, flit.respErr);
+                transaction.responseRespErr = MergeResponseErrors(transaction.responseRespErr, respErr);
         }
         errorMask |= bit;
         if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl)
@@ -495,7 +499,6 @@ namespace CHI::Lunatic {
             }
             LinePoison& poison = flow.snoopForVictim ? flow.victimPoison : transaction.poison;
             LineDataCheck& dataCheck = flow.snoopForVictim ? flow.victimDataCheck : transaction.dataCheck;
-            const ByteEnables enables = ExpandedEnables(flit.byteEnables, offset, bytes);
             MergeMetadata(poison, dataCheck, flit.poison, flit.dataCheck, enables, offset, 0, bytes, options);
         }
         received |= bit;

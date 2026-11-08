@@ -1,4 +1,5 @@
 #include "chi_lunatic_metadata.hpp"
+#include "../../../chi_eb/spec/chi_eb_protocol.hpp"
 
 #include <bit>
 
@@ -7,6 +8,30 @@ namespace CHI::Lunatic {
     uint8_t OddByteParity(uint8_t data) noexcept
     {
         return uint8_t(!bool(std::popcount(unsigned(data)) & 1));
+    }
+
+    bool HasUnsupportedMetadataError(const Data& flit, const ByteEnables& enables,
+                                     size_t targetOffset, size_t sourceOffset, size_t bytes,
+                                     const Options& options) noexcept
+    {
+        if (flit.respErr == CHI::Eb::RespErrs::DERR || flit.respErr == CHI::Eb::RespErrs::NDERR ||
+            targetOffset + bytes > LINE_SIZE || sourceOffset + bytes > LINE_SIZE ||
+            (targetOffset % 8) != (sourceOffset % 8))
+            return false;
+
+        for (size_t index = 0; index < bytes; ++index)
+        {
+            const size_t target = targetOffset + index;
+            if (!enables[target])
+                continue;
+            const size_t source = sourceOffset + index;
+            if (!options.poisonEnabled && flit.poisonPresent && flit.poison[source / 8])
+                return true;
+            if (!options.dataCheckEnabled && flit.dataCheckPresent &&
+                flit.dataCheck[source] != OddByteParity(flit.bytes[source]))
+                return true;
+        }
+        return false;
     }
 
     void GenerateMetadata(LinePoison& poison, LineDataCheck& dataCheck, const LineData& data,

@@ -807,11 +807,13 @@ namespace CHI::Lunatic {
         LineDataCheck& dataCheck = victimBaseline ? flow.victimDataCheck : transaction.dataCheck;
         MergeMetadata(poison, dataCheck, flit.poison, flit.dataCheck,
                       enables, offset, 0, bytes, options);
-        flow.backendReadRespErr[beat] = flit.respErr;
+        flow.backendReadRespErr[beat] = MergeResponseErrors(flit.respErr,
+            HasUnsupportedMetadataError(flit, enables, offset, 0, bytes, options)
+                ? uint8_t(CHI::Eb::RespErrs::DERR) : uint8_t(CHI::Eb::RespErrs::OK));
         flow.backendReadRespErrMask |= bit;
         if (transaction.responseRespErr == CHI::Eb::RespErrs::OK ||
-            flit.respErr == CHI::Eb::RespErrs::NDERR)
-            transaction.responseRespErr = flit.respErr;
+            flow.backendReadRespErr[beat] == CHI::Eb::RespErrs::NDERR)
+            transaction.responseRespErr = flow.backendReadRespErr[beat];
         received |= bit;
 
         if ((received & complete) != complete)

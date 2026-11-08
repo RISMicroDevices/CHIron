@@ -13,6 +13,9 @@ namespace CHI::Lunatic {
     };
 
     uint8_t OddByteParity(uint8_t data) noexcept;
+    bool    HasUnsupportedMetadataError(const Data& flit, const ByteEnables& enables,
+                                        size_t targetOffset, size_t sourceOffset, size_t bytes,
+                                        const Options& options) noexcept;
 
     void GenerateMetadata(LinePoison& poison, LineDataCheck& dataCheck, const LineData& data,
                           const ByteEnables& enables, const Options& options) noexcept;
