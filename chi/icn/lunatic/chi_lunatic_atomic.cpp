@@ -72,6 +72,8 @@ namespace CHI::Lunatic {
             supported |= request.address >= region.base && request.address < region.limit;
         if (!supported)
             return AtomicPath::Error;
+        if (options.backend == BackendKind::AXI && CHI::Eb::MemAttrs::ExtractDevice(request.memAttr))
+            return AtomicPath::Error;
 
         if (options.backend == BackendKind::CHI && options.subordinateAtomicEnabled)
             return AtomicPath::Forward;
