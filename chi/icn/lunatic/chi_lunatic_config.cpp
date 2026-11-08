@@ -52,6 +52,9 @@ namespace CHI::Lunatic {
              options.directPersistEnabled || options.poisonEnabled || options.dataCheckEnabled))
             throw std::invalid_argument("Lunatic AXI does not support CHI-only backend features or metadata");
 
+        if (options.backend == BackendKind::AXI && !options.axiCachelessSingleManager)
+            throw std::invalid_argument("Lunatic AXI requires the cacheless single-manager topology");
+
         for (const auto& region : options.atomicRegions)
             if (region.base >= region.limit)
                 throw std::invalid_argument("Lunatic atomic address regions must be non-empty");

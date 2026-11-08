@@ -68,6 +68,7 @@ namespace CHI::Lunatic {
 
         size_t      axiOutstandingLimit = 1;
         uint8_t     axiIdWidth = 4;
+        bool        axiCachelessSingleManager = true;
         bool        randomizeArbitration = false;
         bool        preciseSnoopFilter = true;
         bool        doNotGoToSD = false;
