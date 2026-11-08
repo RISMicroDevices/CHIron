@@ -454,8 +454,8 @@ namespace CHI::Lunatic {
         flow.dwtActive = options.dwtEnabled && options.backend == BackendKind::CHI &&
             requestClass == RequestClass::ImmediateWrite && !IsStashRequest(request.opcode) &&
             !request.expCompAck && !IsOrderedWriteObservation(request);
-        flow.directPersistActive = options.directPersistEnabled && options.backend == BackendKind::CHI &&
-            request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
+        flow.directPersistActive = options.directPersistEnabled && options.subordinatePersistSepEnabled &&
+            options.backend == BackendKind::CHI && request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
         flows.emplace(transaction->handle, std::move(flow));
         if (!hazards.Add(transaction->handle, transaction->request.Line(), transaction->actionAge))
         {

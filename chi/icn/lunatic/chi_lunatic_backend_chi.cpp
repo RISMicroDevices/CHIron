@@ -604,7 +604,8 @@ namespace CHI::Lunatic {
 
         if (IsCMORequest(transaction.request.opcode) && !flow.spillPending)
         {
-            if (flow.directPersistActive || transaction.request.opcode != CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+            if (flow.directPersistActive || !options.subordinatePersistSepEnabled ||
+                transaction.request.opcode != CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
             {
                 if (flit.opcode != RSP::Comp)
                     return false;

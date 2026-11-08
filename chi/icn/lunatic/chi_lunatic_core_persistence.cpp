@@ -27,7 +27,14 @@ namespace CHI::Lunatic {
             request.stashNidValid = false;
             request.stashLpidValid = false;
             if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+            {
                 request.returnNid = flow.directPersistActive ? transaction.request.source : nodeId;
+                if (!options.subordinatePersistSepEnabled)
+                {
+                    request.opcode = CHI::Eb::Opcodes::REQ::CleanSharedPersist;
+                    request.pGroupId = 0;
+                }
+            }
             else
                 request.pGroupId = 0;
             if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
