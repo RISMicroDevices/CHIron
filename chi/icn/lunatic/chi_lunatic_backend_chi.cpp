@@ -267,7 +267,7 @@ namespace CHI::Lunatic {
 
         Request request = transaction.request;
         request.source = nodeId;
-        request.target = options.subordinateId;
+        request.target = SelectSubordinate(options, request.address, request.nonSecure);
         request.txnId = transaction.handle;
         request.returnNid = nodeId;
         request.returnTxnId = transaction.handle;
@@ -426,7 +426,7 @@ namespace CHI::Lunatic {
 
         Request request = transaction.request;
         request.source = nodeId;
-        request.target = options.subordinateId;
+        request.target = SelectSubordinate(options, request.address, request.nonSecure);
         request.txnId = transaction.handle;
         request.returnNid = nodeId;
         request.returnTxnId = 0;

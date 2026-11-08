@@ -12,6 +12,7 @@
 #include "chi_lunatic_policy.hpp"
 #include "chi_lunatic_protocol.hpp"
 #include "chi_lunatic_random.hpp"
+#include "chi_lunatic_sam.hpp"
 #include "chi_lunatic_snoop_filter.hpp"
 #include "chi_lunatic_tracker.hpp"
 

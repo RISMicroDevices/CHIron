@@ -4,8 +4,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 namespace CHI::Lunatic {
+
+    class SystemAddressMap;
 
     enum class PolicyKind : uint8_t {
         NINE,
@@ -46,6 +49,9 @@ namespace CHI::Lunatic {
         NodeId      subordinateId = 0;
         PolicyKind  policy = PolicyKind::Exclusive;
         BackendKind backend = BackendKind::Internal;
+
+        std::shared_ptr<const SystemAddressMap> addressMap;
+
         size_t      axiOutstandingLimit = 1;
         uint8_t     axiIdWidth = 4;
         bool        randomizeArbitration = false;
