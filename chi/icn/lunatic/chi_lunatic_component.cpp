@@ -81,6 +81,11 @@ namespace CHI::Lunatic {
             impl->Error(INVALID_TRANSACTION, "invalid HomeNID on data delivered to Home");
             return false;
         }
+        if (flit.tagOp != CHI::Eb::TagOp::Invalid || flit.tag != 0 || flit.tagUpdate != 0)
+        {
+            impl->Error(INVALID_TRANSACTION, "nonzero MTE DAT payload is unsupported");
+            return false;
+        }
         return impl->Push(impl->rxdat, flit, EventKind::AcceptedRXDAT);
     }
 

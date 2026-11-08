@@ -179,6 +179,9 @@ namespace CHI::Lunatic {
             result.qos = flit.QoS();
             result.cBusy = flit.CBusy();
             result.traceTag = flit.TraceTag();
+            result.tagOp = flit.TagOp();
+            result.tag = flit.Tag();
+            result.tagUpdate = flit.TU();
 
             constexpr size_t lanes = config::dataWidth / 64;
             constexpr size_t bytes = config::dataWidth / 8;

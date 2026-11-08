@@ -147,6 +147,9 @@ namespace CHI::Lunatic {
         uint8_t                        qos = 0;
         uint8_t                        cBusy = 0;
         uint8_t                        traceTag = 0;
+        uint8_t                        tagOp = 0;
+        uint64_t                       tag = 0;
+        uint64_t                       tagUpdate = 0;
         LineData                       bytes{};
         ByteEnables                    byteEnables{};
         LinePoison                     poison{};
