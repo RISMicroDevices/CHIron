@@ -97,6 +97,13 @@ namespace Cohestra::CHI {
         virtual bool ValidateCreditAccounting() const noexcept = 0;
     };
 
+    class CHITransportResetInterface {
+    public:
+        virtual ~CHITransportResetInterface() noexcept = default;
+
+        virtual void Reset() noexcept = 0;
+    };
+
 
     // A timestamped flit captured at a completed handshake.
     template<class TFlit>

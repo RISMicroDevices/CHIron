@@ -795,6 +795,11 @@ int main(const int argc, const char* argv[])
             time + 2 * resetCycles, time + 4 * resetCycles);
 
         top.reset = 1;
+        if (lunatic)
+        {
+            lunaticLink.Reset();
+            lunatic->Reset();
+        }
         runResetCycles(resetCycles);
 
         top.reset = 0;

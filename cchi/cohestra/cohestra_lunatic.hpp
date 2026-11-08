@@ -24,6 +24,11 @@ namespace Cohestra {
         using Interconnect = ::CHI::Lunatic::Interconnect<CHI::CommonFlitConfiguration>;
         using Bridge      = ::CHI::Lunatic::Bridge<CHI::CommonFlitConfiguration>;
 
+        enum class ResetPolicy : uint8_t {
+            CoordinatedHard,
+            IdleOnly
+        };
+
         struct RNPort {
             size_t  port = 0;
             NodeId  nodeId = 0;
@@ -34,6 +39,7 @@ namespace Cohestra {
             Config                      options{};
             std::vector<RNPort>         rnPorts;
             size_t                      serviceQuantum = 1;
+            ResetPolicy                 resetPolicy = ResetPolicy::CoordinatedHard;
             std::shared_ptr<EventHub>   events;
         };
 
@@ -57,6 +63,7 @@ namespace Cohestra {
 
         void        Reset();
         void        Tick(uint64_t time);
+        void        Evaluate();
         bool        Drain();
         bool        IsDrained() const noexcept;
         bool        Validate() const noexcept;

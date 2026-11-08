@@ -10,7 +10,8 @@
 namespace Cohestra {
 
     template<class VT, template<class, size_t, class> class ChannelPolicy>
-    class LunaticCHIToRNInterfaceT final : public V3CHIToRNInterfaceT<VT, ChannelPolicy> {
+    class LunaticCHIToRNInterfaceT final : public V3CHIToRNInterfaceT<VT, ChannelPolicy>,
+                                           public CHI::CHITransportResetInterface {
     private:
         template<class Flit>
         static bool IsLinkReturn(const Flit& flit) noexcept
@@ -48,6 +49,53 @@ namespace Cohestra {
         explicit LunaticCHIToRNInterfaceT(VT* verilated) noexcept
             : V3CHIToRNInterfaceT<VT, ChannelPolicy>(verilated)
         {
+        }
+
+        void Reset() noexcept override
+        {
+            this->lastPreTickTime = 0;
+            this->lastPostTickTime = 0;
+            this->lastPreTickValid = false;
+            this->lastPostTickValid = false;
+            transmitActivated.fill(false);
+
+#define _LUNATIC_RESET_PORT(port) \
+            if constexpr (V3CHIToRNInterfaceT<VT, ChannelPolicy>::HasPort##port()) \
+            { \
+                auto& p = this->ports[port]; \
+                using Port = typename V3CHIToRNInterfaceT<VT, ChannelPolicy>::Port; \
+                p = Port{}; \
+                p.rxrsp.SetBufferSize(4); \
+                p.rxdat.SetBufferSize(4); \
+                p.rxsnp.SetBufferSize(4); \
+                p.txreq.SetBufferSize(4); \
+                p.txrsp.SetBufferSize(4); \
+                p.txdat.SetBufferSize(4); \
+                p.txreq.SetRxCreditCount(4); \
+                p.txrsp.SetRxCreditCount(4); \
+                p.txdat.SetRxCreditCount(4); \
+                ChannelPolicy<VT, port, details::RXRSPChannel>::ClearValid(*this->verilated); \
+                ChannelPolicy<VT, port, details::RXDATChannel>::ClearValid(*this->verilated); \
+                ChannelPolicy<VT, port, details::RXSNPChannel>::ClearValid(*this->verilated); \
+                ChannelPolicy<VT, port, details::TXREQChannel>::ClearLCrdV(*this->verilated); \
+                ChannelPolicy<VT, port, details::TXRSPChannel>::ClearLCrdV(*this->verilated); \
+                ChannelPolicy<VT, port, details::TXDATChannel>::ClearLCrdV(*this->verilated); \
+                ChannelPolicy<VT, port, details::RXRSPChannel>::DrivePending(*this->verilated, false); \
+                ChannelPolicy<VT, port, details::RXDATChannel>::DrivePending(*this->verilated, false); \
+                ChannelPolicy<VT, port, details::RXSNPChannel>::DrivePending(*this->verilated, false); \
+                ChannelPolicy<VT, port, details::TXREQChannel>::DrivePending(*this->verilated, false); \
+                ChannelPolicy<VT, port, details::TXRSPChannel>::DrivePending(*this->verilated, false); \
+                ChannelPolicy<VT, port, details::TXDATChannel>::DrivePending(*this->verilated, false); \
+            }
+            _LUNATIC_RESET_PORT(0)
+            _LUNATIC_RESET_PORT(1)
+            _LUNATIC_RESET_PORT(2)
+            _LUNATIC_RESET_PORT(3)
+            _LUNATIC_RESET_PORT(4)
+            _LUNATIC_RESET_PORT(5)
+            _LUNATIC_RESET_PORT(6)
+            _LUNATIC_RESET_PORT(7)
+#undef _LUNATIC_RESET_PORT
         }
 
         void TickPreHandshake(uint64_t time) noexcept override

@@ -10,7 +10,8 @@
 namespace LunaticTest {
 
     class FakeCHIToRNInterface : public Cohestra::CHI::CHIToRNInterface,
-                                 public Cohestra::CHI::CHITransportStatusInterface {
+                                 public Cohestra::CHI::CHITransportStatusInterface,
+                                 public Cohestra::CHI::CHITransportResetInterface {
     public:
         struct Port {
             std::deque<Cohestra::CHI::RSPFlit>  rxrsp;
@@ -33,6 +34,12 @@ namespace LunaticTest {
 
         void TickPreHandshake(uint64_t) noexcept override { }
         void TickPostHandshake(uint64_t) noexcept override { }
+        void Reset() noexcept override
+        {
+            for (auto& [index, port] : ports)
+                port = Port{};
+            creditValid = true;
+        }
 
         size_t GetPortCount() const noexcept override { return ports.size(); }
         std::set<size_t> GetPortIndices() const noexcept override

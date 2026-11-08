@@ -290,3 +290,95 @@ LUNATIC_TEST(Stage9EventConfigurationValidation)
     loader.values["lunatic.dct.choice"] = "invalid";
     LUNATIC_CHECK(!LoadLunaticIntegrationConfiguration(loader, configuration));
 }
+
+LUNATIC_TEST(Stage9CohestraHardResetClearsGenerations)
+{
+    FakeCHIToRNInterface transport;
+    auto configuration = MakeConfiguration();
+    configuration.options.tagLatency = 1;
+    configuration.options.dataLatency = 1;
+    configuration.options.memoryLatency = 1;
+    LUNATIC_CHECK(configuration.resetPolicy == LunaticModel::ResetPolicy::CoordinatedHard);
+    LunaticModel model(transport, configuration);
+
+    transport.InjectREQ(0, MakeRead(1, 0, 7, 0x80000040));
+    model.Tick(2);
+    LUNATIC_CHECK(!transport.HasTXREQ(0));
+    LUNATIC_CHECK(model.GetNode().GetTime() == 1);
+    model.Reset();
+    LUNATIC_CHECK(model.GetNode().GetTime() == 0);
+    LUNATIC_CHECK(!model.HasErrors());
+    LUNATIC_CHECK(model.Drain());
+    LUNATIC_CHECK(model.Validate());
+
+    transport.InjectREQ(0, MakeRead(1, 0, 7, 0x80000040));
+    model.Tick(2);
+    LUNATIC_CHECK(!transport.HasTXREQ(0));
+    LUNATIC_CHECK(model.GetNode().GetTime() == 1);
+    LUNATIC_CHECK(!model.HasErrors());
+}
+
+LUNATIC_TEST(Stage9CohestraIdleOnlyResetRequiresDrain)
+{
+    FakeCHIToRNInterface transport;
+    auto configuration = MakeConfiguration();
+    configuration.options.tagLatency = 1;
+    configuration.options.dataLatency = 1;
+    configuration.options.memoryLatency = 1;
+    configuration.resetPolicy = LunaticModel::ResetPolicy::IdleOnly;
+    LunaticModel model(transport, configuration);
+
+    transport.InjectREQ(0, MakeRead(1, 0, 8, 0x80000080));
+    model.Tick(2);
+    model.Reset();
+    LUNATIC_CHECK(model.HasErrors());
+    LUNATIC_CHECK(model.GetNode().GetTime() == 1);
+    LUNATIC_CHECK(!model.GetIntegrationErrors().empty());
+
+    size_t beats = 0;
+    RunUntil(model, [&] {
+        while (transport.TakeDAT(0))
+            ++beats;
+        return beats == 2;
+    }, 4);
+    DrainOutputs(transport);
+    LUNATIC_CHECK(model.Drain());
+    model.Reset();
+    LUNATIC_CHECK(!model.HasErrors());
+    LUNATIC_CHECK(model.GetNode().GetTime() == 0);
+    LUNATIC_CHECK(model.Validate());
+}
+
+LUNATIC_TEST(Stage9CohestraOddTimestampAndSeparateEvaluation)
+{
+    FakeCHIToRNInterface transport;
+    auto configuration = MakeConfiguration();
+    configuration.options.tagLatency = 1;
+    configuration.options.dataLatency = 1;
+    configuration.options.memoryLatency = 1;
+    LunaticModel model(transport, configuration);
+
+    transport.InjectREQ(0, MakeRead(1, 0, 9, 0x800000c0));
+    model.Tick(2);
+    LUNATIC_CHECK(model.GetNode().GetTime() == 1);
+    model.Tick(3);
+    LUNATIC_CHECK(model.HasErrors());
+    LUNATIC_CHECK(model.GetNode().GetTime() == 1);
+    LUNATIC_CHECK(model.GetIntegrationErrors().size() == 1);
+
+    model.Reset();
+    transport.InjectREQ(0, MakeRead(1, 0, 9, 0x800000c0));
+    model.Evaluate();
+    LUNATIC_CHECK(!transport.HasTXREQ(0));
+    LUNATIC_CHECK(model.GetNode().GetTime() == 0);
+    model.Tick(2);
+    LUNATIC_CHECK(model.GetNode().GetTime() == 1);
+    model.Tick(3);
+    LUNATIC_CHECK(model.HasErrors());
+    LUNATIC_CHECK(model.GetNode().GetTime() == 1);
+
+    model.Reset();
+    model.Tick(2);
+    LUNATIC_CHECK(!model.HasErrors());
+    LUNATIC_CHECK(model.GetNode().GetTime() == 1);
+}

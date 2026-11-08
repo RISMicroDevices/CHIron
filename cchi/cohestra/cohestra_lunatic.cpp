@@ -73,7 +73,20 @@ namespace Cohestra {
 
     void LunaticModel::Reset()
     {
+        if (configuration.resetPolicy == ResetPolicy::IdleOnly && !IsDrained())
+        {
+            integrationErrors.emplace_back("Lunatic idle-only reset requires a drained model");
+            return;
+        }
+        auto* transportReset = dynamic_cast<CHI::CHITransportResetInterface*>(rnInterface);
+        if (!transportReset)
+        {
+            ReportError("Lunatic transport does not support coordinated reset");
+            return;
+        }
+        transportReset->Reset();
         Home().Reset();
+        snoopAllowed.clear();
         integrationErrors.clear();
         nextPort = 0;
         lastTickTime = 0;
@@ -271,6 +284,11 @@ namespace Cohestra {
     {
         if (failed || (lastTickValid && lastTickTime == time))
             return;
+        if (time & 1)
+        {
+            ReportError("Lunatic Cohestra timestamps must be even");
+            return;
+        }
         if (lastTickValid && time < lastTickTime)
         {
             ReportError("Lunatic Cohestra time must not decrease");
@@ -278,7 +296,13 @@ namespace Cohestra {
         }
         lastTickTime = time;
         lastTickValid = true;
+        Evaluate();
+    }
 
+    void LunaticModel::Evaluate()
+    {
+        if (failed)
+            return;
         for (size_t offset = 0; offset < routes.size() && !failed; ++offset)
         {
             const RNPort& route = routes[(nextPort + offset) % routes.size()];
@@ -290,7 +314,7 @@ namespace Cohestra {
         if (failed)
             return;
 
-        Home().Tick(time / 2);
+        Home().Tick(lastTickValid ? lastTickTime / 2 : 0);
         EmitResponses();
         EmitData();
         EmitSnoops();
@@ -310,13 +334,13 @@ namespace Cohestra {
     bool LunaticModel::Validate() const noexcept
     {
         const auto* status = TransportStatus();
-        return !failed && Home().GetErrors().empty() && Home().ValidateInvariants() &&
-            status && status->ValidateCreditAccounting();
+        return !failed && integrationErrors.empty() && Home().GetErrors().empty() &&
+            Home().ValidateInvariants() && status && status->ValidateCreditAccounting();
     }
 
     bool LunaticModel::HasErrors() const noexcept
     {
-        return failed || !Home().GetErrors().empty();
+        return failed || !integrationErrors.empty() || !Home().GetErrors().empty();
     }
 
 }

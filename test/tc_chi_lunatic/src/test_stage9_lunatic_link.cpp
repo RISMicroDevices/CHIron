@@ -553,3 +553,37 @@ LUNATIC_TEST(Stage9LunaticSnoopActivityTracksOutstanding)
     driver.Quiesce();
     LUNATIC_CHECK(driver.node.GetErrors().empty());
 }
+
+LUNATIC_TEST(Stage9LunaticTransportResetRestoresFreshState)
+{
+    LinkMock mock;
+    LinkTransport transport(&mock);
+    LinkControl link(&mock, &transport);
+    uint64_t time = 0;
+    ActivateLink(mock, transport, link, time);
+
+    Cohestra::CHI::RSPFlit response{};
+    response.SrcID() = 0;
+    response.TgtID() = 1;
+    response.TxnID() = 8;
+    response.Opcode() = ::CHI::Eb::Opcodes::RSP::Comp;
+    LUNATIC_CHECK(transport.PushRXRSP(0, response));
+    TickLink(mock, transport, link, time++);
+    transport.Reset();
+    ExpectNoCreditsOrPayload(mock);
+    LUNATIC_CHECK(transport.ValidateCreditAccounting());
+    const auto status = transport.GetPortStatus(0);
+    for (size_t index = 0; index < status.size(); ++index)
+    {
+        LUNATIC_CHECK(status[index].txQueue == 0);
+        LUNATIC_CHECK(status[index].rxQueue == 0);
+        LUNATIC_CHECK(status[index].firedQueue == 0);
+        LUNATIC_CHECK(status[index].txCredits == 0);
+        LUNATIC_CHECK(status[index].rxCredits == 0);
+        LUNATIC_CHECK(!status[index].txDriven);
+        LUNATIC_CHECK(status[index].rxPendingReturns == (index < 3 ? 0 : 4));
+    }
+
+    ActivateLink(mock, transport, link, time);
+    LUNATIC_CHECK(transport.ValidateCreditAccounting());
+}
