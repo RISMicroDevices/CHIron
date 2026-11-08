@@ -152,6 +152,8 @@ namespace CHI::Lunatic {
         bool                       requesterWasDirty = false;
         CacheState                 requesterFinal = CacheState::I;
         LineKey                    snoopLine{};
+        NodeId                     stashTarget = 0;
+        bool                       stashTargetValid = false;
         bool                       snoopForVictim = false;
         bool                       victimPending = false;
         bool                       victimLinked = false;

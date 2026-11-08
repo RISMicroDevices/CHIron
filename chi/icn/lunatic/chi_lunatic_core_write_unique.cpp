@@ -20,19 +20,35 @@ namespace CHI::Lunatic {
         else if (!transaction.homeHit)
             flow.validBytes.fill(0);
 
+        flow.stashTarget = transaction.request.returnNid;
+        flow.stashTargetValid = IsStashRequest(transaction.request.opcode) && transaction.request.stashNidValid;
+        const auto targets = SnoopTargets(transaction.request.Line());
+        if (IsStashRequest(transaction.request.opcode) && !flow.stashTargetValid)
+        {
+            for (NodeId target : targets)
+            {
+                if (target != transaction.request.source && IsUnique(snoopFilter.State(flow.snoopLine, target)))
+                {
+                    flow.stashTarget = target;
+                    flow.stashTargetValid = true;
+                    break;
+                }
+            }
+        }
+
         bool stashTargetPlanned = false;
-        for (NodeId target : SnoopTargets(transaction.request.Line()))
+        for (NodeId target : targets)
         {
             if (target != transaction.request.source)
             {
                 transaction.snoopTargets.push_back(target);
-                stashTargetPlanned |= IsStashRequest(transaction.request.opcode) && target == transaction.request.returnNid;
+                stashTargetPlanned |= flow.stashTargetValid && target == flow.stashTarget;
             }
         }
         if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite &&
-            IsStashRequest(transaction.request.opcode) && transaction.request.stashNidValid &&
-            transaction.request.returnNid != transaction.request.source && !stashTargetPlanned)
-            transaction.snoopTargets.push_back(transaction.request.returnNid);
+            IsStashRequest(transaction.request.opcode) && flow.stashTargetValid &&
+            flow.stashTarget != transaction.request.source && !stashTargetPlanned)
+            transaction.snoopTargets.push_back(flow.stashTarget);
         transaction.pendingSnoops.clear();
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
@@ -229,12 +245,19 @@ namespace CHI::Lunatic {
         context.requesterDirty = flow.dataDirty;
         context.evictionHasData = true;
         context.allocationHint = CHI::Eb::MemAttrs::ExtractAllocate(transaction.request.memAttr) != 0;
-        const PolicyDecision decision = policy->OnImmediateWrite(context);
+        PolicyDecision decision = policy->OnImmediateWrite(context);
+        const bool targetlessStash = IsStashRequest(transaction.request.opcode) && !transaction.request.stashNidValid;
+        if (targetlessStash)
+        {
+            decision.allocateHome = true;
+            decision.retainHome = transaction.homeHit;
+            decision.removeHome = false;
+        }
         flow.allocateHome = decision.allocateHome;
         flow.retainHome = decision.retainHome;
         flow.removeHome = decision.removeHome;
-        flow.mergeImmediateHome = decision.mergeCopyback &&
-            (decision.allocateHome || decision.retainHome || transaction.homeHit);
+        flow.mergeImmediateHome = targetlessStash || (decision.mergeCopyback &&
+            (decision.allocateHome || decision.retainHome || transaction.homeHit));
 
         if (flow.mergeImmediateHome && !transaction.homeHit)
         {

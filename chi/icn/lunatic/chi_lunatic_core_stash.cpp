@@ -15,8 +15,10 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         flow.snoopLine = transaction.request.Line();
         flow.responseForm = transaction.handle % 3;
-        if (transaction.request.stashNidValid && transaction.request.returnNid != transaction.request.source)
-            transaction.snoopTargets.push_back(transaction.request.returnNid);
+        flow.stashTarget = transaction.request.returnNid;
+        flow.stashTargetValid = transaction.request.stashNidValid;
+        if (flow.stashTargetValid && flow.stashTarget != transaction.request.source)
+            transaction.snoopTargets.push_back(flow.stashTarget);
         transaction.pendingSnoops.clear();
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;

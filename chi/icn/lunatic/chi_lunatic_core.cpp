@@ -574,11 +574,16 @@ namespace CHI::Lunatic {
             case Phase::Decode:
             {
                 const auto requestClass = ClassifyRequest(transaction.request.opcode);
+                const bool invalidStashTarget = IsStashRequest(transaction.request.opcode) &&
+                    ((!transaction.request.stashNidValid &&
+                      (transaction.request.returnNid != 0 || transaction.request.stashLpidValid ||
+                       transaction.request.stashLpid != 0)) ||
+                     (transaction.request.stashNidValid &&
+                      (!IsSnoopableRequester(options, transaction.request.returnNid) ||
+                       (!transaction.request.stashLpidValid && transaction.request.stashLpid != 0))));
                 const bool invalidStash = (requestClass == RequestClass::Stash &&
                     (transaction.request.size != 6 || transaction.request.order != 0 || transaction.request.expCompAck)) ||
-                    (IsStashRequest(transaction.request.opcode) && !transaction.request.stashNidValid) ||
-                    (IsStashRequest(transaction.request.opcode) && transaction.request.stashNidValid &&
-                     !IsSnoopableRequester(options, transaction.request.returnNid)) ||
+                    invalidStashTarget ||
                     (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteUniqueFullStash &&
                      transaction.request.size != 6);
                 const bool invalidCleanUnique = requestClass == RequestClass::CleanUnique &&

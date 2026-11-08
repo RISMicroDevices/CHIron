@@ -108,10 +108,10 @@ namespace CHI::Lunatic {
             case RequestClass::MakeUnique: return SNP::SnpUnique;
             case RequestClass::MakeReadUnique: return SNP::SnpCleanInvalid;
             case RequestClass::ImmediateWrite:
-                if (target == transaction.request.returnNid &&
+                if (flow.stashTargetValid && target == flow.stashTarget &&
                     transaction.request.opcode == REQ::WriteUniquePtlStash)
                     return SNP::SnpUniqueStash;
-                if (target == transaction.request.returnNid &&
+                if (flow.stashTargetValid && target == flow.stashTarget &&
                     transaction.request.opcode == REQ::WriteUniqueFullStash)
                     return SNP::SnpMakeInvalidStash;
                 return SNP::SnpUnique;
@@ -126,7 +126,7 @@ namespace CHI::Lunatic {
                     return SNP::SnpCleanInvalid;
                 return SNP::SnpMakeInvalid;
             case RequestClass::Stash:
-                if (target != transaction.request.returnNid)
+                if (!flow.stashTargetValid || target != flow.stashTarget)
                     return SNP::SnpUnique;
                 return transaction.request.opcode == REQ::StashOnceUnique ||
                     transaction.request.opcode == REQ::StashOnceSepUnique ? SNP::SnpStashUnique : SNP::SnpStashShared;
