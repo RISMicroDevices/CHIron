@@ -306,6 +306,18 @@ int main(const int argc, const char* argv[])
             lunatic = std::make_unique<Cohestra::LunaticModel>(
                 *chiToRNInterface, lunaticConfiguration.model);
             lunaticLink.SetProtocolDrained([model = lunatic.get()] { return model->IsDrained(); });
+            lunaticLink.SetSnoopCallbacks(
+                [model = lunatic.get(), transport = chiToRNInterface.get()](size_t port) {
+                    if (model->HasSnoopActivity(port))
+                        return true;
+                    for (const auto& status : transport->GetPortStatus(port))
+                        if (status.rxQueue)
+                            return true;
+                    return false;
+                },
+                [model = lunatic.get()](size_t port, bool allowed) {
+                    model->SetSnoopAllowed(port, allowed);
+                });
         }
         catch (const std::exception& error)
         {

@@ -1,4 +1,4 @@
-#include "common.hpp"
+#include "driver.hpp"
 #include "cchi/cohestra/cohestra_v3/interface_chi.hpp"
 #include "cchi/cohestra/cohestra_lunatic_link.hpp"
 
@@ -136,6 +136,7 @@ namespace {
         uint8_t chi_rn0_rxlinkactivereq = 0;
         uint8_t chi_rn0_rxlinkactiveack = 0;
         uint8_t chi_rn0_rxsactive = 0;
+        uint8_t chi_rn0_syscoreq = 0;
         uint8_t chi_rn0_syscoack = 0;
     };
 
@@ -464,4 +465,91 @@ LUNATIC_TEST(Stage9LunaticRemoteDeactivationReturnsFinalProtocol)
     LUNATIC_CHECK(!mock.chi_rn0_txlinkactiveack);
     LUNATIC_CHECK(!mock.chi_rn0_rxsactive);
     LUNATIC_CHECK(transport.ValidateCreditAccounting());
+}
+
+LUNATIC_TEST(Stage9LunaticSyscoConnectIsIndependentOfLinkActive)
+{
+    LinkMock mock;
+    LinkTransport transport(&mock);
+    LinkControl link(&mock, &transport);
+    link.Reset();
+    link.SetActive(false);
+    mock.chi_rn0_syscoreq = 1;
+    link.TickPreHandshake();
+    LUNATIC_CHECK(mock.chi_rn0_syscoack);
+    LUNATIC_CHECK(mock.chi_rn0_rxsactive);
+    LUNATIC_CHECK(!mock.chi_rn0_rxlinkactivereq);
+    LUNATIC_CHECK(!mock.chi_rn0_txlinkactiveack);
+}
+
+LUNATIC_TEST(Stage9LunaticSyscoDisconnectDrainsAndReconnects)
+{
+    LinkMock mock;
+    LinkTransport transport(&mock);
+    LinkControl link(&mock, &transport);
+    bool activity = false;
+    bool allowed = false;
+    link.SetSnoopCallbacks(
+        [&](size_t) { return activity; },
+        [&](size_t, bool value) { allowed = value; });
+    link.Reset();
+    link.SetActive(false);
+    mock.chi_rn0_syscoreq = 1;
+    link.TickPreHandshake();
+    LUNATIC_CHECK(mock.chi_rn0_syscoack);
+    LUNATIC_CHECK(allowed);
+
+    activity = true;
+    mock.chi_rn0_syscoreq = 0;
+    link.TickPreHandshake();
+    LUNATIC_CHECK(mock.chi_rn0_syscoack);
+    LUNATIC_CHECK(!allowed);
+
+    mock.chi_rn0_syscoreq = 1;
+    link.TickPreHandshake();
+    LUNATIC_CHECK(mock.chi_rn0_syscoack);
+    LUNATIC_CHECK(allowed);
+
+    mock.chi_rn0_syscoreq = 0;
+    link.TickPreHandshake();
+    LUNATIC_CHECK(mock.chi_rn0_syscoack);
+    LUNATIC_CHECK(!allowed);
+    activity = false;
+    link.TickPreHandshake();
+    LUNATIC_CHECK(!mock.chi_rn0_syscoack);
+    LUNATIC_CHECK(!mock.chi_rn0_rxsactive);
+}
+
+LUNATIC_TEST(Stage9LunaticSnoopActivityTracksOutstanding)
+{
+    using namespace CHI::Lunatic;
+    Driver<Config256> driver;
+    const uint64_t address = 0x90000;
+    LineData data{};
+    for (size_t index = 0; index < data.size(); ++index)
+        data[index] = uint8_t(index * 5 + 5);
+    ByteEnables enables{};
+    enables.fill(1);
+
+    LUNATIC_CHECK(driver.node.PushRXREQ(driver.Request(CHI::Eb::Opcodes::REQ::WriteBackFull, 6, 90, address)));
+    const auto copyback = driver.NextRSP(CHI::Eb::Opcodes::RSP::CompDBIDResp);
+    driver.WriteData(6, 90, copyback.DBID(), data, enables, CHI::Eb::Opcodes::DAT::CopyBackWrData,
+                     CHI::Eb::Resps::CopyBackWrData_UD_PD);
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.ReadData(6, 91, address, CHI::Eb::Opcodes::REQ::ReadUnique) == data);
+    driver.Quiesce();
+
+    LUNATIC_CHECK(driver.node.PushRXREQ(driver.Request(CHI::Eb::Opcodes::REQ::ReadUnique, 4, 92, address, true)));
+    const auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpUnique);
+    LUNATIC_CHECK(snoop.target == 6);
+    LUNATIC_CHECK(driver.node.HasSnoopActivity(6));
+    driver.WriteData(6, 92, snoop.flit.TxnID(), data, enables, CHI::Eb::Opcodes::DAT::SnpRespData,
+                     CHI::Eb::Resps::SnpRespData_I_PD);
+    driver.Tick();
+    LUNATIC_CHECK(!driver.node.HasSnoopActivity(6));
+    const auto read = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+    driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+    driver.CompAck(4, read.DBID());
+    driver.Quiesce();
+    LUNATIC_CHECK(driver.node.GetErrors().empty());
 }

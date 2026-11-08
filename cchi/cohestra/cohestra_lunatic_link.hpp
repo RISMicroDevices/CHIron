@@ -139,12 +139,16 @@ namespace Cohestra {
         using Transport = LunaticCHIToRNInterfaceT<VT, ChannelPolicy>;
 
     private:
-        VT*                         verilated;
-        Transport*                  transport;
-        bool                        active = false;
-        std::array<bool, 8>         transmitStopped{};
-        std::array<bool, 8>         remoteTransmitRun{};
-        std::function<bool()>       protocolDrained;
+        VT*                                      verilated;
+        Transport*                               transport;
+        bool                                     active = false;
+        bool                                     reset = true;
+        std::array<bool, 8>                      transmitStopped{};
+        std::array<bool, 8>                      remoteTransmitRun{};
+        std::array<bool, 8>                      syscoDisconnecting{};
+        std::function<bool()>                    protocolDrained;
+        std::function<bool(size_t)>              snoopActivity;
+        std::function<void(size_t, bool)>        snoopAllowed;
 
         bool PortProtocolDrained(size_t port) const noexcept
         {
@@ -222,17 +226,27 @@ namespace Cohestra {
             protocolDrained = std::move(callback);
         }
 
+        void SetSnoopCallbacks(std::function<bool(size_t)> activity,
+                               std::function<void(size_t, bool)> allowed) noexcept
+        {
+            snoopActivity = std::move(activity);
+            snoopAllowed = std::move(allowed);
+        }
+
         void Reset() noexcept
         {
             active = false;
+            reset = true;
             transmitStopped.fill(true);
             remoteTransmitRun.fill(false);
+            syscoDisconnecting.fill(false);
             TickPreHandshake();
         }
 
         void SetActive(bool value) noexcept
         {
             active = value;
+            reset = false;
             if (active)
             {
                 transmitStopped.fill(false);
@@ -246,30 +260,62 @@ namespace Cohestra {
             if constexpr (HasPort##port()) \
             { \
                 using Traits = details::V3CHILinkPinTraits<VT, port>; \
-                const bool transmitRun = Traits::RxReq(*verilated) && Traits::RxAck(*verilated); \
-                if (transmitRun) \
-                    remoteTransmitRun[port] = true; \
-                if (active && Traits::RxAck(*verilated)) \
-                    transmitStopped[port] = false; \
-                else if (!transmitStopped[port] && PortProtocolDrained(port) && \
-                    (!active || remoteTransmitRun[port])) \
-                    transmitStopped[port] = true; \
-                Traits::RxReq(*verilated) = transmitStopped[port] ? 0 : 1; \
-                bool acknowledge = Traits::TxAck(*verilated) != 0; \
-                if (Traits::TxReq(*verilated)) \
+                if (reset) \
                 { \
-                    if (active || acknowledge) \
-                        acknowledge = true; \
+                    Traits::RxReq(*verilated) = 0; \
+                    Traits::TxAck(*verilated) = 0; \
+                    Traits::RxSActive(*verilated) = 0; \
+                    Traits::SyscoAck(*verilated) = 0; \
+                    if (snoopAllowed) \
+                        snoopAllowed(port, false); \
                 } \
-                else if (acknowledge && ReceiveCreditsReturned(port)) \
-                    acknowledge = false; \
-                Traits::TxAck(*verilated) = acknowledge ? 1 : 0; \
-                Traits::RxSActive(*verilated) = Traits::RxReq(*verilated) || acknowledge ? 1 : 0; \
-                Traits::SyscoAck(*verilated) = active ? 1 : 0; \
-                if (transmitStopped[port]) \
-                    QueueCreditReturns(port); \
-                if (!Traits::RxReq(*verilated) && !Traits::RxAck(*verilated) && TransmitCreditsReturned(port)) \
-                    remoteTransmitRun[port] = false; \
+                else \
+                { \
+                    const bool transmitRun = Traits::RxReq(*verilated) && Traits::RxAck(*verilated); \
+                    if (transmitRun) \
+                        remoteTransmitRun[port] = true; \
+                    if (active && Traits::RxAck(*verilated)) \
+                        transmitStopped[port] = false; \
+                    else if (!transmitStopped[port] && PortProtocolDrained(port) && \
+                        (!active || remoteTransmitRun[port])) \
+                        transmitStopped[port] = true; \
+                    Traits::RxReq(*verilated) = transmitStopped[port] ? 0 : 1; \
+                    bool acknowledge = Traits::TxAck(*verilated) != 0; \
+                    if (Traits::TxReq(*verilated)) \
+                    { \
+                        if (active || acknowledge) \
+                            acknowledge = true; \
+                    } \
+                    else if (acknowledge && ReceiveCreditsReturned(port)) \
+                        acknowledge = false; \
+                    Traits::TxAck(*verilated) = acknowledge ? 1 : 0; \
+                    bool syscoAck = Traits::SyscoAck(*verilated) != 0; \
+                    if (Traits::SyscoReq(*verilated)) \
+                    { \
+                        syscoDisconnecting[port] = false; \
+                        syscoAck = true; \
+                    } \
+                    else if (syscoAck) \
+                    { \
+                        syscoDisconnecting[port] = true; \
+                        if (!snoopActivity || !snoopActivity(port)) \
+                        { \
+                            syscoAck = false; \
+                            syscoDisconnecting[port] = false; \
+                        } \
+                    } \
+                    else \
+                        syscoDisconnecting[port] = false; \
+                    Traits::SyscoAck(*verilated) = syscoAck ? 1 : 0; \
+                    Traits::RxSActive(*verilated) = \
+                        Traits::RxReq(*verilated) || acknowledge || Traits::SyscoReq(*verilated) || syscoAck ? 1 : 0; \
+                    if (snoopAllowed) \
+                        snoopAllowed(port, Traits::SyscoReq(*verilated) != 0); \
+                    if (transmitStopped[port]) \
+                        QueueCreditReturns(port); \
+                    if (!Traits::RxReq(*verilated) && !Traits::RxAck(*verilated) && TransmitCreditsReturned(port)) \
+                        remoteTransmitRun[port] = false; \
+                } \
             }
             _LUNATIC_TICK_LINK(0)
             _LUNATIC_TICK_LINK(1)

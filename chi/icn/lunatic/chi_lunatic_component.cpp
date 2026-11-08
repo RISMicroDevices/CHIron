@@ -40,6 +40,7 @@ namespace CHI::Lunatic {
     }
 
     bool Core::HasInflight() const noexcept { return impl->HasInflight(); }
+    bool Core::HasSnoopActivity(NodeId target) const noexcept { return impl->HasSnoopActivity(target); }
 
     bool Core::PushRXREQ(const Request& flit)
     {

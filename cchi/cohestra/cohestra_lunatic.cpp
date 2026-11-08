@@ -89,6 +89,19 @@ namespace Cohestra {
         return iter->second;
     }
 
+    bool LunaticModel::HasSnoopActivity(size_t port) const noexcept
+    {
+        for (const auto& route : routes)
+            if (route.port == port)
+                return Home().HasSnoopActivity(route.nodeId);
+        return true;
+    }
+
+    void LunaticModel::SetSnoopAllowed(size_t port, bool allowed) noexcept
+    {
+        snoopAllowed[port] = allowed;
+    }
+
     void LunaticModel::ReportError(std::string reason) noexcept
     {
         if (!failed)
@@ -244,6 +257,9 @@ namespace Cohestra {
                 ReportError("Lunatic snoop targets an unknown RN");
                 return;
             }
+            const auto allowed = snoopAllowed.find(*target);
+            if (allowed != snoopAllowed.end() && !allowed->second)
+                return;
             if (rnInterface->PushRXSNP(*target, emission->flit))
                 Home().PopTXSNP();
             else

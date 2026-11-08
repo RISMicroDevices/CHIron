@@ -13,6 +13,7 @@ namespace details {
     { t.chi_rn ## PORT ## _rxlinkactivereq } -> std::convertible_to<uint8_t&>; \
     { t.chi_rn ## PORT ## _rxlinkactiveack } -> std::convertible_to<uint8_t&>; \
     { t.chi_rn ## PORT ## _rxsactive } -> std::convertible_to<uint8_t&>; \
+    { t.chi_rn ## PORT ## _syscoreq } -> std::convertible_to<uint8_t&>; \
     { t.chi_rn ## PORT ## _syscoack } -> std::convertible_to<uint8_t&>
 
 #define COHESTRA_V3_DECLARE_CHI_LINK_CONCEPT(PORT) \
@@ -44,6 +45,7 @@ namespace details {
             static uint8_t& RxReq(VT& v) noexcept { return v.chi_rn ## PORT ## _rxlinkactivereq; } \
             static uint8_t& RxAck(VT& v) noexcept { return v.chi_rn ## PORT ## _rxlinkactiveack; } \
             static uint8_t& RxSActive(VT& v) noexcept { return v.chi_rn ## PORT ## _rxsactive; } \
+            static uint8_t& SyscoReq(VT& v) noexcept { return v.chi_rn ## PORT ## _syscoreq; } \
             static uint8_t& SyscoAck(VT& v) noexcept { return v.chi_rn ## PORT ## _syscoack; } \
         }
 

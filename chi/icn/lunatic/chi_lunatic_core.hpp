@@ -521,6 +521,7 @@ namespace CHI::Lunatic {
         void Error(TransactionHandle handle, std::string reason);
         void Deny(const Request& request, std::string reason);
         bool HasInflight() const noexcept;
+        bool HasSnoopActivity(NodeId target) const noexcept;
         bool ValidateInvariants() const noexcept;
     };
 

@@ -29,6 +29,7 @@ namespace CHI::Lunatic {
         void Tick(Time time) { node.Tick(time); }
         bool Drain() { return node.Drain(); }
         bool HasInflight() const noexcept { return node.HasInflight(); }
+        bool HasSnoopActivity(NodeId target) const noexcept { return node.HasSnoopActivity(target); }
 
         bool PushRXREQ(const REQFlit& flit) { return node.PushRXREQ(flit); }
         bool PushRXRSP(const RSPFlit& flit) { return node.PushRXRSP(flit); }

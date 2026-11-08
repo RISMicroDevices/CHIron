@@ -12,6 +12,7 @@ namespace {
         uint8_t chi_rn0_rxlinkactivereq = 0;
         uint8_t chi_rn0_rxlinkactiveack = 0;
         uint8_t chi_rn0_rxsactive = 0;
+        uint8_t chi_rn0_syscoreq = 0;
         uint8_t chi_rn0_syscoack = 0;
     };
 

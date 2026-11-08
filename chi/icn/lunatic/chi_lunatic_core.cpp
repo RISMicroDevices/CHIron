@@ -1112,6 +1112,22 @@ namespace CHI::Lunatic {
                snoopIdAllocator.Size() != 0 || (options.backend == BackendKind::AXI && axi.HasInflight());
     }
 
+    bool Core::Impl::HasSnoopActivity(NodeId target) const noexcept
+    {
+        for (const TransactionHandle handle : tracker.Handles())
+        {
+            const Transaction* transaction = tracker.Find(handle);
+            if (transaction->snoopsRequired)
+                for (const NodeId candidate : transaction->snoopTargets)
+                    if (candidate == target)
+                        return true;
+            for (const NodeId pending : transaction->pendingSnoops)
+                if (pending == target)
+                    return true;
+        }
+        return false;
+    }
+
     bool Core::Impl::ValidateInvariants() const noexcept
     {
         if (!tracker.Validate() || !hazards.Validate() || !ordering.Validate())

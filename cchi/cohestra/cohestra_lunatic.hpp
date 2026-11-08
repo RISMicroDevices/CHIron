@@ -45,6 +45,7 @@ namespace Cohestra {
         HomeVariant                         home;
         std::vector<RNPort>                 routes;
         std::map<NodeId, size_t>            portByNode;
+        std::map<size_t, bool>              snoopAllowed;
         std::vector<std::string>            integrationErrors;
         size_t                              nextPort = 0;
         uint64_t                            lastTickTime = 0;
@@ -64,6 +65,8 @@ namespace Cohestra {
         HomeNode&                       GetNode() noexcept;
         const HomeNode&                 GetNode() const noexcept;
         const std::vector<std::string>& GetIntegrationErrors() const noexcept;
+        bool                            HasSnoopActivity(size_t port) const noexcept;
+        void                            SetSnoopAllowed(size_t port, bool allowed) noexcept;
 
     private:
         HomeNode&                           Home() noexcept;

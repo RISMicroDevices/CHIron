@@ -35,6 +35,7 @@ namespace CHI::Lunatic {
         void Tick(Time time);
         bool Drain();
         bool HasInflight() const noexcept;
+        bool HasSnoopActivity(NodeId target) const noexcept;
 
         bool PushRXREQ(const Request& flit);
         bool PushRXRSP(const Response& flit);
@@ -403,6 +404,7 @@ namespace CHI::Lunatic {
         void Tick(Time time) { core.Tick(time); }
         bool Drain() { return core.Drain(); }
         bool HasInflight() const noexcept { return core.HasInflight(); }
+        bool HasSnoopActivity(NodeId target) const noexcept { return core.HasSnoopActivity(target); }
 
         bool PushRXREQ(const REQFlit& flit) { return core.PushRXREQ(Decode(flit)); }
         bool PushRXRSP(const RSPFlit& flit) { return core.PushRXRSP(Decode(flit)); }
