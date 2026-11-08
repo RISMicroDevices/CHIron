@@ -290,7 +290,7 @@ int main(const int argc, const char* argv[])
     std::unique_ptr<Cohestra::LunaticModel> lunatic;
     auto forceRetry = std::make_shared<bool>(lunaticConfiguration.retryForceOnce);
     auto dctDecisions = std::make_shared<size_t>(0);
-    Cohestra::V3CHILinkControl<VerilatedTop> lunaticLink(&top);
+    Cohestra::LunaticCHILinkControl<VerilatedTop> lunaticLink(&top, chiToRNInterface.get());
     if (lunaticConfiguration.enabled)
     {
         for (const auto& route : lunaticConfiguration.model.rnPorts)
@@ -305,6 +305,7 @@ int main(const int argc, const char* argv[])
         {
             lunatic = std::make_unique<Cohestra::LunaticModel>(
                 *chiToRNInterface, lunaticConfiguration.model);
+            lunaticLink.SetProtocolDrained([model = lunatic.get()] { return model->IsDrained(); });
         }
         catch (const std::exception& error)
         {
