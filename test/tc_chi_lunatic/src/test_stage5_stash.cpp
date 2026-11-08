@@ -210,11 +210,18 @@ LUNATIC_TEST(Stage5IndependentStashReportsDataPull)
     LUNATIC_CHECK(driver.node.PushRXREQ(request));
     auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpStashUnique);
     RawSnoopResponse(driver, 5, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I, 1);
-    LUNATIC_CHECK(!driver.node.GetErrors().empty());
-    RawSnoopResponse(driver, 5, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
     LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).TxnID() == 7);
+    DataBufferId impliedDBID = 0;
+    for (size_t beat = 0; beat < 2; ++beat)
+    {
+        const auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+        LUNATIC_CHECK(data.TgtID() == 5 && data.TxnID() == 0);
+        LUNATIC_CHECK(data.RespErr() == CHI::Eb::RespErrs::OK);
+        impliedDBID = data.DBID();
+    }
+    driver.CompAck(5, impliedDBID);
     driver.Quiesce();
-    LUNATIC_CHECK(!driver.node.GetErrors().empty());
+    LUNATIC_CHECK(driver.node.GetErrors().empty());
 }
 
 LUNATIC_TEST(Stage5IndependentStashRejectsInvalidGeometry)

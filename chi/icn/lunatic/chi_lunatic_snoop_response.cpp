@@ -428,11 +428,26 @@ namespace CHI::Lunatic {
         const OrdinarySnoopResponse& response) noexcept
     {
         namespace SNP = CHI::Eb::Opcodes::SNP;
-        const bool hasDataSource = response.withData && response.opcode != SNP::SnpUniqueStash &&
-            response.opcode != SNP::SnpMakeInvalidStash && response.opcode != SNP::SnpStashUnique &&
-            response.opcode != SNP::SnpStashShared;
-        if ((response.dataPull != 0 && !hasDataSource) ||
-            (response.retToSrc && RetToSrcMustBeZero(response.opcode)))
+        const bool stashSnoop = response.opcode == SNP::SnpUniqueStash ||
+            response.opcode == SNP::SnpMakeInvalidStash || response.opcode == SNP::SnpStashUnique ||
+            response.opcode == SNP::SnpStashShared;
+        if (!stashSnoop && response.dataPull != 0 && !response.withData)
+            return false;
+        if (stashSnoop && response.dataPull != 0)
+        {
+            if (response.dataPull != 1)
+                return false;
+            if (response.withData)
+            {
+                if (response.partial ? response.resp != CHI::Eb::Resps::SnpRespDataPtl_I_PD
+                                     : response.resp != CHI::Eb::Resps::SnpRespData_I_PD)
+                    return false;
+            }
+            else if (response.resp != CHI::Eb::Resps::SnpResp_I)
+                return false;
+            return true;
+        }
+        if (response.retToSrc && RetToSrcMustBeZero(response.opcode))
             return false;
         for (CacheState initial : possibleInitial)
             if (MatchesResponse(response.opcode, initial, response))

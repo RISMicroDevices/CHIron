@@ -76,6 +76,13 @@ namespace CHI::Lunatic {
         std::map<NodeId, bool>     snoopDoNotGoToSD;
         std::map<NodeId, TransactionId>
                                    snoopIds;
+        std::map<NodeId, DataBufferId>
+                                   dataPullIds;
+        std::vector<TransactionHandle>
+                                   dataPullChildren;
+        TransactionHandle            dataPullParent = INVALID_TRANSACTION;
+        bool                       dataPullWriteStash = false;
+        bool                       dataPullHomeDataAvailable = false;
         bool                       readReceiptSent = false;
         bool                       readReceiptEmitted = false;
         bool                       separatedResponse = false;
@@ -154,6 +161,7 @@ namespace CHI::Lunatic {
         LineKey                    snoopLine{};
         NodeId                     stashTarget = 0;
         bool                       stashTargetValid = false;
+        bool                       targetlessSharedPeer = false;
         bool                       snoopForVictim = false;
         bool                       victimPending = false;
         bool                       victimLinked = false;
@@ -412,6 +420,7 @@ namespace CHI::Lunatic {
         void ActionImmediateWrite(Transaction& transaction);
         void QueueImmediateResponse(Transaction& transaction);
         void ActionEvictOrEvict(Transaction& transaction);
+        bool PrepareTargetlessStash(Transaction& transaction);
         void ResolveStash(Transaction& transaction);
         void ActionStash(Transaction& transaction);
         void ActionPersistence(Transaction& transaction);
@@ -473,6 +482,12 @@ namespace CHI::Lunatic {
         bool       EmitSnoops(Transaction& transaction);
         void       ProcessSnoopRSP(Transaction& transaction, const Response& flit);
         void       ProcessSnoopDAT(Transaction& transaction, const Data& flit);
+        bool       CreateDataPullTransaction(Transaction& transaction, NodeId stashee,
+                                             DataBufferId dbid, uint8_t qos, uint8_t traceTag);
+        bool       HandleDataPullResponse(Transaction& transaction, const Response& flit);
+        bool       HandleDataPullResponse(Transaction& transaction, const Data& flit);
+        bool       HandleDataPullResponse(Transaction& transaction, NodeId stashee,
+                                          DataBufferId dbid, uint8_t dataPull, uint8_t qos, uint8_t traceTag);
         void       CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp,
                                        bool withData, bool partial = false);
         CacheState DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp,

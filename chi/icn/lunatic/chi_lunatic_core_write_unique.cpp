@@ -258,6 +258,9 @@ namespace CHI::Lunatic {
         flow.removeHome = decision.removeHome;
         flow.mergeImmediateHome = targetlessStash || (decision.mergeCopyback &&
             (decision.allocateHome || decision.retainHome || transaction.homeHit));
+        for (TransactionHandle child : flow.dataPullChildren)
+            if (const auto implied = flows.find(child); implied != flows.end())
+                implied->second.dataPullHomeDataAvailable = flow.mergeImmediateHome;
 
         if (flow.mergeImmediateHome && !transaction.homeHit)
         {

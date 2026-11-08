@@ -386,6 +386,8 @@ namespace CHI::Lunatic {
         }
         if (flit.respErr == CHI::Eb::RespErrs::NDERR)
             transaction.responseRespErr = MergeResponseErrors(transaction.responseRespErr, flit.respErr);
+        if (!HandleDataPullResponse(transaction, flit))
+            return;
         CompleteSnoopTarget(transaction, flit.source, flit.resp, false);
     }
 
@@ -438,6 +440,8 @@ namespace CHI::Lunatic {
             Error(transaction.handle, "illegal snoop data response");
             return;
         }
+        if (!HandleDataPullResponse(transaction, flit))
+            return;
         flow.snoopResponses[flit.source] = flit.resp;
 
         const CacheState initial = snoopFilter.State(flow.snoopLine, flit.source);

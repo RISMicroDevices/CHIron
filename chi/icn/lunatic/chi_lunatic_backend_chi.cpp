@@ -190,6 +190,10 @@ namespace CHI::Lunatic {
     void Core::Impl::StartMemoryRead(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (flow.dataPullWriteStash)
+            flow.dmtActive = options.dmtEnabled && options.backend == BackendKind::CHI &&
+                CHI::Eb::MemAttrs::ExtractAllocate(transaction.request.memAttr) == 0 &&
+                !flow.dataPullHomeDataAvailable;
         const bool orderedSeparatedDMT = flow.dmtActive && flow.separatedResponse && transaction.request.order != 0;
         if (orderedSeparatedDMT && !ordering.CanIssueDMT(transaction))
         {

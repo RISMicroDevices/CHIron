@@ -218,7 +218,11 @@ LUNATIC_TEST(Stage9OrdinarySnoopResponseSpecificationMatrix)
     {
         OrdinarySnoopResponse response = MakeResponse(opcode, CHI::Eb::Resps::SnpResp_I);
         response.dataPull = 1;
-        CheckEvaluation(false, CacheState::I, response, { CacheState::I });
+        const bool stashSnoop = opcode == CHI::Eb::Opcodes::SNP::SnpUniqueStash ||
+            opcode == CHI::Eb::Opcodes::SNP::SnpMakeInvalidStash ||
+            opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
+            opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
+        CheckEvaluation(stashSnoop, CacheState::I, response, { CacheState::I });
     }
 }
 

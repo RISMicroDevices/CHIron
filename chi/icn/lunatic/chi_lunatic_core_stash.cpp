@@ -10,6 +10,45 @@ namespace CHI::Lunatic {
 
     }
 
+    bool Core::Impl::PrepareTargetlessStash(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.directoryCommitted)
+            return true;
+        if (flow.targetlessSharedPeer)
+        {
+            transaction.homeHit = true;
+            flow.directoryCommitted = true;
+            return true;
+        }
+        if (transaction.homeHit)
+        {
+            flow.directoryCommitted = true;
+            return true;
+        }
+        if (!flow.snoopDataValid && !transaction.Complete(COMPLETE_MEMORY))
+        {
+            StartMemoryRead(transaction);
+            return false;
+        }
+        if (!PrepareVictim(transaction))
+        {
+            transaction.phase = Phase::Action;
+            transaction.readyTime = time;
+            return false;
+        }
+
+        const std::optional<size_t> currentWay = directory.FindWay(transaction.request.Line());
+        const size_t way = currentWay ? *currentWay : flow.victimWay;
+        HomeLine& home = InstallHome(transaction.request.Line(), way, transaction.data,
+            flow.homeDirty || flow.dataDirty, time);
+        CopyMetadata(home, transaction, options);
+        home.validBytes = flow.validBytes;
+        transaction.homeHit = true;
+        flow.directoryCommitted = true;
+        return true;
+    }
+
     void Core::Impl::ResolveStash(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
@@ -17,18 +56,45 @@ namespace CHI::Lunatic {
         flow.responseForm = transaction.handle % 3;
         flow.stashTarget = transaction.request.returnNid;
         flow.stashTargetValid = transaction.request.stashNidValid;
-        if (flow.stashTargetValid && flow.stashTarget != transaction.request.source)
-            transaction.snoopTargets.push_back(flow.stashTarget);
+        if (flow.stashTargetValid)
+        {
+            if (flow.stashTarget != transaction.request.source)
+                transaction.snoopTargets.push_back(flow.stashTarget);
+        }
+        else
+        {
+            for (NodeId target : SnoopTargets(transaction.request.Line()))
+            {
+                const CacheState state = snoopFilter.State(flow.snoopLine, target);
+                flow.targetlessSharedPeer |= state == CacheState::SC || state == CacheState::SD;
+                if (IsUnique(state))
+                    transaction.snoopTargets.push_back(target);
+            }
+            if (transaction.snoopTargets.empty() && !transaction.homeHit && !flow.targetlessSharedPeer)
+                StartMemoryRead(transaction);
+        }
         transaction.pendingSnoops.clear();
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
-        transaction.phase = Phase::Action;
-        transaction.readyTime = time;
+        if (transaction.phase != Phase::WaitMemory)
+        {
+            transaction.phase = Phase::Action;
+            transaction.readyTime = time;
+        }
     }
 
     void Core::Impl::ActionStash(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (!flow.stashTargetValid && !PrepareTargetlessStash(transaction))
+        {
+            if (transaction.phase != Phase::WaitMemory)
+            {
+                transaction.phase = Phase::Action;
+                transaction.readyTime = time;
+            }
+            return;
+        }
         snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
         if (!IsSeparatedStashRequest(transaction.request.opcode))
         {
