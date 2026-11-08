@@ -83,7 +83,7 @@ namespace CHI::Lunatic {
         context.requesterDirty = flow.requesterWasDirty;
         if (ClassifyRequest(transaction.request.opcode) == RequestClass::ReadOnce)
         {
-            for (NodeId target : snoopFilter.Targets(line))
+            for (NodeId target : SnoopTargets(line))
                 context.requesterValid |= IsValid(snoopFilter.State(line, target));
         }
         PolicyDecision decision = ClassifyRequest(transaction.request.opcode) == RequestClass::ReadOnce
@@ -99,7 +99,7 @@ namespace CHI::Lunatic {
         flow.removeHome = decision.removeHome;
 
         size_t otherSharers = 0;
-        for (NodeId target : snoopFilter.Targets(line))
+        for (NodeId target : SnoopTargets(line))
         {
             if (target != transaction.request.source && IsValid(snoopFilter.State(line, target)))
                 ++otherSharers;
@@ -183,7 +183,7 @@ namespace CHI::Lunatic {
             const std::optional<size_t> currentWay = directory.FindWay(line);
             const size_t way = currentWay ? *currentWay : flow.victimWay;
             bool anyRequesterDirty = IsDirty(flow.requesterFinal);
-            for (NodeId target : snoopFilter.Targets(line))
+            for (NodeId target : SnoopTargets(line))
             {
                 if (target != transaction.request.source && IsDirty(snoopFilter.State(line, target)))
                     anyRequesterDirty = true;
@@ -271,7 +271,7 @@ namespace CHI::Lunatic {
         context.evictionHasData = hasData;
         const PolicyDecision decision = policy->OnCopyback(context);
         bool otherRequesterValid = false;
-        for (NodeId target : snoopFilter.Targets(line))
+        for (NodeId target : SnoopTargets(line))
         {
             if (target != transaction.request.source && IsValid(snoopFilter.State(line, target)))
                 otherRequesterValid = true;
@@ -420,7 +420,7 @@ namespace CHI::Lunatic {
         flow.victimLinked = true;
         flow.snoopLine = flow.victimLine;
         flow.snoopForVictim = true;
-        transaction.snoopTargets = snoopFilter.Targets(flow.victimLine);
+        transaction.snoopTargets = SnoopTargets(flow.victimLine);
         transaction.pendingSnoops.clear();
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
@@ -469,13 +469,13 @@ namespace CHI::Lunatic {
         context.line = flow.victimLine;
         context.homeValid = true;
         context.homeDirty = flow.victimDirty;
-        context.requesterValid = !snoopFilter.Targets(flow.victimLine).empty();
+        context.requesterValid = !SnoopTargets(flow.victimLine).empty();
         const PolicyDecision decision = policy->OnHomeEviction(context);
         if (decision.backInvalidate && context.requesterValid && flow.nextSnoop == 0)
         {
             flow.snoopForVictim = true;
             flow.snoopLine = flow.victimLine;
-            transaction.snoopTargets = snoopFilter.Targets(flow.victimLine);
+            transaction.snoopTargets = SnoopTargets(flow.victimLine);
             transaction.pendingSnoops.clear();
             transaction.snoopsRequired = true;
             flow.nextSnoop = 0;

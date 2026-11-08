@@ -19,7 +19,7 @@ namespace CHI::Lunatic {
         flow.expectedBeatMask = AtomicOperandBeatMask(transaction.request, options);
         flow.atomic.resultBeatMask = AtomicResultBeatMask(transaction.request, options);
         flow.responseForm = transaction.handle % 3;
-        for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+        for (NodeId target : SnoopTargets(transaction.request.Line()))
         {
             if (target != transaction.request.source || transaction.request.snoopMe)
                 transaction.snoopTargets.push_back(target);

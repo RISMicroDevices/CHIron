@@ -21,7 +21,7 @@ namespace CHI::Lunatic {
             flow.validBytes.fill(0);
 
         bool stashTargetPlanned = false;
-        for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+        for (NodeId target : SnoopTargets(transaction.request.Line()))
         {
             if (target != transaction.request.source)
             {

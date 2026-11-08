@@ -455,6 +455,7 @@ namespace CHI::Lunatic {
                             const ByteEnables& enables, bool generatedEviction = false);
         bool FetchBaseline(Transaction& transaction);
 
+        std::vector<NodeId> SnoopTargets(const LineKey& line) const;
         uint16_t   SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const;
         void       PlanReadSnoops(Transaction& transaction);
         void       PlanCMOSnoops(Transaction& transaction);

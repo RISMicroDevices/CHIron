@@ -29,7 +29,18 @@ namespace LunaticTest {
         {
             auto& oracle = oracles[requester];
             if (!oracle)
-                oracle = std::make_unique<RNOracle<config>>(home, requester);
+            {
+                CHI::Eb::Xact::NodeTypeEnum role = CHI::Eb::Xact::NodeType::RN_F;
+                if (const auto configured = driver.node.GetOptions().requesterRoles.find(requester);
+                    configured != driver.node.GetOptions().requesterRoles.end())
+                {
+                    if (configured->second == CHI::Lunatic::RequesterRole::RN_D)
+                        role = CHI::Eb::Xact::NodeType::RN_D;
+                    else if (configured->second == CHI::Lunatic::RequesterRole::RN_I)
+                        role = CHI::Eb::Xact::NodeType::RN_I;
+                }
+                oracle = std::make_unique<RNOracle<config>>(home, requester, role);
+            }
             return *oracle;
         }
 

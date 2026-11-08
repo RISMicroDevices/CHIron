@@ -24,11 +24,12 @@ namespace LunaticTest {
         }
 
     public:
-        RNOracle(CHI::Lunatic::NodeId home, CHI::Lunatic::NodeId requester)
+        RNOracle(CHI::Lunatic::NodeId home, CHI::Lunatic::NodeId requester,
+                 CHI::Eb::Xact::NodeTypeEnum role = CHI::Eb::Xact::NodeType::RN_F)
             : home(home), requester(requester)
         {
             global.TOPOLOGY.SetNode(home, CHI::Eb::Xact::NodeType::HN_F);
-            global.TOPOLOGY.SetNode(requester, CHI::Eb::Xact::NodeType::RN_F);
+            global.TOPOLOGY.SetNode(requester, role);
         }
 
         void RegisterRequester(CHI::Lunatic::NodeId requester)

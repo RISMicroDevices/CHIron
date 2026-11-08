@@ -6,6 +6,17 @@
 
 namespace CHI::Lunatic {
 
+    RequesterRole GetRequesterRole(const Options& options, NodeId requester) noexcept
+    {
+        const auto role = options.requesterRoles.find(requester);
+        return role == options.requesterRoles.end() ? RequesterRole::RN_F : role->second;
+    }
+
+    bool IsSnoopableRequester(const Options& options, NodeId requester) noexcept
+    {
+        return GetRequesterRole(options, requester) == RequesterRole::RN_F;
+    }
+
     void ValidateOptions(const Options& options)
     {
         if (!options.inputQueueLimit || !options.outputQueueLimit)

@@ -576,6 +576,8 @@ namespace CHI::Lunatic {
                 const bool invalidStash = (requestClass == RequestClass::Stash &&
                     (transaction.request.size != 6 || transaction.request.order != 0 || transaction.request.expCompAck)) ||
                     (IsStashRequest(transaction.request.opcode) && !transaction.request.stashNidValid) ||
+                    (IsStashRequest(transaction.request.opcode) && transaction.request.stashNidValid &&
+                     !IsSnoopableRequester(options, transaction.request.returnNid)) ||
                     (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteUniqueFullStash &&
                      transaction.request.size != 6);
                 const bool invalidCleanUnique = requestClass == RequestClass::CleanUnique &&

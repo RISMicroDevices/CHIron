@@ -38,6 +38,15 @@ namespace CHI::Lunatic {
 
     }
 
+    std::vector<NodeId> Core::Impl::SnoopTargets(const LineKey& line) const
+    {
+        auto targets = snoopFilter.Targets(line);
+        targets.erase(std::remove_if(targets.begin(), targets.end(), [&](NodeId target) {
+            return !IsSnoopableRequester(options, target);
+        }), targets.end());
+        return targets;
+    }
+
     uint16_t Core::Impl::SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const
     {
         namespace REQ = CHI::Eb::Opcodes::REQ;
@@ -106,7 +115,7 @@ namespace CHI::Lunatic {
             return;
         }
         std::vector<NodeId> candidates;
-        for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+        for (NodeId target : SnoopTargets(transaction.request.Line()))
         {
             if (target == transaction.request.source)
                 continue;
@@ -128,7 +137,7 @@ namespace CHI::Lunatic {
         if (candidates.empty() && !transaction.homeHit &&
             ClassifyRequest(transaction.request.opcode) != RequestClass::MakeUnique)
         {
-            for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+            for (NodeId target : SnoopTargets(transaction.request.Line()))
             {
                 if (target != transaction.request.source)
                 {
@@ -151,7 +160,7 @@ namespace CHI::Lunatic {
         flow.retToSrcUsed = false;
         if (flow.dctActive)
         {
-            const std::vector<NodeId> owners = snoopFilter.Targets(transaction.request.Line());
+            const std::vector<NodeId> owners = SnoopTargets(transaction.request.Line());
             const bool soleProvider = options.preciseSnoopFilter && owners.size() == 1 &&
                 owners.front() == flow.dctTarget;
             const bool uniqueProviderRequired = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique ||
@@ -181,7 +190,7 @@ namespace CHI::Lunatic {
     void Core::Impl::PlanCMOSnoops(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
-        for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+        for (NodeId target : SnoopTargets(transaction.request.Line()))
         {
             if (target == transaction.request.source)
                 continue;
@@ -213,6 +222,14 @@ namespace CHI::Lunatic {
 
         const size_t index = flow.nextSnoop;
         const NodeId target = transaction.snoopTargets[index];
+        if (!IsSnoopableRequester(options, target))
+        {
+            Error(transaction.handle, "snoop target is not an RN-F");
+            transaction.canceled = true;
+            transaction.phase = Phase::Commit;
+            transaction.readyTime = time;
+            return false;
+        }
         Snoop snoop;
         snoop.source = nodeId;
         snoop.target = target;

@@ -4,11 +4,18 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 
 namespace CHI::Lunatic {
 
     class SystemAddressMap;
+
+    enum class RequesterRole : uint8_t {
+        RN_F,
+        RN_D,
+        RN_I
+    };
 
     enum class PolicyKind : uint8_t {
         NINE,
@@ -50,6 +57,7 @@ namespace CHI::Lunatic {
         PolicyKind  policy = PolicyKind::Exclusive;
         BackendKind backend = BackendKind::Internal;
 
+        std::map<NodeId, RequesterRole> requesterRoles;
         std::shared_ptr<const SystemAddressMap> addressMap;
 
         size_t      axiOutstandingLimit = 1;
@@ -70,6 +78,8 @@ namespace CHI::Lunatic {
         bool        dvmEnabled = false;
     };
 
+    RequesterRole GetRequesterRole(const Options& options, NodeId requester) noexcept;
+    bool IsSnoopableRequester(const Options& options, NodeId requester) noexcept;
     void   ValidateOptions(const Options& options);
     size_t BytesPerBeat(const Options& options) noexcept;
     size_t BeatsPerLine(const Options& options) noexcept;
