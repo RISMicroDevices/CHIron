@@ -14,6 +14,7 @@
 #include "chi_lunatic_random.hpp"
 #include "chi_lunatic_sam.hpp"
 #include "chi_lunatic_snoop_filter.hpp"
+#include "chi_lunatic_snoop_id.hpp"
 #include "chi_lunatic_tracker.hpp"
 
 #include <deque>
@@ -73,6 +74,8 @@ namespace CHI::Lunatic {
         std::map<NodeId, uint8_t>  snoopResponses;
         std::map<NodeId, bool>     snoopRetToSrc;
         std::map<NodeId, bool>     snoopDoNotGoToSD;
+        std::map<NodeId, TransactionId>
+                                   snoopIds;
         bool                       readReceiptSent = false;
         bool                       readReceiptEmitted = false;
         bool                       separatedResponse = false;
@@ -83,6 +86,8 @@ namespace CHI::Lunatic {
         bool                       dctSnoopEmitted = false;
         bool                       dctProviderResponded = false;
         NodeId                     dctTarget = 0;
+        TransactionId              dctSnoopId = 0;
+        bool                       dctSnoopIdValid = false;
         uint8_t                    dctFwdState = 0;
         bool                       retToSrcUsed = false;
         bool                       dwtActive = false;
@@ -118,6 +123,8 @@ namespace CHI::Lunatic {
         std::array<uint8_t, 4>     writeRespErr{};
         uint64_t                   writeRespErrMask = 0;
         bool                       victimSnoopFilterOnly = false;
+        TransactionId              allocatedDBID = 0;
+        bool                       allocatedDBIDValid = false;
         bool                       dbidSent = false;
         bool                       compSent = false;
         bool                       persistSent = false;
@@ -208,6 +215,7 @@ namespace CHI::Lunatic {
         std::unique_ptr<CachePolicy>
                                   policy;
         Tracker                   tracker;
+        SnoopIdAllocator          snoopIdAllocator;
         HazardGraph               hazards;
         OrderingTracker           ordering;
         VirtualPipeline           pipeline;
@@ -455,6 +463,7 @@ namespace CHI::Lunatic {
                             const ByteEnables& enables, bool generatedEviction = false);
         bool FetchBaseline(Transaction& transaction);
 
+        bool PrepareDCTId(Transaction& transaction);
         std::vector<NodeId> SnoopTargets(const LineKey& line) const;
         uint16_t   SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const;
         void       PlanReadSnoops(Transaction& transaction);

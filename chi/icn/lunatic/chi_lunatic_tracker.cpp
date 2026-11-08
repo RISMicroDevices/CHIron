@@ -111,6 +111,37 @@ namespace CHI::Lunatic {
         return true;
     }
 
+    bool Tracker::RebindDBID(TransactionHandle handle, DataBufferId dbid)
+    {
+        Transaction* transaction = Find(handle);
+        if (!transaction)
+            return false;
+        if (transaction->dbid == dbid)
+            return true;
+
+        const RequestKey currentKey{ transaction->request.source, transaction->dbid };
+        const RequestKey nextKey{ transaction->request.source, dbid };
+        if (dbidMap.find(nextKey) != dbidMap.end())
+            return false;
+        const auto current = dbidMap.find(currentKey);
+        if (current == dbidMap.end() || current->second != handle)
+            return false;
+
+        dbidMap.erase(current);
+        try {
+            auto [next, inserted] = dbidMap.emplace(nextKey, handle);
+            if (!inserted) {
+                dbidMap.emplace(currentKey, handle);
+                return false;
+            }
+            transaction->dbid = dbid;
+            return true;
+        } catch (...) {
+            dbidMap.emplace(currentKey, handle);
+            throw;
+        }
+    }
+
     bool Tracker::BindSnoop(TransactionHandle handle, NodeId target, TransactionId txnId)
     {
         if (!Find(handle))

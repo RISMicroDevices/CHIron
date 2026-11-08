@@ -38,6 +38,7 @@ namespace CHI::Lunatic {
         flows.clear();
         errors.clear();
         tracker.Clear();
+        snoopIdAllocator.Clear();
         hazards.Clear();
         ordering.Clear();
         directory.Clear();
@@ -615,7 +616,33 @@ namespace CHI::Lunatic {
                 return;
             }
             case Phase::Admit:
-                if (!tracker.BindDBID(transaction.handle, transaction.handle))
+            {
+                bool bound = false;
+                if (tracker.FindDBID(transaction.request.source, transaction.handle) == nullptr)
+                {
+                    bound = tracker.BindDBID(transaction.handle, transaction.handle);
+                }
+                else
+                {
+                    const auto allocated = snoopIdAllocator.Allocate([&](TransactionId candidate) {
+                        return tracker.FindDBID(transaction.request.source, candidate) == nullptr;
+                    });
+                    if (!allocated)
+                    {
+                        pmu.RecordStall(WaitReason::Tracker);
+                        transaction.readyTime = time;
+                        return;
+                    }
+                    bound = tracker.BindDBID(transaction.handle, *allocated);
+                    if (bound)
+                    {
+                        flow.allocatedDBID = *allocated;
+                        flow.allocatedDBIDValid = true;
+                    }
+                    else
+                        snoopIdAllocator.Release(*allocated);
+                }
+                if (!bound)
                 {
                     Error(transaction.handle, "unable to bind database ID");
                     transaction.canceled = true;
@@ -623,10 +650,10 @@ namespace CHI::Lunatic {
                     transaction.readyTime = time;
                     return;
                 }
-                transaction.dbid = transaction.handle;
                 transaction.phase = Phase::Hazard;
                 transaction.readyTime = time;
                 return;
+            }
             case Phase::Hazard:
                 if (!hazards.IsHead(transaction.handle, transaction.request.Line()) ||
                     (flow.victimLinked && !hazards.IsHead(transaction.handle, flow.victimLine)))
@@ -783,6 +810,19 @@ namespace CHI::Lunatic {
         event.line = transaction->request.Line();
         events->Publish(std::move(event), false);
 
+        for (const auto& [target, txnId] : flow.snoopIds)
+            snoopIdAllocator.Release(txnId);
+        flow.snoopIds.clear();
+        if (flow.allocatedDBIDValid)
+        {
+            snoopIdAllocator.Release(flow.allocatedDBID);
+            flow.allocatedDBIDValid = false;
+        }
+        if (flow.dctSnoopIdValid)
+        {
+            snoopIdAllocator.Release(flow.dctSnoopId);
+            flow.dctSnoopIdValid = false;
+        }
         tracker.Retire(handle);
         flows.erase(handle);
         events->DispatchDeferred();
@@ -1009,7 +1049,7 @@ namespace CHI::Lunatic {
             return;
         FlowState& flow = flows.at(transaction->handle);
         if (flow.dctActive && pending.flit.target == flow.dctTarget &&
-            pending.flit.txnId == transaction->handle &&
+            flow.dctSnoopIdValid && pending.flit.txnId == flow.dctSnoopId &&
             pending.flit.fwdNid == transaction->request.source &&
             pending.flit.fwdTxnId == transaction->request.txnId)
             flow.dctSnoopEmitted = true;
@@ -1064,7 +1104,7 @@ namespace CHI::Lunatic {
         return !rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
                !txdat.empty() || !txsnp.empty() || !retries.empty() || !backendRetries.empty() ||
                !backendCredits.empty() || !tracker.Empty() || !hazards.Empty() || !ordering.Empty() ||
-               (options.backend == BackendKind::AXI && axi.HasInflight());
+               snoopIdAllocator.Size() != 0 || (options.backend == BackendKind::AXI && axi.HasInflight());
     }
 
     bool Core::Impl::ValidateInvariants() const noexcept
@@ -1073,6 +1113,8 @@ namespace CHI::Lunatic {
             return false;
         if (!tracker.Empty())
             return true;
+        if (snoopIdAllocator.Size() != 0)
+            return false;
 
         for (size_t set = 0; set < snoopFilter.Sets(); ++set)
         {
