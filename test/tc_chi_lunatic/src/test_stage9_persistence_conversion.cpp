@@ -55,7 +55,8 @@ namespace {
         response.Opcode() = opcode;
         response.Resp() = CHI::Eb::Resps::Comp_I;
         response.RespErr() = respErr;
-        response.PGroupID() = request.PGroupID();
+        if (opcode == CHI::Eb::Opcodes::RSP::CompPersist || opcode == CHI::Eb::Opcodes::RSP::Persist)
+            response.PGroupID() = request.PGroupID();
         LUNATIC_CHECK(driver.node.PushRXRSP(response));
         driver.Tick();
     }
@@ -64,7 +65,10 @@ namespace {
     {
         SendBackendResponse(driver, request, CHI::Eb::Opcodes::RSP::DBIDResp);
         for (size_t beat = 0; beat < BeatsPerLine(driver.node.GetOptions()); ++beat)
-            driver.NextDAT(CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
+        {
+            const auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::NonCopyBackWrData);
+            LUNATIC_CHECK(data.TgtID() == 6 && data.TxnID() == 77);
+        }
         SendBackendResponse(driver, request, CHI::Eb::Opcodes::RSP::Comp);
     }
 
