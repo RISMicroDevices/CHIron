@@ -3,12 +3,16 @@
 #include "chi_lunatic_transaction.hpp"
 
 #include <map>
+#include <utility>
 
 namespace CHI::Lunatic {
 
     class OrderingTracker {
-        std::map<NodeId, TransactionHandle> entries;
-        std::map<NodeId, TransactionHandle> downstreamDmtEntries;
+        using StreamKey = std::pair<NodeId, LineKey>;
+
+        std::map<StreamKey, TransactionHandle> entries;
+        std::map<StreamKey, TransactionHandle> downstreamDmtEntries;
+        std::map<NodeId, TransactionHandle>    orderedWriteEntries;
 
     public:
         bool CanAdmit(const Request& request) const noexcept;
@@ -17,9 +21,17 @@ namespace CHI::Lunatic {
         bool CanIssueDMT(const Transaction& transaction) const noexcept;
         void HoldDMT(const Transaction& transaction) noexcept;
         void ReleaseDMT(TransactionHandle handle) noexcept;
-        bool Empty() const noexcept { return entries.empty() && downstreamDmtEntries.empty(); }
+        bool Empty() const noexcept
+        {
+            return entries.empty() && downstreamDmtEntries.empty() && orderedWriteEntries.empty();
+        }
         bool Validate() const noexcept;
-        void Clear() noexcept { entries.clear(); downstreamDmtEntries.clear(); }
+        void Clear() noexcept
+        {
+            entries.clear();
+            downstreamDmtEntries.clear();
+            orderedWriteEntries.clear();
+        }
     };
 
 }

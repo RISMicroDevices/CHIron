@@ -38,7 +38,7 @@ namespace {
         driver.driver.Tick();
     }
 
-    void RunOrderedSeparatedDMTGate(bool receiptBeforeAck)
+    void RunOrderedSeparatedDMTGate(bool receiptBeforeAck, bool sameLine = true)
     {
         Options options;
         options.backend = BackendKind::CHI;
@@ -64,17 +64,23 @@ namespace {
         if (receiptBeforeAck)
             SendBackendReceipt(driver, oracle, downstreamFirst.TxnID());
 
-        auto second = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 2, 0x1f040, true);
+        auto second = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 2,
+            sameLine ? 0x1f008 : 0x1f040, true);
         second.Order() = 2;
         driver.PushRequest(second);
         driver.driver.Until([&] {
             return driver.driver.node.GetPerformanceCounters().admittedTransactions == 2;
         });
-        for (size_t cycle = 0; cycle < 8; ++cycle)
+        if (sameLine)
         {
-            LUNATIC_CHECK(!driver.driver.node.PeekTXREQ());
-            driver.driver.Tick();
+            for (size_t cycle = 0; cycle < 8; ++cycle)
+            {
+                LUNATIC_CHECK(!driver.driver.node.PeekTXREQ());
+                driver.driver.Tick();
+            }
         }
+        else
+            driver.driver.Until([&] { return static_cast<bool>(driver.driver.node.PeekTXREQ()); });
 
         driver.CompAck(4, firstResponse.DBID());
         if (!receiptBeforeAck)
@@ -102,4 +108,9 @@ LUNATIC_TEST(Stage9OrderedSeparatedDMTWaitsForCompAckBeforeReceipt)
 LUNATIC_TEST(Stage9OrderedSeparatedDMTWaitsForCompAckAfterReceipt)
 {
     RunOrderedSeparatedDMTGate(true);
+}
+
+LUNATIC_TEST(Stage9OrderedSeparatedDMTDifferentLinesCanProgress)
+{
+    RunOrderedSeparatedDMTGate(false, false);
 }
