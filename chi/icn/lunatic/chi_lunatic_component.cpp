@@ -43,17 +43,45 @@ namespace CHI::Lunatic {
 
     bool Core::PushRXREQ(const Request& flit)
     {
-        return !impl->Reentry() && impl->Push(impl->rxreq, flit, EventKind::AcceptedRXREQ);
+        if (impl->Reentry())
+            return false;
+        if (flit.target != impl->nodeId)
+        {
+            impl->Error(INVALID_TRANSACTION, "misdirected request delivered to Home");
+            return false;
+        }
+        return impl->Push(impl->rxreq, flit, EventKind::AcceptedRXREQ);
     }
 
     bool Core::PushRXRSP(const Response& flit)
     {
-        return !impl->Reentry() && impl->Push(impl->rxrsp, flit, EventKind::AcceptedRXRSP);
+        if (impl->Reentry())
+            return false;
+        if (flit.target != impl->nodeId)
+        {
+            impl->Error(INVALID_TRANSACTION, "misdirected response delivered to Home");
+            return false;
+        }
+        return impl->Push(impl->rxrsp, flit, EventKind::AcceptedRXRSP);
     }
 
     bool Core::PushRXDAT(const Data& flit)
     {
-        return !impl->Reentry() && impl->Push(impl->rxdat, flit, EventKind::AcceptedRXDAT);
+        if (impl->Reentry())
+            return false;
+        if (flit.target != impl->nodeId)
+        {
+            impl->Error(INVALID_TRANSACTION, "misdirected data delivered to Home");
+            return false;
+        }
+        const bool readData = flit.opcode == CHI::Eb::Opcodes::DAT::CompData ||
+            flit.opcode == CHI::Eb::Opcodes::DAT::DataSepResp;
+        if ((readData && flit.homeNid != impl->nodeId) || (!readData && flit.homeNid != 0))
+        {
+            impl->Error(INVALID_TRANSACTION, "invalid HomeNID on data delivered to Home");
+            return false;
+        }
+        return impl->Push(impl->rxdat, flit, EventKind::AcceptedRXDAT);
     }
 
     bool Core::PushRXB(const AXIWriteResponse& response)

@@ -48,6 +48,7 @@ namespace {
                 typename Base::DAT response{};
                 response.SrcID() = 6;
                 response.TgtID() = 2;
+                response.HomeNID() = 2;
                 response.TxnID() = request.TxnID();
                 response.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
                 response.Resp() = CHI::Eb::Resps::CompData_I;

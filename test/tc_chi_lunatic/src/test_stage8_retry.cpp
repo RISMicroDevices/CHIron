@@ -1,4 +1,5 @@
 #include "oracle_driver.hpp"
+#include "topology_adapter.hpp"
 
 using namespace CHI::Lunatic;
 using namespace LunaticTest;
@@ -350,6 +351,7 @@ LUNATIC_TEST(Stage8RetryBackendWithFlowDecisions)
 LUNATIC_TEST(Stage8RetryChangedTraceTagAndTargetResend)
 {
     Driver<Config256> driver;
+    RequestTargetAdapter<Config256> adapter(driver.node, [](uint64_t, bool) { return NodeId(2); });
     driver.node.GetEvents()->OnRequestAdmission.Register(
         Gravity::MakeListener<RequestAdmissionEvent>("force-retry", 0, [&](RequestAdmissionEvent& event) {
             if (event.request.allowRetry && event.request.txnId == 2)
@@ -359,7 +361,7 @@ LUNATIC_TEST(Stage8RetryChangedTraceTagAndTargetResend)
     auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 2, 0x20000, false);
     request.TgtID() = 3;
     request.TraceTag() = 0;
-    driver.node.PushRXREQ(request);
+    LUNATIC_CHECK(adapter.PushRXREQ(request));
     driver.Tick();
     driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
     driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
@@ -368,7 +370,7 @@ LUNATIC_TEST(Stage8RetryChangedTraceTagAndTargetResend)
     request.AllowRetry() = 0;
     request.TraceTag() = 1;
     request.TgtID() = 2;
-    driver.node.PushRXREQ(request);
+    LUNATIC_CHECK(adapter.PushRXREQ(request));
     for (size_t beat = 0; beat < 2; ++beat)
     {
         const auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
@@ -380,7 +382,7 @@ LUNATIC_TEST(Stage8RetryChangedTraceTagAndTargetResend)
     LUNATIC_CHECK(driver.node.GetErrors().empty());
 }
 
-LUNATIC_TEST(Stage8RetryArbitraryTargetDoesNotConsumeCredit)
+LUNATIC_TEST(Stage8RetryChangedSecurityDoesNotConsumeCredit)
 {
     Driver<Config256> driver;
     driver.node.GetEvents()->OnRequestAdmission.Register(
@@ -390,15 +392,15 @@ LUNATIC_TEST(Stage8RetryArbitraryTargetDoesNotConsumeCredit)
         }));
 
     auto request = driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 2, 0x20000, false);
-    driver.node.PushRXREQ(request);
+    LUNATIC_CHECK(driver.node.PushRXREQ(request));
     driver.Tick();
     driver.NextRSP(CHI::Eb::Opcodes::RSP::RetryAck);
     driver.NextRSP(CHI::Eb::Opcodes::RSP::PCrdGrant);
 
     request.TxnID() = 9;
     request.AllowRetry() = 0;
-    request.TgtID() = 3;
-    driver.node.PushRXREQ(request);
+    request.NS() = 1;
+    LUNATIC_CHECK(driver.node.PushRXREQ(request));
     for (size_t beat = 0; beat < 2; ++beat)
         driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
     LUNATIC_CHECK(driver.node.GetPerformanceCounters().creditedResends == 0);
@@ -408,7 +410,7 @@ LUNATIC_TEST(Stage8RetryArbitraryTargetDoesNotConsumeCredit)
     creditReturn.TgtID() = 2;
     creditReturn.Opcode() = CHI::Eb::Opcodes::REQ::PCrdReturn;
     creditReturn.PCrdType() = 0;
-    driver.node.PushRXREQ(creditReturn);
+    LUNATIC_CHECK(driver.node.PushRXREQ(creditReturn));
     driver.Quiesce();
     LUNATIC_CHECK(driver.node.GetPerformanceCounters().returnedCredits == 1);
     LUNATIC_CHECK(driver.node.GetErrors().empty());

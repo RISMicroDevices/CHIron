@@ -56,7 +56,7 @@ namespace {
             DAT data{};
             data.SrcID() = 4;
             data.TgtID() = 2;
-            data.HomeNID() = 2;
+            data.HomeNID() = 0;
             data.TxnID() = snoop.flit.TxnID();
             data.Opcode() = CHI::Eb::Opcodes::DAT::SnpRespData;
             data.Resp() = CHI::Eb::Resps::SnpRespData_I_PD;

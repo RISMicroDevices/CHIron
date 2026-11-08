@@ -221,6 +221,7 @@ LUNATIC_TEST(Stage4SublineCHIBackendRead)
     Driver<Config128>::DAT data{};
     data.SrcID() = 6;
     data.TgtID() = 2;
+    data.HomeNID() = 2;
     data.TxnID() = downstream.TxnID();
     data.Opcode() = CHI::Eb::Opcodes::DAT::CompData;
     data.DataID() = 3;

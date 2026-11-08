@@ -89,7 +89,8 @@ namespace {
         DAT data{};
         data.SrcID() = source;
         data.TgtID() = target;
-        data.HomeNID() = 2;
+        data.HomeNID() = opcode == CHI::Eb::Opcodes::DAT::CompData ||
+            opcode == CHI::Eb::Opcodes::DAT::DataSepResp ? 2 : 0;
         data.TxnID() = txnId;
         data.DBID() = dbid;
         data.Opcode() = opcode;
