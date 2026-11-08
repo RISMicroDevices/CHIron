@@ -456,6 +456,8 @@ namespace CHI::Lunatic {
             !request.expCompAck && !IsOrderedWriteObservation(request);
         flow.directPersistActive = options.directPersistEnabled && options.subordinatePersistSepEnabled &&
             options.backend == BackendKind::CHI && request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
+        flow.atomic.localExecution = requestClass == RequestClass::Atomic &&
+            ClassifyAtomicPath(request, options) == AtomicPath::Local;
         flows.emplace(transaction->handle, std::move(flow));
         if (!hazards.Add(transaction->handle, transaction->request.Line(), transaction->actionAge))
         {
@@ -594,7 +596,8 @@ namespace CHI::Lunatic {
                       transaction.request.pGroupId != 0));
                 AtomicGeometry atomicGeometry;
                 const bool invalidAtomic = requestClass == RequestClass::Atomic &&
-                    (!GetAtomicGeometry(transaction.request, atomicGeometry) || transaction.request.expCompAck);
+                    (!GetAtomicGeometry(transaction.request, atomicGeometry) || transaction.request.expCompAck ||
+                     ClassifyAtomicPath(transaction.request, options) == AtomicPath::Error);
                 const bool invalidOrder = transaction.request.order == 1 ||
                     (transaction.request.order != 0 && !IsOrderingSupported(transaction.request.opcode));
                 if (options.backend == BackendKind::AXI && requestClass == RequestClass::Persistence)

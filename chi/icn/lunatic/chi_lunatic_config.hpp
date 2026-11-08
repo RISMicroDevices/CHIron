@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <vector>
 
 namespace CHI::Lunatic {
 
@@ -27,6 +28,11 @@ namespace CHI::Lunatic {
         Internal,
         CHI,
         AXI
+    };
+
+    struct AtomicRegion {
+        uint64_t base = 0;
+        uint64_t limit = 0;
     };
 
     struct Options {
@@ -73,10 +79,15 @@ namespace CHI::Lunatic {
         bool        dwtEnabled = false;
         bool        directPersistEnabled = false;
         bool        subordinatePersistSepEnabled = true;
+        bool        homeAtomicEnabled = true;
+        bool        subordinateAtomicEnabled = true;
         bool        poisonEnabled = false;
         bool        dataCheckEnabled = false;
         bool        mteEnabled = false;
         bool        dvmEnabled = false;
+
+        std::map<NodeId, bool> atomicRequesters;
+        std::vector<AtomicRegion> atomicRegions;
     };
 
     RequesterRole GetRequesterRole(const Options& options, NodeId requester) noexcept;

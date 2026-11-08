@@ -441,6 +441,12 @@ namespace CHI::Lunatic {
         request.doDwt = false;
         request.stashNidValid = false;
         request.stashLpidValid = false;
+        if (flow.atomic.localExecution)
+        {
+            request.opcode = CHI::Eb::Opcodes::REQ::WriteNoSnpFull;
+            request.size = 6;
+            flow.expectedBeatMask = (uint64_t(1) << BeatsPerLine(options)) - 1;
+        }
         if (flow.dwtActive)
         {
             request.doDwt = true;
@@ -599,7 +605,7 @@ namespace CHI::Lunatic {
             return true;
         }
 
-        if (IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
+        if (IsAtomicRequest(transaction.request.opcode) && !flow.atomic.localExecution && !flow.spillPending)
             return HandleAtomicBackendRSP(transaction, flit);
 
         if (IsCMORequest(transaction.request.opcode) && !flow.spillPending)
@@ -744,9 +750,10 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         if (options.backend == BackendKind::CHI && IsAtomicRequest(transaction.request.opcode) &&
-            !flow.spillPending && !flow.baselineFetch)
+            !flow.atomic.localExecution && !flow.spillPending && !flow.baselineFetch)
             return HandleAtomicBackendDAT(transaction, flit);
-        const bool localAtomicRead = options.backend != BackendKind::CHI && IsAtomicRequest(transaction.request.opcode);
+        const bool localAtomicRead = (options.backend != BackendKind::CHI || flow.atomic.localExecution) &&
+            IsAtomicRequest(transaction.request.opcode);
         if (!transaction.memoryRequired || flow.memoryWrite ||
             (!IsReadRequest(transaction.request.opcode) && !flow.baselineFetch && !localAtomicRead))
             return false;

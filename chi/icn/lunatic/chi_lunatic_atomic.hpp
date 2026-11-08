@@ -4,6 +4,12 @@
 
 namespace CHI::Lunatic {
 
+    enum class AtomicPath : uint8_t {
+        Forward,
+        Local,
+        Error
+    };
+
     enum class AtomicOperation : uint8_t {
         Add = 0,
         Clr = 1,
@@ -30,6 +36,7 @@ namespace CHI::Lunatic {
 
     bool            GetAtomicGeometry(const Request& request, AtomicGeometry& geometry) noexcept;
     AtomicOperation GetAtomicOperation(uint16_t opcode) noexcept;
+    AtomicPath      ClassifyAtomicPath(const Request& request, const Options& options) noexcept;
     uint64_t        AtomicOperandBeatMask(const Request& request, const Options& options) noexcept;
     uint64_t        AtomicResultBeatMask(const Request& request, const Options& options) noexcept;
     AtomicExecution ExecuteAtomic(const Request& request, const LineData& initial,

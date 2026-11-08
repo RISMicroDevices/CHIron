@@ -48,6 +48,7 @@ namespace CHI::Lunatic {
         uint8_t         operandRespErr = 0;
         uint8_t         backendResultRespErr = 0;
         bool            backendDirtyCommitted = false;
+        bool            localExecution = false;
     };
 
     struct FlowState {

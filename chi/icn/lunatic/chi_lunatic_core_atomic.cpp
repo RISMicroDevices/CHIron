@@ -71,7 +71,7 @@ namespace CHI::Lunatic {
             QueueDBID(transaction);
             return;
         }
-        if (options.backend == BackendKind::CHI)
+        if (options.backend == BackendKind::CHI && !flow.atomic.localExecution)
         {
             ActionAtomicBackend(transaction);
             return;

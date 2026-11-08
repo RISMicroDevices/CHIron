@@ -59,6 +59,27 @@ namespace CHI::Lunatic {
         return static_cast<AtomicOperation>(opcode & 7);
     }
 
+    AtomicPath ClassifyAtomicPath(const Request& request, const Options& options) noexcept
+    {
+        if (!options.homeAtomicEnabled)
+            return AtomicPath::Error;
+        if (const auto requester = options.atomicRequesters.find(request.source);
+            requester != options.atomicRequesters.end() && !requester->second)
+            return AtomicPath::Error;
+
+        bool supported = options.atomicRegions.empty();
+        for (const auto& region : options.atomicRegions)
+            supported |= request.address >= region.base && request.address < region.limit;
+        if (!supported)
+            return AtomicPath::Error;
+
+        if (options.backend == BackendKind::CHI && options.subordinateAtomicEnabled)
+            return AtomicPath::Forward;
+        if (options.backend == BackendKind::CHI && CHI::Eb::MemAttrs::ExtractDevice(request.memAttr))
+            return AtomicPath::Error;
+        return AtomicPath::Local;
+    }
+
     uint64_t AtomicOperandBeatMask(const Request& request, const Options& options) noexcept
     {
         AtomicGeometry geometry;

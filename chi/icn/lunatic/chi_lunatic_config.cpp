@@ -52,6 +52,10 @@ namespace CHI::Lunatic {
              options.directPersistEnabled || options.poisonEnabled || options.dataCheckEnabled))
             throw std::invalid_argument("Lunatic AXI does not support CHI-only backend features or metadata");
 
+        for (const auto& region : options.atomicRegions)
+            if (region.base >= region.limit)
+                throw std::invalid_argument("Lunatic atomic address regions must be non-empty");
+
         if (options.mteEnabled || options.dvmEnabled)
             throw std::invalid_argument("Lunatic MTE and DVM are prohibited");
     }
