@@ -62,14 +62,11 @@ LUNATIC_TEST(Stage6DCTForwardedRead)
         data.CCID() = 0;
         data.BE() = ~uint64_t(0);
         for (size_t index = 0; index < bytes; ++index)
-        {
-            const size_t lineOffset = beat * bytes + index;
-            data.Data()[index / 8] |= uint64_t(expected[lineOffset]) << ((index % 8) * 8);
-            observed[lineOffset] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
-            LUNATIC_CHECK(observed[lineOffset] == expected[lineOffset]);
-        }
+            data.Data()[index / 8] |= uint64_t(expected[beat * bytes + index]) << ((index % 8) * 8);
         driver.Oracle(6).SnoopData(driver.driver.now, data);
         driver.Oracle(4).Data(driver.driver.now, data);
+        for (size_t index = 0; index < bytes; ++index)
+            observed[beat * bytes + index] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
     }
     LUNATIC_CHECK(observed == expected);
 
@@ -97,18 +94,25 @@ LUNATIC_TEST(Stage6DCTOrdinaryFallback)
     options.dctEnabled = true;
     CheckedDriver<Config256> driver(options);
     const LineKey line = LineKey::FromAddress(0x10000, false);
-    const LineData expected{};
+    LineData expected{};
+    for (size_t index = 0; index < expected.size(); ++index)
+        expected[index] = uint8_t(0xa5 ^ (index * 29));
     SeedDirtyProvider(driver, line, expected);
     const auto snoop = StartDCT(driver, line);
 
     driver.SnoopData(6, snoop.flit.TxnID(), expected, CHI::Eb::Resps::SnpRespData_SC_PD);
+    constexpr size_t bytes = Config256::dataWidth / 8;
+    LineData observed{};
     DataBufferId dataBufferId = 0;
-    for (size_t beat = 0; beat < LINE_SIZE / (Config256::dataWidth / 8); ++beat)
+    for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
     {
         const auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
         LUNATIC_CHECK(data.DBID() == snoop.flit.TxnID());
         dataBufferId = data.DBID();
+        for (size_t index = 0; index < bytes; ++index)
+            observed[beat * bytes + index] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
     }
+    LUNATIC_CHECK(observed == expected);
     driver.CompAck(4, dataBufferId);
     driver.Quiesce();
 }
