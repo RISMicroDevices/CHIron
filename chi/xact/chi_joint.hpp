@@ -3565,6 +3565,58 @@ namespace /*CHI::*/Xact {
 
         auto xactionIter = rxTransactions.find(key);
 
+        if (xactionIter == rxTransactions.end()
+            && rspFlit.Opcode() == Opcodes::RSP::DBIDResp)
+        {
+            auto pendingDWTIter = rxTransactions.end();
+            auto respondedDWTIter = rxTransactions.end();
+            size_t pendingDWTCount = 0;
+            size_t respondedDWTCount = 0;
+
+            for (auto iter = rxTransactions.begin(); iter != rxTransactions.end(); ++iter)
+            {
+                const auto& candidate = iter->second;
+                const auto& first = candidate->GetFirst();
+
+                if (!first.IsREQ()
+                    || candidate->GetType() != XactionType::HomeWrite
+                    || !first.flit.req.DoDWT()
+                    || first.flit.req.TgtID() != rspFlit.SrcID()
+                    || first.flit.req.ReturnNID() != rspFlit.TgtID()
+                    || first.flit.req.ReturnTxnID() != rspFlit.TxnID())
+                    continue;
+
+                if (candidate->HasRSP({
+                        Opcodes::RSP::DBIDResp,
+                        Opcodes::RSP::CompDBIDResp
+                    }))
+                {
+                    respondedDWTIter = iter;
+                    ++respondedDWTCount;
+                }
+                else
+                {
+                    pendingDWTIter = iter;
+                    ++pendingDWTCount;
+                }
+            }
+
+            const bool selectPending = pendingDWTCount != 0;
+            auto dwtXactionIter =
+                selectPending ? pendingDWTIter : respondedDWTIter;
+            const size_t selectedDWTCount =
+                selectPending ? pendingDWTCount : respondedDWTCount;
+
+            if (selectedDWTCount > 1)
+                return this->ResponseDeniedByJoint(
+                    XactDenial::DENIED_DWT_RSP_AMBIGUOUS,
+                    firedRspFlit, dwtXactionIter->second,
+                    "Multiple Home Write generations match the direct DWT DBIDResp");
+
+            if (selectedDWTCount == 1)
+                xactionIter = dwtXactionIter;
+        }
+
         if (rspFlit.Opcode() == Opcodes::RSP::Persist && rspFlit.TxnID() == 0)
         {
             xactionIter = std::find_if(rxTransactions.begin(), rxTransactions.end(),

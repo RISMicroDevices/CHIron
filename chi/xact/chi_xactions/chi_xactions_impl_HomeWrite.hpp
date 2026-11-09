@@ -329,6 +329,12 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
+#ifdef CHI_ISSUE_EB_ENABLE
+            if (this->first.flit.req.DoDWT()
+                && this->first.flit.req.ReturnNID() != this->first.flit.req.SrcID())
+                return XactDenial::DENIED_DWT_COMPDBIDRESP_DIRECT;
+#endif
+
             if (this->HasRSP({ Opcodes::RSP::Comp }))
                 return XactDenial::DENIED_COMPDBIDRESP_AFTER_COMP;
 
@@ -359,26 +365,26 @@ namespace /*CHI::*/Xact {
             if (rspFlit.flit.rsp.TxnID() != this->first.flit.req.TxnID())
                 return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
 
-            const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
+            if (this->HasRSP({ Opcodes::RSP::Comp }))
+                return XactDenial::DENIED_COMP_AFTER_COMP;
+
+            if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
+                return XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP;
+
+            const FiredResponseFlit<config>* optDBIDSource =
+                this->GetLastDBIDSourceRSP({
+                    Opcodes::RSP::DBIDResp,
+                    Opcodes::RSP::CompDBIDResp
+                });
 
             if (optDBIDSource)
             {
                 assert(optDBIDSource->IsRSP() &&
                     "DBID never comes from DAT channel in Home Write transactions");
 
-                if (this->HasRSP({ Opcodes::RSP::Comp }))
-                    return XactDenial::DENIED_COMP_AFTER_COMP;
-
-                if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
-                    return XactDenial::DENIED_COMP_AFTER_COMPDBIDRESP;
-
                 if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
                     return XactDenial::DENIED_RSP_DBID_MISMATCH;
             }
-            else
-                firstDBID = true;
-
-            hasDBID = true;
 
             //
             if (glbl.CHECK_FIELD_MAPPING.enable)
@@ -422,25 +428,34 @@ namespace /*CHI::*/Xact {
                     return XactDenial::DENIED_RSP_TXNID_MISMATCHING_REQ;
             }
 
-            const FiredResponseFlit<config>* optDBIDSource = this->GetDBIDSource();
+            if (this->HasRSP({ Opcodes::RSP::DBIDResp }))
+                return XactDenial::DENIED_DBIDRESP_AFTER_DBIDRESP;
+
+            if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
+                return XactDenial::DENIED_DBIDRESP_AFTER_COMPDBIDRESP;
+
+            const FiredResponseFlit<config>* optDBIDSource =
+                this->GetLastDBIDSourceRSP({
+                    Opcodes::RSP::DBIDResp,
+                    Opcodes::RSP::CompDBIDResp
+                });
+            const FiredResponseFlit<config>* optComp =
+                this->GetLastRSP({ Opcodes::RSP::Comp });
 
             if (optDBIDSource)
             {
                 assert(optDBIDSource->IsRSP() &&
                     "DBID never comes from DAT channel in Home Write transactions");
 
-                if (this->HasRSP({ Opcodes::RSP::DBIDResp }))
-                    return XactDenial::DENIED_DBIDRESP_AFTER_DBIDRESP;
-
-                if (this->HasRSP({ Opcodes::RSP::CompDBIDResp }))
-                    return XactDenial::DENIED_DBIDRESP_AFTER_COMPDBIDRESP;
-
                 if (rspFlit.flit.rsp.DBID() != optDBIDSource->flit.rsp.DBID())
                     return XactDenial::DENIED_RSP_DBID_MISMATCH;
             }
-            else
-                firstDBID = true;
 
+            if (optComp
+                && rspFlit.flit.rsp.DBID() != optComp->flit.rsp.DBID())
+                return XactDenial::DENIED_RSP_DBID_MISMATCH;
+
+            firstDBID = optDBIDSource == nullptr;
             hasDBID = true;
 
             //

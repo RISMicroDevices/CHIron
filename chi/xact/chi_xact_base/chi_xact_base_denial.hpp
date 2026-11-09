@@ -296,6 +296,9 @@ namespace CHI {
 
             inline constexpr XactDenialEnumBack DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED     ("XACT_DENIED_READRECEIPT_TXNID_NOT_EXIST_OR_EVICTED",  0x000B0000 | 102);
 
+            inline constexpr XactDenialEnumBack DENIED_DWT_RSP_AMBIGUOUS                            ("XACT_DENIED_DWT_RSP_AMBIGUOUS",                           0x000B0000 | 103);
+            inline constexpr XactDenialEnumBack DENIED_DWT_COMPDBIDRESP_DIRECT                      ("XACT_DENIED_DWT_COMPDBIDRESP_DIRECT",                     0x000B0000 | 104);
+
             inline constexpr XactDenialEnumBack DENIED_RETRY_DIFF_XACT_TYPE         ("XACT_DENIED_RETRY_DIFF_XACT_TYPE",        0x000C0000 |  0);
             inline constexpr XactDenialEnumBack DENIED_RETRY_NO_ALLOWRETRY          ("XACT_DENIED_RETRY_NO_ALLOWRETRY",         0x000C0000 |  1);
             inline constexpr XactDenialEnumBack DENIED_NO_MATCHING_RETRY            ("XACT_DENIED_NO_MATCHING_RETRY",           0x000C0000 |  2);

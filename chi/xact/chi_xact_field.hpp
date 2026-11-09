@@ -23,6 +23,7 @@ namespace Xact {
             return !(
                 convention == FieldConvention::I0
              || convention == FieldConvention::X
+             || convention == FieldConvention::S
              || convention == FieldConvention::D
             );
         }

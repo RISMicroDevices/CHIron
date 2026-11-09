@@ -119,6 +119,15 @@ namespace /*CHI::*/Xact {
             return;
         }
 
+        if ((this->first.flit.req.Opcode() == Opcodes::REQ::WriteNoSnpPtl
+          || this->first.flit.req.Opcode() == Opcodes::REQ::WriteNoSnpFull)
+            && this->first.flit.req.ReturnTxnID() != 0)
+        {
+            this->firstDenial = this->RequestFlitDenied(
+                XactDenial::DENIED_REQ_FIELD_RETURNTXNID, this->first);
+            return;
+        }
+
         //
         if (glbl.CHECK_FIELD_MAPPING.enable)
         {

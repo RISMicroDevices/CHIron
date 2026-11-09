@@ -1789,6 +1789,14 @@ namespace /*CHI::*/Xact {
                     if (origin.ReturnNID() != retry.ReturnNID())
                         return XactDenial::DENIED_RETRY_DIFF_RETURNNID;
 
+#ifdef CHI_ISSUE_EB_ENABLE
+                if ((origin.Opcode() == Opcodes::REQ::WriteNoSnpPtl
+                  || origin.Opcode() == Opcodes::REQ::WriteNoSnpFull)
+                    && origin.DoDWT()
+                    && origin.ReturnNID() != retry.ReturnNID())
+                    return XactDenial::DENIED_RETRY_DIFF_RETURNNID;
+#endif
+
                 // StashNID
                 if (FieldTrait::IsApplicable(fields->StashNID))
                     if (origin.StashNID() != retry.StashNID())
@@ -1817,7 +1825,19 @@ namespace /*CHI::*/Xact {
 #endif
 
                 // ReturnTxnID
-                /* Permitted to be different */
+#ifdef CHI_ISSUE_EB_ENABLE
+                if ((origin.Opcode() == Opcodes::REQ::WriteNoSnpPtl
+                  || origin.Opcode() == Opcodes::REQ::WriteNoSnpFull)
+                    && origin.DoDWT()
+                    && origin.ReturnTxnID() != retry.ReturnTxnID())
+                    return XactDenial::DENIED_RETRY_DIFF_RETURNTXNID;
+
+                if ((Opcodes::REQ::AtomicLoad::Is(origin.Opcode())
+                  || origin.Opcode() == Opcodes::REQ::AtomicSwap
+                  || origin.Opcode() == Opcodes::REQ::AtomicCompare)
+                    && origin.ReturnTxnID() != retry.ReturnTxnID())
+                    return XactDenial::DENIED_RETRY_DIFF_RETURNTXNID;
+#endif
 
                 // StashLPIDValid
                 if (FieldTrait::IsApplicable(fields->StashLPIDValid))

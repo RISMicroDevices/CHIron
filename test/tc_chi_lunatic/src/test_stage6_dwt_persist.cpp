@@ -27,9 +27,13 @@ LUNATIC_TEST(Stage6DWTDirectDBIDDataAndComp)
     dbidResponse.TxnID() = 0;
     dbidResponse.DBID() = 77;
     dbidResponse.Opcode() = CHI::Eb::Opcodes::RSP::DBIDResp;
+    oracle.Response(driver.driver.now, dbidResponse);
     driver.Oracle(4).Response(driver.driver.now, dbidResponse);
 
-    for (size_t beat = 0; beat < LINE_SIZE / (Config256::dataWidth / 8); ++beat)
+    constexpr size_t bytes = Config256::dataWidth / 8;
+    LineData expected{};
+    LineData actual{};
+    for (size_t beat = 0; beat < LINE_SIZE / bytes; ++beat)
     {
         typename CheckedDriver<Config256>::DAT data{};
         data.SrcID() = 4;
@@ -37,23 +41,35 @@ LUNATIC_TEST(Stage6DWTDirectDBIDDataAndComp)
         data.HomeNID() = 0;
         data.TxnID() = 77;
         data.Opcode() = CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
-        data.DataID() = beat * (Config256::dataWidth / 8) / 16;
+        data.DataID() = beat * bytes / 16;
         data.CCID() = 0;
         data.BE() = ~uint64_t(0);
+        const size_t offset = beat * bytes;
+        for (size_t index = 0; index < bytes; ++index)
+        {
+            const uint8_t value = uint8_t(0x40 + offset + index);
+            expected[offset + index] = value;
+            data.Data()[index / 8] |= uint64_t(value) << ((index % 8) * 8);
+        }
+        oracle.WriteData(driver.driver.now, data);
         driver.Oracle(4).WriteData(driver.driver.now, data);
+        for (size_t index = 0; index < bytes; ++index)
+            actual[offset + index] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
     }
+    LUNATIC_CHECK(actual == expected);
 
     typename CheckedDriver<Config256>::RSP comp{};
     comp.SrcID() = 6;
     comp.TgtID() = 2;
     comp.TxnID() = downstream.TxnID();
-    comp.DBID() = 99;
+    comp.DBID() = 77;
     comp.Resp() = CHI::Eb::Resps::Comp_I;
     comp.Opcode() = CHI::Eb::Opcodes::RSP::Comp;
     oracle.Response(driver.driver.now, comp);
     LUNATIC_CHECK(driver.driver.node.PushRXRSP(comp));
     driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
     driver.Quiesce();
+    LUNATIC_CHECK(!oracle.HasInflight());
 }
 
 LUNATIC_TEST(Stage6DirectPersistRoutesOriginalRequester)
