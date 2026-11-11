@@ -6,7 +6,7 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         const LineKey line = transaction.request.Line();
-        const CacheState initial = snoopFilter.State(line, transaction.request.source);
+        const CacheState initial = Bank(line).snoopFilter.State(line, transaction.request.source);
         switch (initial)
         {
             case CacheState::I:   flow.requesterFinal = CacheState::UCE; break;
@@ -62,7 +62,7 @@ namespace CHI::Lunatic {
 
         if (decision.allocateHome || decision.retainHome)
         {
-            const std::optional<size_t> currentWay = directory.FindWay(line);
+            const std::optional<size_t> currentWay = Bank(line).directory.FindWay(line);
             const size_t way = currentWay ? *currentWay : flow.victimWay;
             HomeLine& home = InstallHome(line, way, transaction.data, false, time);
             CopyMetadata(home, transaction, options);
@@ -70,10 +70,10 @@ namespace CHI::Lunatic {
         }
         else if (decision.removeHome && transaction.homeHit)
         {
-            if (const auto way = directory.FindWay(line); way)
-                directory.Invalidate(directory.SetIndex(line), *way);
+            if (const auto way = Bank(line).directory.FindWay(line); way)
+                Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(line), *way);
         }
-        snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
+        Bank(line).snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
         return true;
     }
 

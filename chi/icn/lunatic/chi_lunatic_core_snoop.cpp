@@ -99,17 +99,17 @@ namespace CHI::Lunatic {
              transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid))
         {
             if (transaction.homeHit)
-                pipeline.Advance(transaction, Phase::Action, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
             else
                 StartMemoryRead(transaction);
             return;
         }
         std::vector<NodeId> candidates;
-        for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+        for (NodeId target : Bank(flow.snoopLine).snoopFilter.Targets(transaction.request.Line()))
         {
             if (target == transaction.request.source)
                 continue;
-            const CacheState state = snoopFilter.State(transaction.request.Line(), target);
+            const CacheState state = Bank(flow.snoopLine).snoopFilter.State(transaction.request.Line(), target);
             const auto requestClass = ClassifyRequest(transaction.request.opcode);
             const bool needsUnique = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique ||
                                      transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
@@ -127,7 +127,7 @@ namespace CHI::Lunatic {
         if (candidates.empty() && !transaction.homeHit &&
             ClassifyRequest(transaction.request.opcode) != RequestClass::MakeUnique)
         {
-            for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+            for (NodeId target : Bank(flow.snoopLine).snoopFilter.Targets(transaction.request.Line()))
             {
                 if (target != transaction.request.source)
                 {
@@ -140,7 +140,7 @@ namespace CHI::Lunatic {
         if (candidates.empty())
         {
             if (ClassifyRequest(transaction.request.opcode) == RequestClass::MakeUnique)
-                pipeline.Advance(transaction, Phase::Action, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
             else
                 StartMemoryRead(transaction);
             return;
@@ -150,7 +150,7 @@ namespace CHI::Lunatic {
         flow.retToSrcUsed = false;
         if (flow.dctActive)
         {
-            const std::vector<NodeId> owners = snoopFilter.Targets(transaction.request.Line());
+            const std::vector<NodeId> owners = Bank(flow.snoopLine).snoopFilter.Targets(transaction.request.Line());
             const bool soleProvider = options.preciseSnoopFilter && owners.size() == 1 &&
                 owners.front() == flow.dctTarget;
             const bool uniqueProviderRequired = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique ||
@@ -163,7 +163,7 @@ namespace CHI::Lunatic {
             if (flow.dctActive)
             {
                 const auto decision = events->Decide(SnoopForwardingEvent(time, nodeId, transaction,
-                    flow.dctTarget, snoopFilter.State(transaction.request.Line(), flow.dctTarget),
+                    flow.dctTarget, Bank(flow.snoopLine).snoopFilter.State(transaction.request.Line(), flow.dctTarget),
                     owners.size(), flow.homeDirty));
                 flow.dctActive = decision.IsForwarding();
             }
@@ -180,11 +180,11 @@ namespace CHI::Lunatic {
     void Core::Impl::PlanCMOSnoops(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
-        for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+        for (NodeId target : Bank(flow.snoopLine).snoopFilter.Targets(transaction.request.Line()))
         {
             if (target == transaction.request.source)
                 continue;
-            const CacheState state = snoopFilter.State(transaction.request.Line(), target);
+            const CacheState state = Bank(flow.snoopLine).snoopFilter.State(transaction.request.Line(), target);
             const bool cleanShared = transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanShared ||
                 ClassifyRequest(transaction.request.opcode) == RequestClass::Persistence;
             if (!cleanShared || IsDirty(state) || !options.preciseSnoopFilter)
@@ -311,7 +311,7 @@ namespace CHI::Lunatic {
                 flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl, flit.dataSource))
             Error(transaction.handle, "illegal snoop data response");
 
-        const CacheState initial = snoopFilter.State(flow.snoopLine, flit.source);
+        const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, flit.source);
         const bool dirty = IsDirty(initial) ||
             (flit.resp & CHI::Eb::Resps::PassDirty) != 0;
         if (flit.opcode == CHI::Eb::Opcodes::DAT::SnpRespDataPtl)
@@ -389,7 +389,7 @@ namespace CHI::Lunatic {
         if (!validPair)
             return false;
 
-        const CacheState initial = snoopFilter.State(flow.snoopLine, target);
+        const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, target);
         if (initial == CacheState::I || initial == CacheState::UCE || initial == CacheState::UDP)
             return false;
         const CacheState provider = DecodeSnoopState(transaction, target, resp, false);
@@ -512,7 +512,7 @@ namespace CHI::Lunatic {
             return false;
         if (dataPull != 0)
             return false;
-        const CacheState initial = snoopFilter.State(flow.snoopLine, target);
+        const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, target);
         const uint16_t opcode = SnoopOpcode(transaction, flow, target);
         const CacheState final = DecodeSnoopState(transaction, target, resp, partial);
         const bool passDirty = (resp & CHI::Eb::Resps::PassDirty) != 0;
@@ -586,7 +586,7 @@ namespace CHI::Lunatic {
     CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp, bool partial) const
     {
         const FlowState& flow = flows.at(transaction.handle);
-        const CacheState initial = snoopFilter.State(flow.snoopLine, target);
+        const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, target);
         const uint16_t opcode = SnoopOpcode(transaction, flow, target);
         if (opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique || opcode == CHI::Eb::Opcodes::SNP::SnpStashShared)
             return initial;
@@ -609,7 +609,7 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         const CacheState final = DecodeSnoopState(transaction, target, resp, partial);
-        snoopFilter.Track(flow.snoopLine, target, final, time);
+        Bank(flow.snoopLine).snoopFilter.Track(flow.snoopLine, target, final, time);
         auto it = std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target);
         if (it != transaction.pendingSnoops.end())
         {

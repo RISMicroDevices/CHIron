@@ -19,7 +19,7 @@ namespace CHI::Lunatic {
         flow.expectedBeatMask = AtomicOperandBeatMask(transaction.request, options);
         flow.atomic.resultBeatMask = AtomicResultBeatMask(transaction.request, options);
         flow.responseForm = transaction.handle % 3;
-        for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+        for (NodeId target : Bank(transaction).snoopFilter.Targets(transaction.request.Line()))
         {
             if (target != transaction.request.source || transaction.request.snoopMe)
                 transaction.snoopTargets.push_back(target);
@@ -75,7 +75,7 @@ namespace CHI::Lunatic {
             else
             {
                 transaction.phase = Phase::Return;
-                transaction.readyTime = ScheduleData();
+                transaction.readyTime = ScheduleData(transaction);
             }
             return;
         }
@@ -88,7 +88,7 @@ namespace CHI::Lunatic {
         if (!store)
         {
             transaction.phase = Phase::Return;
-            transaction.readyTime = ScheduleData();
+            transaction.readyTime = ScheduleData(transaction);
             return;
         }
         if (options.backend == BackendKind::AXI && !flow.compSent)
@@ -211,7 +211,7 @@ namespace CHI::Lunatic {
                     commitImage.poison[lane] |= flow.atomic.operandsPoison[lane];
         }
 
-        if (HomeLine* home = directory.Find(line))
+        if (HomeLine* home = Bank(line).directory.Find(line))
         {
             if (flow.atomic.execution.write || flow.dataDirty)
             {
@@ -242,7 +242,7 @@ namespace CHI::Lunatic {
                 return false;
         }
         flow.requesterFinal = CacheState::I;
-        snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
+        Bank(transaction).snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
         return true;
     }
 

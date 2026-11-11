@@ -10,14 +10,40 @@ namespace CHI::Lunatic {
         : nodeId(nodeId)
         , options(std::move(options))
         , events(std::move(events))
-        , directory(this->options)
-        , snoopFilter(this->options)
+        , bankMap(this->options)
         , policy(MakePolicy(this->options.policy))
         , tracker(this->options.transactionLimit)
-        , pipeline(this->options)
         , random(this->options.seed)
         , axi(this->options)
     {
+        banks.reserve(bankMap.Count());
+        for (size_t index = 0; index < bankMap.Count(); ++index)
+            banks.emplace_back(this->options);
+    }
+
+    size_t Core::Impl::BankIndex(const LineKey& line) const noexcept
+    {
+        return bankMap.Index(line);
+    }
+
+    BankState& Core::Impl::Bank(const LineKey& line)
+    {
+        return banks[BankIndex(line)];
+    }
+
+    const BankState& Core::Impl::Bank(const LineKey& line) const
+    {
+        return banks[BankIndex(line)];
+    }
+
+    BankState& Core::Impl::Bank(const Transaction& transaction)
+    {
+        return Bank(transaction.request.Line());
+    }
+
+    const BankState& Core::Impl::Bank(const Transaction& transaction) const
+    {
+        return Bank(transaction.request.Line());
     }
 
     void Core::Impl::Reset()
@@ -39,13 +65,16 @@ namespace CHI::Lunatic {
         flows.clear();
         errors.clear();
         tracker.Clear();
-        hazards.Clear();
         ordering.Clear();
-        directory.Clear();
-        snoopFilter.Clear();
+        for (BankState& bank : banks)
+        {
+            bank.hazards.Clear();
+            bank.directory.Clear();
+            bank.snoopFilter.Clear();
+            bank.pipeline.Reset();
+        }
         memory.Clear();
         axi.Reset();
-        pipeline.Reset();
         random.Reset(options.seed);
         pmu.Reset();
         time = 0;
@@ -391,7 +420,7 @@ namespace CHI::Lunatic {
         flow.directPersistActive = options.directPersistEnabled && options.backend == BackendKind::CHI &&
             request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
         flows.emplace(transaction->handle, std::move(flow));
-        transaction->readyTime = pipeline.SaturatingAdd(time, 1);
+        transaction->readyTime = Bank(*transaction).pipeline.SaturatingAdd(time, 1);
         transaction->phase = Phase::Receive;
     }
 
@@ -417,7 +446,7 @@ namespace CHI::Lunatic {
             for (TransactionHandle handle : handles)
             {
                 const Transaction* transaction = tracker.Find(handle);
-                if (!transaction || !pipeline.Eligible(*transaction, time))
+                if (!transaction || !Bank(*transaction).pipeline.Eligible(*transaction, time))
                     continue;
                 const LineKey line = transaction->request.Line();
                 auto [it, inserted] = groupByLine.emplace(line, groups.size());
@@ -435,7 +464,7 @@ namespace CHI::Lunatic {
         for (TransactionHandle handle : handles)
         {
             Transaction* transaction = tracker.Find(handle);
-            if (!transaction || !pipeline.Eligible(*transaction, time))
+            if (!transaction || !Bank(*transaction).pipeline.Eligible(*transaction, time))
                 continue;
 
             FlowState& flow = flows.at(handle);
@@ -446,10 +475,10 @@ namespace CHI::Lunatic {
             }
             if (!flow.timingApplied)
             {
-                Time delay = pipeline.PhaseDelay(transaction->phase);
-                if (options.randomDelayLimit && pipeline.DelayablePhase(transaction->phase))
-                    delay = pipeline.SaturatingAdd(delay, random.Bounded(options.randomDelayLimit));
-                transaction->readyTime = pipeline.SaturatingAdd(transaction->readyTime, delay);
+                Time delay = Bank(*transaction).pipeline.PhaseDelay(transaction->phase);
+                if (options.randomDelayLimit && Bank(*transaction).pipeline.DelayablePhase(transaction->phase))
+                    delay = Bank(*transaction).pipeline.SaturatingAdd(delay, random.Bounded(options.randomDelayLimit));
+                transaction->readyTime = Bank(*transaction).pipeline.SaturatingAdd(transaction->readyTime, delay);
                 flow.timingApplied = true;
             }
 
@@ -466,27 +495,29 @@ namespace CHI::Lunatic {
                     pmu.RecordStall(WaitReason::Decision);
                     continue;
                 }
-                transaction->readyTime = pipeline.SaturatingAdd(
+                transaction->readyTime = Bank(*transaction).pipeline.SaturatingAdd(
                     transaction->readyTime, decision.GetAdditionalDelay());
                 flow.eventApplied = true;
             }
-            if (pipeline.Eligible(*transaction, time))
+            if (Bank(*transaction).pipeline.Eligible(*transaction, time))
                 Advance(*transaction);
         }
     }
 
-    Time Core::Impl::ScheduleTag()
+    Time Core::Impl::ScheduleTag(Transaction& transaction)
     {
-        if (pipeline.TagBusy(time))
+        BankState& bank = Bank(transaction);
+        if (bank.pipeline.TagBusy(time))
             pmu.RecordStall(WaitReason::TagPort);
-        return pipeline.ScheduleTag(time);
+        return bank.pipeline.ScheduleTag(time);
     }
 
-    Time Core::Impl::ScheduleData()
+    Time Core::Impl::ScheduleData(Transaction& transaction)
     {
-        if (pipeline.DataBusy(time))
+        BankState& bank = Bank(transaction);
+        if (bank.pipeline.DataBusy(time))
             pmu.RecordStall(WaitReason::DataPort);
-        return pipeline.ScheduleData(time);
+        return bank.pipeline.ScheduleData(time);
     }
 
     void Core::Impl::Advance(Transaction& transaction)
@@ -495,7 +526,7 @@ namespace CHI::Lunatic {
         switch (transaction.phase)
         {
             case Phase::Receive:
-                pipeline.Advance(transaction, Phase::Decode, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Decode, time);
                 return;
             case Phase::Decode:
             {
@@ -538,7 +569,7 @@ namespace CHI::Lunatic {
                     QueueComp(transaction, false, CHI::Eb::Resps::Comp_I, 0b10);
                     return;
                 }
-                pipeline.Advance(transaction, Phase::Admit, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Admit, time);
                 return;
             }
             case Phase::Admit:
@@ -551,13 +582,13 @@ namespace CHI::Lunatic {
                     return;
                 }
                 transaction.dbid = transaction.handle;
-                hazards.Add(transaction.handle, transaction.request.Line(), transaction.actionAge);
+                Bank(transaction).hazards.Add(transaction.handle, transaction.request.Line(), transaction.actionAge);
                 transaction.phase = Phase::Hazard;
                 transaction.readyTime = time;
                 return;
             case Phase::Hazard:
-                if (!hazards.IsHead(transaction.handle, transaction.request.Line()) ||
-                    (flow.victimLinked && !hazards.IsHead(transaction.handle, flow.victimLine)))
+                if (!Bank(transaction).hazards.IsHead(transaction.handle, transaction.request.Line()) ||
+                    (flow.victimLinked && !Bank(flow.victimLine).hazards.IsHead(transaction.handle, flow.victimLine)))
                 {
                     transaction.wait = WaitReason::SameLine;
                     transaction.readyTime = time;
@@ -566,11 +597,11 @@ namespace CHI::Lunatic {
                 }
                 transaction.wait = WaitReason::None;
                 transaction.phase = Phase::Lookup;
-                transaction.readyTime = ScheduleTag();
+                transaction.readyTime = ScheduleTag(transaction);
                 return;
             case Phase::Lookup:
             {
-                const HomeLine* home = directory.Find(transaction.request.Line());
+                const HomeLine* home = Bank(transaction).directory.Find(transaction.request.Line());
                 transaction.homeHit = home && home->valid;
                 flow.validBytes.fill(1);
                 if (transaction.homeHit)
@@ -586,10 +617,10 @@ namespace CHI::Lunatic {
                     transaction.data = image.data;
                     CopyMetadata(transaction, image, options);
                 }
-                const CacheState requesterState = snoopFilter.State(transaction.request.Line(), transaction.request.source);
+                const CacheState requesterState = Bank(transaction).snoopFilter.State(transaction.request.Line(), transaction.request.source);
                 flow.requesterWasValid = IsValid(requesterState);
                 flow.requesterWasDirty = IsDirty(requesterState);
-                pipeline.Advance(transaction, Phase::Resolve, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Resolve, time);
                 return;
             }
             case Phase::Resolve:
@@ -607,7 +638,7 @@ namespace CHI::Lunatic {
                 if (options.backend == BackendKind::Internal && transaction.memoryRequired)
                     CompleteMemoryRead(transaction);
                 else if (flow.backendPhase == BackendPhase::Done)
-                    pipeline.Advance(transaction, Phase::Action, time);
+                    Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 else
                     pmu.RecordStall(WaitReason::Memory);
                 return;
@@ -619,7 +650,7 @@ namespace CHI::Lunatic {
                 return;
             case Phase::WaitSnoop:
                 if (transaction.pendingSnoops.empty())
-                    pipeline.Advance(transaction, Phase::Action, time);
+                    Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 else
                     pmu.RecordStall(WaitReason::Snoop);
                 return;
@@ -684,9 +715,9 @@ namespace CHI::Lunatic {
             }
         }
         ordering.Release(handle);
-        hazards.Release(handle, transaction->request.Line());
+        Bank(transaction->request.Line()).hazards.Release(handle, transaction->request.Line());
         if (flow.victimLinked)
-            hazards.Release(handle, flow.victimLine);
+            Bank(flow.victimLine).hazards.Release(handle, flow.victimLine);
         ++pmu.retiredTransactions;
 
         Event event;
@@ -916,43 +947,75 @@ namespace CHI::Lunatic {
 
     bool Core::Impl::HasInflight() const noexcept
     {
-        return !rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
-               !txdat.empty() || !txsnp.empty() || !retries.empty() || !backendRetries.empty() ||
-               !backendCredits.empty() || !tracker.Empty() || !hazards.Empty() || !ordering.Empty() ||
-               (options.backend == BackendKind::AXI && axi.HasInflight());
+        if (!rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
+            !txdat.empty() || !txsnp.empty() || !retries.empty() || !backendRetries.empty() ||
+            !backendCredits.empty() || !tracker.Empty() || !ordering.Empty() ||
+            (options.backend == BackendKind::AXI && axi.HasInflight()))
+            return true;
+        for (const BankState& bank : banks)
+            if (!bank.hazards.Empty())
+                return true;
+        return false;
     }
 
     bool Core::Impl::ValidateInvariants() const noexcept
     {
-        if (!tracker.Validate() || !hazards.Validate() || !ordering.Validate())
+        if (!tracker.Validate() || !ordering.Validate())
             return false;
+        for (const BankState& bank : banks)
+        {
+            if (!bank.hazards.Validate())
+                return false;
+            const size_t owner = static_cast<size_t>(&bank - banks.data());
+            for (size_t set = 0; set < bank.directory.Sets(); ++set)
+            {
+                for (size_t way = 0; way < bank.directory.Ways(); ++way)
+                {
+                    const HomeLine& home = bank.directory.At(set, way);
+                    if (home.valid && BankIndex(home.key) != owner)
+                        return false;
+                }
+            }
+            for (size_t set = 0; set < bank.snoopFilter.Sets(); ++set)
+            {
+                for (size_t way = 0; way < bank.snoopFilter.Ways(); ++way)
+                {
+                    const SnoopFilterEntry& entry = bank.snoopFilter.At(set, way);
+                    if (entry.valid && BankIndex(entry.key) != owner)
+                        return false;
+                }
+            }
+        }
         if (!tracker.Empty())
             return true;
 
-        for (size_t set = 0; set < snoopFilter.Sets(); ++set)
+        for (const BankState& bank : banks)
         {
-            for (size_t way = 0; way < snoopFilter.Ways(); ++way)
+            for (size_t set = 0; set < bank.snoopFilter.Sets(); ++set)
             {
-                const SnoopFilterEntry& entry = snoopFilter.At(set, way);
-                if (!entry.valid)
-                    continue;
-                size_t validRequesters = 0;
-                size_t dirtyRequesters = 0;
-                for (const auto& [requester, state] : entry.requesters)
+                for (size_t way = 0; way < bank.snoopFilter.Ways(); ++way)
                 {
-                    validRequesters += IsValid(state) ? 1 : 0;
-                    dirtyRequesters += IsDirty(state) ? 1 : 0;
-                }
+                    const SnoopFilterEntry& entry = bank.snoopFilter.At(set, way);
+                    if (!entry.valid)
+                        continue;
+                    size_t validRequesters = 0;
+                    size_t dirtyRequesters = 0;
+                    for (const auto& [requester, state] : entry.requesters)
+                    {
+                        validRequesters += IsValid(state) ? 1 : 0;
+                        dirtyRequesters += IsDirty(state) ? 1 : 0;
+                    }
 
-                const HomeLine* home = directory.Find(entry.key);
-                if (options.policy == PolicyKind::Inclusive && validRequesters && (!home || !home->valid))
-                    return false;
-                if (options.policy == PolicyKind::Exclusive && validRequesters && home && home->valid)
-                    return false;
-                if (home && home->dirty && dirtyRequesters)
-                    return false;
-                if (dirtyRequesters > 1)
-                    return false;
+                    const HomeLine* home = Bank(entry.key).directory.Find(entry.key);
+                    if (options.policy == PolicyKind::Inclusive && validRequesters && (!home || !home->valid))
+                        return false;
+                    if (options.policy == PolicyKind::Exclusive && validRequesters && home && home->valid)
+                        return false;
+                    if (home && home->dirty && dirtyRequesters)
+                        return false;
+                    if (dirtyRequesters > 1)
+                        return false;
+                }
             }
         }
         return true;

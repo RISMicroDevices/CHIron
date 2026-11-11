@@ -7,7 +7,7 @@
 namespace CHI::Lunatic {
 
     Directory::Directory(size_t sets, size_t ways)
-        : sets(sets), ways(ways)
+        : bankMap(1), sets(sets), ways(ways)
     {
         if (!sets || !ways)
             throw std::invalid_argument("Lunatic directory geometry must be non-zero");
@@ -18,8 +18,14 @@ namespace CHI::Lunatic {
     }
 
     Directory::Directory(const Options& options)
-        : Directory(options.slcSets, options.slcWays)
+        : bankMap(options), sets(options.slcSets), ways(options.slcWays)
     {
+        if (!sets || !ways)
+            throw std::invalid_argument("Lunatic directory geometry must be non-zero");
+        if (sets > std::numeric_limits<size_t>::max() / ways)
+            throw std::invalid_argument("Lunatic directory geometry is too large");
+
+        lines.resize(sets * ways);
     }
 
     size_t Directory::Index(size_t set, size_t way) const noexcept
@@ -29,7 +35,7 @@ namespace CHI::Lunatic {
 
     size_t Directory::SetIndex(const LineKey& key) const noexcept
     {
-        return size_t((key.address / LINE_SIZE) % sets);
+        return bankMap.SetIndex(key, sets);
     }
 
     HomeLine* Directory::Find(const LineKey& key) noexcept

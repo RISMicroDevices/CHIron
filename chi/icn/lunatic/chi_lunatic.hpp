@@ -17,5 +17,6 @@
 #include "chi_lunatic_tracker.hpp"
 #include "chi_lunatic_hazard.hpp"
 #include "chi_lunatic_arbiter.hpp"
+#include "chi_lunatic_bank.hpp"
 #include "chi_lunatic_pipeline.hpp"
 #include "chi_lunatic_protocol.hpp"

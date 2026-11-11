@@ -21,7 +21,7 @@ namespace CHI::Lunatic {
             flow.validBytes.fill(0);
 
         bool stashTargetPlanned = false;
-        for (NodeId target : snoopFilter.Targets(transaction.request.Line()))
+        for (NodeId target : Bank(transaction).snoopFilter.Targets(transaction.request.Line()))
         {
             if (target != transaction.request.source)
             {
@@ -180,7 +180,7 @@ namespace CHI::Lunatic {
         {
             flow.backendPhase = BackendPhase::Done;
             flow.directoryCommitted = true;
-            snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
+            Bank(transaction).snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
             return true;
         }
 
@@ -235,7 +235,7 @@ namespace CHI::Lunatic {
 
         if (flow.mergeImmediateHome)
         {
-            const std::optional<size_t> currentWay = directory.FindWay(line);
+            const std::optional<size_t> currentWay = Bank(line).directory.FindWay(line);
             const size_t way = currentWay ? *currentWay : flow.victimWay;
             const bool dirty = flow.homeDirty || flow.dataDirty || !flow.validBytes.empty();
             HomeLine& home = InstallHome(line, way, transaction.data, dirty, time);
@@ -251,11 +251,11 @@ namespace CHI::Lunatic {
         }
 
         if (decision.removeHome && transaction.homeHit)
-            if (const auto way = directory.FindWay(line); way)
-                directory.Invalidate(directory.SetIndex(line), *way);
+            if (const auto way = Bank(line).directory.FindWay(line); way)
+                Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(line), *way);
 
         flow.requesterFinal = CacheState::I;
-        snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
+        Bank(transaction).snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
         flow.directoryCommitted = true;
         return true;
     }

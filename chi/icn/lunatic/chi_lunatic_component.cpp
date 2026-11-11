@@ -191,7 +191,7 @@ namespace CHI::Lunatic {
     HomeLineInfo Core::InspectHome(const LineKey& line) const noexcept
     {
         HomeLineInfo result;
-        if (const HomeLine* home = impl->directory.Find(line))
+        if (const HomeLine* home = impl->Bank(line).directory.Find(line))
         {
             result.valid = home->valid;
             result.dirty = home->dirty;
@@ -204,7 +204,7 @@ namespace CHI::Lunatic {
 
     CacheState Core::InspectRequester(const LineKey& line, NodeId requester) const noexcept
     {
-        return impl->snoopFilter.State(line, requester);
+        return impl->Bank(line).snoopFilter.State(line, requester);
     }
 
     bool Core::ValidateInvariants() const noexcept { return impl->ValidateInvariants(); }

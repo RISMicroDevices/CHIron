@@ -2,6 +2,7 @@
 
 #include "chi_lunatic_arbiter.hpp"
 #include "chi_lunatic_atomic.hpp"
+#include "chi_lunatic_bank.hpp"
 #include "chi_lunatic_backend_axi.hpp"
 #include "chi_lunatic_component.hpp"
 #include "chi_lunatic_directory.hpp"
@@ -153,20 +154,30 @@ namespace CHI::Lunatic {
         bool              downstream = false;
     };
 
+    struct BankState {
+        Directory       directory;
+        SnoopFilter     snoopFilter;
+        HazardGraph     hazards;
+        VirtualPipeline pipeline;
+
+        explicit BankState(const Options& options)
+            : directory(options), snoopFilter(options), pipeline(options)
+        {
+        }
+    };
+
     struct Core::Impl {
         NodeId                    nodeId;
         Options                   options;
         std::shared_ptr<EventHub> events;
         Time                      time = 0;
         PerformanceCounters       pmu;
-        Directory                 directory;
-        SnoopFilter               snoopFilter;
+        BankMap                   bankMap;
+        std::vector<BankState>    banks;
         std::unique_ptr<CachePolicy>
                                   policy;
         Tracker                   tracker;
-        HazardGraph               hazards;
         OrderingTracker           ordering;
-        VirtualPipeline           pipeline;
         DeterministicRandom       random;
         SparseMemory              memory;
         AXIBackend                axi;
@@ -345,8 +356,13 @@ namespace CHI::Lunatic {
         void AdmitRequest(const Request& request);
         void AdvanceTransactions();
         void Advance(Transaction& transaction);
-        Time ScheduleTag();
-        Time ScheduleData();
+        size_t BankIndex(const LineKey& line) const noexcept;
+        BankState& Bank(const LineKey& line);
+        const BankState& Bank(const LineKey& line) const;
+        BankState& Bank(const Transaction& transaction);
+        const BankState& Bank(const Transaction& transaction) const;
+        Time ScheduleTag(Transaction& transaction);
+        Time ScheduleData(Transaction& transaction);
         void Resolve(Transaction& transaction);
         void ResolveNonCoherent(Transaction& transaction);
         void ResolveCoherent(Transaction& transaction);

@@ -39,10 +39,10 @@ namespace CHI::Lunatic {
                 return false;
             flow.atomic.backendDirtyCommitted = true;
         }
-        if (const auto way = directory.FindWay(line); way)
-            directory.Invalidate(directory.SetIndex(line), *way);
+        if (const auto way = Bank(line).directory.FindWay(line); way)
+            Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(line), *way);
         flow.requesterFinal = CacheState::I;
-        snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
+        Bank(line).snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
         return true;
     }
 
@@ -130,7 +130,7 @@ namespace CHI::Lunatic {
         else
         {
             transaction.phase = Phase::Return;
-            transaction.readyTime = ScheduleData();
+            transaction.readyTime = ScheduleData(transaction);
         }
     }
 

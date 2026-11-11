@@ -40,10 +40,10 @@ namespace CHI::Lunatic {
             case RequestClass::WriteEvictOrEvict:
             case RequestClass::CopybackWrite:
                 flow.expectedBeatMask = CopybackMask(transaction.request, options);
-                pipeline.Advance(transaction, Phase::Action, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case RequestClass::Evict:
-                pipeline.Advance(transaction, Phase::Action, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case RequestClass::CMO:
             case RequestClass::CleanUnique:
@@ -90,7 +90,7 @@ namespace CHI::Lunatic {
                 transaction.readyTime = time;
                 return;
             }
-            if (flow.victimLinked && !hazards.IsHead(transaction.handle, flow.victimLine))
+            if (flow.victimLinked && !Bank(flow.victimLine).hazards.IsHead(transaction.handle, flow.victimLine))
             {
                 transaction.readyTime = time;
                 return;
@@ -177,7 +177,7 @@ namespace CHI::Lunatic {
                 return;
             case RequestClass::MakeReadUnique:
             {
-                const CacheState responseState = snoopFilter.State(transaction.request.Line(), transaction.request.source);
+                const CacheState responseState = Bank(transaction).snoopFilter.State(transaction.request.Line(), transaction.request.source);
                 if (!transaction.Complete(COMPLETE_MEMORY) && !transaction.homeHit && !IsValid(responseState) &&
                     (!flow.snoopDataValid || flow.snoopDataPartial))
                 {
@@ -253,7 +253,7 @@ namespace CHI::Lunatic {
                 QueueComp(transaction, false, CHI::Eb::Resps::Comp_I);
                 return;
             case RequestClass::CleanUnique:
-                if (snoopFilter.State(transaction.request.Line(), transaction.request.source) == CacheState::UDP)
+                if (Bank(transaction).snoopFilter.State(transaction.request.Line(), transaction.request.source) == CacheState::UDP)
                 {
                     Error(transaction.handle, "CleanUnique requester UDP is unsupported");
                     transaction.canceled = true;

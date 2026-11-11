@@ -24,7 +24,7 @@ namespace CHI::Lunatic {
                 return;
             case RequestClass::NonCoherentWrite:
                 flow.expectedBeatMask = TransferBeatMask(transaction.request, options);
-                pipeline.Advance(transaction, Phase::Action, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case RequestClass::ZeroWrite:
                 transaction.data.fill(0);

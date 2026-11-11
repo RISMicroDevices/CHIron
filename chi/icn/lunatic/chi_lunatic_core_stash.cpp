@@ -19,7 +19,7 @@ namespace CHI::Lunatic {
     void Core::Impl::ActionStash(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
-        snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
+        Bank(transaction).snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
         if (!IsSeparatedStashRequest(transaction.request.opcode))
         {
             if (!flow.compSent)

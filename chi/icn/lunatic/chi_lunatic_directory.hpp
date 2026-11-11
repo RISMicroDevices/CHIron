@@ -1,5 +1,6 @@
 #pragma once
 
+#include "chi_lunatic_bank.hpp"
 #include "chi_lunatic_config.hpp"
 #include "chi_lunatic_types.hpp"
 
@@ -21,6 +22,7 @@ namespace CHI::Lunatic {
     };
 
     class Directory {
+        BankMap               bankMap;
         size_t                sets;
         size_t                ways;
         std::vector<HomeLine> lines;

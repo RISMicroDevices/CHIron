@@ -7,7 +7,7 @@
 namespace CHI::Lunatic {
 
     SnoopFilter::SnoopFilter(size_t sets, size_t ways, bool precise)
-        : sets(sets), ways(ways), precise(precise)
+        : bankMap(1), sets(sets), ways(ways), precise(precise)
     {
         if (!sets || !ways)
             throw std::invalid_argument("Lunatic snoop filter geometry must be non-zero");
@@ -18,8 +18,15 @@ namespace CHI::Lunatic {
     }
 
     SnoopFilter::SnoopFilter(const Options& options)
-        : SnoopFilter(options.snoopFilterSets, options.snoopFilterWays, options.preciseSnoopFilter)
+        : bankMap(options), sets(options.snoopFilterSets), ways(options.snoopFilterWays),
+          precise(options.preciseSnoopFilter)
     {
+        if (!sets || !ways)
+            throw std::invalid_argument("Lunatic snoop filter geometry must be non-zero");
+        if (sets > std::numeric_limits<size_t>::max() / ways)
+            throw std::invalid_argument("Lunatic snoop filter geometry is too large");
+
+        entries.resize(sets * ways);
     }
 
     size_t SnoopFilter::Index(size_t set, size_t way) const noexcept
@@ -29,7 +36,7 @@ namespace CHI::Lunatic {
 
     size_t SnoopFilter::SetIndex(const LineKey& key) const noexcept
     {
-        return size_t((key.address / LINE_SIZE) % sets);
+        return bankMap.SetIndex(key, sets);
     }
 
     SnoopFilterEntry* SnoopFilter::Find(const LineKey& key) noexcept
