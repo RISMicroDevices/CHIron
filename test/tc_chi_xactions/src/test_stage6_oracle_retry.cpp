@@ -377,3 +377,189 @@ XACT_TEST(Stage6OracleRNCreditTypes) { CreditTypes<RNFixture>(); }
 XACT_TEST(Stage6OracleSNCreditTypes) { CreditTypes<SNFixture>(); }
 XACT_TEST(Stage6OracleRNInvalidGrantPreservesCreditState) { InvalidGrantPreservesCreditState<RNFixture>(); }
 XACT_TEST(Stage6OracleSNInvalidGrantPreservesCreditState) { InvalidGrantPreservesCreditState<SNFixture>(); }
+
+XACT_TEST(Stage6OracleRNChangedSLCRepHintResend)
+{
+    RNFixture fixture;
+    auto original = RetryRead<RNFixture>(131);
+    original.SLCRepHint() = 0;
+
+    XACT_ACCEPT(NextRequest(fixture, original, 1));
+    XACT_ACCEPT(Retry(fixture, 131));
+    XACT_ACCEPT(Grant(fixture));
+
+    auto resend = original;
+    resend.AllowRetry() = 0;
+    resend.SLCRepHint() = 1;
+
+    XACT_ACCEPT(NextRequest(fixture, resend, 23));
+    CompleteRead(fixture, 131);
+    XACT_CHECK(!fixture.joint.HasInflight());
+}
+
+XACT_TEST(Stage6OracleSNChangedReturnNIDResendRejected)
+{
+    SNFixture fixture;
+    fixture.global.TOPOLOGY.SetNode(4, Xact::NodeType::RN_F);
+
+    auto original = RetryRead<SNFixture>(141);
+    original.ReturnNID() = 2;
+    original.ReturnTxnID() = 141;
+
+    XACT_ACCEPT(NextRequest(fixture, original, 1));
+    XACT_ACCEPT(Retry(fixture, 141));
+    XACT_ACCEPT(Grant(fixture));
+
+    auto changed = original;
+    changed.AllowRetry() = 0;
+    changed.ReturnNID() = 4;
+    XACT_CHECK(NextRequest(fixture, changed, 23) ==
+        XactDenial::DENIED_NO_MATCHING_RETRY);
+
+    auto correct = original;
+    correct.AllowRetry() = 0;
+    XACT_ACCEPT(NextRequest(fixture, correct, 24));
+    CompleteRead(fixture, 141);
+    XACT_CHECK(!fixture.joint.HasInflight());
+}
+
+namespace {
+
+    template<typename Fixture>
+    void CompletePersist(Fixture& fixture, uint16_t txnId, uint8_t group)
+    {
+        constexpr bool downstream = std::is_same_v<Fixture, SNFixture>;
+        const uint16_t source = downstream ? 6 : 2;
+        const uint16_t target = downstream ? 2 : 4;
+
+        auto comp = Response(source, target, Opcodes::RSP::Comp, txnId);
+        comp.Resp() = Resps::Comp_UC;
+        XACT_ACCEPT(NextResponse(fixture, comp, 30));
+
+        auto persist = Response(source, target, Opcodes::RSP::Persist, 0);
+        persist.PGroupID() = group;
+        XACT_ACCEPT(NextResponse(fixture, persist, 31));
+    }
+
+    void CompleteHomeSeparatedRead(SNFixture& fixture, uint16_t txnId)
+    {
+        for (uint8_t dataId : { uint8_t(0), uint8_t(2) })
+        {
+            auto data = Data(6, 2, Opcodes::DAT::DataSepResp, txnId, dataId);
+            data.HomeNID() = 2;
+            data.Resp() = Resps::DataSepResp_I;
+            data.BE() = 0;
+            XACT_ACCEPT(fixture.joint.NextTXDAT(fixture.global, 30 + dataId, data));
+        }
+    }
+
+}
+
+XACT_TEST(Stage6OracleRNChangedSLCRepHintMultipleOriginals)
+{
+    RNFixture fixture;
+    std::vector<uint16_t> selected;
+    RecordRetries(fixture, selected);
+
+    auto older = RetryRead<RNFixture>(151, 0x20000);
+    older.SLCRepHint() = 0;
+    auto younger = RetryRead<RNFixture>(152, 0x30000);
+    younger.SLCRepHint() = 1;
+
+    XACT_ACCEPT(NextRequest(fixture, older, 1));
+    XACT_ACCEPT(Retry(fixture, 151, 1));
+    XACT_ACCEPT(NextRequest(fixture, younger, 2));
+    XACT_ACCEPT(Grant(fixture, 2));
+    XACT_ACCEPT(Retry(fixture, 152, 2));
+    XACT_ACCEPT(Grant(fixture, 1));
+
+    auto resend = younger;
+    resend.AllowRetry() = 0;
+    resend.SLCRepHint() = 3;
+    resend.PCrdType() = 2;
+    XACT_ACCEPT(NextRequest(fixture, resend, 23));
+    XACT_CHECK((selected == std::vector<uint16_t>{ 152 }));
+
+    CompleteRead(fixture, 152);
+    XACT_CHECK(fixture.joint.HasInflight());
+    XACT_ACCEPT(Return(fixture, 0, 1));
+    XACT_CHECK(!fixture.joint.HasInflight());
+}
+
+XACT_TEST(Stage6OracleSNChangedReturnNIDReadNoSnpSepRejected)
+{
+    SNFixture fixture;
+    fixture.global.TOPOLOGY.SetNode(4, Xact::NodeType::RN_F);
+
+    auto original = Request(Opcodes::REQ::ReadNoSnpSep, 161);
+    original.SrcID() = 2;
+    original.TgtID() = 6;
+    original.SnpAttr() = 0;
+    original.MemAttr() = MemAttrs::NonCacheable_Bufferable;
+    original.ReturnNID() = 2;
+    original.ReturnTxnID() = 161;
+
+    XACT_ACCEPT(NextRequest(fixture, original, 1));
+    XACT_ACCEPT(Retry(fixture, 161));
+    XACT_ACCEPT(Grant(fixture));
+
+    auto changed = original;
+    changed.AllowRetry() = 0;
+    changed.ReturnNID() = 4;
+    XACT_CHECK(NextRequest(fixture, changed, 23) ==
+        XactDenial::DENIED_NO_MATCHING_RETRY);
+
+    auto correct = original;
+    correct.AllowRetry() = 0;
+    XACT_ACCEPT(NextRequest(fixture, correct, 24));
+    CompleteHomeSeparatedRead(fixture, 161);
+    XACT_CHECK(!fixture.joint.HasInflight());
+}
+
+XACT_TEST(Stage6OracleRNChangedSLCRepHintPersistResend)
+{
+    RNFixture fixture;
+    auto original = Request(Opcodes::REQ::CleanSharedPersistSep, 171);
+    original.PGroupID() = 0x44;
+    original.SLCRepHint() = 0;
+
+    XACT_ACCEPT(NextRequest(fixture, original, 1));
+    XACT_ACCEPT(Retry(fixture, 171));
+    XACT_ACCEPT(Grant(fixture));
+
+    auto resend = original;
+    resend.AllowRetry() = 0;
+    resend.SLCRepHint() = 1;
+    XACT_ACCEPT(NextRequest(fixture, resend, 23));
+
+    CompletePersist(fixture, 171, 0x44);
+    XACT_CHECK(!fixture.joint.HasInflight());
+}
+
+XACT_TEST(Stage6OracleSNChangedReturnNIDPersistResendRejected)
+{
+    SNFixture fixture;
+    fixture.global.TOPOLOGY.SetNode(4, Xact::NodeType::RN_F);
+
+    auto original = Request(Opcodes::REQ::CleanSharedPersistSep, 181);
+    original.SrcID() = 2;
+    original.TgtID() = 6;
+    original.PGroupID() = 0x55;
+    original.ReturnNID() = 2;
+
+    XACT_ACCEPT(NextRequest(fixture, original, 1));
+    XACT_ACCEPT(Retry(fixture, 181));
+    XACT_ACCEPT(Grant(fixture));
+
+    auto changed = original;
+    changed.AllowRetry() = 0;
+    changed.ReturnNID() = 4;
+    XACT_CHECK(NextRequest(fixture, changed, 23) ==
+        XactDenial::DENIED_NO_MATCHING_RETRY);
+
+    auto correct = original;
+    correct.AllowRetry() = 0;
+    XACT_ACCEPT(NextRequest(fixture, correct, 24));
+    CompletePersist(fixture, 181, 0x55);
+    XACT_CHECK(!fixture.joint.HasInflight());
+}

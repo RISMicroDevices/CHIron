@@ -1785,7 +1785,18 @@ namespace /*CHI::*/Xact {
                 /* Permitted to be different */
 
                 // ReturnNID
-                if (FieldTrait::IsApplicable(fields->ReturnNID))
+#ifdef CHI_ISSUE_EB_ENABLE
+                const bool slcRepHintApplicable =
+                    this->first.IsFromRequesterToHome(glbl)
+                    && FieldTrait::IsApplicable(fields->SLCRepHint)
+                    && !(FieldTrait::IsApplicable(fields->StashNID)
+                        && origin.StashNIDValid());
+#else
+                const bool slcRepHintApplicable = false;
+#endif
+
+                if (FieldTrait::IsApplicable(fields->ReturnNID)
+                    && !slcRepHintApplicable)
                     if (origin.ReturnNID() != retry.ReturnNID())
                         return XactDenial::DENIED_RETRY_DIFF_RETURNNID;
 
