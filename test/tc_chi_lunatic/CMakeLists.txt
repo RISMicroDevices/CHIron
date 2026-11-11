@@ -12,12 +12,15 @@ file(GLOB test_sources CONFIGURE_DEPENDS
 
 set_source_files_properties(${test_sources} PROPERTIES COMPILE_OPTIONS "-Wno-error")
 set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/../../cchi/cohestra/cohestra_lunatic.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../cchi/cohestra/cohestra_lunatic_config.cpp"
     PROPERTIES COMPILE_OPTIONS "-Wno-error=unused-parameter")
 
 add_executable(test_chi_lunatic
     ${test_sources}
     ${lunatic_sources}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../cchi/cohestra/cohestra_lunatic.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../cchi/cohestra/cohestra_lunatic.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../cchi/cohestra/cohestra_lunatic_config.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../cchi/cohestra/cohestra_config.cpp")
 target_include_directories(test_chi_lunatic PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../.."
     "${CMAKE_CURRENT_SOURCE_DIR}/../../cchi/cohestra"
