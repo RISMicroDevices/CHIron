@@ -148,6 +148,20 @@ LUNATIC_TEST(Stage9SLCRepHintCompatibilityControls)
     original.allowRetry = true;
     Request resend = original;
     resend.allowRetry = false;
+    for (uint16_t hint = 0; hint < 0x80; ++hint)
+    {
+        resend.returnNid = hint;
+        LUNATIC_CHECK(RetryRequestCompatible(original, resend, 2));
+    }
+
+    resend.returnNid = 0x80;
+    LUNATIC_CHECK(!RetryRequestCompatible(original, resend, 2));
+
+    original.opcode = CHI::Eb::Opcodes::REQ::StashOnceShared;
+    original.stashNidValid = false;
+    original.returnNid = 0;
+    resend = original;
+    resend.allowRetry = false;
     resend.returnNid = 1;
     LUNATIC_CHECK(RetryRequestCompatible(original, resend, 2));
 
@@ -162,6 +176,18 @@ LUNATIC_TEST(Stage9SLCRepHintCompatibilityControls)
     original.opcode = CHI::Eb::Opcodes::REQ::AtomicStore::ADD;
     original.stashNidValid = false;
     original.returnNid = 0;
+    resend = original;
+    resend.allowRetry = false;
+    resend.returnNid = 1;
+    LUNATIC_CHECK(!RetryRequestCompatible(original, resend, 2));
+
+    original.opcode = CHI::Eb::Opcodes::REQ::PrefetchTgt;
+    resend = original;
+    resend.allowRetry = false;
+    resend.returnNid = 1;
+    LUNATIC_CHECK(!RetryRequestCompatible(original, resend, 2));
+
+    original.opcode = CHI::Eb::Opcodes::REQ::PCrdReturn;
     resend = original;
     resend.allowRetry = false;
     resend.returnNid = 1;

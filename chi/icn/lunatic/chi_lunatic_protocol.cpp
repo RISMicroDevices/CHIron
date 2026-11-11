@@ -350,6 +350,18 @@ namespace CHI::Lunatic {
         return RequiresCompAck(request);
     }
 
+    bool IsSLCRepHintApplicable(const Request& request) noexcept
+    {
+        namespace REQ = CHI::Eb::Opcodes::REQ;
+        if (IsAtomicRequest(request.opcode) ||
+            request.opcode == REQ::PrefetchTgt ||
+            request.opcode == REQ::PCrdReturn ||
+            request.opcode == REQ::DVMOp)
+            return false;
+
+        return !IsStashRequest(request.opcode) || !request.stashNidValid;
+    }
+
     bool RetryRequestCompatible(const Request& original, const Request& resend, NodeId retrySource) noexcept
     {
         if (resend.target != original.target && resend.target != retrySource)
@@ -362,6 +374,14 @@ namespace CHI::Lunatic {
         left.qos = right.qos = 0;
         left.traceTag = right.traceTag = 0;
         left.allowRetry = right.allowRetry = false;
+
+        if (IsSLCRepHintApplicable(original))
+        {
+            constexpr uint16_t returnNidUpperBits = 0xFF80;
+            left.returnNid &= returnNidUpperBits;
+            right.returnNid &= returnNidUpperBits;
+        }
+
         return left == right;
     }
 

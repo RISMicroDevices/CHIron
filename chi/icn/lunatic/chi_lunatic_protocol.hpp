@@ -40,6 +40,7 @@ namespace CHI::Lunatic {
     bool         IsAtomicRequest(uint16_t opcode) noexcept;
     bool         IsStashRequest(uint16_t opcode) noexcept;
     bool         IsSeparatedStashRequest(uint16_t opcode) noexcept;
+    bool         IsSLCRepHintApplicable(const Request& request) noexcept;
     bool         IsOrderingSupported(uint16_t opcode) noexcept;
     bool         IsOrderedWriteObservation(const Request& request) noexcept;
     bool         RequiresCompAck(const Request& request) noexcept;
