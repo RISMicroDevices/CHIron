@@ -66,6 +66,7 @@ namespace CHI::Lunatic {
             const size_t way = currentWay ? *currentWay : flow.victimWay;
             HomeLine& home = InstallHome(line, way, transaction.data, false, time);
             CopyMetadata(home, transaction, options);
+            ReleaseRefill(transaction, line);
             home.validBytes = flow.validBytes;
         }
         else if (decision.removeHome && transaction.homeHit)

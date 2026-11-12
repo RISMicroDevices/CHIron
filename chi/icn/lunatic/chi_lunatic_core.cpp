@@ -46,6 +46,270 @@ namespace CHI::Lunatic {
         return Bank(transaction.request.Line());
     }
 
+    size_t Core::Impl::OrdinaryTransactionLimit() const noexcept
+    {
+        return tracker.Limit() - options.structure.reservedTransactionEntries;
+    }
+
+    bool Core::Impl::OriginalAdmissionAvailable(const LineKey& line, bool resend) const
+    {
+        const size_t capacity = resend && options.structure.classes.enabled ?
+            tracker.Limit() : OrdinaryTransactionLimit();
+        if (tracker.Size() >= capacity)
+            return false;
+        const BankState& bank = Bank(line);
+        const size_t reservations = !resend && options.structure.classes.enabled ?
+            BankRetryReservations(BankIndex(line)) : 0;
+        if (bankMap.Count() > 1 &&
+            bank.activeOriginals + reservations >= tracker.Limit() / bankMap.Count())
+            return false;
+        return !options.structure.requestBufferLimit ||
+            bank.requestBufferOccupants < options.structure.requestBufferLimit;
+    }
+
+    void Core::Impl::ReleaseOriginal(Transaction& transaction)
+    {
+        --Bank(transaction).activeOriginals;
+    }
+
+    void Core::Impl::ReleaseRequestBuffer(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.requestBufferOwned)
+            return;
+        flow.requestBufferOwned = false;
+        --Bank(transaction).requestBufferOccupants;
+    }
+
+    void Core::Impl::ReleaseSnoopWave(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.snoopWaveOwned)
+            return;
+        flow.snoopWaveOwned = false;
+        --Bank(flow.snoopLine).activeSnoopWaves;
+    }
+
+    bool Core::Impl::AcquireBackendOperation(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.backendOperationOwned)
+            return true;
+        BankState& bank = Bank(transaction);
+        if (options.structure.memoryResourceLimit &&
+            bank.backendOperations >= options.structure.memoryResourceLimit)
+        {
+            pmu.RecordStall(WaitReason::Memory);
+            return false;
+        }
+        ++bank.backendOperations;
+        flow.backendOperationOwned = true;
+        return true;
+    }
+
+    bool Core::Impl::AcquireRefill(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.baselineOperationOwned)
+            return true;
+        BankState& bank = Bank(flow.baselineLine);
+        if (options.structure.refillResourceLimit &&
+            bank.refillOperations >= options.structure.refillResourceLimit)
+        {
+            pmu.RecordStall(WaitReason::Memory);
+            return false;
+        }
+        ++bank.refillOperations;
+        flow.baselineOperationOwned = true;
+        return true;
+    }
+
+    void Core::Impl::ReleaseResponse(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.responseOwned)
+            return;
+        flow.responseOwned = false;
+        --Bank(transaction).responseUnits;
+    }
+
+    void Core::Impl::ReleaseResponseIfComplete(Transaction& transaction)
+    {
+        if (transaction.Complete(COMPLETE_RESPONSE) &&
+            (!RequiresTransactionCompAck(transaction) || transaction.Complete(COMPLETE_COMPACK)))
+            ReleaseResponse(transaction);
+    }
+
+    void Core::Impl::ReleaseBackendOperation(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.backendOperationOwned)
+            return;
+        flow.backendOperationOwned = false;
+        --Bank(transaction).backendOperations;
+    }
+
+    void Core::Impl::CompleteBackendOperation(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        flow.backendPhase = BackendPhase::Done;
+        ReleaseBackendOperation(transaction);
+    }
+
+    void Core::Impl::ReleaseRefill(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.baselineOperationOwned)
+            return;
+        flow.baselineOperationOwned = false;
+        --Bank(flow.baselineLine).refillOperations;
+    }
+
+    void Core::Impl::ReleaseRefill(Transaction& transaction, const LineKey& line)
+    {
+        if (flows.at(transaction.handle).baselineLine == line)
+            ReleaseRefill(transaction);
+    }
+
+    size_t Core::Impl::ClassForQos(uint8_t qos) const noexcept
+    {
+        const auto& classes = options.structure.classes;
+        for (size_t index = 0; index < classes.qosMinimum.size(); ++index)
+            if (qos >= classes.qosMinimum[index] && qos <= classes.qosMaximum[index])
+                return index;
+        return classes.qosMinimum.size();
+    }
+
+    size_t Core::Impl::RetryTier(size_t bank, size_t classId) const noexcept
+    {
+        const auto& classes = options.structure.classes;
+        const size_t occupancy = banks[bank].activeClasses[classId] + banks[bank].retryReservations[classId];
+        if (occupancy < classes.dedicated[classId])
+            return 0;
+        if (occupancy < classes.contendedMinimum[classId])
+            return 1;
+        return 2;
+    }
+
+    bool Core::Impl::RetryCreditEligible(const RetryRecord& retry) const
+    {
+        if (!retry.ackPopped ||
+            (options.structure.classes.enabled ? retry.creditReserved || retry.creditReturned : retry.grantQueued) ||
+            OutstandingRetryCredits(retry.request.source, retry.request.pCrdType) >=
+                RetryOriginals(retry.request.source, retry.request.pCrdType))
+            return false;
+        return !options.structure.classes.enabled ||
+            banks[retry.bank].activeClasses[retry.classId] + banks[retry.bank].retryReservations[retry.classId] <
+                options.structure.classes.maximum[retry.classId];
+    }
+
+    bool Core::Impl::ClassAdmissionAvailable(const Request& request, size_t classId, bool resend) const
+    {
+        if (!OriginalAdmissionAvailable(request.Line(), resend))
+            return false;
+        if (!options.structure.classes.enabled)
+            return true;
+        if (classId >= options.structure.classes.maximum.size())
+            return false;
+
+        const auto& classes = options.structure.classes;
+        const BankState& bank = Bank(request.Line());
+        const size_t additional = resend ? 0 : 1;
+        if (bank.activeClasses[classId] + bank.retryReservations[classId] + additional >
+            classes.maximum[classId])
+            return false;
+        if (resend)
+            return true;
+
+        size_t dedicatedOthers = 0;
+        for (size_t index = 0; index < classes.dedicated.size(); ++index)
+            if (index != classId)
+                dedicatedOthers += classes.dedicated[index];
+        return tracker.Size() + TotalRetryReservations() + additional + dedicatedOthers <=
+            OrdinaryTransactionLimit();
+    }
+
+    bool Core::Impl::RetryAdmissionAvailable(const Request& request, size_t classId) const
+    {
+        (void)request;
+        return !options.structure.classes.enabled || classId < options.structure.classes.maximum.size();
+    }
+
+    size_t Core::Impl::RetrySourceCount() const noexcept
+    {
+        size_t sources = 0;
+        NodeId previous = 0;
+        bool havePrevious = false;
+        for (const auto& [key, count] : retrySources)
+        {
+            (void)count;
+            if (havePrevious && key.first == previous)
+                continue;
+            previous = key.first;
+            havePrevious = true;
+            ++sources;
+        }
+        return sources;
+    }
+
+    bool Core::Impl::RetrySourceAvailable(NodeId source) const noexcept
+    {
+        if (!options.structure.retrySourceLimit)
+            return true;
+        for (const auto& [key, count] : retrySources)
+        {
+            (void)count;
+            if (key.first == source)
+                return true;
+        }
+        return RetrySourceCount() < options.structure.retrySourceLimit;
+    }
+
+    void Core::Impl::AcquireRetrySource(const Request& request)
+    {
+        const size_t bank = BankIndex(request.Line());
+        const size_t classId = options.structure.classes.enabled ? ClassForQos(request.qos) : request.pCrdType;
+        ++retrySources[{ request.source, { bank, classId } }];
+    }
+
+    void Core::Impl::ReleaseRetrySource(NodeId source, size_t bank, size_t classId)
+    {
+        const auto key = std::make_pair(source, std::make_pair(bank, classId));
+        auto it = retrySources.find(key);
+        if (it == retrySources.end())
+            return;
+        if (it->second > 1)
+            --it->second;
+        else
+            retrySources.erase(it);
+    }
+
+    void Core::Impl::ReleaseClass(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.classOwned)
+            return;
+        --Bank(transaction).activeClasses[flow.assignedClass];
+        flow.classOwned = false;
+    }
+
+    size_t Core::Impl::BankRetryReservations(size_t bank) const noexcept
+    {
+        size_t total = 0;
+        for (size_t count : banks[bank].retryReservations)
+            total += count;
+        return total;
+    }
+
+    size_t Core::Impl::TotalRetryReservations() const noexcept
+    {
+        size_t total = 0;
+        for (const BankState& bank : banks)
+            for (size_t count : bank.retryReservations)
+                total += count;
+        return total;
+    }
+
     void Core::Impl::Reset()
     {
         rxreq.clear();
@@ -58,6 +322,7 @@ namespace CHI::Lunatic {
         retries.clear();
         availableCredits.clear();
         cancellationCredits.clear();
+        retrySources.clear();
         backendRetries.clear();
         backendCredits.clear();
         completedBackendReads.clear();
@@ -72,6 +337,15 @@ namespace CHI::Lunatic {
             bank.directory.Clear();
             bank.snoopFilter.Clear();
             bank.pipeline.Reset();
+            bank.activeOriginals = 0;
+            bank.requestBufferOccupants = 0;
+            bank.activeSnoopWaves = 0;
+            bank.outgoingSnoopQueue = 0;
+            bank.responseUnits = 0;
+            bank.backendOperations = 0;
+            bank.refillOperations = 0;
+            bank.activeClasses.fill(0);
+            bank.retryReservations.fill(0);
         }
         memory.Clear();
         axi.Reset();
@@ -82,6 +356,11 @@ namespace CHI::Lunatic {
         nextSerial = 0;
         nextBackendRetry = 0;
         nextRetry = 0;
+        nextBackendSelection = 0;
+        retryRounds = {};
+        backendRetryRounds = {};
+        responseCategoryRound = {};
+        responseClassRounds = {};
 
         Event event;
         event.kind = EventKind::Reset;
@@ -107,8 +386,7 @@ namespace CHI::Lunatic {
         AdvanceTransactions();
         AdvanceBackendRetries();
 
-        for (const auto& [index, retry] : retries)
-            QueueRetryCredit(index);
+        QueueRetryCredits();
 
         RetireFinished();
     }
@@ -171,7 +449,8 @@ namespace CHI::Lunatic {
                 (flow.separatedResponse ? flow.respSepEmitted
                                         : transaction->request.order == 0 || flow.readReceiptEmitted) &&
                 !transaction->Complete(COMPLETE_RESPONSE);
-            const bool earlyDCTAck = flow.dctActive && !transaction->Complete(COMPLETE_RESPONSE);
+            const bool earlyDCTAck = flow.dctActive && flow.dctSnoopEmitted &&
+                (!flow.dctProviderResponded || flow.dctForwarded) && !transaction->Complete(COMPLETE_RESPONSE);
             const bool compAckAllowed = !transaction->canceled && (AllowsCompAck(transaction->request) ||
                 (requestClass == RequestClass::WriteEvictOrEvict && flow.evictOrEvictNoData));
             if (!compAckAllowed || transaction->Complete(COMPLETE_COMPACK) ||
@@ -191,6 +470,7 @@ namespace CHI::Lunatic {
                 responseComplete = true;
             }
             transaction->Mark(COMPLETE_COMPACK);
+            ReleaseResponseIfComplete(*transaction);
             if (IsOrderedWriteObservation(transaction->request))
                 ordering.Release(transaction->handle);
             if (responseComplete)
@@ -328,22 +608,40 @@ namespace CHI::Lunatic {
 
         if (!rxreq.front().allowRetry)
         {
-            if (!ordering.CanAdmit(rxreq.front()))
+            size_t classId = options.structure.classes.enabled ? ClassForQos(rxreq.front().qos) : 0;
+            bool resend = false;
+            const auto credit = availableCredits.find({ rxreq.front().source, rxreq.front().pCrdType });
+            if (credit != availableCredits.end() && credit->second != 0)
+            {
+                for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
+                {
+                    if (!RetryRequestCompatible(iter->second.request, rxreq.front(), nodeId))
+                        continue;
+                    classId = iter->second.classId;
+                    resend = true;
+                    break;
+                }
+            }
+            if (!ClassAdmissionAvailable(rxreq.front(), classId, resend) || !ordering.CanAdmit(rxreq.front()))
             {
                 pmu.RecordStall(WaitReason::InputQueue);
                 return;
             }
             Request request = std::move(rxreq.front());
             rxreq.pop_front();
-            ConsumeRetryRequest(request, false);
-            AdmitRequest(request);
+            if (resend)
+                ConsumeRetryRequest(request, false);
+            AdmitRequest(request, classId);
             return;
         }
 
-        const bool reservationAvailable = RetryReservationAvailable();
-        if (!reservationAvailable)
+        const size_t classId = options.structure.classes.enabled ? ClassForQos(rxreq.front().qos) :
+            rxreq.front().pCrdType;
+        const bool admissionAvailable = RetryReservationAvailable() &&
+            ClassAdmissionAvailable(rxreq.front(), classId, false);
+        if (!admissionAvailable)
             pmu.RecordStall(WaitReason::Tracker);
-        if (requestRetry || !reservationAvailable)
+        if (requestRetry || !admissionAvailable)
         {
             Request& request = rxreq.front();
             if (!options.retryEnabled || !request.allowRetry)
@@ -354,22 +652,35 @@ namespace CHI::Lunatic {
                 return;
             }
 
+            if (!RetryAdmissionAvailable(request, classId) || !RetrySourceAvailable(request.source))
+            {
+                pmu.RecordStall(WaitReason::Tracker);
+                return;
+            }
+            AcquireRetrySource(request);
             const size_t index = nextRetry++;
-            RetryRecord record{ request, false, false };
+            const Time age = nextAge++;
+            RetryRecord record{ request, BankIndex(request.Line()), classId, age, false, false, false };
+            record.request.pCrdType = classId;
             Response response;
             response.source = nodeId;
             response.target = request.source;
             response.txnId = request.txnId;
             response.opcode = CHI::Eb::Opcodes::RSP::RetryAck;
-            response.pCrdType = request.pCrdType;
+            response.pCrdType = classId;
             response.qos = request.qos;
             response.traceTag = request.traceTag;
             retries.emplace(index, record);
             rxreq.pop_front();
-            Queue(txrsp, response, INVALID_TRANSACTION, nextAge++, false, false, index);
+            Queue(txrsp, response, INVALID_TRANSACTION, age, false, false, index);
             return;
         }
 
+        if (!ClassAdmissionAvailable(rxreq.front(), classId, false))
+        {
+            pmu.RecordStall(WaitReason::Tracker);
+            return;
+        }
         if (!ordering.CanAdmit(rxreq.front()))
         {
             pmu.RecordStall(WaitReason::InputQueue);
@@ -378,11 +689,18 @@ namespace CHI::Lunatic {
 
         Request request = std::move(rxreq.front());
         rxreq.pop_front();
-        AdmitRequest(request);
+        AdmitRequest(request, classId);
     }
 
-    void Core::Impl::AdmitRequest(const Request& request)
+    void Core::Impl::AdmitRequest(const Request& request, size_t classId)
     {
+        if (classId == std::numeric_limits<size_t>::max())
+            classId = ClassForQos(request.qos);
+        if (options.structure.classes.enabled && classId >= options.structure.classes.maximum.size())
+        {
+            Deny(request, "request QoS has no assigned class");
+            return;
+        }
         const Time age = nextAge++;
         Transaction* transaction = tracker.Allocate(request, age);
         if (!transaction)
@@ -391,14 +709,22 @@ namespace CHI::Lunatic {
             return;
         }
         ++pmu.admittedTransactions;
+        BankState& bank = Bank(*transaction);
+        ++bank.activeOriginals;
+        ++bank.requestBufferOccupants;
 
         if (!ordering.Add(*transaction))
         {
-            Error(transaction->handle, "duplicate requester ordering gate");
-            transaction->canceled = true;
-            transaction->phase = Phase::Commit;
+            const TransactionHandle handle = transaction->handle;
+            --bank.activeOriginals;
+            --bank.requestBufferOccupants;
+            tracker.Retire(handle);
+            Error(handle, "duplicate requester ordering gate");
             return;
         }
+
+        if (options.structure.classes.enabled)
+            ++bank.activeClasses[classId];
 
         const auto requestClass = ClassifyRequest(request.opcode);
         const bool separatedEligible = requestClass == RequestClass::NonCoherentRead ||
@@ -406,6 +732,9 @@ namespace CHI::Lunatic {
         const bool separatedLegal = separatedEligible &&
             (request.order == 0 || RequiresCompAck(request));
         FlowState flow;
+        flow.requestBufferOwned = true;
+        flow.assignedClass = options.structure.classes.enabled ? classId : 0;
+        flow.classOwned = options.structure.classes.enabled;
         flow.separatedResponse = separatedLegal && options.separatedReadResponse;
         flow.separatedBackendRead = separatedLegal && options.separatedBackendRead;
         flow.dmtActive = options.dmtEnabled && options.backend == BackendKind::CHI && separatedEligible &&
@@ -598,6 +927,7 @@ namespace CHI::Lunatic {
                 transaction.wait = WaitReason::None;
                 transaction.phase = Phase::Lookup;
                 transaction.readyTime = ScheduleTag(transaction);
+                ReleaseRequestBuffer(transaction);
                 return;
             case Phase::Lookup:
             {
@@ -715,6 +1045,13 @@ namespace CHI::Lunatic {
             }
         }
         ordering.Release(handle);
+        ReleaseRequestBuffer(*transaction);
+        ReleaseSnoopWave(*transaction);
+        ReleaseOriginal(*transaction);
+        ReleaseClass(*transaction);
+        ReleaseResponse(*transaction);
+        ReleaseBackendOperation(*transaction);
+        ReleaseRefill(*transaction);
         Bank(transaction->request.Line()).hazards.Release(handle, transaction->request.Line());
         if (flow.victimLinked)
             Bank(flow.victimLine).hazards.Release(handle, flow.victimLine);
@@ -857,7 +1194,7 @@ namespace CHI::Lunatic {
                     const bool complete = store ? flow.backendCompReceived : flow.atomic.backendResultReceived;
                     if (complete)
                     {
-                        flow.backendPhase = BackendPhase::Done;
+                        CompleteBackendOperation(*transaction);
                         tracker.UnbindMemory(options.subordinateId, transaction->handle);
                         transaction->phase = Phase::Action;
                         transaction->readyTime = time;
@@ -871,7 +1208,7 @@ namespace CHI::Lunatic {
                 }
                 if (flow.backendCompReceived)
                 {
-                    flow.backendPhase = BackendPhase::Done;
+                    CompleteBackendOperation(*transaction);
                     tracker.UnbindMemory(options.subordinateId, transaction->handle);
                     transaction->phase = Phase::Action;
                     transaction->readyTime = time;
@@ -897,8 +1234,18 @@ namespace CHI::Lunatic {
         }
     }
 
-    void Core::Impl::OnEmitted(const Pending<Snoop>&)
+    void Core::Impl::OnEmitted(const Pending<Snoop>& pending)
     {
+        --Bank(pending.flit.Line()).outgoingSnoopQueue;
+        Transaction* transaction = tracker.Find(pending.transaction);
+        if (!transaction)
+            return;
+        FlowState& flow = flows.at(transaction->handle);
+        if (flow.dctActive && pending.flit.target == flow.dctTarget &&
+            pending.flit.txnId == transaction->handle &&
+            pending.flit.fwdNid == transaction->request.source &&
+            pending.flit.fwdTxnId == transaction->request.txnId)
+            flow.dctSnoopEmitted = true;
     }
 
     bool Core::Impl::Reentry()
@@ -949,19 +1296,177 @@ namespace CHI::Lunatic {
     {
         if (!rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
             !txdat.empty() || !txsnp.empty() || !retries.empty() || !backendRetries.empty() ||
-            !backendCredits.empty() || !tracker.Empty() || !ordering.Empty() ||
+            !backendCredits.empty() || !availableCredits.empty() || !cancellationCredits.empty() ||
+            !retrySources.empty() || !tracker.Empty() || !ordering.Empty() ||
             (options.backend == BackendKind::AXI && axi.HasInflight()))
             return true;
         for (const BankState& bank : banks)
-            if (!bank.hazards.Empty())
+            if (!bank.hazards.Empty() || bank.activeOriginals || bank.requestBufferOccupants ||
+                bank.activeSnoopWaves || bank.outgoingSnoopQueue || bank.responseUnits ||
+                bank.backendOperations || bank.refillOperations ||
+                std::any_of(bank.activeClasses.begin(), bank.activeClasses.end(), [](size_t count) { return count != 0; }) ||
+                std::any_of(bank.retryReservations.begin(), bank.retryReservations.end(), [](size_t count) { return count != 0; }))
                 return true;
         return false;
     }
 
     bool Core::Impl::ValidateInvariants() const noexcept
     {
-        if (!tracker.Validate() || !ordering.Validate())
+        const size_t occupancy = tracker.Size();
+        const size_t capacity = options.structure.classes.enabled ?
+            tracker.Limit() : OrdinaryTransactionLimit();
+        if (!tracker.Validate() || !ordering.Validate() || occupancy > capacity)
             return false;
+
+        std::vector<size_t> expectedOriginals(banks.size(), 0);
+        std::vector<size_t> expectedBuffers(banks.size(), 0);
+        std::vector<size_t> expectedWaves(banks.size(), 0);
+        std::vector<size_t> expectedOutgoing(banks.size(), 0);
+        std::vector<size_t> expectedResponses(banks.size(), 0);
+        std::vector<size_t> expectedBackend(banks.size(), 0);
+        std::vector<size_t> expectedRefills(banks.size(), 0);
+        std::vector<std::array<size_t, 4>> expectedClasses(banks.size());
+        std::vector<std::array<size_t, 4>> expectedRetryReservations(banks.size());
+        for (TransactionHandle handle : tracker.Handles())
+        {
+            const Transaction* transaction = tracker.Find(handle);
+            if (!transaction)
+                return false;
+            ++expectedOriginals[BankIndex(transaction->request.Line())];
+            const FlowState& flow = flows.at(handle);
+            if (flow.requestBufferOwned)
+                ++expectedBuffers[BankIndex(transaction->request.Line())];
+            if (flow.snoopWaveOwned)
+            {
+                const size_t owner = BankIndex(flow.snoopLine);
+                if (owner >= banks.size())
+                    return false;
+                ++expectedWaves[owner];
+            }
+            if (flow.responseOwned)
+                ++expectedResponses[BankIndex(transaction->request.Line())];
+            if (flow.backendOperationOwned)
+                ++expectedBackend[BankIndex(transaction->request.Line())];
+            if (flow.baselineOperationOwned)
+                ++expectedRefills[BankIndex(flow.baselineLine)];
+            if (options.structure.classes.enabled)
+            {
+                if (!flow.classOwned || flow.assignedClass >= expectedClasses[0].size() ||
+                    (flow.assignedClass != ClassForQos(transaction->request.qos) &&
+                     flow.assignedClass != transaction->request.pCrdType))
+                    return false;
+                ++expectedClasses[BankIndex(transaction->request.Line())][flow.assignedClass];
+            }
+            else if (flow.classOwned)
+                return false;
+        }
+        for (const auto& pending : txsnp)
+            ++expectedOutgoing[BankIndex(pending.flit.Line())];
+
+        std::map<std::pair<NodeId, uint8_t>, size_t> sourceReservations;
+        std::map<std::pair<NodeId, uint8_t>, size_t> requiredReservations;
+        std::map<std::pair<NodeId, uint8_t>, size_t> reservedCredits;
+        if (options.structure.retrySourceLimit && RetrySourceCount() > options.structure.retrySourceLimit)
+            return false;
+        for (const auto& [key, count] : retrySources)
+        {
+            if (!count || key.second.first >= banks.size() ||
+                (options.structure.classes.enabled && key.second.second >= expectedRetryReservations[0].size()))
+                return false;
+            sourceReservations[{ key.first, key.second.second }] += count;
+        }
+        for (const auto& [index, retry] : retries)
+        {
+            if (retry.bank >= banks.size() ||
+                (options.structure.classes.enabled && retry.classId >= expectedRetryReservations[0].size()) ||
+                (options.structure.classes.enabled && retry.grantQueued && !retry.creditReserved))
+                return false;
+            ++requiredReservations[{ retry.request.source, retry.request.pCrdType }];
+            if (!options.structure.classes.enabled || !retry.creditReserved)
+                continue;
+            ++expectedRetryReservations[retry.bank][retry.classId];
+            ++reservedCredits[{ retry.request.source, retry.request.pCrdType }];
+            bool queued = false;
+            for (const auto& pending : txrsp)
+                queued = queued || (pending.retry == index &&
+                    pending.flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant);
+            if (retry.grantQueued != queued)
+                return false;
+        }
+        for (const auto& [key, count] : cancellationCredits)
+        {
+            auto original = requiredReservations.find(key);
+            if (original == requiredReservations.end() || count > original->second)
+                return false;
+            original->second -= count;
+        }
+        for (const auto& [key, count] : sourceReservations)
+        {
+            const auto required = requiredReservations.find(key);
+            if (required == requiredReservations.end() || count != required->second)
+                return false;
+        }
+        for (const auto& [key, count] : reservedCredits)
+            if (OutstandingRetryCredits(key.first, key.second) != count)
+                return false;
+        for (const auto& [key, count] : requiredReservations)
+        {
+            (void)count;
+            if (OutstandingRetryCredits(key.first, key.second) > RetryOriginals(key.first, key.second))
+                return false;
+        }
+        for (const auto& [key, count] : availableCredits)
+        {
+            (void)count;
+            if (OutstandingRetryCredits(key.first, key.second) > RetryOriginals(key.first, key.second))
+                return false;
+        }
+        for (const auto& pending : txrsp)
+            if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant &&
+                OutstandingRetryCredits(pending.flit.target, pending.flit.pCrdType) >
+                    RetryOriginals(pending.flit.target, pending.flit.pCrdType))
+                return false;
+
+        for (size_t owner = 0; owner < banks.size(); ++owner)
+        {
+            const BankState& bank = banks[owner];
+            if (bank.activeOriginals != expectedOriginals[owner] ||
+                bank.requestBufferOccupants != expectedBuffers[owner] ||
+                bank.activeSnoopWaves != expectedWaves[owner] ||
+                bank.outgoingSnoopQueue != expectedOutgoing[owner] ||
+                bank.responseUnits != expectedResponses[owner] ||
+                bank.backendOperations != expectedBackend[owner] ||
+                bank.refillOperations != expectedRefills[owner] ||
+                bank.activeClasses != expectedClasses[owner] ||
+                bank.retryReservations != expectedRetryReservations[owner])
+                return false;
+            if (bankMap.Count() > 1 && bank.activeOriginals > tracker.Limit() / bankMap.Count())
+                return false;
+            if (options.structure.classes.enabled)
+                for (size_t classId = 0; classId < bank.activeClasses.size(); ++classId)
+                    if (bank.activeClasses[classId] + bank.retryReservations[classId] >
+                        options.structure.classes.maximum[classId])
+                        return false;
+            if (options.structure.requestBufferLimit &&
+                bank.requestBufferOccupants > options.structure.requestBufferLimit)
+                return false;
+            if (options.structure.snoopResourceLimit &&
+                bank.activeSnoopWaves > options.structure.snoopResourceLimit)
+                return false;
+            if (options.structure.outgoingSnoopQueueLimit &&
+                bank.outgoingSnoopQueue > options.structure.outgoingSnoopQueueLimit)
+                return false;
+            if (options.structure.responseResourceLimit &&
+                bank.responseUnits > options.structure.responseResourceLimit)
+                return false;
+            if (options.structure.memoryResourceLimit &&
+                bank.backendOperations > options.structure.memoryResourceLimit)
+                return false;
+            if (options.structure.refillResourceLimit &&
+                bank.refillOperations > options.structure.refillResourceLimit)
+                return false;
+        }
+
         for (const BankState& bank : banks)
         {
             if (!bank.hazards.Validate())

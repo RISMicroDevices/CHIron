@@ -240,6 +240,7 @@ namespace CHI::Lunatic {
             const bool dirty = flow.homeDirty || flow.dataDirty || !flow.validBytes.empty();
             HomeLine& home = InstallHome(line, way, transaction.data, dirty, time);
             CopyMetadata(home, transaction, options);
+            ReleaseRefill(transaction, line);
             home.validBytes = flow.validBytes;
             flow.backendPhase = BackendPhase::Done;
         }

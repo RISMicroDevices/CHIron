@@ -20,6 +20,7 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <type_traits>
 
 namespace CHI::Lunatic {
 
@@ -60,6 +61,13 @@ namespace CHI::Lunatic {
         uint64_t                   backendBeatMask = 0;
         size_t                     backendBeat = 0;
         size_t                     nextSnoop = 0;
+        bool                       requestBufferOwned = false;
+        bool                       snoopWaveOwned = false;
+        bool                       responseOwned = false;
+        bool                       backendOperationOwned = false;
+        bool                       baselineOperationOwned = false;
+        size_t                     assignedClass = 0;
+        bool                       classOwned = false;
         uint8_t                    writeResp = 0;
         std::map<NodeId, uint64_t> snoopBeatMasks;
         std::map<NodeId, uint8_t>  snoopResponses;
@@ -70,6 +78,8 @@ namespace CHI::Lunatic {
         bool                       dmtActive = false;
         bool                       dctActive = false;
         bool                       dctForwarded = false;
+        bool                       dctSnoopEmitted = false;
+        bool                       dctProviderResponded = false;
         NodeId                     dctTarget = 0;
         uint8_t                    dctFwdState = 0;
         bool                       retToSrcUsed = false;
@@ -87,6 +97,7 @@ namespace CHI::Lunatic {
         ByteEnables                snoopValidBytes{};
         ByteEnables                validBytes{};
         bool                       spillPending = false;
+        bool                       spillGeneratedEviction = false;
         LineKey                    spillLine{};
         LineData                   spillData{};
         LinePoison                 spillPoison{};
@@ -117,6 +128,8 @@ namespace CHI::Lunatic {
         bool                       victimDataValid = false;
         bool                       victimDataPartial = false;
         ByteEnables                victimValidBytes{};
+        uint64_t                   victimGeneration = 0;
+        bool                       victimResponseUpdated = false;
         bool                       victimDirty = false;
         size_t                     victimWay = 0;
         LineKey                    victimLine{};
@@ -130,17 +143,31 @@ namespace CHI::Lunatic {
         AtomicFlowState            atomic;
     };
 
+    struct WeightedRoundState {
+        size_t   index = 0;
+        uint64_t remaining = 0;
+    };
+
     struct RetryRecord {
         Request request;
+        size_t  bank = 0;
+        size_t  classId = 0;
+        Time    age = 0;
         bool    ackPopped = false;
         bool    grantQueued = false;
+        bool    creditReserved = false;
+        bool    creditReturned = false;
     };
 
     struct BackendRetryRecord {
         Request           request;
         TransactionHandle transaction = INVALID_TRANSACTION;
         uint64_t          serial = 0;
+        size_t            bank = 0;
+        size_t            classId = 0;
+        uint8_t           retryAckPCrdType = 0;
         bool              creditReceived = false;
+        uint64_t          selection = std::numeric_limits<uint64_t>::max();
     };
 
     template<typename T>
@@ -159,6 +186,15 @@ namespace CHI::Lunatic {
         SnoopFilter     snoopFilter;
         HazardGraph     hazards;
         VirtualPipeline pipeline;
+        size_t          activeOriginals = 0;
+        size_t          requestBufferOccupants = 0;
+        size_t          activeSnoopWaves = 0;
+        size_t          outgoingSnoopQueue = 0;
+        size_t          responseUnits = 0;
+        size_t          backendOperations = 0;
+        size_t          refillOperations = 0;
+        std::array<size_t, 4> activeClasses{};
+        std::array<size_t, 4> retryReservations{};
 
         explicit BankState(const Options& options)
             : directory(options), snoopFilter(options), pipeline(options)
@@ -189,6 +225,8 @@ namespace CHI::Lunatic {
                                   availableCredits;
         std::map<std::pair<NodeId, uint8_t>, size_t>
                                   cancellationCredits;
+        std::map<std::pair<NodeId, std::pair<size_t, size_t>>, size_t>
+                                  retrySources;
         std::map<TransactionHandle, BackendRetryRecord>
                                   backendRetries;
         std::map<std::pair<NodeId, uint8_t>, size_t>
@@ -200,6 +238,11 @@ namespace CHI::Lunatic {
         size_t                    nextRetry = 0;
         uint64_t                  nextAge = 0;
         uint64_t                  nextSerial = 0;
+        uint64_t                  nextBackendSelection = 0;
+        std::array<WeightedRoundState, 3> retryRounds{};
+        std::array<WeightedRoundState, 3> backendRetryRounds{};
+        WeightedRoundState          responseCategoryRound{};
+        std::array<WeightedRoundState, 4> responseClassRounds{};
 
         std::deque<Request>           rxreq;
         std::deque<Response>          rxrsp;
@@ -262,9 +305,51 @@ namespace CHI::Lunatic {
             events->Publish(std::move(event), !emitted);
         }
 
-        template<typename T>
-        static size_t Select(const std::deque<Pending<T>>& queue)
+        template<size_t N>
+        static size_t SelectWeighted(const std::array<uint64_t, N>& weights,
+                                     const std::array<bool, N>& eligible,
+                                     WeightedRoundState& state, bool commit)
         {
+            WeightedRoundState next = state;
+            size_t selected = N;
+            const size_t current = next.index < N ? next.index : 0;
+            if (next.remaining && eligible[current])
+            {
+                selected = current;
+            }
+            else
+            {
+                const size_t offset = next.remaining ? 1 : 0;
+                for (size_t step = 0; step < N; ++step)
+                {
+                    const size_t candidate = (current + offset + step) % N;
+                    if (!eligible[candidate])
+                        continue;
+                    selected = candidate;
+                    break;
+                }
+                if (selected == N)
+                    return N;
+                next.index = selected;
+                next.remaining = weights[selected] ? weights[selected] : 1;
+            }
+            --next.remaining;
+            if (!next.remaining)
+                next.index = (selected + 1) % N;
+            if (commit)
+                state = next;
+            return selected;
+        }
+
+        template<typename T>
+        size_t Select(const std::deque<Pending<T>>& queue, bool commit = false)
+        {
+            if constexpr (std::is_same_v<T, Response>)
+            {
+                if (options.structure.classes.enabled &&
+                    options.strategy.outputArbitration == OutputArbitrationKind::OldestClassWeighted)
+                    return SelectResponse(queue, std::nullopt, commit);
+            }
             size_t selected = 0;
             for (size_t index = 1; index < queue.size(); ++index)
             {
@@ -276,8 +361,14 @@ namespace CHI::Lunatic {
         }
 
         template<typename T>
-        static size_t Select(const std::deque<Pending<T>>& queue, bool downstream)
+        size_t Select(const std::deque<Pending<T>>& queue, bool downstream, bool commit)
         {
+            if constexpr (std::is_same_v<T, Response>)
+            {
+                if (options.structure.classes.enabled &&
+                    options.strategy.outputArbitration == OutputArbitrationKind::OldestClassWeighted)
+                    return SelectResponse(queue, downstream, commit);
+            }
             size_t selected = queue.size();
             for (size_t index = 0; index < queue.size(); ++index)
             {
@@ -291,15 +382,15 @@ namespace CHI::Lunatic {
         }
 
         template<typename T>
-        const T* Peek(const std::deque<Pending<T>>& queue) const
+        const T* Peek(const std::deque<Pending<T>>& queue)
         {
-            return queue.empty() ? nullptr : &queue[Select(queue)].flit;
+            return queue.empty() ? nullptr : &queue[Select(queue, false)].flit;
         }
 
         template<typename T>
-        const T* Peek(const std::deque<Pending<T>>& queue, bool downstream) const
+        const T* Peek(const std::deque<Pending<T>>& queue, bool downstream)
         {
-            const size_t selected = Select(queue, downstream);
+            const size_t selected = Select(queue, downstream, false);
             return selected == queue.size() ? nullptr : &queue[selected].flit;
         }
 
@@ -308,7 +399,7 @@ namespace CHI::Lunatic {
         {
             if (queue.empty())
                 return std::nullopt;
-            const size_t selected = Select(queue);
+            const size_t selected = Select(queue, true);
             Pending<T> pending = std::move(queue[selected]);
             queue.erase(queue.begin() + selected);
             std::optional<T> result(std::move(pending.flit));
@@ -321,7 +412,7 @@ namespace CHI::Lunatic {
         template<typename T>
         std::optional<T> Pop(std::deque<Pending<T>>& queue, EventKind kind, bool downstream)
         {
-            const size_t selected = Select(queue, downstream);
+            const size_t selected = Select(queue, downstream, true);
             if (selected == queue.size())
                 return std::nullopt;
             Pending<T> pending = std::move(queue[selected]);
@@ -347,13 +438,36 @@ namespace CHI::Lunatic {
             return true;
         }
 
+        template<typename T>
+        bool AcquireResponse(Transaction& transaction, const std::deque<Pending<T>>& queue)
+        {
+            if (queue.size() >= options.outputQueueLimit)
+            {
+                pmu.RecordStall(WaitReason::OutputQueue);
+                return false;
+            }
+            FlowState& flow = flows.at(transaction.handle);
+            if (flow.responseOwned)
+                return true;
+            BankState& bank = Bank(transaction);
+            if (options.structure.responseResourceLimit &&
+                bank.responseUnits >= options.structure.responseResourceLimit)
+            {
+                pmu.RecordStall(WaitReason::OutputQueue);
+                return false;
+            }
+            ++bank.responseUnits;
+            flow.responseOwned = true;
+            return true;
+        }
+
         void Reset();
         void Tick();
         void ProcessResponses();
         void ProcessRSP(const Response& flit);
         void ProcessDAT(const Data& flit);
         void AdmitRequests();
-        void AdmitRequest(const Request& request);
+        void AdmitRequest(const Request& request, size_t classId = std::numeric_limits<size_t>::max());
         void AdvanceTransactions();
         void Advance(Transaction& transaction);
         size_t BankIndex(const LineKey& line) const noexcept;
@@ -361,6 +475,31 @@ namespace CHI::Lunatic {
         const BankState& Bank(const LineKey& line) const;
         BankState& Bank(const Transaction& transaction);
         const BankState& Bank(const Transaction& transaction) const;
+        size_t OrdinaryTransactionLimit() const noexcept;
+        bool OriginalAdmissionAvailable(const LineKey& line, bool resend) const;
+        void ReleaseOriginal(Transaction& transaction);
+        void ReleaseRequestBuffer(Transaction& transaction);
+        void ReleaseSnoopWave(Transaction& transaction);
+        bool AcquireBackendOperation(Transaction& transaction);
+        bool AcquireRefill(Transaction& transaction);
+        void ReleaseResponse(Transaction& transaction);
+        void ReleaseResponseIfComplete(Transaction& transaction);
+        void ReleaseBackendOperation(Transaction& transaction);
+        void CompleteBackendOperation(Transaction& transaction);
+        void ReleaseRefill(Transaction& transaction);
+        void ReleaseRefill(Transaction& transaction, const LineKey& line);
+        size_t ClassForQos(uint8_t qos) const noexcept;
+        size_t RetryTier(size_t bank, size_t classId) const noexcept;
+        bool RetryCreditEligible(const RetryRecord& retry) const;
+        bool ClassAdmissionAvailable(const Request& request, size_t classId, bool resend) const;
+        bool RetryAdmissionAvailable(const Request& request, size_t classId) const;
+        size_t RetrySourceCount() const noexcept;
+        bool RetrySourceAvailable(NodeId source) const noexcept;
+        void AcquireRetrySource(const Request& request);
+        void ReleaseRetrySource(NodeId source, size_t bank, size_t classId);
+        void ReleaseClass(Transaction& transaction);
+        size_t BankRetryReservations(size_t bank) const noexcept;
+        size_t TotalRetryReservations() const noexcept;
         Time ScheduleTag(Transaction& transaction);
         Time ScheduleData(Transaction& transaction);
         void Resolve(Transaction& transaction);
@@ -387,7 +526,12 @@ namespace CHI::Lunatic {
         void QueueCompPersist(Transaction& transaction);
         void QueueReadReceipt(Transaction& transaction);
         void QueueRespSepData(Transaction& transaction);
-        void   QueueRetryCredit(size_t index);
+        size_t ResponseCategory(const Response& response) const noexcept;
+        size_t ResponseClass(const Pending<Response>& pending) const noexcept;
+        size_t SelectResponse(const std::deque<Pending<Response>>& queue,
+                              std::optional<bool> downstream, bool commit);
+        void   QueueRetryCredits();
+        bool   QueueRetryCredit(size_t index);
         size_t OutstandingRetryCredits(NodeId source, uint8_t pCrdType) const noexcept;
         size_t RetryOriginals(NodeId source, uint8_t pCrdType) const noexcept;
         void   PurgeReturnedRetries(NodeId source, uint8_t pCrdType);
@@ -399,6 +543,7 @@ namespace CHI::Lunatic {
         void Retire(TransactionHandle handle);
 
         void StartMemoryRead(Transaction& transaction);
+        void RetryBackendSubmission(Transaction& transaction);
         void AdvanceBackendRetries();
         bool HandleBackendRetry(Transaction& transaction, const Response& flit);
         void StartBackendWrite(Transaction& transaction);
@@ -418,7 +563,7 @@ namespace CHI::Lunatic {
         bool WriteLine(Transaction& transaction, const LineKey& line, const LineData& data,
                        const ByteEnables& enables);
         bool WriteLineImage(Transaction& transaction, const LineKey& line, const LineImage& image,
-                            const ByteEnables& enables);
+                            const ByteEnables& enables, bool generatedEviction = false);
         bool FetchBaseline(Transaction& transaction);
 
         uint16_t   SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const;
@@ -430,7 +575,7 @@ namespace CHI::Lunatic {
         void       CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp,
                                        bool withData, bool partial = false);
         CacheState DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp,
-                                    bool partial = false) const;
+                                    bool withData, bool partial = false) const;
         bool       ValidateSnoopResponse(Transaction& transaction, NodeId target, uint8_t resp,
                                          bool withData, bool partial = false, uint8_t dataPull = 0) const;
         bool       AcceptForwardedResponse(Transaction& transaction, NodeId target, uint8_t resp,

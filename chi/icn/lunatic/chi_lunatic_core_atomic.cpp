@@ -139,7 +139,7 @@ namespace CHI::Lunatic {
         }
         for (size_t lane = 0; lane < bytes / 8; ++lane)
             data.poison[lane] = transaction.poison[offset / 8 + lane];
-        if (Queue(txdat, data, transaction.handle, transaction.actionAge, true))
+        if (AcquireResponse(transaction, txdat) && Queue(txdat, data, transaction.handle, transaction.actionAge, true))
             flow.atomic.returnSent = true;
     }
 
@@ -237,6 +237,7 @@ namespace CHI::Lunatic {
             {
                 HomeLine& home = InstallHome(line, flow.victimWay, commitImage.data, true, time);
                 CopyMetadata(home, commitImage, options);
+                ReleaseRefill(transaction, line);
             }
             else if (!WriteLineImage(transaction, line, commitImage, AtomicFullEnables()))
                 return false;

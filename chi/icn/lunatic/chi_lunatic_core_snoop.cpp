@@ -249,12 +249,37 @@ namespace CHI::Lunatic {
             Error(transaction.handle, "snoop response ID is still live");
             return false;
         }
+        BankState& bank = Bank(flow.snoopLine);
+        if (!flow.snoopWaveOwned && options.structure.snoopResourceLimit &&
+            bank.activeSnoopWaves >= options.structure.snoopResourceLimit)
+        {
+            pmu.RecordStall(WaitReason::Snoop);
+            return false;
+        }
+        if (options.structure.outgoingSnoopQueueLimit &&
+            bank.outgoingSnoopQueue >= options.structure.outgoingSnoopQueueLimit)
+        {
+            pmu.RecordStall(WaitReason::OutputQueue);
+            return false;
+        }
         if (!Queue(txsnp, snoop, transaction.handle, transaction.actionAge, index + 1 == transaction.snoopTargets.size()))
             return false;
+        ++bank.outgoingSnoopQueue;
+        const bool newWave = !flow.snoopWaveOwned;
+        if (newWave)
+        {
+            ++bank.activeSnoopWaves;
+            flow.snoopWaveOwned = true;
+        }
         if (snoop.retToSrc)
             flow.retToSrcUsed = true;
         if (!tracker.BindSnoop(transaction.handle, target, snoop.txnId))
         {
+            if (newWave)
+            {
+                --bank.activeSnoopWaves;
+                flow.snoopWaveOwned = false;
+            }
             Error(transaction.handle, "unable to bind snoop response ID");
             transaction.canceled = true;
             transaction.phase = Phase::Commit;
@@ -392,7 +417,7 @@ namespace CHI::Lunatic {
         const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, target);
         if (initial == CacheState::I || initial == CacheState::UCE || initial == CacheState::UDP)
             return false;
-        const CacheState provider = DecodeSnoopState(transaction, target, resp, false);
+        const CacheState provider = DecodeSnoopState(transaction, target, resp, withData, false);
         const uint16_t opcode = SnoopOpcode(transaction, flow, target);
         const bool passDirty = withData && (resp & CHI::Eb::Resps::PassDirty) != 0;
         if (passDirty && !IsDirty(initial))
@@ -514,7 +539,7 @@ namespace CHI::Lunatic {
             return false;
         const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, target);
         const uint16_t opcode = SnoopOpcode(transaction, flow, target);
-        const CacheState final = DecodeSnoopState(transaction, target, resp, partial);
+        const CacheState final = DecodeSnoopState(transaction, target, resp, withData, partial);
         const bool passDirty = (resp & CHI::Eb::Resps::PassDirty) != 0;
         const bool stashRead = opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
             opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
@@ -583,13 +608,23 @@ namespace CHI::Lunatic {
         return true;
     }
 
-    CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp, bool partial) const
+    CacheState Core::Impl::DecodeSnoopState(Transaction& transaction, NodeId target, uint8_t resp,
+                                            bool withData, bool partial) const
     {
         const FlowState& flow = flows.at(transaction.handle);
         const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, target);
         const uint16_t opcode = SnoopOpcode(transaction, flow, target);
-        if (opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique || opcode == CHI::Eb::Opcodes::SNP::SnpStashShared)
+        const bool stashRead = opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
+            opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
+        if (stashRead)
             return initial;
+        if (!withData && (resp & 0b011) == 0b010 && !(resp & CHI::Eb::Resps::PassDirty))
+        {
+            if (initial == CacheState::UCE)
+                return CacheState::UCE;
+            if (initial == CacheState::UDP)
+                return CacheState::UDP;
+        }
         switch (resp & 0b011)
         {
             case 0b000: return CacheState::I;
@@ -598,18 +633,37 @@ namespace CHI::Lunatic {
             default:
                 if (partial)
                     return CacheState::UDP;
-                if (IsDirty(initial) && !(resp & CHI::Eb::Resps::PassDirty) &&
-                    opcode != CHI::Eb::Opcodes::SNP::SnpCleanShared && opcode != CHI::Eb::Opcodes::SNP::SnpCleanInvalid)
+                if (!withData && IsDirty(initial) &&
+                    opcode != CHI::Eb::Opcodes::SNP::SnpCleanShared &&
+                    opcode != CHI::Eb::Opcodes::SNP::SnpCleanInvalid)
                     return CacheState::UD;
-                return CacheState::UC;
+                if (!withData || (resp & CHI::Eb::Resps::PassDirty))
+                    return CacheState::UC;
+                return CacheState::UD;
         }
     }
 
-    void Core::Impl::CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp, bool, bool partial)
+    void Core::Impl::CompleteSnoopTarget(Transaction& transaction, NodeId target, uint8_t resp,
+                                         bool withData, bool partial)
     {
         FlowState& flow = flows.at(transaction.handle);
-        const CacheState final = DecodeSnoopState(transaction, target, resp, partial);
-        Bank(flow.snoopLine).snoopFilter.Track(flow.snoopLine, target, final, time);
+        if (flow.dctActive && target == flow.dctTarget)
+            flow.dctProviderResponded = true;
+        const CacheState final = DecodeSnoopState(transaction, target, resp, withData, partial);
+        const bool ambiguousUnique = final == CacheState::UD && !partial && (resp & 0b011) == 0b010 &&
+            !(resp & CHI::Eb::Resps::PassDirty) && Bank(flow.snoopLine).snoopFilter.PossiblyClean(flow.snoopLine, target);
+        if (flow.victimSnoopFilterOnly && flow.victimPending && flow.snoopLine == flow.victimLine)
+        {
+            const SnoopFilterEntry& current = Bank(flow.snoopLine).snoopFilter.At(Bank(flow.snoopLine).snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
+            if (current.valid && current.key == flow.victimLine && current.generation == flow.victimGeneration)
+            {
+                Bank(flow.snoopLine).snoopFilter.Track(flow.snoopLine, target, final, time, ambiguousUnique);
+                flow.victimGeneration = current.generation;
+                flow.victimResponseUpdated = true;
+            }
+        }
+        else
+            Bank(flow.snoopLine).snoopFilter.Track(flow.snoopLine, target, final, time, ambiguousUnique);
         auto it = std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target);
         if (it != transaction.pendingSnoops.end())
         {
@@ -618,6 +672,8 @@ namespace CHI::Lunatic {
         }
         if (transaction.pendingSnoops.empty())
         {
+            if (flow.nextSnoop >= transaction.snoopTargets.size())
+                ReleaseSnoopWave(transaction);
             if (flow.dctForwarded && !flow.snoopForVictim && !flow.victimPending)
                 FinishResponse(transaction);
             else

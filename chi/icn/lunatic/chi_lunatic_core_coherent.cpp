@@ -292,8 +292,15 @@ namespace CHI::Lunatic {
                     request.doDwt = false;
                     request.stashNidValid = false;
                     request.stashLpidValid = false;
+                    if (!AcquireBackendOperation(transaction))
+                    {
+                        transaction.wait = WaitReason::Memory;
+                        transaction.readyTime = time;
+                        return;
+                    }
                     if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
                     {
+                        ReleaseBackendOperation(transaction);
                         transaction.readyTime = time;
                         return;
                     }

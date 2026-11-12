@@ -24,7 +24,7 @@ namespace CHI::Lunatic {
         {
             flow.backendCompReceived = true;
             flow.backendDataEmitted = true;
-            flow.backendPhase = BackendPhase::Done;
+            CompleteBackendOperation(*transaction);
             transaction->phase = Phase::Action;
             transaction->wait = WaitReason::None;
             transaction->readyTime = time;
@@ -52,7 +52,7 @@ namespace CHI::Lunatic {
             if (!HandleBackendDAT(*transaction, data))
             {
                 Error(transaction->handle, "invalid AXI read completion geometry");
-                flow.backendPhase = BackendPhase::Done;
+                CompleteBackendOperation(*transaction);
                 transaction->phase = Phase::Action;
                 transaction->readyTime = time;
                 return;

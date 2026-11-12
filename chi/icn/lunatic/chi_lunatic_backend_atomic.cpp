@@ -13,7 +13,7 @@ namespace CHI::Lunatic {
                 : flow.atomic.backendResultReceived && flow.backendDataEmitted;
             if (!complete)
                 return;
-            flow.backendPhase = BackendPhase::Done;
+            impl.CompleteBackendOperation(transaction);
             impl.tracker.UnbindMemory(impl.options.subordinateId, transaction.handle);
             transaction.phase = Phase::Action;
             transaction.readyTime = impl.time;
@@ -65,8 +65,15 @@ namespace CHI::Lunatic {
         request.stashLpidValid = false;
         request.likelyShared = false;
         request.memAttr &= ~CHI::Eb::MemAttrs::EWA;
+        if (!AcquireBackendOperation(transaction))
+        {
+            transaction.wait = WaitReason::Memory;
+            transaction.readyTime = time;
+            return;
+        }
         if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
         {
+            ReleaseBackendOperation(transaction);
             transaction.readyTime = time;
             return;
         }

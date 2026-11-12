@@ -30,8 +30,15 @@ namespace CHI::Lunatic {
                 request.returnNid = flow.directPersistActive ? transaction.request.source : nodeId;
             else
                 request.pGroupId = 0;
+            if (!AcquireBackendOperation(transaction))
+            {
+                transaction.wait = WaitReason::Memory;
+                transaction.readyTime = time;
+                return;
+            }
             if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
             {
+                ReleaseBackendOperation(transaction);
                 transaction.readyTime = time;
                 return;
             }
@@ -72,7 +79,7 @@ namespace CHI::Lunatic {
         response.pGroupId = transaction.request.pGroupId;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
-        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
         {
             flow.compSent = true;
             transaction.phase = Phase::Return;

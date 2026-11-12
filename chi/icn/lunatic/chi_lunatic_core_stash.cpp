@@ -69,7 +69,7 @@ namespace CHI::Lunatic {
         response.stashGroupId = transaction.request.stashGroupId;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
-        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
         {
             flow.stashDoneSent = true;
             if (withComp)

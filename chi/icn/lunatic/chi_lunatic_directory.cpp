@@ -114,8 +114,15 @@ namespace CHI::Lunatic {
         line = HomeLine{};
         line.key = key;
         line.age = age;
+        line.generation = ++nextGeneration;
         line.valid = true;
         return line;
+    }
+
+    void Directory::Touch(const LineKey& key) noexcept
+    {
+        if (HomeLine* line = Find(key))
+            line->generation = ++nextGeneration;
     }
 
     void Directory::Invalidate(size_t set, size_t way) noexcept
@@ -125,6 +132,7 @@ namespace CHI::Lunatic {
 
     void Directory::Clear() noexcept
     {
+        nextGeneration = 0;
         for (HomeLine& line : lines)
             line = HomeLine{};
     }

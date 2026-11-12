@@ -170,6 +170,7 @@ namespace CHI::Lunatic {
             const bool dirty = anyRequesterDirty ? false : flow.homeDirty || flow.dataDirty;
             HomeLine& home = InstallHome(line, way, transaction.data, dirty, time);
             CopyMetadata(home, transaction, options);
+            ReleaseRefill(transaction, line);
             home.validBytes = flow.validBytes;
         }
         else if (decision.removeHome && transaction.homeHit)
@@ -265,6 +266,7 @@ namespace CHI::Lunatic {
                 const std::optional<size_t> currentWay = Bank(line).directory.FindWay(line);
                 HomeLine& home = InstallHome(line, currentWay ? *currentWay : flow.victimWay, transaction.data, dirty, time);
                 CopyMetadata(home, transaction, options);
+            ReleaseRefill(transaction, line);
                 if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl)
                     home.validBytes = transaction.byteEnables;
             }
@@ -371,6 +373,8 @@ namespace CHI::Lunatic {
         flow.victimWay = ChooseVictim(transaction.handle, VictimDomain::SnoopFilter, line);
         const SnoopFilterEntry& victim = Bank(line).snoopFilter.At(Bank(line).snoopFilter.SetIndex(line), flow.victimWay);
         flow.victimLine = victim.key;
+        flow.victimGeneration = victim.generation;
+        flow.victimResponseUpdated = false;
         flow.victimPending = true;
         if (const HomeLine* home = Bank(flow.victimLine).directory.Find(flow.victimLine))
         {
@@ -423,6 +427,8 @@ namespace CHI::Lunatic {
                 return true;
             flow.victimPending = true;
             flow.victimLine = victim.key;
+        flow.victimGeneration = victim.generation;
+        flow.victimResponseUpdated = false;
             flow.victimData = victim.data;
             flow.victimPoison = options.poisonEnabled ? victim.poison : LinePoison{};
             flow.victimDataCheck = options.dataCheckEnabled ? victim.dataCheck : LineDataCheck{};
@@ -472,6 +478,51 @@ namespace CHI::Lunatic {
         if (!flow.victimPending)
             return true;
         const LineKey& line = flow.victimLine;
+
+        auto discardVictim = [&] {
+            ReleaseSnoopWave(transaction);
+            if (flow.victimLinked)
+                Bank(flow.victimLine).hazards.Release(transaction.handle, flow.victimLine);
+            flow.victimLinked = false;
+            flow.victimPending = false;
+            flow.victimSnoopFilterOnly = false;
+            flow.victimDataValid = false;
+            flow.victimDataPartial = false;
+            flow.victimValidBytes.fill(0);
+            flow.victimGeneration = 0;
+            flow.victimResponseUpdated = false;
+            flow.victimDirty = false;
+            flow.snoopForVictim = false;
+            flow.snoopLine = transaction.request.Line();
+            transaction.snoopTargets.clear();
+            transaction.pendingSnoops.clear();
+            transaction.snoopsRequired = false;
+            flow.nextSnoop = 0;
+            flow.snoopBeatMasks.clear();
+            flow.snoopResponses.clear();
+        };
+
+        const bool snoopFilterOnly = flow.victimSnoopFilterOnly;
+        if (snoopFilterOnly)
+        {
+            const SnoopFilterEntry& current = Bank(line).snoopFilter.At(Bank(line).snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
+            const bool identityMatches = current.valid ? current.key == flow.victimLine : flow.victimResponseUpdated;
+            if (!identityMatches || current.generation != flow.victimGeneration)
+            {
+                discardVictim();
+                return PrepareSnoopFilterCapacity(transaction);
+            }
+        }
+        else
+        {
+            const HomeLine& current = Bank(line).directory.At(Bank(line).directory.SetIndex(flow.victimLine), flow.victimWay);
+            if (!current.valid || current.key != flow.victimLine || current.generation != flow.victimGeneration)
+            {
+                discardVictim();
+                return PrepareVictim(transaction);
+            }
+        }
+
         if (options.backend != BackendKind::Internal && flow.victimDataPartial && !Bank(flow.victimLine).directory.Find(flow.victimLine) &&
             !FetchBaseline(transaction))
             return false;
@@ -490,8 +541,9 @@ namespace CHI::Lunatic {
                     home->poison = flow.victimPoison;
                     home->dataCheck = flow.victimDataCheck;
                     home->dirty = true;
+                    Bank(line).directory.Touch(flow.victimLine);
                 }
-                else if (!WriteLineImage(transaction, flow.victimLine, victimImage, FullEnables()))
+                else if (!WriteLineImage(transaction, flow.victimLine, victimImage, FullEnables(), true))
                     return false;
             }
             const auto requesters = Bank(flow.victimLine).snoopFilter.Targets(flow.victimLine);
@@ -501,28 +553,12 @@ namespace CHI::Lunatic {
         }
         else
         {
-            if (flow.victimDirty && !WriteLineImage(transaction, flow.victimLine, victimImage, FullEnables()))
+            if (flow.victimDirty && !WriteLineImage(transaction, flow.victimLine, victimImage, FullEnables(), true))
                 return false;
             Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(flow.victimLine), flow.victimWay);
         }
 
-        if (flow.victimLinked)
-            Bank(flow.victimLine).hazards.Release(transaction.handle, flow.victimLine);
-        flow.victimLinked = false;
-        flow.victimPending = false;
-        flow.victimSnoopFilterOnly = false;
-        flow.victimDataValid = false;
-        flow.victimDataPartial = false;
-        flow.victimValidBytes.fill(0);
-        flow.victimDirty = false;
-        flow.snoopForVictim = false;
-        flow.snoopLine = transaction.request.Line();
-        transaction.snoopTargets.clear();
-        transaction.pendingSnoops.clear();
-        transaction.snoopsRequired = false;
-        flow.nextSnoop = 0;
-        flow.snoopBeatMasks.clear();
-        flow.snoopResponses.clear();
+        discardVictim();
         return true;
     }
 
