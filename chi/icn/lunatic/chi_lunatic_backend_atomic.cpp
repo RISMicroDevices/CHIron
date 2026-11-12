@@ -223,7 +223,7 @@ namespace CHI::Lunatic {
         if (store && flit.opcode == RSP::Comp)
         {
             if (flow.backendPhase != BackendPhase::WaitDBID && flow.backendPhase != BackendPhase::WaitComp &&
-                flow.backendPhase != BackendPhase::WaitDataEmission)
+                flow.backendPhase != BackendPhase::SendData && flow.backendPhase != BackendPhase::WaitDataEmission)
                 return false;
             flow.backendCompReceived = true;
             CompleteAtomicBackendIfReady(*this, transaction);

@@ -33,6 +33,9 @@ namespace CHI::Lunatic {
                                  transaction.byteEnables, options);
                 StartBackendWrite(transaction);
                 return;
+            case RequestClass::Prefetch:
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
+                return;
             default:
                 Error(transaction.handle, "invalid non-coherent request class");
                 transaction.canceled = true;
@@ -83,6 +86,46 @@ namespace CHI::Lunatic {
                 if (flow.backendPhase == BackendPhase::Done)
                     QueueComp(transaction, true);
                 return;
+            case RequestClass::Prefetch:
+            {
+                if (options.backend != BackendKind::CHI)
+                {
+                    Error(transaction.handle, "PrefetchTgt requires a CHI backend");
+                    transaction.phase = Phase::Commit;
+                    transaction.readyTime = time;
+                    return;
+                }
+                Request request = transaction.request;
+                request.source = nodeId;
+                request.target = options.subordinateId;
+                request.txnId = transaction.handle;
+                request.returnNid = 0;
+                request.returnTxnId = 0;
+                request.order = 0;
+                request.allowRetry = false;
+                request.expCompAck = false;
+                request.snpAttr = 0;
+                request.doDwt = false;
+                request.stashNidValid = false;
+                request.stashLpidValid = false;
+                if (!AcquireBackendOperation(transaction))
+                {
+                    transaction.wait = WaitReason::Memory;
+                    transaction.readyTime = time;
+                    return;
+                }
+                if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
+                {
+                    ReleaseBackendOperation(transaction);
+                    transaction.readyTime = time;
+                    return;
+                }
+                flow.backendPhase = BackendPhase::WaitRequestEmission;
+                transaction.phase = Phase::WaitMemory;
+                transaction.wait = WaitReason::Memory;
+                transaction.readyTime = time;
+                return;
+            }
             default:
                 Error(transaction.handle, "invalid non-coherent action");
                 transaction.canceled = true;

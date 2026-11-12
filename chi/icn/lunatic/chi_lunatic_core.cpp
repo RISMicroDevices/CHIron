@@ -599,7 +599,8 @@ namespace CHI::Lunatic {
 
         bool requestRetry = decision.IsRetryRequested();
         if (requestRetry && (!options.retryEnabled || !rxreq.front().allowRetry ||
-            rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PCrdReturn))
+            rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PCrdReturn ||
+            rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PrefetchTgt))
         {
             Error(INVALID_TRANSACTION, "requester retry decision is not legal for this request");
             requestRetry = false;
@@ -615,7 +616,7 @@ namespace CHI::Lunatic {
             return;
         }
 
-        if (!rxreq.front().allowRetry)
+        if (!rxreq.front().allowRetry || rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PrefetchTgt)
         {
             size_t classId = options.structure.classes.enabled ? ClassForQos(rxreq.front().qos) : 0;
             bool resend = false;
@@ -827,6 +828,7 @@ namespace CHI::Lunatic {
         BankState& bank = Bank(transaction);
         if (bank.pipeline.DataBusy(time))
             pmu.RecordStall(WaitReason::DataPort);
+        flows.at(transaction.handle).scheduleMarks.erase(SchedulePoint::DataReturn);
         return ScheduleResult(transaction, SchedulePoint::DataReturn, bank.pipeline.ScheduleData(time));
     }
 
@@ -876,7 +878,7 @@ namespace CHI::Lunatic {
                     Deny(transaction.request, "unsupported request opcode or transfer geometry");
                     transaction.canceled = true;
                     transaction.dbid = transaction.handle;
-                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_I, 0b10);
+                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_I, CHI::Eb::RespErrs::NDERR);
                     return;
                 }
                 Bank(transaction).pipeline.Advance(transaction, Phase::Admit, time);
@@ -1002,7 +1004,12 @@ namespace CHI::Lunatic {
         for (TransactionHandle handle : tracker.Handles())
         {
             Transaction* transaction = tracker.Find(handle);
-            if (transaction->phase == Phase::Commit &&
+            const FlowState& flow = flows.at(handle);
+            const bool receiptPending = flow.separatedBackendRead && !flow.dmtActive &&
+                transaction->request.order != 0 && !flow.backendReadReceiptReceived;
+            const bool canceledBackendPending = transaction->canceled &&
+                (flow.backendOperationOwned || backendRetries.contains(handle));
+            if (transaction->phase == Phase::Commit && !receiptPending && !canceledBackendPending &&
                 ScheduleTransition(*transaction, SchedulePoint::CommitSchedule) && transaction->readyTime <= time)
                 handles.push_back(handle);
         }
@@ -1065,9 +1072,16 @@ namespace CHI::Lunatic {
         if (!transaction)
             return;
         FlowState& flow = flows.at(transaction->handle);
+        flow.backendRequest = pending.flit;
+        if (ClassifyRequest(transaction->request.opcode) == RequestClass::Prefetch)
+        {
+            CompleteBackendOperation(*transaction);
+            transaction->phase = Phase::Commit;
+            transaction->readyTime = time;
+            return;
+        }
         if (flow.backendPhase == BackendPhase::WaitRequestEmission)
         {
-            flow.backendRequest = pending.flit;
             flow.backendPhase = flow.dwtActive || (!flow.spillPending &&
                 (IsReadRequest(transaction->request.opcode) || IsCMORequest(transaction->request.opcode)))
                 ? BackendPhase::WaitComp : BackendPhase::WaitDBID;
@@ -1505,7 +1519,9 @@ namespace CHI::Lunatic {
                     const HomeLine* home = Bank(entry.key).directory.Find(entry.key);
                     if (options.policy == PolicyKind::Inclusive && validRequesters && (!home || !home->valid))
                         return false;
-                    if (options.policy == PolicyKind::Exclusive && validRequesters && home && home->valid)
+                    if (options.policy == PolicyKind::Exclusive &&
+                        options.strategy.allocationStrategy == AllocationStrategyKind::Policy &&
+                        validRequesters && home && home->valid)
                         return false;
                     if (home && home->dirty && dirtyRequesters)
                         return false;

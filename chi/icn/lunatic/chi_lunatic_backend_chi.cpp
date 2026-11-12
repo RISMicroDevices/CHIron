@@ -10,8 +10,11 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         const bool awaitingWriteAcceptance = flow.backendPhase == BackendPhase::WaitDBID &&
             !flow.backendCompReceived && !flow.atomic.backendResultReceived;
-        if ((!transaction.memoryRequired && !awaitingWriteAcceptance) || !flow.backendRequest.allowRetry ||
-            backendRetries.contains(transaction.handle))
+        const bool canceledBackendWrite = transaction.canceled && flow.backendOperationOwned;
+        const bool pendingCmo = IsCMORequest(transaction.request.opcode) && flow.backendOperationOwned &&
+            !flow.backendCompReceived && !flow.backendPersistReceived;
+        if ((!transaction.memoryRequired && !awaitingWriteAcceptance && !canceledBackendWrite && !pendingCmo) ||
+            !flow.backendRequest.allowRetry || backendRetries.contains(transaction.handle))
             return false;
 
         BackendRetryRecord record{
@@ -33,6 +36,8 @@ namespace CHI::Lunatic {
         flow.atomic.backendResultReceived = false;
         flow.atomic.backendDirtyCommitted = false;
         transaction.receivedBeats = 0;
+        transaction.responseRespErr = CHI::Eb::RespErrs::OK;
+        flow.backendBeatRespErr.clear();
         transaction.wait = WaitReason::Memory;
         transaction.phase = Phase::WaitMemory;
         transaction.readyTime = time;
@@ -695,7 +700,7 @@ namespace CHI::Lunatic {
             if (flow.backendPhase != BackendPhase::WaitDBID)
                 return false;
             flow.backendDBID = flit.dbid;
-            flow.backendCompReceived = flit.opcode == RSP::CompDBIDResp;
+            flow.backendCompReceived |= flit.opcode == RSP::CompDBIDResp;
             if (ClassifyRequest(transaction.request.opcode) == RequestClass::ZeroWrite ||
                 ClassifyRequest(transaction.request.opcode) == RequestClass::WriteUniqueZero)
             {
@@ -814,7 +819,12 @@ namespace CHI::Lunatic {
         LineDataCheck& dataCheck = victimBaseline ? flow.victimDataCheck : transaction.dataCheck;
         MergeMetadata(poison, dataCheck, flit.poison, flit.dataCheck,
                       enables, offset, 0, bytes, options);
-        transaction.responseRespErr = flit.respErr;
+        flow.backendBeatRespErr[beat] = flit.respErr;
+        if (flit.respErr == CHI::Eb::RespErrs::NDERR)
+            transaction.responseRespErr = CHI::Eb::RespErrs::NDERR;
+        else if (flit.respErr == CHI::Eb::RespErrs::DERR &&
+                 transaction.responseRespErr == CHI::Eb::RespErrs::OK)
+            transaction.responseRespErr = CHI::Eb::RespErrs::DERR;
         received |= bit;
 
         const uint64_t complete = flow.backendExpectedBeatMask ? flow.backendExpectedBeatMask

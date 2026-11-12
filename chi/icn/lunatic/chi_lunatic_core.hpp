@@ -62,6 +62,7 @@ namespace CHI::Lunatic {
         uint64_t                   expectedBeatMask = 0;
         uint64_t                   backendExpectedBeatMask = 0;
         uint64_t                   backendBeatMask = 0;
+        std::map<size_t, uint8_t>  backendBeatRespErr;
         size_t                     backendBeat = 0;
         size_t                     dataBeatScheduled = 0;
         size_t                     nextSnoop = 0;

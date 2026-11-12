@@ -257,7 +257,7 @@ namespace CHI::Lunatic {
                 {
                     Error(transaction.handle, "CleanUnique requester UDP is unsupported");
                     transaction.canceled = true;
-                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC, 0b10);
+                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC, CHI::Eb::RespErrs::NDERR);
                     return;
                 }
                 if (!PrepareHomeCommit(transaction))

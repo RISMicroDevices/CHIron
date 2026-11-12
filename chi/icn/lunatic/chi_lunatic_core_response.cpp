@@ -101,8 +101,7 @@ namespace CHI::Lunatic {
         response.dbid = transaction.dbid;
         response.opcode = CHI::Eb::Opcodes::RSP::RespSepData;
         response.resp = 0;
-        response.respErr = transaction.responseRespErr == CHI::Eb::RespErrs::DERR
-            ? uint8_t(CHI::Eb::RespErrs::NDERR) : transaction.responseRespErr;
+        response.respErr = transaction.responseRespErr;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
         if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
@@ -306,7 +305,11 @@ namespace CHI::Lunatic {
         for (auto iter = retries.begin(); iter != retries.end();)
         {
             if (iter->second.request.source == source && iter->second.request.pCrdType == pCrdType)
+            {
+                if (!iter->second.creditReturned)
+                    ReleaseRetrySource(iter->second.request.source, iter->second.bank, iter->second.classId);
                 iter = retries.erase(iter);
+            }
             else
                 ++iter;
         }
@@ -365,6 +368,13 @@ namespace CHI::Lunatic {
             if (!creditReturn && !ClassAdmissionAvailable(request, originalClass, true))
                 return false;
 
+            const auto donor = SelectRetryIf([&](const auto& iter) {
+                return iter->second.request.source == request.source &&
+                    iter->second.request.pCrdType == request.pCrdType &&
+                    iter->second.creditReserved && !iter->second.grantQueued;
+            });
+            if (donor != retries.end())
+                donor->second.creditReserved = false;
             if (--credit->second == 0)
                 availableCredits.erase(credit);
             if (creditReturn)
@@ -493,6 +503,10 @@ namespace CHI::Lunatic {
     void Core::Impl::ReturnRead(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (transaction.canceled)
+            return;
+        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::MakeReadUnique && flow.compSent)
+            return;
         if (transaction.request.order != 0 && !flow.separatedResponse && !flow.readReceiptEmitted)
         {
             if (!flow.readReceiptSent)
@@ -539,6 +553,9 @@ namespace CHI::Lunatic {
             ? CHI::Eb::Opcodes::DAT::DataSepResp : CHI::Eb::Opcodes::DAT::CompData;
         data.resp = transaction.responseResp;
         data.respErr = transaction.responseRespErr;
+        if (transaction.responseRespErr != CHI::Eb::RespErrs::NDERR)
+            if (const auto error = flow.backendBeatRespErr.find(beat); error != flow.backendBeatRespErr.end())
+                data.respErr = error->second;
         data.dataId = offset / 16;
         data.ccid = (transaction.request.address >> 4) & 3;
         data.qos = transaction.request.qos;
@@ -560,6 +577,17 @@ namespace CHI::Lunatic {
     {
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         const FlowState& flow = flows.at(transaction.handle);
+        const bool canceledResponsePending = transaction.canceled &&
+            ((flow.dbidSent && !flow.dbidEmitted) || (flow.compSent && !flow.compEmitted) ||
+             (flow.readReceiptSent && !flow.readReceiptEmitted) || (flow.respSepSent && !flow.respSepEmitted) ||
+             (flow.stashDoneSent && !flow.stashDoneEmitted) || (flow.persistSent && !flow.persistEmitted) ||
+             (flow.atomic.returnSent && !flow.atomic.returnEmitted));
+        if (canceledResponsePending)
+        {
+            transaction.phase = Phase::Action;
+            transaction.readyTime = time;
+            return;
+        }
         if (!transaction.canceled && flow.dwtActive &&
             (!flow.directoryCommitted || !flow.backendCompReceived || !flow.compEmitted))
         {

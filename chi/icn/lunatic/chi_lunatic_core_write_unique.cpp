@@ -29,7 +29,7 @@ namespace CHI::Lunatic {
         bool stashTargetPlanned = false;
         for (NodeId target : Bank(transaction).snoopFilter.Targets(transaction.request.Line()))
         {
-            if (target != transaction.request.source)
+            if (target != transaction.request.source || transaction.request.snoopMe)
             {
                 transaction.snoopTargets.push_back(target);
                 stashTargetPlanned |= IsStashRequest(transaction.request.opcode) && target == transaction.request.returnNid;
@@ -55,7 +55,8 @@ namespace CHI::Lunatic {
                 QueueDBID(transaction);
             return;
         }
-        switch (flow.responseForm)
+        const size_t responseForm = IsOrderedWriteObservation(transaction.request) ? 0 : flow.responseForm;
+        switch (responseForm)
         {
             case 0:
                 if (!flow.dbidSent)

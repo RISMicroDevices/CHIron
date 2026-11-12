@@ -222,7 +222,7 @@ LUNATIC_TEST(Stage5IndependentStashRejectsInvalidGeometry)
     request.Size() = 4;
     LUNATIC_CHECK(driver.node.PushRXREQ(request));
     auto comp = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-    LUNATIC_CHECK(comp.TxnID() == 8 && comp.RespErr() == 0b10);
+    LUNATIC_CHECK(comp.TxnID() == 8 && comp.RespErr() == CHI::Eb::RespErrs::NDERR);
     driver.Quiesce();
     LUNATIC_CHECK(!driver.node.GetErrors().empty());
 }
@@ -431,7 +431,7 @@ LUNATIC_TEST(Stage5WriteStashRejectsUnexpectedCombinedAckAndBadGeometry)
         request.Size() = 4;
         LUNATIC_CHECK(driver.node.PushRXREQ(request));
         auto comp = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-        LUNATIC_CHECK(comp.TxnID() == 4 && comp.RespErr() == 0b10);
+        LUNATIC_CHECK(comp.TxnID() == 4 && comp.RespErr() == CHI::Eb::RespErrs::NDERR);
         driver.Quiesce();
         LUNATIC_CHECK(!driver.node.GetErrors().empty());
     }

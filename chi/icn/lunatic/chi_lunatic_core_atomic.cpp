@@ -41,6 +41,23 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         const bool store = CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction.request.opcode);
+        if (transaction.canceled)
+        {
+            CompleteBackendOperation(transaction);
+            if (store)
+            {
+                if (!flow.compSent)
+                    QueueComp(transaction);
+                else if (flow.compEmitted)
+                    FinishResponse(transaction);
+            }
+            else
+            {
+                transaction.phase = Phase::Return;
+                transaction.readyTime = time;
+            }
+            return;
+        }
         if (store && (!flow.dbidSent || (options.backend != BackendKind::AXI && !flow.compSent)))
         {
             QueueImmediateResponse(transaction);
@@ -154,6 +171,21 @@ namespace CHI::Lunatic {
     bool Core::Impl::HandleAtomicDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (flit.opcode == CHI::Eb::Opcodes::DAT::WriteDataCancel)
+        {
+            const bool dataPhase = transaction.phase == Phase::WaitWriteData ||
+                (transaction.phase == Phase::Action && flow.dbidEmitted);
+            if (!dataPhase || !flow.dbidEmitted || flit.txnId != transaction.dbid ||
+                flit.ccid != ((transaction.request.address >> 4) & 3))
+                return false;
+            transaction.canceled = true;
+            transaction.receivedBeats = flow.expectedBeatMask;
+            transaction.Mark(COMPLETE_WRITE_DATA);
+            transaction.phase = Phase::Action;
+            transaction.wait = WaitReason::None;
+            transaction.readyTime = time;
+            return true;
+        }
         const bool dataPhase = transaction.phase == Phase::WaitWriteData ||
             (transaction.phase == Phase::Action && flow.dbidEmitted);
         if (!dataPhase || !flow.dbidEmitted || flit.opcode != CHI::Eb::Opcodes::DAT::NonCopyBackWrData ||
