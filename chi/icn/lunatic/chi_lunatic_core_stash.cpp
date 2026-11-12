@@ -6,7 +6,13 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         flow.snoopLine = transaction.request.Line();
-        flow.responseForm = transaction.handle % 3;
+        switch (options.strategy.stashResponse)
+        {
+            case StashResponseKind::Rotate: flow.responseForm = transaction.handle % 3; break;
+            case StashResponseKind::CompFirst: flow.responseForm = 0; break;
+            case StashResponseKind::StashDoneFirst: flow.responseForm = 1; break;
+            case StashResponseKind::Combined: flow.responseForm = 2; break;
+        }
         if (transaction.request.stashNidValid && transaction.request.returnNid != transaction.request.source)
             transaction.snoopTargets.push_back(transaction.request.returnNid);
         transaction.pendingSnoops.clear();

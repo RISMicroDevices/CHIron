@@ -338,27 +338,22 @@ namespace CHI::Lunatic {
             size_t originalIndex = std::numeric_limits<size_t>::max();
             if (!creditReturn)
             {
-                for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
-                {
-                    if (!RetryRequestCompatible(iter->second.request, request, nodeId))
-                        continue;
-                    originalIndex = iter->first;
-                    break;
-                }
+                const auto original = SelectRetryIf([&](const auto& iter) {
+                    return RetryRequestCompatible(iter->second.request, request, nodeId);
+                });
+                if (original != retries.end())
+                    originalIndex = original->first;
             }
             else
             {
                 if (RetryOriginals(request.source, request.pCrdType) == 0)
                     return false;
-                for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
-                {
-                    if (iter->second.request.source == request.source &&
-                        iter->second.request.pCrdType == request.pCrdType)
-                    {
-                        originalIndex = iter->first;
-                        break;
-                    }
-                }
+                const auto original = SelectRetryIf([&](const auto& iter) {
+                    return iter->second.request.source == request.source &&
+                        iter->second.request.pCrdType == request.pCrdType;
+                });
+                if (original != retries.end())
+                    originalIndex = original->first;
             }
             if (originalIndex == std::numeric_limits<size_t>::max())
                 return false;
@@ -394,30 +389,28 @@ namespace CHI::Lunatic {
         size_t donorIndex = std::numeric_limits<size_t>::max();
         if (!creditReturn)
         {
-            for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
-            {
-                if (!RetryRequestCompatible(iter->second.request, request, nodeId))
-                    continue;
-                originalIndex = iter->first;
-                break;
-            }
+            const auto original = SelectRetryIf([&](const auto& iter) {
+                return RetryRequestCompatible(iter->second.request, request, nodeId);
+            });
+            if (original != retries.end())
+                originalIndex = original->first;
             if (originalIndex == std::numeric_limits<size_t>::max())
                 return false;
-            const RetryRecord& original = retries.at(originalIndex);
-            if (original.creditReserved && !original.grantQueued)
+            const RetryRecord& originalRecord = retries.at(originalIndex);
+            if (originalRecord.creditReserved && !originalRecord.grantQueued)
                 donorIndex = originalIndex;
         }
         else if (RetryOriginals(request.source, request.pCrdType) == 0)
             return false;
 
-        for (auto iter = retries.rbegin(); donorIndex == std::numeric_limits<size_t>::max() && iter != retries.rend(); ++iter)
-        {
-            if (iter->second.request.source != request.source ||
-                iter->second.request.pCrdType != request.pCrdType ||
-                !iter->second.creditReserved || iter->second.grantQueued)
-                continue;
-            donorIndex = iter->first;
-        }
+        const auto donorMatch = SelectRetryIf([&](const auto& iter) {
+            return donorIndex == std::numeric_limits<size_t>::max() &&
+                iter->second.request.source == request.source &&
+                iter->second.request.pCrdType == request.pCrdType &&
+                iter->second.creditReserved && !iter->second.grantQueued;
+        });
+        if (donorMatch != retries.end())
+            donorIndex = donorMatch->first;
         if (donorIndex == std::numeric_limits<size_t>::max())
             return false;
         if (creditReturn)
@@ -597,6 +590,13 @@ namespace CHI::Lunatic {
         }
         if (!transaction.canceled && requestClass == RequestClass::Stash &&
             IsSeparatedStashRequest(transaction.request.opcode) && (!flow.compEmitted || !flow.stashDoneEmitted))
+        {
+            transaction.phase = Phase::Action;
+            transaction.readyTime = time;
+            return;
+        }
+        if (!transaction.canceled && RequiresSeparatedPersist(transaction) &&
+            (!flow.compEmitted || !flow.persistEmitted))
         {
             transaction.phase = Phase::Action;
             transaction.readyTime = time;

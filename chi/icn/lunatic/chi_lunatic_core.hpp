@@ -17,6 +17,7 @@
 #include "chi_lunatic_tracker.hpp"
 
 #include <deque>
+#include <iterator>
 #include <limits>
 #include <list>
 #include <map>
@@ -58,6 +59,7 @@ namespace CHI::Lunatic {
         bool                       memoryWrite = false;
         DataBufferId               backendDBID = 0;
         uint64_t                   expectedBeatMask = 0;
+        uint64_t                   backendExpectedBeatMask = 0;
         uint64_t                   backendBeatMask = 0;
         size_t                     backendBeat = 0;
         size_t                     nextSnoop = 0;
@@ -114,6 +116,11 @@ namespace CHI::Lunatic {
         bool                       evictOrEvictNoData = false;
         bool                       mergeImmediateHome = false;
         bool                       backendCompReceived = false;
+        bool                       backendPersistReceived = false;
+        bool                       backendSeparatedPersistResponse = false;
+        bool                       backendPersistFirst = false;
+        bool                       persistSent = false;
+        bool                       persistEmitted = false;
         bool                       backendDataEmitted = false;
         bool                       snoopDataValid = false;
         bool                       dataDirty = false;
@@ -219,6 +226,7 @@ namespace CHI::Lunatic {
         AXIBackend                axi;
         std::map<TransactionHandle, FlowState>
                                   flows;
+        std::map<LineKey, size_t> providerNext;
         std::map<size_t, RetryRecord>
                                   retries;
         std::map<std::pair<NodeId, uint8_t>, size_t>
@@ -340,6 +348,19 @@ namespace CHI::Lunatic {
             if (commit)
                 state = next;
             return selected;
+        }
+
+        template<typename Predicate>
+        auto SelectRetryIf(Predicate predicate)
+        {
+            if (options.strategy.upstreamRetrySelection == RetrySelectionKind::Oldest)
+                for (auto iter = retries.begin(); iter != retries.end(); ++iter)
+                    if (predicate(iter))
+                        return iter;
+            for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
+                if (predicate(iter))
+                    return std::prev(iter.base());
+            return retries.end();
         }
 
         template<typename T>
@@ -527,6 +548,8 @@ namespace CHI::Lunatic {
                        uint8_t respErr = 0);
         void QueueStashDone(Transaction& transaction, bool withComp = false);
         void QueueCompPersist(Transaction& transaction);
+        void QueuePersist(Transaction& transaction);
+        bool RequiresSeparatedPersist(const Transaction& transaction) const;
         void QueueReadReceipt(Transaction& transaction);
         void QueueRespSepData(Transaction& transaction);
         size_t ResponseCategory(const Response& response) const noexcept;

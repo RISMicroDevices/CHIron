@@ -14,6 +14,10 @@ namespace CHI::Lunatic {
 
         if (options.backend == BackendKind::CHI && flow.backendPhase == BackendPhase::None)
         {
+            flow.backendCompReceived = false;
+            flow.backendPersistReceived = false;
+            flow.backendSeparatedPersistResponse = false;
+            flow.backendPersistFirst = false;
             Request request = transaction.request;
             request.source = nodeId;
             request.target = options.subordinateId;
@@ -57,10 +61,43 @@ namespace CHI::Lunatic {
         if (options.backend == BackendKind::CHI && flow.backendPhase != BackendPhase::Done)
             return;
 
-        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep && !flow.directPersistActive)
+        if (RequiresSeparatedPersist(transaction))
+        {
+            const bool persistFirst = options.strategy.persistResponse == PersistResponseKind::SeparatePersistFirst ||
+                (options.strategy.persistResponse == PersistResponseKind::Downstream && flow.backendPersistFirst);
+            if (persistFirst && !flow.persistSent)
+            {
+                QueuePersist(transaction);
+                return;
+            }
+            if (!flow.compSent)
+            {
+                QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC);
+                return;
+            }
+            if (!flow.persistSent)
+            {
+                QueuePersist(transaction);
+                return;
+            }
+        }
+        else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep && !flow.directPersistActive)
             QueueCompPersist(transaction);
         else
             QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC);
+    }
+
+    bool Core::Impl::RequiresSeparatedPersist(const Transaction& transaction) const
+    {
+        if (transaction.request.opcode != CHI::Eb::Opcodes::REQ::CleanSharedPersistSep)
+            return false;
+        const FlowState& flow = flows.at(transaction.handle);
+        if (flow.directPersistActive)
+            return false;
+        return options.strategy.persistResponse == PersistResponseKind::SeparateCompFirst ||
+            options.strategy.persistResponse == PersistResponseKind::SeparatePersistFirst ||
+            (options.strategy.persistResponse == PersistResponseKind::Downstream &&
+             flow.backendSeparatedPersistResponse);
     }
 
     void Core::Impl::QueueCompPersist(Transaction& transaction)
@@ -83,6 +120,29 @@ namespace CHI::Lunatic {
         {
             flow.compSent = true;
             transaction.phase = Phase::Return;
+            transaction.readyTime = time;
+        }
+    }
+
+    void Core::Impl::QueuePersist(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.persistSent)
+            return;
+
+        Response response;
+        response.source = nodeId;
+        response.target = transaction.request.source;
+        response.txnId = 0;
+        response.opcode = CHI::Eb::Opcodes::RSP::Persist;
+        response.respErr = transaction.responseRespErr;
+        response.pGroupId = transaction.request.pGroupId;
+        response.qos = transaction.request.qos;
+        response.traceTag = transaction.request.traceTag;
+        if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        {
+            flow.persistSent = true;
+            transaction.phase = Phase::Action;
             transaction.readyTime = time;
         }
     }

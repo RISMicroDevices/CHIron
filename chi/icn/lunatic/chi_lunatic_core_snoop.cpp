@@ -162,9 +162,18 @@ namespace CHI::Lunatic {
                 (!uniqueProviderRequired || soleProvider);
             if (flow.dctActive)
             {
-                const auto decision = events->Decide(SnoopForwardingEvent(time, nodeId, transaction,
+                if (options.strategy.providerSelection == ProviderSelectionKind::RoundRobin)
+                {
+                    size_t& next = providerNext[transaction.request.Line()];
+                    flow.dctTarget = candidates[next % candidates.size()];
+                    ++next;
+                }
+                SnoopForwardingEvent choice(time, nodeId, transaction,
                     flow.dctTarget, Bank(flow.snoopLine).snoopFilter.State(transaction.request.Line(), flow.dctTarget),
-                    owners.size(), flow.homeDirty));
+                    owners.size(), flow.homeDirty);
+                if (!options.strategy.forwardDct)
+                    choice.UseNonForwarding();
+                const auto decision = events->Decide(std::move(choice));
                 flow.dctActive = decision.IsForwarding();
             }
         }

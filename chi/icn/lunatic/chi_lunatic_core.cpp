@@ -329,6 +329,7 @@ namespace CHI::Lunatic {
         completedBackendReads.clear();
         completedBackendReadOrder.clear();
         flows.clear();
+        providerNext.clear();
         errors.clear();
         tracker.Clear();
         ordering.Clear();
@@ -615,13 +616,13 @@ namespace CHI::Lunatic {
             const auto credit = availableCredits.find({ rxreq.front().source, rxreq.front().pCrdType });
             if (credit != availableCredits.end() && credit->second != 0)
             {
-                for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
+                const auto original = SelectRetryIf([&](const auto& iter) {
+                    return RetryRequestCompatible(iter->second.request, rxreq.front(), nodeId);
+                });
+                if (original != retries.end())
                 {
-                    if (!RetryRequestCompatible(iter->second.request, rxreq.front(), nodeId))
-                        continue;
-                    classId = iter->second.classId;
+                    classId = original->second.classId;
                     resend = true;
-                    break;
                 }
             }
             if (!ClassAdmissionAvailable(rxreq.front(), classId, resend) || !ordering.CanAdmit(rxreq.front()))
@@ -1103,6 +1104,12 @@ namespace CHI::Lunatic {
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::StashDone)
         {
             flows.at(transaction->handle).stashDoneEmitted = true;
+            FinishResponse(*transaction);
+            return;
+        }
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Persist)
+        {
+            flows.at(transaction->handle).persistEmitted = true;
             FinishResponse(*transaction);
             return;
         }

@@ -18,7 +18,13 @@ namespace CHI::Lunatic {
         flow.snoopLine = transaction.request.Line();
         flow.expectedBeatMask = AtomicOperandBeatMask(transaction.request, options);
         flow.atomic.resultBeatMask = AtomicResultBeatMask(transaction.request, options);
-        flow.responseForm = transaction.handle % 3;
+        switch (options.strategy.immediateResponse)
+        {
+            case ImmediateResponseKind::Rotate: flow.responseForm = transaction.handle % 3; break;
+            case ImmediateResponseKind::EarlyDBID: flow.responseForm = 0; break;
+            case ImmediateResponseKind::LateComp: flow.responseForm = 1; break;
+            case ImmediateResponseKind::Combined: flow.responseForm = 2; break;
+        }
         for (NodeId target : Bank(transaction).snoopFilter.Targets(transaction.request.Line()))
         {
             if (target != transaction.request.source || transaction.request.snoopMe)
@@ -45,7 +51,7 @@ namespace CHI::Lunatic {
             QueueDBID(transaction);
             return;
         }
-        if (options.backend == BackendKind::CHI)
+        if (options.backend == BackendKind::CHI && options.strategy.atomicExecution != AtomicExecutionKind::Local)
         {
             ActionAtomicBackend(transaction);
             return;

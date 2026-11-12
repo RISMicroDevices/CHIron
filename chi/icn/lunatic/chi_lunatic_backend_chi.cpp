@@ -25,6 +25,9 @@ namespace CHI::Lunatic {
         flow.backendPhase = BackendPhase::WaitRetry;
         flow.backendBeatMask = 0;
         flow.backendCompReceived = false;
+        flow.backendPersistReceived = false;
+        flow.backendSeparatedPersistResponse = false;
+        flow.backendPersistFirst = false;
         flow.backendDataEmitted = false;
         flow.backendReadReceiptReceived = false;
         flow.atomic.backendResultReceived = false;
@@ -51,7 +54,9 @@ namespace CHI::Lunatic {
                         if (retry.creditReceived || retry.request.target != credit->first.first ||
                             retry.retryAckPCrdType != credit->first.second)
                             continue;
-                        if (selected == backendRetries.end() || retry.serial > selected->second.serial)
+                        if (selected == backendRetries.end() ||
+                            (options.strategy.downstreamRetrySelection == RetrySelectionKind::Oldest
+                                ? retry.serial < selected->second.serial : retry.serial > selected->second.serial))
                             selected = iter;
                     }
                     if (selected == backendRetries.end())
@@ -71,20 +76,24 @@ namespace CHI::Lunatic {
             {
                 while (credit->second)
                 {
-                    uint64_t oldest = std::numeric_limits<uint64_t>::max();
+                    const bool oldest = options.strategy.downstreamRetrySelection == RetrySelectionKind::Oldest;
+                    uint64_t selectedSerial = oldest ? std::numeric_limits<uint64_t>::max() : 0;
                     for (const auto& [handle, retry] : backendRetries)
                     {
                         (void)handle;
                         if (!retry.creditReceived && retry.request.target == credit->first.first &&
                             retry.retryAckPCrdType == credit->first.second)
-                            oldest = std::min(oldest, retry.serial);
+                        {
+                            if ((oldest && retry.serial < selectedSerial) || (!oldest && retry.serial > selectedSerial))
+                                selectedSerial = retry.serial;
+                        }
                     }
                     size_t tier = backendRetryRounds.size();
                     for (const auto& [handle, retry] : backendRetries)
                     {
                         (void)handle;
                         if (!retry.creditReceived && retry.request.target == credit->first.first &&
-                            retry.retryAckPCrdType == credit->first.second && retry.serial == oldest)
+                            retry.retryAckPCrdType == credit->first.second && retry.serial == selectedSerial)
                             tier = std::min(tier, RetryTier(retry.bank, retry.classId));
                     }
                     if (tier == backendRetryRounds.size())
@@ -95,7 +104,7 @@ namespace CHI::Lunatic {
                     {
                         (void)handle;
                         if (!retry.creditReceived && retry.request.target == credit->first.first &&
-                            retry.retryAckPCrdType == credit->first.second && retry.serial == oldest &&
+                            retry.retryAckPCrdType == credit->first.second && retry.serial == selectedSerial &&
                             RetryTier(retry.bank, retry.classId) == tier)
                             eligibleClasses[retry.classId] = true;
                     }
@@ -107,7 +116,7 @@ namespace CHI::Lunatic {
                     {
                         BackendRetryRecord& retry = iter->second;
                         if (!retry.creditReceived && retry.request.target == credit->first.first &&
-                            retry.retryAckPCrdType == credit->first.second && retry.serial == oldest &&
+                            retry.retryAckPCrdType == credit->first.second && retry.serial == selectedSerial &&
                             retry.classId == classId && RetryTier(retry.bank, retry.classId) == tier)
                         {
                             selected = iter;
@@ -213,6 +222,9 @@ namespace CHI::Lunatic {
         transaction.wait = WaitReason::None;
         transaction.readyTime = time;
         flow.backendCompReceived = false;
+        flow.backendPersistReceived = false;
+        flow.backendSeparatedPersistResponse = false;
+        flow.backendPersistFirst = false;
         flow.backendDataEmitted = false;
         flow.backendPhase = BackendPhase::None;
         flow.directoryCommitted = false;
@@ -253,6 +265,9 @@ namespace CHI::Lunatic {
         transaction.memoryRequired = true;
         flow.memoryWrite = false;
         flow.backendBeatMask = 0;
+        const bool localAtomicRead = IsAtomicRequest(transaction.request.opcode) &&
+            (options.backend != BackendKind::CHI || options.strategy.atomicExecution == AtomicExecutionKind::Local);
+        flow.backendExpectedBeatMask = localAtomicRead ? (uint64_t(1) << BeatsPerLine(options)) - 1 : 0;
         if (options.backend == BackendKind::Internal)
         {
             flow.memoryReady = Bank(transaction).pipeline.SaturatingAdd(time, memory.NextLatency(options.memoryLatency));
@@ -266,8 +281,8 @@ namespace CHI::Lunatic {
             AXIOperation operation;
             operation.transaction = transaction.handle;
             operation.line = flow.baselineFetch ? flow.baselineLine : transaction.request.Line();
-            operation.beatMask = flow.expectedBeatMask
-                ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+            operation.beatMask = flow.backendExpectedBeatMask ? flow.backendExpectedBeatMask
+                : flow.expectedBeatMask ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
             operation.memAttr = transaction.request.memAttr;
             operation.qos = transaction.request.qos;
             if (!axi.Submit(operation))
@@ -302,6 +317,8 @@ namespace CHI::Lunatic {
         }
         request.opcode = flow.separatedBackendRead
             ? CHI::Eb::Opcodes::REQ::ReadNoSnpSep : CHI::Eb::Opcodes::REQ::ReadNoSnp;
+        if (localAtomicRead)
+            request.size = 6;
         if (flow.victimPending && flow.victimDataPartial)
         {
             request.address = flow.victimLine.address;
@@ -598,17 +615,66 @@ namespace CHI::Lunatic {
             return true;
         }
 
-        if (IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
+        if (IsAtomicRequest(transaction.request.opcode) && !flow.spillPending &&
+            options.strategy.atomicExecution != AtomicExecutionKind::Local)
             return HandleAtomicBackendRSP(transaction, flit);
 
         if (IsCMORequest(transaction.request.opcode) && !flow.spillPending)
         {
             const bool separatedPersistence = transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
-            const bool persistenceResponse = flow.directPersistActive
-                ? flit.opcode == RSP::Comp
-                : flit.opcode == RSP::CompPersist && flit.pGroupId == transaction.request.pGroupId;
-            if ((separatedPersistence && !persistenceResponse) ||
-                (!separatedPersistence && flit.opcode != RSP::Comp))
+            if (flow.directPersistActive)
+            {
+                if (flit.opcode != RSP::Comp)
+                    return false;
+                flow.backendCompReceived = true;
+                CompleteBackendOperation(transaction);
+                tracker.UnbindMemory(options.subordinateId, transaction.handle);
+                transaction.phase = Phase::Action;
+                transaction.readyTime = time;
+                return true;
+            }
+            if (separatedPersistence)
+            {
+                if (flit.opcode == RSP::CompPersist && flit.pGroupId == transaction.request.pGroupId)
+                {
+                    if (flow.backendCompReceived || flow.backendPersistReceived)
+                        return false;
+                    flow.backendCompReceived = true;
+                    flow.backendPersistReceived = true;
+                }
+                else if (flit.opcode == RSP::Comp)
+                {
+                    if (flow.backendCompReceived)
+                        return false;
+                    flow.backendCompReceived = true;
+                    flow.backendSeparatedPersistResponse = true;
+                }
+                else if (flit.opcode == RSP::Persist && flit.pGroupId == transaction.request.pGroupId)
+                {
+                    if (flow.backendPersistReceived)
+                        return false;
+                    flow.backendPersistFirst = !flow.backendCompReceived;
+                    flow.backendPersistReceived = true;
+                    flow.backendSeparatedPersistResponse = true;
+                }
+                else
+                    return false;
+
+                if (flow.backendCompReceived && flow.backendPersistReceived)
+                {
+                    CompleteBackendOperation(transaction);
+                    tracker.UnbindMemory(options.subordinateId, transaction.handle);
+                    transaction.phase = Phase::Action;
+                }
+                else
+                {
+                    flow.backendPhase = BackendPhase::WaitComp;
+                    transaction.phase = Phase::WaitMemory;
+                }
+                transaction.readyTime = time;
+                return true;
+            }
+            if (flit.opcode != RSP::Comp)
                 return false;
             flow.backendCompReceived = true;
             CompleteBackendOperation(transaction);
@@ -695,9 +761,11 @@ namespace CHI::Lunatic {
     bool Core::Impl::HandleBackendDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
-        if (options.backend == BackendKind::CHI && IsAtomicRequest(transaction.request.opcode) && !flow.spillPending)
+        if (options.backend == BackendKind::CHI && IsAtomicRequest(transaction.request.opcode) && !flow.spillPending &&
+            options.strategy.atomicExecution != AtomicExecutionKind::Local)
             return HandleAtomicBackendDAT(transaction, flit);
-        const bool localAtomicRead = options.backend != BackendKind::CHI && IsAtomicRequest(transaction.request.opcode);
+        const bool localAtomicRead = IsAtomicRequest(transaction.request.opcode) &&
+            (options.backend != BackendKind::CHI || options.strategy.atomicExecution == AtomicExecutionKind::Local);
         if (!transaction.memoryRequired || flow.memoryWrite ||
             (!IsReadRequest(transaction.request.opcode) && !flow.baselineFetch && !localAtomicRead))
             return false;
@@ -746,8 +814,8 @@ namespace CHI::Lunatic {
         transaction.responseRespErr = flit.respErr;
         received |= bit;
 
-        const uint64_t complete = flow.expectedBeatMask
-            ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+        const uint64_t complete = flow.backendExpectedBeatMask ? flow.backendExpectedBeatMask
+            : flow.expectedBeatMask ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
         if ((received & complete) != complete)
             return true;
 

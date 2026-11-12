@@ -7,7 +7,13 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         flow.snoopLine = transaction.request.Line();
         flow.expectedBeatMask = TransferBeatMask(transaction.request, options);
-        flow.responseForm = transaction.handle % 3;
+        switch (options.strategy.immediateResponse)
+        {
+            case ImmediateResponseKind::Rotate: flow.responseForm = transaction.handle % 3; break;
+            case ImmediateResponseKind::EarlyDBID: flow.responseForm = 0; break;
+            case ImmediateResponseKind::LateComp: flow.responseForm = 1; break;
+            case ImmediateResponseKind::Combined: flow.responseForm = 2; break;
+        }
         if (ClassifyRequest(transaction.request.opcode) == RequestClass::WriteUniqueZero)
         {
             transaction.data.fill(0);
