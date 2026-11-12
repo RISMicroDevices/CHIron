@@ -131,6 +131,29 @@ namespace CHI::Lunatic {
         bool                   forwardDct = true;
     };
 
+    enum class SchedulePoint : uint8_t {
+        Automatic,
+        InputRegister,
+        RequestBuffer,
+        Allocation,
+        LookupResult,
+        SnoopDecision,
+        SnoopIssue,
+        DataReturn,
+        FastResponse,
+        NormalResponse,
+        BackendRequest,
+        BackendData,
+        RetryAck,
+        CreditGrant,
+        BackendResend,
+        AtomicExecution,
+        Persistence,
+        DataBeat,
+        Output,
+        CommitSchedule
+    };
+
     struct OperationTiming {
         uint64_t    inputRegister = 0;
         uint64_t    requestBuffer = 0;

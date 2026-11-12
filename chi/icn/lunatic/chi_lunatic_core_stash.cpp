@@ -19,7 +19,7 @@ namespace CHI::Lunatic {
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
-        transaction.readyTime = time;
+        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
     }
 
     void Core::Impl::ActionStash(Transaction& transaction)

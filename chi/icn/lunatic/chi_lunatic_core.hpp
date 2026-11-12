@@ -53,6 +53,7 @@ namespace CHI::Lunatic {
         bool                       timingApplied = false;
         Phase                      eventPhase = Phase::Retired;
         bool                       eventApplied = false;
+        std::map<SchedulePoint, Time> scheduleMarks;
         BackendPhase               backendPhase = BackendPhase::None;
         Request                    backendRequest{};
         Time                       memoryReady = 0;
@@ -62,6 +63,7 @@ namespace CHI::Lunatic {
         uint64_t                   backendExpectedBeatMask = 0;
         uint64_t                   backendBeatMask = 0;
         size_t                     backendBeat = 0;
+        size_t                     dataBeatScheduled = 0;
         size_t                     nextSnoop = 0;
         bool                       requestBufferOwned = false;
         bool                       snoopWaveOwned = false;
@@ -186,7 +188,14 @@ namespace CHI::Lunatic {
         size_t            retry = std::numeric_limits<size_t>::max();
         bool              last = false;
         bool              downstream = false;
+        SchedulePoint     schedule = SchedulePoint::Automatic;
+        Time              readyTime = 0;
     };
+
+    SchedulePoint OutputPoint(const Request& flit, bool downstream, size_t retry);
+    SchedulePoint OutputPoint(const Response& flit, bool downstream, size_t retry);
+    SchedulePoint OutputPoint(const Data& flit, bool downstream, size_t retry);
+    SchedulePoint OutputPoint(const Snoop& flit, bool downstream, size_t retry);
 
     struct BankState {
         Directory       directory;
@@ -256,6 +265,9 @@ namespace CHI::Lunatic {
         std::deque<Request>           rxreq;
         std::deque<Response>          rxrsp;
         std::deque<Data>              rxdat;
+        std::deque<Time>              rxreqTimes;
+        std::deque<Time>              rxrspTimes;
+        std::deque<Time>              rxdatTimes;
         std::deque<Pending<Request>>  txreq;
         std::deque<Pending<Response>> txrsp;
         std::deque<Pending<Data>>     txdat;
@@ -273,6 +285,14 @@ namespace CHI::Lunatic {
                 return false;
             }
             queue.push_back(flit);
+            const Time readyTime = banks.front().pipeline.SaturatingAdd(time,
+                banks.front().pipeline.OperationDelay(SchedulePoint::InputRegister));
+            if constexpr (std::is_same_v<T, Request>)
+                rxreqTimes.push_back(readyTime);
+            else if constexpr (std::is_same_v<T, Response>)
+                rxrspTimes.push_back(readyTime);
+            else if constexpr (std::is_same_v<T, Data>)
+                rxdatTimes.push_back(readyTime);
             Publish(kind, flit);
             return true;
         }
@@ -372,10 +392,12 @@ namespace CHI::Lunatic {
                     options.strategy.outputArbitration == OutputArbitrationKind::OldestClassWeighted)
                     return SelectResponse(queue, std::nullopt, commit);
             }
-            size_t selected = 0;
-            for (size_t index = 1; index < queue.size(); ++index)
+            size_t selected = queue.size();
+            for (size_t index = 0; index < queue.size(); ++index)
             {
-                if (queue[index].age < queue[selected].age ||
+                if (queue[index].readyTime > time)
+                    continue;
+                if (selected == queue.size() || queue[index].age < queue[selected].age ||
                     (queue[index].age == queue[selected].age && queue[index].serial < queue[selected].serial))
                     selected = index;
             }
@@ -394,7 +416,7 @@ namespace CHI::Lunatic {
             size_t selected = queue.size();
             for (size_t index = 0; index < queue.size(); ++index)
             {
-                if (queue[index].downstream != downstream)
+                if (queue[index].downstream != downstream || queue[index].readyTime > time)
                     continue;
                 if (selected == queue.size() || queue[index].age < queue[selected].age ||
                     (queue[index].age == queue[selected].age && queue[index].serial < queue[selected].serial))
@@ -406,7 +428,10 @@ namespace CHI::Lunatic {
         template<typename T>
         const T* Peek(const std::deque<Pending<T>>& queue)
         {
-            return queue.empty() ? nullptr : &queue[Select(queue, false)].flit;
+            if (queue.empty())
+                return nullptr;
+            const size_t selected = Select(queue, false);
+            return selected == queue.size() ? nullptr : &queue[selected].flit;
         }
 
         template<typename T>
@@ -422,6 +447,8 @@ namespace CHI::Lunatic {
             if (queue.empty())
                 return std::nullopt;
             const size_t selected = Select(queue, true);
+            if (selected == queue.size())
+                return std::nullopt;
             Pending<T> pending = std::move(queue[selected]);
             queue.erase(queue.begin() + selected);
             std::optional<T> result(std::move(pending.flit));
@@ -449,14 +476,18 @@ namespace CHI::Lunatic {
         template<typename T>
         bool Queue(std::deque<Pending<T>>& queue, const T& flit, TransactionHandle handle,
                    Time age, bool last = false, bool downstream = false,
-                   size_t retry = std::numeric_limits<size_t>::max())
+                   size_t retry = std::numeric_limits<size_t>::max(),
+                   SchedulePoint point = SchedulePoint::Automatic)
         {
             if (queue.size() >= options.outputQueueLimit)
             {
                 pmu.RecordStall(WaitReason::OutputQueue);
                 return false;
             }
-            queue.push_back({ flit, handle, age, nextSerial++, retry, last, downstream });
+            const SchedulePoint selected = point == SchedulePoint::Automatic
+                ? OutputPoint(flit, downstream, retry) : point;
+            queue.push_back({ flit, handle, age, nextSerial++, retry, last, downstream,
+                selected, ScheduleOutput(handle, selected, time, retry) });
             return true;
         }
 
@@ -526,6 +557,10 @@ namespace CHI::Lunatic {
         size_t TotalRetryReservations() const noexcept;
         Time ScheduleTag(Transaction& transaction);
         Time ScheduleData(Transaction& transaction);
+        Time ScheduleResult(Transaction& transaction, SchedulePoint point, Time earliest);
+        bool ScheduleTransition(Transaction& transaction, SchedulePoint point);
+        Time ScheduleOutput(TransactionHandle handle, SchedulePoint point, Time earliest,
+                            size_t retry = std::numeric_limits<size_t>::max());
         void Resolve(Transaction& transaction);
         void ResolveNonCoherent(Transaction& transaction);
         void ResolveCoherent(Transaction& transaction);

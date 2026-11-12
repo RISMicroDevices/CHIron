@@ -183,7 +183,7 @@ namespace CHI::Lunatic {
         transaction.snoopsRequired = true;
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
-        transaction.readyTime = time;
+        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
     }
 
     void Core::Impl::PlanCMOSnoops(Transaction& transaction)
@@ -203,7 +203,7 @@ namespace CHI::Lunatic {
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
-        transaction.readyTime = time;
+        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
     }
 
     bool Core::Impl::EmitSnoops(Transaction& transaction)

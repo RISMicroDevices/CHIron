@@ -148,13 +148,13 @@ namespace CHI::Lunatic {
     {
         Time oldest = std::numeric_limits<Time>::max();
         for (const auto& pending : queue)
-            if (!downstream || pending.downstream == *downstream)
+            if ((!downstream || pending.downstream == *downstream) && pending.readyTime <= time)
                 oldest = std::min(oldest, pending.age);
 
         std::array<bool, 4> categories{};
         for (const auto& pending : queue)
-            if ((!downstream || pending.downstream == *downstream) && pending.age == oldest &&
-                ResponseClass(pending) < categories.size())
+            if ((!downstream || pending.downstream == *downstream) && pending.readyTime <= time &&
+                pending.age == oldest && ResponseClass(pending) < categories.size())
                 categories[ResponseCategory(pending.flit)] = true;
         const auto& classes = options.structure.classes;
         const std::array<uint64_t, 4> categoryWeights = {
@@ -167,8 +167,9 @@ namespace CHI::Lunatic {
 
         std::array<bool, 4> eligibleClasses{};
         for (const auto& pending : queue)
-            if ((!downstream || pending.downstream == *downstream) && pending.age == oldest &&
-                ResponseCategory(pending.flit) == category && ResponseClass(pending) < eligibleClasses.size())
+            if ((!downstream || pending.downstream == *downstream) && pending.readyTime <= time &&
+                pending.age == oldest && ResponseCategory(pending.flit) == category &&
+                ResponseClass(pending) < eligibleClasses.size())
                 eligibleClasses[ResponseClass(pending)] = true;
         const auto& classWeights = category == 1 || category == 2 ? classes.retryWeights : classes.requestWeights;
         WeightedRoundState& classRound = responseClassRounds[category];
@@ -180,8 +181,9 @@ namespace CHI::Lunatic {
         for (size_t index = 0; index < queue.size(); ++index)
         {
             const auto& pending = queue[index];
-            if ((downstream && pending.downstream != *downstream) || pending.age != oldest ||
-                ResponseCategory(pending.flit) != category || ResponseClass(pending) != classId)
+            if ((downstream && pending.downstream != *downstream) || pending.readyTime > time ||
+                pending.age != oldest || ResponseCategory(pending.flit) != category ||
+                ResponseClass(pending) != classId)
                 continue;
             if (selected == queue.size() || pending.serial < queue[selected].serial)
                 selected = index;
@@ -515,6 +517,8 @@ namespace CHI::Lunatic {
         if (!mask)
             mask = (uint64_t(1) << BeatsPerLine(options)) - 1;
         if (transaction.sentBeats >= size_t(std::popcount(mask)))
+            return;
+        if (transaction.sentBeats != 0 && !ScheduleTransition(transaction, SchedulePoint::DataBeat))
             return;
 
         uint64_t selected = mask;

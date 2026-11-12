@@ -185,7 +185,8 @@ namespace CHI::Lunatic {
                 request.allowRetry = false;
             }
 
-            if (!Queue(txreq, request, retry.transaction, transaction->actionAge, false, true))
+            if (!Queue(txreq, request, retry.transaction, transaction->actionAge, false, true,
+                std::numeric_limits<size_t>::max(), SchedulePoint::BackendResend))
             {
                 transaction->readyTime = time;
                 if (options.structure.classes.enabled)
@@ -533,6 +534,8 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.backendPhase != BackendPhase::SendData)
+            return;
+        if (flow.backendBeatMask && !ScheduleTransition(transaction, SchedulePoint::DataBeat))
             return;
 
         const size_t bytes = BytesPerBeat(options);

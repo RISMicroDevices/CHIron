@@ -316,6 +316,9 @@ namespace CHI::Lunatic {
         rxreq.clear();
         rxrsp.clear();
         rxdat.clear();
+        rxreqTimes.clear();
+        rxrspTimes.clear();
+        rxdatTimes.clear();
         txreq.clear();
         txrsp.clear();
         txdat.clear();
@@ -396,16 +399,18 @@ namespace CHI::Lunatic {
 
     void Core::Impl::ProcessResponses()
     {
-        while (!rxrsp.empty())
+        while (!rxrsp.empty() && rxrspTimes.front() <= time)
         {
             Response flit = std::move(rxrsp.front());
             rxrsp.pop_front();
+            rxrspTimes.pop_front();
             ProcessRSP(flit);
         }
-        while (!rxdat.empty())
+        while (!rxdat.empty() && rxdatTimes.front() <= time)
         {
             Data flit = std::move(rxdat.front());
             rxdat.pop_front();
+            rxdatTimes.pop_front();
             ProcessDAT(flit);
         }
     }
@@ -582,7 +587,7 @@ namespace CHI::Lunatic {
 
     void Core::Impl::AdmitRequests()
     {
-        if (rxreq.empty())
+        if (rxreq.empty() || rxreqTimes.front() > time)
             return;
 
         const auto decision = events->Decide(RequestAdmissionEvent(time, nodeId, rxreq.front()));
@@ -604,6 +609,7 @@ namespace CHI::Lunatic {
         {
             Request request = std::move(rxreq.front());
             rxreq.pop_front();
+            rxreqTimes.pop_front();
             if (!ConsumeRetryRequest(request, true))
                 Deny(request, "PCrdReturn has no matching credit");
             return;
@@ -632,6 +638,7 @@ namespace CHI::Lunatic {
             }
             Request request = std::move(rxreq.front());
             rxreq.pop_front();
+            rxreqTimes.pop_front();
             if (resend)
                 ConsumeRetryRequest(request, false);
             AdmitRequest(request, classId);
@@ -675,6 +682,7 @@ namespace CHI::Lunatic {
             response.traceTag = request.traceTag;
             retries.emplace(index, record);
             rxreq.pop_front();
+            rxreqTimes.pop_front();
             Queue(txrsp, response, INVALID_TRANSACTION, age, false, false, index);
             return;
         }
@@ -692,6 +700,7 @@ namespace CHI::Lunatic {
 
         Request request = std::move(rxreq.front());
         rxreq.pop_front();
+        rxreqTimes.pop_front();
         AdmitRequest(request, classId);
     }
 
@@ -752,7 +761,8 @@ namespace CHI::Lunatic {
         flow.directPersistActive = options.directPersistEnabled && options.backend == BackendKind::CHI &&
             request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
         flows.emplace(transaction->handle, std::move(flow));
-        transaction->readyTime = Bank(*transaction).pipeline.SaturatingAdd(time, 1);
+        transaction->readyTime = ScheduleResult(*transaction, SchedulePoint::RequestBuffer,
+            Bank(*transaction).pipeline.SaturatingAdd(time, 1));
         transaction->phase = Phase::Receive;
     }
 
@@ -809,7 +819,7 @@ namespace CHI::Lunatic {
         BankState& bank = Bank(transaction);
         if (bank.pipeline.TagBusy(time))
             pmu.RecordStall(WaitReason::TagPort);
-        return bank.pipeline.ScheduleTag(time);
+        return ScheduleResult(transaction, SchedulePoint::LookupResult, bank.pipeline.ScheduleTag(time));
     }
 
     Time Core::Impl::ScheduleData(Transaction& transaction)
@@ -817,7 +827,7 @@ namespace CHI::Lunatic {
         BankState& bank = Bank(transaction);
         if (bank.pipeline.DataBusy(time))
             pmu.RecordStall(WaitReason::DataPort);
-        return bank.pipeline.ScheduleData(time);
+        return ScheduleResult(transaction, SchedulePoint::DataReturn, bank.pipeline.ScheduleData(time));
     }
 
     void Core::Impl::Advance(Transaction& transaction)
@@ -884,7 +894,7 @@ namespace CHI::Lunatic {
                 transaction.dbid = transaction.handle;
                 Bank(transaction).hazards.Add(transaction.handle, transaction.request.Line(), transaction.actionAge);
                 transaction.phase = Phase::Hazard;
-                transaction.readyTime = time;
+                transaction.readyTime = ScheduleResult(transaction, SchedulePoint::Allocation, time);
                 return;
             case Phase::Hazard:
                 if (!Bank(transaction).hazards.IsHead(transaction.handle, transaction.request.Line()) ||
@@ -991,8 +1001,9 @@ namespace CHI::Lunatic {
         std::vector<TransactionHandle> handles;
         for (TransactionHandle handle : tracker.Handles())
         {
-            const Transaction* transaction = tracker.Find(handle);
-            if (transaction->phase == Phase::Commit && transaction->readyTime <= time)
+            Transaction* transaction = tracker.Find(handle);
+            if (transaction->phase == Phase::Commit &&
+                ScheduleTransition(*transaction, SchedulePoint::CommitSchedule) && transaction->readyTime <= time)
                 handles.push_back(handle);
         }
         for (TransactionHandle handle : handles)

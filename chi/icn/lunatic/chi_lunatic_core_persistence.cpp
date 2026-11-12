@@ -61,6 +61,8 @@ namespace CHI::Lunatic {
         if (options.backend == BackendKind::CHI && flow.backendPhase != BackendPhase::Done)
             return;
 
+        if (!ScheduleTransition(transaction, SchedulePoint::Persistence))
+            return;
         if (RequiresSeparatedPersist(transaction))
         {
             const bool persistFirst = options.strategy.persistResponse == PersistResponseKind::SeparatePersistFirst ||

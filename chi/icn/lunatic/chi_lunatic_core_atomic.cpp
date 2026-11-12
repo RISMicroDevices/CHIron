@@ -34,7 +34,7 @@ namespace CHI::Lunatic {
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
-        transaction.readyTime = time;
+        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
     }
 
     void Core::Impl::ActionAtomic(Transaction& transaction)
@@ -85,6 +85,8 @@ namespace CHI::Lunatic {
             }
             return;
         }
+        if (!ScheduleTransition(transaction, SchedulePoint::AtomicExecution))
+            return;
         if (!PrepareHomeCommit(transaction))
         {
             transaction.phase = Phase::Action;

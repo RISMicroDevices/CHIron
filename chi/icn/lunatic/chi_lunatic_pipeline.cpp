@@ -44,6 +44,33 @@ namespace CHI::Lunatic {
         }
     }
 
+    Time VirtualPipeline::OperationDelay(SchedulePoint point) const noexcept
+    {
+        switch (point)
+        {
+            case SchedulePoint::InputRegister: return options.timing.inputRegister;
+            case SchedulePoint::RequestBuffer: return options.timing.requestBuffer;
+            case SchedulePoint::Allocation: return options.timing.allocation;
+            case SchedulePoint::LookupResult: return options.timing.lookupResult;
+            case SchedulePoint::SnoopDecision: return options.timing.snoopDecision;
+            case SchedulePoint::SnoopIssue: return options.timing.snoopIssue;
+            case SchedulePoint::DataReturn: return options.timing.dataReturn;
+            case SchedulePoint::FastResponse: return options.timing.fastResponse;
+            case SchedulePoint::NormalResponse: return options.timing.normalResponse;
+            case SchedulePoint::BackendRequest: return options.timing.backendRequest;
+            case SchedulePoint::BackendData: return options.timing.backendData;
+            case SchedulePoint::RetryAck: return options.timing.retryAck;
+            case SchedulePoint::CreditGrant: return options.timing.creditGrant;
+            case SchedulePoint::BackendResend: return options.timing.backendResend;
+            case SchedulePoint::AtomicExecution: return options.timing.atomicExecution;
+            case SchedulePoint::Persistence: return options.timing.persistence;
+            case SchedulePoint::DataBeat: return options.timing.dataBeat;
+            case SchedulePoint::Output: return options.timing.output;
+            case SchedulePoint::CommitSchedule: return options.timing.commitSchedule;
+            default: return 0;
+        }
+    }
+
     bool VirtualPipeline::DelayablePhase(Phase phase) const noexcept
     {
         switch (phase)

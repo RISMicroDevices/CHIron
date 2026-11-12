@@ -17,6 +17,7 @@ namespace CHI::Lunatic {
         Time StageLatency(Phase phase) const noexcept;
         Time PhaseDelay(Phase phase) const noexcept;
         bool DelayablePhase(Phase phase) const noexcept;
+        Time OperationDelay(SchedulePoint point) const noexcept;
         Time Advance(Transaction& transaction, Phase next, Time time) const noexcept;
         Time ScheduleTag(Time earliest) noexcept;
         Time ScheduleData(Time earliest) noexcept;
