@@ -2,6 +2,7 @@
 
 #include "chi_lunatic_bank.hpp"
 #include "chi_lunatic_config.hpp"
+#include "chi_lunatic_replacement.hpp"
 #include "chi_lunatic_state.hpp"
 #include "chi_lunatic_types.hpp"
 
@@ -27,13 +28,15 @@ namespace CHI::Lunatic {
         bool                          precise;
         std::vector<SnoopFilterEntry> entries;
         uint64_t                      nextGeneration = 0;
+        ReplacementState              replacement;
 
         size_t            Index(size_t set, size_t way) const noexcept;
         SnoopFilterEntry& Acquire(const LineKey& key, uint64_t age);
 
     public:
         SnoopFilter(size_t sets, size_t ways, bool precise = true);
-        explicit SnoopFilter(const Options& options);
+        explicit SnoopFilter(const Options& options,
+                             std::shared_ptr<DeterministicRandom> random = {});
 
         size_t                  Sets() const noexcept { return sets; }
         size_t                  Ways() const noexcept { return ways; }
@@ -45,7 +48,7 @@ namespace CHI::Lunatic {
 
         std::optional<size_t> FindWay(const LineKey& key) const noexcept;
         std::vector<size_t>    VictimCandidates(const LineKey& key) const;
-        size_t                 ChooseVictim(const LineKey& key) const;
+        size_t                 ChooseVictim(const LineKey& key);
         bool                   HasInvalidWay(const LineKey& key) const noexcept;
         void                   Invalidate(size_t set, size_t way) noexcept;
 

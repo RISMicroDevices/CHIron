@@ -16,9 +16,10 @@ namespace CHI::Lunatic {
         , random(this->options.seed)
         , axi(this->options)
     {
+        std::shared_ptr<DeterministicRandom> sharedRandom(&random, [](DeterministicRandom*) {});
         banks.reserve(bankMap.Count());
         for (size_t index = 0; index < bankMap.Count(); ++index)
-            banks.emplace_back(this->options);
+            banks.emplace_back(this->options, sharedRandom);
     }
 
     size_t Core::Impl::BankIndex(const LineKey& line) const noexcept
@@ -359,6 +360,7 @@ namespace CHI::Lunatic {
         nextBackendSelection = 0;
         retryRounds = {};
         backendRetryRounds = {};
+        requestClassRound = {};
         responseCategoryRound = {};
         responseClassRounds = {};
 
@@ -756,39 +758,7 @@ namespace CHI::Lunatic {
     void Core::Impl::AdvanceTransactions()
     {
         std::vector<TransactionHandle> handles = tracker.Handles();
-        std::sort(handles.begin(), handles.end(), [&](TransactionHandle a, TransactionHandle b) {
-            const Transaction* ta = tracker.Find(a);
-            const Transaction* tb = tracker.Find(b);
-            if (ta->actionAge != tb->actionAge)
-                return ta->actionAge < tb->actionAge;
-            return a < b;
-        });
-
-        if (options.randomizeArbitration && handles.size() > 1)
-        {
-            struct WorkGroup {
-                LineKey                       line;
-                std::vector<TransactionHandle> handles;
-            };
-            std::vector<WorkGroup> groups;
-            std::map<LineKey, size_t> groupByLine;
-            for (TransactionHandle handle : handles)
-            {
-                const Transaction* transaction = tracker.Find(handle);
-                if (!transaction || !Bank(*transaction).pipeline.Eligible(*transaction, time))
-                    continue;
-                const LineKey line = transaction->request.Line();
-                auto [it, inserted] = groupByLine.emplace(line, groups.size());
-                if (inserted)
-                    groups.push_back({ line, {} });
-                groups[it->second].handles.push_back(handle);
-            }
-            for (size_t size = groups.size(); size > 1; --size)
-                std::swap(groups[size - 1], groups[random.Bounded(size - 1)]);
-            handles.clear();
-            for (const WorkGroup& group : groups)
-                handles.insert(handles.end(), group.handles.begin(), group.handles.end());
-        }
+        OrderTransactions(handles);
 
         for (TransactionHandle handle : handles)
         {
@@ -940,6 +910,9 @@ namespace CHI::Lunatic {
                     CopyMetadata(transaction, *home, options);
                     flow.homeDirty = home->dirty;
                     flow.validBytes = home->validBytes;
+                    if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique ||
+                        transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty)
+                        Bank(transaction).directory.Access(transaction.request.Line());
                 }
                 else if (IsReadRequest(transaction.request.opcode) || IsCMORequest(transaction.request.opcode))
                 {

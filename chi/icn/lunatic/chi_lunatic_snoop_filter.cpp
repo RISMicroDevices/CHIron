@@ -7,22 +7,20 @@
 namespace CHI::Lunatic {
 
     SnoopFilter::SnoopFilter(size_t sets, size_t ways, bool precise)
-        : bankMap(1), sets(sets), ways(ways), precise(precise)
+        : bankMap(1), sets(sets), ways(ways), precise(precise),
+          replacement(ReplacementKind::Age, sets, ways, 0)
     {
-        if (!sets || !ways)
-            throw std::invalid_argument("Lunatic snoop filter geometry must be non-zero");
         if (sets > std::numeric_limits<size_t>::max() / ways)
             throw std::invalid_argument("Lunatic snoop filter geometry is too large");
 
         entries.resize(sets * ways);
     }
 
-    SnoopFilter::SnoopFilter(const Options& options)
+    SnoopFilter::SnoopFilter(const Options& options, std::shared_ptr<DeterministicRandom> random)
         : bankMap(options), sets(options.snoopFilterSets), ways(options.snoopFilterWays),
-          precise(options.preciseSnoopFilter)
+          precise(options.preciseSnoopFilter),
+          replacement(options.strategy.snoopFilterReplacement, sets, ways, options.seed, std::move(random))
     {
-        if (!sets || !ways)
-            throw std::invalid_argument("Lunatic snoop filter geometry must be non-zero");
         if (sets > std::numeric_limits<size_t>::max() / ways)
             throw std::invalid_argument("Lunatic snoop filter geometry is too large");
 
@@ -91,19 +89,9 @@ namespace CHI::Lunatic {
         return candidates;
     }
 
-    size_t SnoopFilter::ChooseVictim(const LineKey& key) const
+    size_t SnoopFilter::ChooseVictim(const LineKey& key)
     {
-        const size_t set = SetIndex(key);
-        for (size_t way = 0; way < ways; ++way) {
-            if (!At(set, way).valid)
-                return way;
-        }
-        size_t victim = 0;
-        for (size_t way = 1; way < ways; ++way) {
-            if (At(set, way).age < At(set, victim).age)
-                victim = way;
-        }
-        return victim;
+        return replacement.Choose(SetIndex(key), entries);
     }
 
     SnoopFilterEntry& SnoopFilter::Acquire(const LineKey& key, uint64_t age)
@@ -111,6 +99,7 @@ namespace CHI::Lunatic {
         if (SnoopFilterEntry* current = Find(key)) {
             current->age = age;
             current->generation = ++nextGeneration;
+            replacement.Update(SetIndex(key), (current - entries.data()) % ways);
             return *current;
         }
 
@@ -123,6 +112,7 @@ namespace CHI::Lunatic {
         entry.age = age;
         entry.generation = ++nextGeneration;
         entry.valid = true;
+        replacement.Update(SetIndex(key), (&entry - entries.data()) % ways);
         return entry;
     }
 
@@ -251,6 +241,7 @@ namespace CHI::Lunatic {
     void SnoopFilter::Clear() noexcept
     {
         nextGeneration = 0;
+        replacement.Reset();
         for (SnoopFilterEntry& entry : entries) {
             entry.requesters.clear();
             entry.possiblyClean.clear();

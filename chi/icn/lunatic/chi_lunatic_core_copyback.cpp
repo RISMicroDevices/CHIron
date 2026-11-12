@@ -154,6 +154,18 @@ namespace CHI::Lunatic {
             }
         }
 
+        if (options.strategy.allocationStrategy == AllocationStrategyKind::SelectiveSharedCopyback &&
+            transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty &&
+            !transaction.homeHit && otherSharers != 0)
+        {
+            decision.allocateHome = true;
+            decision.retainHome = false;
+            decision.removeHome = false;
+            flow.allocateHome = true;
+            flow.retainHome = false;
+            flow.removeHome = false;
+        }
+
         if (decision.allocateHome && !transaction.homeHit && !PrepareVictim(transaction))
             return false;
 
@@ -246,7 +258,17 @@ namespace CHI::Lunatic {
         context.requesterDirty = dirty;
         context.requesterRetains = IsValid(flow.requesterFinal);
         context.evictionHasData = hasData;
-        const PolicyDecision decision = policy->OnCopyback(context);
+        PolicyDecision decision = policy->OnCopyback(context);
+        const bool selectiveCopyback = transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackFull ||
+            transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteEvictOrEvict;
+        if (options.strategy.allocationStrategy == AllocationStrategyKind::SelectiveSharedCopyback && hasData &&
+            !transaction.homeHit && selectiveCopyback)
+        {
+            decision.allocateHome = true;
+            decision.retainHome = false;
+            decision.removeHome = false;
+            decision.mergeCopyback = true;
+        }
         bool otherRequesterValid = false;
         for (NodeId target : Bank(line).snoopFilter.Targets(line))
         {

@@ -196,8 +196,8 @@ namespace CHI::Lunatic {
         std::array<size_t, 4> activeClasses{};
         std::array<size_t, 4> retryReservations{};
 
-        explicit BankState(const Options& options)
-            : directory(options), snoopFilter(options), pipeline(options)
+        explicit BankState(const Options& options, std::shared_ptr<DeterministicRandom> random = {})
+            : directory(options, std::move(random)), snoopFilter(options, std::move(random)), pipeline(options)
         {
         }
     };
@@ -241,6 +241,7 @@ namespace CHI::Lunatic {
         uint64_t                  nextBackendSelection = 0;
         std::array<WeightedRoundState, 3> retryRounds{};
         std::array<WeightedRoundState, 3> backendRetryRounds{};
+        WeightedRoundState          requestClassRound{};
         WeightedRoundState          responseCategoryRound{};
         std::array<WeightedRoundState, 4> responseClassRounds{};
 
@@ -468,6 +469,8 @@ namespace CHI::Lunatic {
         void ProcessDAT(const Data& flit);
         void AdmitRequests();
         void AdmitRequest(const Request& request, size_t classId = std::numeric_limits<size_t>::max());
+        bool IsRefillTransaction(const Transaction& transaction) const;
+        void OrderTransactions(std::vector<TransactionHandle>& handles);
         void AdvanceTransactions();
         void Advance(Transaction& transaction);
         size_t BankIndex(const LineKey& line) const noexcept;

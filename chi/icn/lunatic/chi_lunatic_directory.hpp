@@ -2,6 +2,7 @@
 
 #include "chi_lunatic_bank.hpp"
 #include "chi_lunatic_config.hpp"
+#include "chi_lunatic_replacement.hpp"
 #include "chi_lunatic_types.hpp"
 
 #include <cstddef>
@@ -28,12 +29,14 @@ namespace CHI::Lunatic {
         size_t                ways;
         std::vector<HomeLine> lines;
         uint64_t              nextGeneration = 0;
+        ReplacementState      replacement;
 
         size_t Index(size_t set, size_t way) const noexcept;
 
     public:
         Directory(size_t sets, size_t ways);
-        explicit Directory(const Options& options);
+        explicit Directory(const Options& options,
+                           std::shared_ptr<DeterministicRandom> random = {});
 
         size_t Sets() const noexcept { return sets; }
         size_t Ways() const noexcept { return ways; }
@@ -46,9 +49,10 @@ namespace CHI::Lunatic {
 
         std::optional<size_t> FindWay(const LineKey& key) const noexcept;
         std::vector<size_t>   VictimCandidates(const LineKey& key) const;
-        size_t                ChooseVictim(const LineKey& key) const;
+        size_t                ChooseVictim(const LineKey& key);
 
         HomeLine& Install(const LineKey& key, size_t way, uint64_t age);
+        void      Access(const LineKey& key) noexcept;
         void      Touch(const LineKey& key) noexcept;
         void      Invalidate(size_t set, size_t way) noexcept;
         void      Clear() noexcept;
