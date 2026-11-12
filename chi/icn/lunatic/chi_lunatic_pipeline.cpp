@@ -100,14 +100,14 @@ namespace CHI::Lunatic {
     Time VirtualPipeline::ScheduleTag(Time earliest) noexcept
     {
         const Time slot = std::max(earliest, tagPortFree);
-        tagPortFree = SaturatingAdd(slot, 1);
+        tagPortFree = SaturatingAdd(slot, options.structure.tagPortOccupancy);
         return SaturatingAdd(slot, options.tagLatency);
     }
 
     Time VirtualPipeline::ScheduleData(Time earliest) noexcept
     {
         const Time slot = std::max(earliest, dataPortFree);
-        dataPortFree = SaturatingAdd(slot, 1);
+        dataPortFree = SaturatingAdd(slot, options.structure.dataPortOccupancy);
         return SaturatingAdd(slot, options.dataLatency);
     }
 
