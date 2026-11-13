@@ -477,3 +477,30 @@ LUNATIC_TEST(Stage9FIFOMoveOwnership)
     LUNATIC_CHECK(assigned.Peek()->TxnID() == request.TxnID());
     LUNATIC_CHECK(moved.Count() == 0);
 }
+
+
+LUNATIC_TEST(Stage9SeparateFieldRSPCommonUnion)
+{
+    using Channel = V3CHISeparateFieldRNChannelPolicy<SeparatePinMock, 0, RXRSPChannel>;
+    SeparatePinMock mock;
+    auto response = MakeResponse();
+    response.Opcode() = ::CHI::Eb::Opcodes::RSP::CompPersist;
+    response.PGroupID() = 0x65;
+    Channel::DriveFlit(mock, &response, true);
+    LUNATIC_CHECK(mock.chi_rn0_rxrsp_bits_DBID == 0x65);
+
+    Cohestra::CHI::RSPFlit sampled{};
+    LUNATIC_CHECK(Channel::SampleFlit(mock, &sampled));
+    LUNATIC_CHECK(sampled.DBID() == 0x65);
+    LUNATIC_CHECK(sampled.PGroupID() == 0x65);
+
+    response.Opcode() = ::CHI::Eb::Opcodes::RSP::StashDone;
+    response.StashGroupID() = 0x39;
+    Channel::DriveFlit(mock, &response, true);
+    LUNATIC_CHECK(mock.chi_rn0_rxrsp_bits_DBID == 0x39);
+
+    sampled = {};
+    LUNATIC_CHECK(Channel::SampleFlit(mock, &sampled));
+    LUNATIC_CHECK(sampled.DBID() == 0x39);
+    LUNATIC_CHECK(sampled.StashGroupID() == 0x39);
+}
