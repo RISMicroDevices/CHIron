@@ -126,6 +126,7 @@ namespace {
         LUNATIC_CHECK(options.strategy.downstreamRetrySelection == RetrySelectionKind::Newest);
         LUNATIC_CHECK(options.strategy.providerSelection == ProviderSelectionKind::LowestNodeId);
         LUNATIC_CHECK(options.strategy.forwardDct);
+        LUNATIC_CHECK(options.strategy.copybackResponseAtResolve == (options.profile == ProfileKind::Type3));
         CheckZeroTiming(options.timing);
     }
 
@@ -142,8 +143,8 @@ namespace {
         LUNATIC_CHECK(options.snoopFilterSets == 128);
         LUNATIC_CHECK(options.snoopFilterWays == 4);
         LUNATIC_CHECK(options.dataWidth == 256);
-        LUNATIC_CHECK(options.tagLatency == 2);
-        LUNATIC_CHECK(options.dataLatency == 2);
+        LUNATIC_CHECK(options.tagLatency == 1);
+        LUNATIC_CHECK(options.dataLatency == 3);
         CheckLegacyAuxiliaryDefaults(options);
         LUNATIC_CHECK(options.policy == PolicyKind::Exclusive);
         LUNATIC_CHECK(options.backend == BackendKind::CHI);
@@ -187,7 +188,11 @@ namespace {
         LUNATIC_CHECK(options.strategy.downstreamRetrySelection == RetrySelectionKind::Newest);
         LUNATIC_CHECK(options.strategy.providerSelection == ProviderSelectionKind::LowestNodeId);
         LUNATIC_CHECK(options.strategy.forwardDct);
-        CheckZeroTiming(options.timing);
+        LUNATIC_CHECK(options.strategy.copybackResponseAtResolve == (options.profile == ProfileKind::Type3));
+        OperationTiming legacyTiming = options.timing;
+        legacyTiming.backendData = 0;
+        CheckZeroTiming(legacyTiming);
+        LUNATIC_CHECK(options.timing.backendData == 4);
     }
 
     void CheckType7Options(const Options& options)
@@ -248,6 +253,7 @@ namespace {
         LUNATIC_CHECK(options.strategy.downstreamRetrySelection == RetrySelectionKind::Newest);
         LUNATIC_CHECK(options.strategy.providerSelection == ProviderSelectionKind::LowestNodeId);
         LUNATIC_CHECK(options.strategy.forwardDct);
+        LUNATIC_CHECK(options.strategy.copybackResponseAtResolve == (options.profile == ProfileKind::Type3));
         CheckZeroTiming(options.timing);
     }
 

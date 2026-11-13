@@ -146,6 +146,7 @@ LUNATIC_TEST(Stage10ProfileConfigOverridesEveryOptionGroup)
     loader.values["lunatic.strategy.allocation"] = "selective";
     loader.values["lunatic.strategy.atomic"] = "backend";
     loader.values["lunatic.strategy.immediate.response"] = "latecomp";
+    loader.values["lunatic.strategy.copyback.resolve"] = "1";
     loader.values["lunatic.strategy.stash.response"] = "combined";
     loader.values["lunatic.strategy.persist.response"] = "compfirst";
     loader.values["lunatic.strategy.retry.upstream"] = "oldest";
@@ -203,6 +204,7 @@ LUNATIC_TEST(Stage10ProfileConfigOverridesEveryOptionGroup)
     LUNATIC_CHECK(options.strategy.allocationStrategy == AllocationStrategyKind::SelectiveSharedCopyback);
     LUNATIC_CHECK(options.strategy.atomicExecution == AtomicExecutionKind::Backend);
     LUNATIC_CHECK(options.strategy.immediateResponse == ImmediateResponseKind::LateComp);
+    LUNATIC_CHECK(options.strategy.copybackResponseAtResolve);
     LUNATIC_CHECK(options.strategy.stashResponse == StashResponseKind::Combined);
     LUNATIC_CHECK(options.strategy.persistResponse == PersistResponseKind::SeparateCompFirst);
     LUNATIC_CHECK(options.strategy.upstreamRetrySelection == RetrySelectionKind::Oldest);

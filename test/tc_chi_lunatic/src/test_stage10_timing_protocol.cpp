@@ -517,7 +517,7 @@ LUNATIC_TEST(Stage10MatrixP07ClassTiersAndWeightedCreditGrant)
                 TIMING_CHECK(row, impl.RetryTier(0, 0) == 2);
         }
         TIMING_CHECK(row, impl.RetryTier(0, 0) == 2);
-        const std::vector<uint8_t> expectedClasses = { 2, 0, 0, 1, 0, 0, 1 };
+        const std::vector<uint8_t> expectedClasses = { 2, 0, 0, 0, 0, 1, 1 };
         std::vector<uint8_t> actualClasses;
         for (const Pending<Response>& pending : impl.txrsp)
         {
@@ -774,10 +774,10 @@ LUNATIC_TEST(Stage10MatrixP11PrefetchTargetForwardTimeline)
         driver.TickTo(19);
         TIMING_CHECK(row, transaction->phase == Phase::Lookup);
         TIMING_CHECK(row, flow.scheduleMarks.contains(SchedulePoint::LookupResult));
-        ExpectTime(row, flow.scheduleMarks.at(SchedulePoint::LookupResult), 25,
+        ExpectTime(row, flow.scheduleMarks.at(SchedulePoint::LookupResult), 23 + options.tagLatency,
             "prefetch lookup result");
         TIMING_CHECK(row, !flow.requestBufferOwned);
-        driver.TickTo(25);
+        driver.TickTo(23 + options.tagLatency);
         TIMING_CHECK(row, transaction->phase == Phase::Resolve);
         driver.TickTo(28);
         TIMING_CHECK(row, impl.txreq.size() == 1);

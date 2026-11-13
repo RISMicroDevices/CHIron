@@ -410,7 +410,7 @@ LUNATIC_TEST(Stage10MatrixC05CleanUniqueCompAckAndErrorFallback)
             impl.ActionCoherent(transaction);
             TIMING_CHECK(row, impl.flows.at(transaction.handle).directoryCommitted == !udpError);
             const HomeLine* home = impl.Bank(line).directory.Find(line);
-            TIMING_CHECK(row, !home || home->dirty == udpError);
+            TIMING_CHECK(row, !home || !home->dirty);
             const Response comp = PopOnlyResponse(row, impl, 15, CHI::Eb::Opcodes::RSP::Comp);
             if (udpError)
             {
@@ -1361,7 +1361,7 @@ namespace {
         FlowState& flow = impl.flows.at(transaction.handle);
         AcceptAtomicOperands(row, impl, transaction, 15, operands);
         impl.ActionAtomic(transaction);
-        Time dataDone = 19;
+        Time dataDone = 17 + options.dataLatency;
         if (local)
         {
             TIMING_CHECK(row, flow.directoryCommitted);
@@ -1387,7 +1387,7 @@ namespace {
             PopOnlyData(row, impl, 23, CHI::Eb::Opcodes::DAT::NonCopyBackWrData, true);
             TIMING_CHECK(row, !flow.backendOperationOwned);
             impl.ActionAtomic(transaction);
-            dataDone = 27;
+            dataDone = 25 + options.dataLatency;
             ExpectTime(row, transaction.readyTime, dataDone, "remote atomic result data");
             TIMING_CHECK(row, flow.directoryCommitted);
             TIMING_CHECK(row, !flow.scheduleMarks.contains(SchedulePoint::AtomicExecution));
@@ -1485,11 +1485,12 @@ LUNATIC_TEST(Stage10MatrixC20AtomicCompareSuccessFailureSchedule)
             const AtomicExecution expected = ExecuteAtomic(transaction.request, initial, operands);
             TIMING_CHECK(row, expected.write == success);
             CheckLine(row, impl, transaction.request.Line(), expected.data);
-            ExpectTime(row, transaction.readyTime, 21, "compare result data");
-            driver.TickTo(21);
-            const Data result = PopHeldData(row, impl, 24, success ? 24 : 27,
+            ExpectTime(row, transaction.readyTime, 19 + options.dataLatency, "compare result data");
+            driver.TickTo(19 + options.dataLatency);
+            const Time resultVisible = 22 + options.dataLatency;
+            const Data result = PopHeldData(row, impl, resultVisible, success ? resultVisible : resultVisible + 3,
                 CHI::Eb::Opcodes::DAT::CompData);
-            CheckAtomicResult(row, transaction, options, result, initial, 24);
+            CheckAtomicResult(row, transaction, options, result, initial, resultVisible);
             ExpectTime(row, flow.scheduleMarks.at(SchedulePoint::AtomicExecution), 17,
                 "compare execution applied once");
             TIMING_CHECK(row, !flow.responseOwned);
@@ -1532,7 +1533,7 @@ LUNATIC_TEST(Stage10MatrixC21MultiBeatAtomicOperandPlacement)
         TIMING_CHECK(row, transaction.Complete(COMPLETE_WRITE_DATA));
         impl.ActionAtomic(transaction);
         TIMING_CHECK(row, flow.directoryCommitted);
-        ExpectTime(row, transaction.readyTime, 17, "multi-beat operand result data");
+        ExpectTime(row, transaction.readyTime, 15 + options.dataLatency, "multi-beat operand result data");
         impl.time = 23;
         impl.ReturnAtomic(transaction);
         const Data result = PopOnlyData(row, impl, 26, CHI::Eb::Opcodes::DAT::CompData);
@@ -1592,22 +1593,24 @@ LUNATIC_TEST(Stage10MatrixC22LocalAtomicExecutionDelayAppliedOnce)
         TIMING_CHECK(row, !flow.directoryCommitted && impl.txdat.empty());
         driver.TickTo(27);
         TIMING_CHECK(row, flow.directoryCommitted);
-        ExpectTime(row, transaction.readyTime, 31, "atomic result after execution");
-        driver.TickTo(31);
+        ExpectTime(row, transaction.readyTime, 29 + options.dataLatency, "atomic result after execution");
+        driver.TickTo(29 + options.dataLatency);
         TIMING_CHECK(row, impl.txdat.size() == 1);
-        ExpectTime(row, impl.txdat.front().readyTime, 34, "held atomic result visibility");
-        impl.time = 34;
+        const Time resultVisible = transaction.readyTime + 3;
+        ExpectTime(row, impl.txdat.front().readyTime, resultVisible, "held atomic result visibility");
+        impl.time = resultVisible;
         TIMING_CHECK(row, impl.Peek(impl.txdat));
-        impl.time = 35;
+        impl.time = resultVisible + 1;
         impl.ReturnAtomic(transaction);
         TIMING_CHECK(row, impl.txdat.size() == 1);
-        impl.time = 37;
+        impl.time = resultVisible + 3;
         impl.ReturnAtomic(transaction);
         TIMING_CHECK(row, impl.txdat.size() == 1);
         ExpectTime(row, flow.scheduleMarks.at(SchedulePoint::AtomicExecution), 27,
             "atomic execution not reapplied");
-        const Data result = PopHeldData(row, impl, 34, 37, CHI::Eb::Opcodes::DAT::CompData);
-        CheckAtomicResult(row, transaction, options, result, initial, 34);
+        const Data result = PopHeldData(row, impl, resultVisible, resultVisible + 3,
+            CHI::Eb::Opcodes::DAT::CompData);
+        CheckAtomicResult(row, transaction, options, result, initial, resultVisible);
         TIMING_CHECK(row, flow.atomic.returnEmitted);
         TIMING_CHECK(row, transaction.Complete(COMPLETE_RESPONSE));
         TIMING_CHECK(row, !flow.responseOwned);
@@ -1672,12 +1675,13 @@ LUNATIC_TEST(Stage10MatrixC23RemoteAtomicRetryAndEarlyResult)
         TIMING_CHECK(row, flow.backendDataEmitted);
         impl.ActionAtomic(transaction);
         TIMING_CHECK(row, flow.directoryCommitted);
-        ExpectTime(row, transaction.readyTime, 35, "retried atomic result data");
+        ExpectTime(row, transaction.readyTime, 33 + options.dataLatency, "retried atomic result data");
         TIMING_CHECK(row, !flow.scheduleMarks.contains(SchedulePoint::AtomicExecution));
-        impl.time = 35;
+        impl.time = 33 + options.dataLatency;
+        const Time resultVisible = transaction.readyTime + 3;
         impl.ReturnAtomic(transaction);
-        const Data result = PopOnlyData(row, impl, 38, CHI::Eb::Opcodes::DAT::CompData);
-        CheckAtomicResult(row, transaction, options, result, initial, 38);
+        const Data result = PopOnlyData(row, impl, resultVisible, CHI::Eb::Opcodes::DAT::CompData);
+        CheckAtomicResult(row, transaction, options, result, initial, resultVisible);
         TIMING_CHECK(row, impl.txrsp.empty() && impl.txreq.empty());
         TIMING_CHECK(row, !flow.responseOwned);
         RetireChecked(row, impl, transaction.handle);
@@ -1713,7 +1717,7 @@ namespace {
         }
         TIMING_CHECK(row, transaction.Complete(COMPLETE_MEMORY));
         TIMING_CHECK(row, !impl.flows.at(transaction.handle).backendOperationOwned);
-        ExpectTime(row, transaction.readyTime, 22, "AXI atomic read completion");
+        ExpectTime(row, transaction.readyTime, 20 + impl.options.dataLatency, "AXI atomic read completion");
         TIMING_CHECK(row, transaction.responseRespErr == (failed
             ? CHI::Eb::RespErrs::NDERR : CHI::Eb::RespErrs::OK));
     }
@@ -1798,7 +1802,7 @@ namespace {
             ExpectTime(row, flow.scheduleMarks.at(SchedulePoint::AtomicExecution), 25,
                 "AXI execution applied once");
             TIMING_CHECK(row, impl.memory.Read(transaction.request.Line()) == expected.data);
-            finalResponse = store ? 33 : 35;
+            finalResponse = store ? 33 : 35 + options.dataLatency - 2;
         }
         else
         {
@@ -1808,7 +1812,7 @@ namespace {
             TIMING_CHECK(row, !flow.scheduleMarks.contains(SchedulePoint::AtomicExecution));
             TIMING_CHECK(row, !flow.backendOperationOwned && !impl.axi.PeekAW());
             TIMING_CHECK(row, impl.memory.Read(transaction.request.Line()) == initial);
-            finalResponse = store ? 27 : 29;
+            finalResponse = store ? 27 : 29 + options.dataLatency - 2;
         }
 
         if (store)

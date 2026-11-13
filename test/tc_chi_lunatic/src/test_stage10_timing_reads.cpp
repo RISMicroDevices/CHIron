@@ -255,9 +255,10 @@ LUNATIC_TEST(Stage10MatrixR02OrdinaryChiReadDependencyPositions)
             const LineData payload = ReadPattern(23);
             Transaction& transaction = driver.Add(Timing::MakeRequest(CHI::Eb::Opcodes::REQ::ReadNoSnp));
             const TransactionHandle handle = transaction.handle;
-            driver.TickTo(9);
+            driver.TickTo(8);
             TIMING_CHECK(row, !impl.Peek(impl.txreq));
-            const Request downstream = PopREQ(row, driver, 10, 10);
+            const Request downstream = PopREQ(row, driver, profile == ProfileKind::Type3 ? 9 : 10,
+                profile == ProfileKind::Type3 ? 9 : 10);
             TIMING_CHECK(row, downstream.opcode == CHI::Eb::Opcodes::REQ::ReadNoSnp);
             TIMING_CHECK(row, downstream.returnNid == 2);
             AcceptDAT(row, driver, dependency, std::vector<Data>{
@@ -265,14 +266,15 @@ LUNATIC_TEST(Stage10MatrixR02OrdinaryChiReadDependencyPositions)
                 BackendData(transaction, 1, options, payload)
             });
             TIMING_CHECK(row, !impl.flows.at(handle).backendOperationOwned);
-            const Time action = dependency + 5;
+            const Time action = dependency + options.dataLatency + options.timing.dataReturn;
             driver.TickTo(action);
             TIMING_CHECK(row, transaction.phase == Phase::Return);
             ExpectTime(row, impl.flows.at(handle).scheduleMarks.at(SchedulePoint::DataReturn),
                 action, "CHI backend data return");
-            const Data first = PopDAT(row, driver, dependency + 10, dependency + 10);
+            const Time firstAt = action + 5;
+            const Data first = PopDAT(row, driver, firstAt, firstAt);
             CheckBeat(row, first, options, 0, CHI::Eb::Resps::CompData_I, 0, &payload);
-            const Data second = PopDAT(row, driver, dependency + 11, dependency + 11);
+            const Data second = PopDAT(row, driver, firstAt + 1, firstAt + 1);
             CheckBeat(row, second, options, 1, CHI::Eb::Resps::CompData_I, 0, &payload);
             RetireUnacked(row, driver, handle);
         }
@@ -309,12 +311,13 @@ LUNATIC_TEST(Stage10MatrixR03AxiReadSubmissionAndRLastPositions)
             }
             impl.Tick();
             TIMING_CHECK(row, !impl.flows.at(handle).backendOperationOwned);
-            const Time action = dependency + 4;
+            const Time action = dependency + options.dataLatency + options.timing.dataReturn;
             driver.TickTo(action);
             TIMING_CHECK(row, transaction.phase == Phase::Return);
-            const Data first = PopDAT(row, driver, dependency + 8, dependency + 8);
+            const Time firstAt = action + options.timing.dataReturn + 2;
+            const Data first = PopDAT(row, driver, firstAt, firstAt);
             CheckBeat(row, first, options, 0, CHI::Eb::Resps::CompData_I, 0, &payload);
-            const Data second = PopDAT(row, driver, dependency + 9, dependency + 9);
+            const Data second = PopDAT(row, driver, firstAt + 1, firstAt + 1);
             CheckBeat(row, second, options, 1, CHI::Eb::Resps::CompData_I, 0, &payload);
             RetireUnacked(row, driver, handle);
             TIMING_CHECK(row, impl.txreq.empty());
@@ -337,12 +340,13 @@ LUNATIC_TEST(Stage10MatrixR04OrderedReadReceiptAndIndependentDataPop)
         request.order = 2;
         Transaction& transaction = driver.Add(request);
         const TransactionHandle handle = transaction.handle;
-        driver.TickTo(9);
+        driver.TickTo(8);
         TIMING_CHECK(row, !impl.Peek(impl.txrsp));
         driver.TickTo(12);
         TIMING_CHECK(row, impl.txdat.empty());
         TIMING_CHECK(row, !impl.ordering.Empty());
-        const Response receipt = PopRSP(row, driver, 13, 10, CHI::Eb::Opcodes::RSP::ReadReceipt);
+        const Response receipt = PopRSP(row, driver, 13, profile == ProfileKind::Type3 ? 9 : 10,
+            CHI::Eb::Opcodes::RSP::ReadReceipt);
         TIMING_CHECK(row, receipt.txnId == request.txnId);
         TIMING_CHECK(row, impl.ordering.Empty());
         TIMING_CHECK(row, impl.flows.at(handle).readReceiptEmitted);
@@ -422,8 +426,9 @@ LUNATIC_TEST(Stage10MatrixR06SeparatedBackendReceiptAndDataOrders)
             request.expCompAck = true;
             Transaction& transaction = driver.Add(request);
             const TransactionHandle handle = transaction.handle;
-            PopRSP(row, driver, 9, 9, CHI::Eb::Opcodes::RSP::ReadReceipt);
-            const Request downstream = PopREQ(row, driver, 9, 9);
+            PopRSP(row, driver, profile == ProfileKind::Type3 ? 8 : 9,
+                profile == ProfileKind::Type3 ? 8 : 9, CHI::Eb::Opcodes::RSP::ReadReceipt);
+            const Request downstream = PopREQ(row, driver, profile == ProfileKind::Type3 ? 8 : 9, profile == ProfileKind::Type3 ? 8 : 9);
             TIMING_CHECK(row, downstream.opcode == CHI::Eb::Opcodes::REQ::ReadNoSnpSep);
             const Time receiptAt = mode == 0 ? 9 : mode == 1 ? 17 : 10;
             const Time dataAt = mode == 0 ? 15 : mode == 1 ? 9 : 10;
@@ -438,10 +443,10 @@ LUNATIC_TEST(Stage10MatrixR06SeparatedBackendReceiptAndDataOrders)
                 BackendData(transaction, 1, options, payload, CHI::Eb::Opcodes::DAT::DataSepResp)
             });
             TIMING_CHECK(row, !impl.flows.at(handle).backendOperationOwned);
-            const Time action = dataAt + 3;
+            const Time action = dataAt + 1 + options.dataLatency;
             driver.TickTo(action);
             TIMING_CHECK(row, transaction.phase == Phase::Return);
-            const Time firstAt = dataAt + 6;
+            const Time firstAt = action + 3;
             const Time secondAt = firstAt + 1;
             const Data first = PopDAT(row, driver, firstAt, firstAt);
             CheckBeat(row, first, options, 0, CHI::Eb::Resps::CompData_I, 0, &payload);
@@ -485,7 +490,7 @@ LUNATIC_TEST(Stage10MatrixR07DmtDirectReturnAndLateReceipt)
                 Transaction& transaction = driver.Add(request);
                 const TransactionHandle handle = transaction.handle;
                 TIMING_CHECK(row, impl.flows.at(handle).dmtActive);
-                const Request downstream = PopREQ(row, driver, 9, 9);
+                const Request downstream = PopREQ(row, driver, profile == ProfileKind::Type3 ? 8 : 9, profile == ProfileKind::Type3 ? 8 : 9);
                 TIMING_CHECK(row, downstream.returnNid == request.source);
                 TIMING_CHECK(row, downstream.returnTxnId == request.txnId);
                 TIMING_CHECK(row, downstream.order == 1);
@@ -614,10 +619,11 @@ LUNATIC_TEST(Stage10MatrixR10CleanPeerResponseAndMemoryJoinPositions)
             impl.Bank(line).snoopFilter.Track(line, 5, CacheState::SC, 0);
             Transaction& transaction = driver.Add(Timing::MakeRequest(CHI::Eb::Opcodes::REQ::ReadShared));
             const TransactionHandle handle = transaction.handle;
-            driver.TickTo(8);
+            driver.TickTo(6 + options.tagLatency);
             ExpectTime(row, impl.flows.at(handle).scheduleMarks.at(SchedulePoint::SnoopDecision),
-                8, "clean peer snoop decision");
-            const Snoop snoop = PopSNP(row, driver, 11, 11, CHI::Eb::Opcodes::SNP::SnpShared);
+                6 + options.tagLatency, "clean peer snoop decision");
+            const Snoop snoop = PopSNP(row, driver, profile == ProfileKind::Type3 ? 10 : 11,
+                profile == ProfileKind::Type3 ? 10 : 11, CHI::Eb::Opcodes::SNP::SnpShared);
             TIMING_CHECK(row, snoop.target == 5);
             TIMING_CHECK(row, impl.flows.at(handle).snoopWaveOwned);
             AcceptRSP(row, driver, dependency,
@@ -626,14 +632,15 @@ LUNATIC_TEST(Stage10MatrixR10CleanPeerResponseAndMemoryJoinPositions)
             TIMING_CHECK(row, transaction.memoryRequired);
             driver.TickTo(dependency + 8);
             TIMING_CHECK(row, !impl.flows.at(handle).backendOperationOwned);
-            const Time action = dependency + 11;
+            const Time action = dependency + 9 + options.dataLatency;
             driver.TickTo(action);
             TIMING_CHECK(row, transaction.phase == Phase::Return);
-            const Data first = PopDAT(row, driver, dependency + 14, dependency + 14);
+            const Time firstAt = action + options.timing.dataReturn + 2;
+            const Data first = PopDAT(row, driver, firstAt, firstAt);
             CheckBeat(row, first, options, 0, CHI::Eb::Resps::CompData_SC, 0, &payload);
-            const Data second = PopDAT(row, driver, dependency + 15, dependency + 15);
+            const Data second = PopDAT(row, driver, firstAt + 1, firstAt + 1);
             CheckBeat(row, second, options, 1, CHI::Eb::Resps::CompData_SC, 0, &payload);
-            AckAndRetire(row, driver, transaction, second.dbid, dependency + 16);
+            AckAndRetire(row, driver, transaction, second.dbid, firstAt + 2);
             TIMING_CHECK(row, impl.Bank(line).snoopFilter.State(line, 5) == CacheState::SC);
         }
 }
@@ -664,7 +671,8 @@ LUNATIC_TEST(Stage10MatrixR11DirtyPeerFullAndPartialDataJoins)
                 impl.Bank(line).snoopFilter.Track(line, 5, CacheState::UD, 0);
                 Transaction& transaction = driver.Add(Timing::MakeRequest(CHI::Eb::Opcodes::REQ::ReadUnique));
                 const TransactionHandle handle = transaction.handle;
-                const Snoop snoop = PopSNP(row, driver, 11, 11, CHI::Eb::Opcodes::SNP::SnpUnique);
+                const Snoop snoop = PopSNP(row, driver, profile == ProfileKind::Type3 ? 10 : 11,
+                    profile == ProfileKind::Type3 ? 10 : 11, CHI::Eb::Opcodes::SNP::SnpUnique);
                 const uint16_t opcode = partial ? CHI::Eb::Opcodes::DAT::SnpRespDataPtl
                                                 : CHI::Eb::Opcodes::DAT::SnpRespData;
                 const uint8_t resp = partial ? uint8_t(CHI::Eb::Resps::SnpRespDataPtl_I_PD)
@@ -682,11 +690,11 @@ LUNATIC_TEST(Stage10MatrixR11DirtyPeerFullAndPartialDataJoins)
                 TIMING_CHECK(row, transaction.pendingSnoops.empty());
                 TIMING_CHECK(row, impl.flows.at(handle).snoopDataPartial == partial);
                 TIMING_CHECK(row, !impl.flows.at(handle).snoopWaveOwned);
-                const Time action = dependency + (partial ? 11 : 0);
+                const Time action = dependency + (partial ? 9 + options.dataLatency : 0);
                 driver.TickTo(action);
                 TIMING_CHECK(row, transaction.phase == Phase::Return);
-                const Time firstAt = dependency + (partial ? 14 : 3);
-                const Time secondAt = dependency + (partial ? 15 : 4);
+                const Time firstAt = dependency + (partial ? 12 + options.dataLatency : 3);
+                const Time secondAt = firstAt + 1;
                 const Data first = PopDAT(row, driver, firstAt, firstAt);
                 CheckBeat(row, first, options, 0, CHI::Eb::Resps::CompData_UD_PD, 0, &expected);
                 const Data second = PopDAT(row, driver, secondAt, secondAt);
@@ -718,7 +726,8 @@ LUNATIC_TEST(Stage10MatrixR12DctProviderAndMultiOwnerFallback)
                 Transaction& transaction = driver.Add(NonAllocating(
                     Timing::MakeRequest(CHI::Eb::Opcodes::REQ::ReadUnique)));
                 const TransactionHandle handle = transaction.handle;
-                const Snoop snoop = PopSNP(row, driver, 11, 11, CHI::Eb::Opcodes::SNP::SnpUniqueFwd);
+                const Snoop snoop = PopSNP(row, driver, profile == ProfileKind::Type3 ? 10 : 11,
+                    profile == ProfileKind::Type3 ? 10 : 11, CHI::Eb::Opcodes::SNP::SnpUniqueFwd);
                 TIMING_CHECK(row, snoop.target == 5);
                 TIMING_CHECK(row, snoop.fwdNid == transaction.request.source);
                 TIMING_CHECK(row, snoop.fwdTxnId == transaction.request.txnId);
@@ -759,13 +768,14 @@ LUNATIC_TEST(Stage10MatrixR12DctProviderAndMultiOwnerFallback)
         impl.Bank(line).snoopFilter.Track(line, 6, CacheState::SC, 0);
         Transaction& transaction = driver.Add(NonAllocating(Timing::MakeRequest(CHI::Eb::Opcodes::REQ::ReadUnique)));
         const TransactionHandle handle = transaction.handle;
-        const Snoop first = PopSNP(row, driver, 11, 11, CHI::Eb::Opcodes::SNP::SnpUnique);
+        const Snoop first = PopSNP(row, driver, profile == ProfileKind::Type3 ? 10 : 11,
+            profile == ProfileKind::Type3 ? 10 : 11, CHI::Eb::Opcodes::SNP::SnpUnique);
         TIMING_CHECK(row, !impl.flows.at(handle).dctActive);
         Snoop second;
         if (profile == ProfileKind::Type3)
         {
             impl.Tick();
-            second = PopSNP(row, driver, 14, 14, CHI::Eb::Opcodes::SNP::SnpUnique);
+            second = PopSNP(row, driver, 13, 13, CHI::Eb::Opcodes::SNP::SnpUnique);
         }
         else
             second = PopSNP(row, driver, 12, 12, CHI::Eb::Opcodes::SNP::SnpUnique);
@@ -776,11 +786,12 @@ LUNATIC_TEST(Stage10MatrixR12DctProviderAndMultiOwnerFallback)
         AcceptRSP(row, driver, 15,
             MakeResponse(second.target, second.txnId, CHI::Eb::Opcodes::RSP::SnpResp, CHI::Eb::Resps::SnpResp_I));
         TIMING_CHECK(row, transaction.pendingSnoops.empty());
-        const Data firstData = PopDAT(row, driver, 29, 29);
+        const Time firstAt = profile == ProfileKind::Type3 ? 30 : 29;
+        const Data firstData = PopDAT(row, driver, firstAt, firstAt);
         CheckBeat(row, firstData, options, 0, CHI::Eb::Resps::CompData_UC, 0, &payload);
-        const Data secondData = PopDAT(row, driver, 30, 30);
+        const Data secondData = PopDAT(row, driver, firstAt + 1, firstAt + 1);
         CheckBeat(row, secondData, options, 1, CHI::Eb::Resps::CompData_UC, 0, &payload);
-        AckAndRetire(row, driver, transaction, secondData.dbid, 31);
+        AckAndRetire(row, driver, transaction, secondData.dbid, firstAt + 2);
         TIMING_CHECK(row, impl.Bank(line).snoopFilter.State(line, 5) == CacheState::I);
         TIMING_CHECK(row, impl.Bank(line).snoopFilter.State(line, 6) == CacheState::I);
     }
@@ -832,14 +843,15 @@ LUNATIC_TEST(Stage10MatrixR13ReadUniqueAndMakeUniqueInvalidationWaves)
                     }
                     else
                     {
-                        const Snoop first = PopSNP(row, driver, 10, 10, CHI::Eb::Opcodes::SNP::SnpUnique);
+                        const Snoop first = PopSNP(row, driver, profile == ProfileKind::Type3 ? 9 : 10,
+                            profile == ProfileKind::Type3 ? 9 : 10, CHI::Eb::Opcodes::SNP::SnpUnique);
                         std::vector<Snoop> snoops{ first };
                         if (sharers == 2)
                         {
                             if (profile == ProfileKind::Type3)
                             {
                                 impl.Tick();
-                                snoops.push_back(PopSNP(row, driver, 12, 12, CHI::Eb::Opcodes::SNP::SnpUnique));
+                                snoops.push_back(PopSNP(row, driver, 11, 11, CHI::Eb::Opcodes::SNP::SnpUnique));
                             }
                             else
                                 snoops.push_back(PopSNP(row, driver, 11, 11, CHI::Eb::Opcodes::SNP::SnpUnique));
@@ -858,11 +870,12 @@ LUNATIC_TEST(Stage10MatrixR13ReadUniqueAndMakeUniqueInvalidationWaves)
                         }
                         else
                         {
-                            const Data firstData = PopDAT(row, driver, dependency + 14, dependency + 14);
+                            const Time firstAt = dependency + (profile == ProfileKind::Type3 ? 15 : 14);
+                            const Data firstData = PopDAT(row, driver, firstAt, firstAt);
                             CheckBeat(row, firstData, options, 0, CHI::Eb::Resps::CompData_UC, 0, &payload);
-                            const Data secondData = PopDAT(row, driver, dependency + 15, dependency + 15);
+                            const Data secondData = PopDAT(row, driver, firstAt + 1, firstAt + 1);
                             CheckBeat(row, secondData, options, 1, CHI::Eb::Resps::CompData_UC, 0, &payload);
-                            AckAndRetire(row, driver, transaction, secondData.dbid, dependency + 16);
+                            AckAndRetire(row, driver, transaction, secondData.dbid, firstAt + 2);
                         }
                     }
                     TIMING_CHECK(row, impl.Bank(line).snoopFilter.State(line, 4) ==
@@ -946,7 +959,8 @@ LUNATIC_TEST(Stage10MatrixR15SharedDirtyAndPreferUniqueSourceJoins)
                     const uint16_t snoopOpcode = opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty
                         ? uint16_t(CHI::Eb::Opcodes::SNP::SnpNotSharedDirty)
                         : uint16_t(CHI::Eb::Opcodes::SNP::SnpPreferUnique);
-                    const Snoop snoop = PopSNP(row, driver, 10, 10, snoopOpcode);
+                    const Snoop snoop = PopSNP(row, driver, profile == ProfileKind::Type3 ? 9 : 10,
+                        profile == ProfileKind::Type3 ? 9 : 10, snoopOpcode);
                     const uint8_t snoopResp = initial == CacheState::SD
                         ? uint8_t(CHI::Eb::Resps::SnpRespData_SC_PD) : uint8_t(CHI::Eb::Resps::SnpRespData_SC);
                     const Data firstSnoop = MakeData(5, 2, snoop.txnId, 0, options,
@@ -1011,15 +1025,15 @@ LUNATIC_TEST(Stage10MatrixR16RefillCleanAndDirtyVictimJoins)
                 Transaction& transaction = driver.Add(Timing::MakeRequest(
                     CHI::Eb::Opcodes::REQ::ReadUnique, 4, 1, readLine.address));
                 const TransactionHandle handle = transaction.handle;
-                const Request baseline = PopREQ(row, driver, 9, 9);
+                const Request baseline = PopREQ(row, driver, profile == ProfileKind::Type3 ? 8 : 9, profile == ProfileKind::Type3 ? 8 : 9);
                 TIMING_CHECK(row, baseline.opcode == CHI::Eb::Opcodes::REQ::ReadNoSnp);
-                const Time baselineAt = 9 + offset;
+                const Time baselineAt = 7 + options.tagLatency + offset;
                 AcceptDAT(row, driver, baselineAt, std::vector<Data>{
                     BackendData(transaction, 0, options, readPayload),
                     BackendData(transaction, 1, options, readPayload)
                 });
                 TIMING_CHECK(row, !impl.flows.at(handle).backendOperationOwned);
-                const Time action = baselineAt + 3;
+                const Time action = baselineAt + 1 + options.dataLatency;
                 driver.TickTo(action);
                 TIMING_CHECK(row, impl.flows.at(handle).victimPending);
                 TIMING_CHECK(row, !impl.flows.at(handle).directoryCommitted);
@@ -1148,7 +1162,8 @@ LUNATIC_TEST(Stage10MatrixR18CompAckEarlySameLateAndPreDataRejection)
             request.expCompAck = true;
             Transaction& transaction = driver.Add(request);
             const TransactionHandle handle = transaction.handle;
-            PopRSP(row, driver, 9, 9, CHI::Eb::Opcodes::RSP::ReadReceipt);
+            PopRSP(row, driver, profile == ProfileKind::Type3 ? 8 : 9,
+                profile == ProfileKind::Type3 ? 8 : 9, CHI::Eb::Opcodes::RSP::ReadReceipt);
             const Data first = PopDAT(row, driver, 21, 21);
             CheckBeat(row, first, options, 0, CHI::Eb::Resps::CompData_I);
             if (position == 0)
@@ -1177,7 +1192,8 @@ LUNATIC_TEST(Stage10MatrixR18CompAckEarlySameLateAndPreDataRejection)
         request.expCompAck = true;
         Transaction& transaction = driver.Add(request);
         const TransactionHandle handle = transaction.handle;
-        PopRSP(row, driver, 9, 9, CHI::Eb::Opcodes::RSP::ReadReceipt);
+        PopRSP(row, driver, profile == ProfileKind::Type3 ? 8 : 9,
+                profile == ProfileKind::Type3 ? 8 : 9, CHI::Eb::Opcodes::RSP::ReadReceipt);
         AcceptCompAck(row, driver, request.source, transaction.dbid, 10);
         TIMING_CHECK(row, impl.errors.size() == 1);
         TIMING_CHECK(row, impl.tracker.Find(handle) != nullptr);
@@ -1246,7 +1262,7 @@ LUNATIC_TEST(Stage10MatrixR20BackendErrorPropagationAndOwnership)
                 Core::Impl& impl = driver.impl;
                 Transaction& transaction = driver.Add(Timing::MakeRequest(CHI::Eb::Opcodes::REQ::ReadNoSnp));
                 const TransactionHandle handle = transaction.handle;
-                PopREQ(row, driver, 9, 9);
+                PopREQ(row, driver, profile == ProfileKind::Type3 ? 8 : 9, profile == ProfileKind::Type3 ? 8 : 9);
                 const LineData payload = ReadPattern(239);
                 const uint8_t firstError = errorCase == 0 ? uint8_t(CHI::Eb::RespErrs::DERR)
                                                          : uint8_t(CHI::Eb::RespErrs::OK);
@@ -1268,13 +1284,15 @@ LUNATIC_TEST(Stage10MatrixR20BackendErrorPropagationAndOwnership)
                                                        : uint8_t(CHI::Eb::Resps::CompData_I);
                 if (separated)
                 {
-                    const Response response = PopRSP(row, driver, 17, 17, CHI::Eb::Opcodes::RSP::RespSepData);
+                    const Response response = PopRSP(row, driver, profile == ProfileKind::Type3 ? 18 : 17,
+                        profile == ProfileKind::Type3 ? 18 : 17, CHI::Eb::Opcodes::RSP::RespSepData);
                     TIMING_CHECK(row, response.respErr == expectedFirstError);
                 }
-                const Data first = PopDAT(row, driver, 17, 17, dataOpcode);
+                const Time firstAt = profile == ProfileKind::Type3 ? 18 : 17;
+                const Data first = PopDAT(row, driver, firstAt, firstAt, dataOpcode);
                 CheckBeat(row, first, options, 0, expectedResp, expectedFirstError, &payload);
                 TIMING_CHECK(row, impl.flows.at(handle).responseOwned);
-                const Data second = PopDAT(row, driver, 18, 18, dataOpcode);
+                const Data second = PopDAT(row, driver, firstAt + 1, firstAt + 1, dataOpcode);
                 CheckBeat(row, second, options, 1, expectedResp, expectedLastError, &payload);
                 RetireUnacked(row, driver, handle);
             }
@@ -1306,9 +1324,10 @@ LUNATIC_TEST(Stage10MatrixR20BackendErrorPropagationAndOwnership)
             TIMING_CHECK(row, impl.axi.PushR(last));
             impl.Tick();
             TIMING_CHECK(row, !impl.flows.at(handle).backendOperationOwned);
-            const Data firstData = PopDAT(row, driver, 15, 15);
+            const Time firstAt = 13 + options.dataLatency;
+            const Data firstData = PopDAT(row, driver, firstAt, firstAt);
             CheckBeat(row, firstData, options, 0, CHI::Eb::Resps::CompData_I, CHI::Eb::RespErrs::NDERR);
-            const Data lastData = PopDAT(row, driver, 16, 16);
+            const Data lastData = PopDAT(row, driver, firstAt + 1, firstAt + 1);
             CheckBeat(row, lastData, options, 1, CHI::Eb::Resps::CompData_I, CHI::Eb::RespErrs::NDERR);
             RetireUnacked(row, driver, handle);
             TIMING_CHECK(row, impl.txreq.empty());

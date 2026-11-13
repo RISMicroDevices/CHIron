@@ -129,6 +129,7 @@ namespace CHI::Lunatic {
         RetrySelectionKind     downstreamRetrySelection = RetrySelectionKind::Newest;
         ProviderSelectionKind  providerSelection = ProviderSelectionKind::LowestNodeId;
         bool                   forwardDct = true;
+        bool                   copybackResponseAtResolve = false;
     };
 
     enum class SchedulePoint : uint8_t {

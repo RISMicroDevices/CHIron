@@ -37,12 +37,12 @@ LUNATIC_TEST(Stage10MatrixF01FrontEndAbsoluteSchedule)
         ExpectTime(row, flow.scheduleMarks.at(SchedulePoint::RequestBuffer), 6, "request buffer");
         driver.TickTo(12);
         ExpectTime(row, flow.scheduleMarks.at(SchedulePoint::Allocation), 12, "allocation");
-        ExpectTime(row, flow.scheduleMarks.at(SchedulePoint::LookupResult), 19, "lookup result");
+        ExpectTime(row, flow.scheduleMarks.at(SchedulePoint::LookupResult), 17 + options.tagLatency, "lookup result");
         TIMING_CHECK(row, !flow.requestBufferOwned);
         TIMING_CHECK(row, transaction.phase == Phase::Lookup);
-        driver.TickTo(19);
+        driver.TickTo(17 + options.tagLatency);
         TIMING_CHECK(row, transaction.phase == Phase::Resolve);
-        ExpectTime(row, transaction.readyTime, 20, "resolve eligibility");
+        ExpectTime(row, transaction.readyTime, 18 + options.tagLatency, "resolve eligibility");
     }
 }
 
@@ -149,9 +149,9 @@ LUNATIC_TEST(Stage10MatrixF04IdleTagLatencyBoundary)
         ExpectTime(row, pipeline.ScheduleTag(5), 8, "idle tag result");
         TIMING_CHECK(row, pipeline.TagBusy(5));
         TIMING_CHECK(row, !pipeline.TagBusy(6));
-        ExpectTime(row, pipeline.ScheduleData(7), 9, "idle data result");
+        ExpectTime(row, pipeline.ScheduleData(7), 7 + options.dataLatency, "idle data result");
         TIMING_CHECK(row, pipeline.DataBusy(7));
-        TIMING_CHECK(row, !pipeline.DataBusy(8));
+        TIMING_CHECK(row, !pipeline.DataBusy(6 + options.dataLatency));
     }
 }
 
@@ -163,9 +163,9 @@ LUNATIC_TEST(Stage10MatrixF05ConfiguredTagOccupancy)
         Options options = ProfileOptions(profile);
         options.structure.tagPortOccupancy = 3;
         VirtualPipeline pipeline(options);
-        ExpectTime(row, pipeline.ScheduleTag(5), 7, "first tag result");
-        ExpectTime(row, pipeline.ScheduleTag(5), 10, "second tag result");
-        ExpectTime(row, pipeline.ScheduleTag(5), 13, "third tag result");
+        ExpectTime(row, pipeline.ScheduleTag(5), 5 + options.tagLatency, "first tag result");
+        ExpectTime(row, pipeline.ScheduleTag(5), 8 + options.tagLatency, "second tag result");
+        ExpectTime(row, pipeline.ScheduleTag(5), 11 + options.tagLatency, "third tag result");
     }
 }
 
@@ -177,9 +177,9 @@ LUNATIC_TEST(Stage10MatrixF06ConfiguredDataOccupancy)
         Options options = ProfileOptions(profile);
         options.structure.dataPortOccupancy = 4;
         VirtualPipeline pipeline(options);
-        ExpectTime(row, pipeline.ScheduleData(5), 7, "first data result");
-        ExpectTime(row, pipeline.ScheduleData(5), 11, "second data result");
-        ExpectTime(row, pipeline.ScheduleData(5), 15, "third data result");
+        ExpectTime(row, pipeline.ScheduleData(5), 5 + options.dataLatency, "first data result");
+        ExpectTime(row, pipeline.ScheduleData(5), 9 + options.dataLatency, "second data result");
+        ExpectTime(row, pipeline.ScheduleData(5), 13 + options.dataLatency, "third data result");
     }
 }
 
@@ -198,7 +198,7 @@ LUNATIC_TEST(Stage10MatrixF07ParallelBankPorts)
             else
                 TIMING_CHECK(row, driver.impl.BankIndex(line) == 0);
             ExpectTime(row, driver.impl.Bank(line).pipeline.ScheduleTag(0),
-                profile == ProfileKind::Type3 ? 2 : 2 + bank, "bank tag result");
+                profile == ProfileKind::Type3 ? options.tagLatency : options.tagLatency + bank, "bank tag result");
         }
     }
 }
@@ -233,7 +233,7 @@ LUNATIC_TEST(Stage10MatrixF08SameLineReleaseDoesNotReallocate)
         ExpectTime(row, impl.flows.at(younger.handle).scheduleMarks.at(SchedulePoint::Allocation),
             3, "younger allocation after release");
         ExpectTime(row, impl.flows.at(younger.handle).scheduleMarks.at(SchedulePoint::LookupResult),
-            26, "younger lookup after release");
+            24 + options.tagLatency, "younger lookup after release");
         impl.Retire(younger.handle);
         TIMING_CHECK(row, impl.ValidateInvariants());
     }
@@ -271,7 +271,7 @@ LUNATIC_TEST(Stage10MatrixF09LinkedVictimReleaseBoundary)
         impl.Bank(victim).hazards.Release(olderVictim, victim);
         impl.Advance(transaction);
         TIMING_CHECK(row, transaction.phase == Phase::Lookup);
-        ExpectTime(row, transaction.readyTime, 6, "linked victim lookup release");
+        ExpectTime(row, transaction.readyTime, 4 + options.tagLatency, "linked victim lookup release");
         impl.Retire(transaction.handle);
         TIMING_CHECK(row, impl.ValidateInvariants());
     }
@@ -303,8 +303,8 @@ LUNATIC_TEST(Stage10MatrixF10SameSetDifferentLinesPipeline)
         impl.Advance(second);
         TIMING_CHECK(row, first.phase == Phase::Lookup);
         TIMING_CHECK(row, second.phase == Phase::Lookup);
-        ExpectTime(row, first.readyTime, 2, "first same-set lookup");
-        ExpectTime(row, second.readyTime, 3, "second same-set lookup");
+        ExpectTime(row, first.readyTime, options.tagLatency, "first same-set lookup");
+        ExpectTime(row, second.readyTime, options.tagLatency + 1, "second same-set lookup");
         impl.Retire(first.handle);
         impl.Retire(second.handle);
         TIMING_CHECK(row, impl.ValidateInvariants());

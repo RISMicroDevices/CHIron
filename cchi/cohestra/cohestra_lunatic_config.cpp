@@ -221,6 +221,7 @@ namespace {
             { "latecomp", ImmediateResponseKind::LateComp },
             { "combined", ImmediateResponseKind::Combined }
         });
+        ReadBool(loader, "strategy.copyback.resolve", options.strategy.copybackResponseAtResolve, ok);
         ReadChoice(loader, "strategy.stash.response", options.strategy.stashResponse, ok, {
             { "rotate", StashResponseKind::Rotate },
             { "compfirst", StashResponseKind::CompFirst },

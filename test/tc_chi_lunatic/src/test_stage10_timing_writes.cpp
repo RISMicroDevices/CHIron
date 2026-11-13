@@ -1790,8 +1790,10 @@ LUNATIC_TEST(Stage10MatrixW19HeldResponsesWithCompletedRequesterData)
             Time completed = visible + 3;
             if (form == 0)
             {
-                ExpectResponseTime(row, impl, CHI::Eb::Opcodes::RSP::Comp, 201);
-                completed = 201;
+                const Time compVisible = profile == ProfileKind::Type3 ? 202 : 201;
+                driver.TickTo(compVisible - 5);
+                ExpectResponseTime(row, impl, CHI::Eb::Opcodes::RSP::Comp, compVisible);
+                completed = compVisible;
                 PopResponse(row, driver, CHI::Eb::Opcodes::RSP::Comp, completed);
             }
             TIMING_CHECK(row, transaction.phase == Phase::Commit);

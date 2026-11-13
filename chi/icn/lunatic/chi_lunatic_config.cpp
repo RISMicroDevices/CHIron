@@ -125,6 +125,9 @@ namespace CHI::Lunatic {
         options.retryEnabled = false;
         options.poisonEnabled = true;
         options.dataCheckEnabled = true;
+        options.tagLatency = 1;
+        options.dataLatency = 3;
+        options.timing.backendData = 4;
 
         options.structure.bankCount = 4;
         options.structure.requestBufferLimit = 8;
@@ -138,6 +141,7 @@ namespace CHI::Lunatic {
         options.strategy.snoopFilterReplacement = ReplacementKind::PseudoRandom;
         options.strategy.requestArbitration = RequestArbitrationKind::RefillFirst;
         options.strategy.allocationStrategy = AllocationStrategyKind::SelectiveSharedCopyback;
+        options.strategy.copybackResponseAtResolve = true;
 
         ValidateOptions(options);
         return options;

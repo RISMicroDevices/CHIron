@@ -82,6 +82,14 @@ namespace {
 
         std::optional<Data> PopDAT()
         {
+            if (impl.txdat.empty())
+                return std::nullopt;
+            const Time ready = impl.txdat.front().readyTime;
+            while (impl.time < ready)
+            {
+                ++impl.time;
+                impl.Tick();
+            }
             return impl.Pop(impl.txdat, EventKind::EmittedTXDAT);
         }
 

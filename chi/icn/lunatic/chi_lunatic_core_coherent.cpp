@@ -38,8 +38,23 @@ namespace CHI::Lunatic {
                 ResolveImmediateWrite(transaction);
                 return;
             case RequestClass::WriteEvictOrEvict:
+                flow.expectedBeatMask = CopybackMask(transaction.request, options);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
+                return;
             case RequestClass::CopybackWrite:
                 flow.expectedBeatMask = CopybackMask(transaction.request, options);
+                if (options.strategy.copybackResponseAtResolve && !flow.dbidSent)
+                {
+                    QueueComp(transaction, true);
+                    flow.dbidSent = flow.compSent;
+                    if (flow.compSent)
+                    {
+                        transaction.phase = Phase::WaitWriteData;
+                        transaction.wait = WaitReason::WriteData;
+                        transaction.readyTime = time;
+                        return;
+                    }
+                }
                 Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case RequestClass::Evict:

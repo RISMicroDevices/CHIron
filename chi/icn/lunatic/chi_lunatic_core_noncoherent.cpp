@@ -204,7 +204,8 @@ namespace CHI::Lunatic {
             transaction.Mark(COMPLETE_COMPACK);
         transaction.phase = Phase::Action;
         transaction.wait = WaitReason::None;
-        transaction.readyTime = time;
+        transaction.readyTime = requestClass == RequestClass::CopybackWrite &&
+            options.strategy.copybackResponseAtResolve ? ScheduleData(transaction) : time;
         return true;
     }
 
