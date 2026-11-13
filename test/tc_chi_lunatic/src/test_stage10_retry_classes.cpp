@@ -278,11 +278,12 @@ LUNATIC_TEST(Stage10RetryClassesRetryAckAndChangedResendPreserveClass)
     LUNATIC_CHECK(harness.impl.retrySources.empty());
     LUNATIC_CHECK(harness.impl.availableCredits.empty());
     LUNATIC_CHECK(harness.impl.retries.empty());
+    const auto handle = transaction->handle;
     harness.Retire(0);
     LUNATIC_CHECK(harness.impl.banks[0].activeClasses[3] == 15);
-    harness.Retire(transaction->handle);
+    harness.Retire(handle);
     LUNATIC_CHECK(harness.impl.banks[0].activeClasses[3] == 14);
-    harness.Retire(transaction->handle);
+    harness.Retire(handle);
     LUNATIC_CHECK(harness.impl.banks[0].activeClasses[3] == 14);
     harness.Check();
 }
@@ -406,6 +407,7 @@ LUNATIC_TEST(Stage10RetryClassesDistinctSourceExhaustionAndRecovery)
     LUNATIC_CHECK(firstGrant);
     auto firstResend = ClassRequest(4, 300, ClassLine(0, 0), 0, firstGrant->pCrdType);
     firstResend.allowRetry = false;
+    harness.impl.rxreqTimes.push_front(harness.impl.time);
     harness.impl.rxreq.push_front(firstResend);
     harness.Admit();
     LUNATIC_CHECK(harness.impl.retrySources.empty());

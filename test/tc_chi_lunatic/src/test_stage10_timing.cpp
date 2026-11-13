@@ -277,11 +277,14 @@ LUNATIC_TEST(Stage10TimingAtomicExecution)
     impl.ActionAtomic(transaction);
     LUNATIC_CHECK(transaction.readyTime == 2);
     LUNATIC_CHECK(!flow.directoryCommitted);
+    const auto handle = transaction.handle;
+    const LineKey line = transaction.request.Line();
     TickTo(impl, 2);
-    LUNATIC_CHECK(flow.directoryCommitted);
-    LUNATIC_CHECK(impl.Bank(transaction.request.Line()).directory.Find(transaction.request.Line()));
-    LUNATIC_CHECK(impl.Bank(transaction.request.Line()).directory.Find(transaction.request.Line())->data[0] == 3);
-    impl.Retire(transaction.handle);
+    LUNATIC_CHECK(!impl.tracker.Find(handle));
+    LUNATIC_CHECK(!impl.flows.contains(handle));
+    LUNATIC_CHECK(impl.Bank(line).directory.Find(line));
+    LUNATIC_CHECK(impl.Bank(line).directory.Find(line)->data[0] == 3);
+    impl.Retire(handle);
 }
 
 LUNATIC_TEST(Stage10TimingPersistenceCompletion)

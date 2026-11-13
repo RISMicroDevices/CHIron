@@ -240,9 +240,10 @@ LUNATIC_TEST(Stage10BackendResourcesCopyBackEarlyResponseHeld)
     copyback.Mark(COMPLETE_WRITE_DATA);
     flow.writeResp = CHI::Eb::Resps::CopyBackWrData_UD_PD;
     flow.dataDirty = true;
+    const auto handle = copyback.handle;
     LUNATIC_CHECK(harness.impl.CommitCopyback(copyback));
-    harness.impl.Retire(copyback.handle);
-    LUNATIC_CHECK(!harness.impl.flows.contains(copyback.handle));
+    harness.impl.Retire(handle);
+    LUNATIC_CHECK(!harness.impl.flows.contains(handle));
     harness.impl.QueueDBID(writer);
     LUNATIC_CHECK(harness.impl.flows.at(writer.handle).dbidSent);
     harness.impl.Retire(writer.handle);
