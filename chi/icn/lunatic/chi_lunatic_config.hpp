@@ -130,6 +130,9 @@ namespace CHI::Lunatic {
         ProviderSelectionKind  providerSelection = ProviderSelectionKind::LowestNodeId;
         bool                   forwardDct = true;
         bool                   copybackResponseAtResolve = false;
+        bool                   cmoBackendWhenRequired = false;
+        bool                   cmoLocalCompI = false;
+        bool                   evictResponseAtResolve = false;
         bool                   snoopIssueAtResolve = false;
         bool                   snoopDataThroughDataPort = false;
     };
@@ -193,6 +196,7 @@ namespace CHI::Lunatic {
         uint64_t    dataLatency = 2;
         uint64_t    homeHitDataLatency = 0;
         uint64_t    snoopDataLatency = 0;
+        uint64_t    cmoWriteLatency = 0;
         uint64_t    memoryLatency = 8;
         uint64_t    receiveDelay = 0;
         uint64_t    decodeDelay = 0;

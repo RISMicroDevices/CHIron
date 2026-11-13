@@ -517,6 +517,7 @@ LUNATIC_TEST(Stage10BackendResourcesDirectCmoPersistAtomic)
 {
     Options options = BackendOptions(BackendKind::CHI);
     options.structure.memoryResourceLimit = 1;
+    options.strategy.cmoBackendWhenRequired = false;
     Harness harness(options);
     auto& cmo = harness.Add(CHI::Eb::Opcodes::REQ::CleanInvalid, 4, 200, ResourceLine(0, 0));
     harness.impl.ActionCoherent(cmo);

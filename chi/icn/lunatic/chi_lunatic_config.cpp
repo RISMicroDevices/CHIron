@@ -130,6 +130,7 @@ namespace CHI::Lunatic {
         options.dataLatency = 3;
         options.homeHitDataLatency = 2;
         options.snoopDataLatency = 4;
+        options.cmoWriteLatency = 2;
         options.timing.backendData = 4;
 
         options.structure.bankCount = 4;
@@ -145,6 +146,9 @@ namespace CHI::Lunatic {
         options.strategy.requestArbitration = RequestArbitrationKind::RefillFirst;
         options.strategy.allocationStrategy = AllocationStrategyKind::SelectiveSharedCopyback;
         options.strategy.copybackResponseAtResolve = true;
+        options.strategy.cmoBackendWhenRequired = true;
+        options.strategy.cmoLocalCompI = true;
+        options.strategy.evictResponseAtResolve = true;
         options.strategy.snoopIssueAtResolve = true;
         options.strategy.snoopDataThroughDataPort = true;
 

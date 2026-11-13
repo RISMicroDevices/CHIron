@@ -205,7 +205,15 @@ namespace CHI::Lunatic {
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
-        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
+        const bool writeRequired = options.strategy.cmoBackendWhenRequired &&
+            transaction.request.opcode != CHI::Eb::Opcodes::REQ::MakeInvalid &&
+            (flow.dataDirty || flow.homeDirty);
+        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision,
+            time + (writeRequired ? options.cmoWriteLatency : 0));
+        if (options.strategy.cmoBackendWhenRequired && transaction.snoopTargets.empty() &&
+            (transaction.request.opcode == CHI::Eb::Opcodes::REQ::MakeInvalid ||
+             (!flow.dataDirty && !flow.homeDirty)))
+            ActionCoherent(transaction);
     }
 
     bool Core::Impl::EmitSnoops(Transaction& transaction)

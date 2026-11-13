@@ -50,6 +50,10 @@ namespace LunaticTest::Timing {
         options.policy = CHI::Lunatic::PolicyKind::Exclusive;
         options.homeHitDataLatency = 0;
         options.snoopDataLatency = 0;
+        options.cmoWriteLatency = 0;
+        options.strategy.cmoBackendWhenRequired = false;
+        options.strategy.cmoLocalCompI = false;
+        options.strategy.evictResponseAtResolve = false;
         options.strategy.snoopIssueAtResolve = false;
         options.strategy.snoopDataThroughDataPort = false;
         options.inputQueueLimit = 64;

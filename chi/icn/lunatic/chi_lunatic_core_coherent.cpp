@@ -58,7 +58,10 @@ namespace CHI::Lunatic {
                 Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case RequestClass::Evict:
-                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
+                if (options.strategy.evictResponseAtResolve)
+                    ActionCoherent(transaction);
+                else
+                    Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case RequestClass::CMO:
             case RequestClass::CleanUnique:
@@ -287,13 +290,18 @@ namespace CHI::Lunatic {
                 ActionPersistence(transaction);
                 return;
             case RequestClass::CMO:
+            {
                 if (!PrepareHomeCommit(transaction))
                 {
                     transaction.phase = Phase::Action;
                     transaction.readyTime = time;
                     return;
                 }
-                if (options.backend == BackendKind::CHI && flow.backendPhase == BackendPhase::None)
+                const bool writeCompleted = flow.backendCompReceived && flow.backendDataEmitted;
+                const bool forwardCmo = !options.strategy.cmoBackendWhenRequired ||
+                    (!writeCompleted && transaction.request.opcode != CHI::Eb::Opcodes::REQ::MakeInvalid &&
+                     (flow.dataDirty || flow.homeDirty));
+                if (options.backend == BackendKind::CHI && flow.backendPhase == BackendPhase::None && forwardCmo)
                 {
                     Request request = transaction.request;
                     request.source = nodeId;
@@ -325,11 +333,14 @@ namespace CHI::Lunatic {
                     transaction.readyTime = time;
                     return;
                 }
-                if (options.backend == BackendKind::CHI && flow.backendPhase != BackendPhase::Done)
+                if (options.backend == BackendKind::CHI && flow.backendPhase != BackendPhase::Done && forwardCmo)
                     return;
-                QueueComp(transaction, false, flow.requesterFinal == CacheState::I ? CHI::Eb::Resps::Comp_I
-                    : flow.requesterFinal == CacheState::SC ? CHI::Eb::Resps::Comp_SC : CHI::Eb::Resps::Comp_UC);
+                const uint8_t response = options.strategy.cmoLocalCompI && !forwardCmo
+                    ? CHI::Eb::Resps::Comp_I : flow.requesterFinal == CacheState::I ? CHI::Eb::Resps::Comp_I
+                    : flow.requesterFinal == CacheState::SC ? CHI::Eb::Resps::Comp_SC : CHI::Eb::Resps::Comp_UC;
+                QueueComp(transaction, false, response);
                 return;
+            }
             default:
                 Error(transaction.handle, "invalid coherent action");
                 transaction.canceled = true;

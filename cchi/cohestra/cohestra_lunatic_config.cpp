@@ -121,6 +121,7 @@ namespace {
         ReadUInt64(loader, "latency.data", options.dataLatency, ok);
         ReadUInt64(loader, "latency.homehit", options.homeHitDataLatency, ok);
         ReadUInt64(loader, "latency.snoopdata", options.snoopDataLatency, ok);
+        ReadUInt64(loader, "latency.cmowrite", options.cmoWriteLatency, ok);
         ReadUInt64(loader, "latency.memory", options.memoryLatency, ok);
         ReadUInt64(loader, "pipeline.receive", options.receiveDelay, ok);
         ReadUInt64(loader, "pipeline.decode", options.decodeDelay, ok);
@@ -224,6 +225,9 @@ namespace {
             { "combined", ImmediateResponseKind::Combined }
         });
         ReadBool(loader, "strategy.copyback.resolve", options.strategy.copybackResponseAtResolve, ok);
+        ReadBool(loader, "strategy.cmo.whenrequired", options.strategy.cmoBackendWhenRequired, ok);
+        ReadBool(loader, "strategy.cmo.localcompi", options.strategy.cmoLocalCompI, ok);
+        ReadBool(loader, "strategy.evict.resolve", options.strategy.evictResponseAtResolve, ok);
         ReadBool(loader, "strategy.snoop.resolve", options.strategy.snoopIssueAtResolve, ok);
         ReadBool(loader, "strategy.snoop.dataport", options.strategy.snoopDataThroughDataPort, ok);
         ReadChoice(loader, "strategy.stash.response", options.strategy.stashResponse, ok, {
