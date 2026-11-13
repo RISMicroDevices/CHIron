@@ -37,6 +37,39 @@ namespace CHI::Lunatic {
 
     }
 
+    bool Core::Impl::PrepareDCTId(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.dctSnoopIdValid)
+            return true;
+
+        const auto allocated = snoopIdAllocator.Allocate([&](TransactionId candidate) {
+            return tracker.FindDBID(transaction.request.source, candidate) == nullptr;
+        });
+        if (!allocated)
+        {
+            pmu.RecordStall(WaitReason::Tracker);
+            return false;
+        }
+        if (!tracker.RebindDBID(transaction.handle, *allocated))
+        {
+            snoopIdAllocator.Release(*allocated);
+            Error(transaction.handle, "unable to rebind DCT acknowledgment ID");
+            transaction.canceled = true;
+            transaction.phase = Phase::Commit;
+            transaction.readyTime = time;
+            return false;
+        }
+        if (flow.allocatedDBIDValid)
+        {
+            snoopIdAllocator.Release(flow.allocatedDBID);
+            flow.allocatedDBIDValid = false;
+        }
+        flow.dctSnoopId = *allocated;
+        flow.dctSnoopIdValid = true;
+        return true;
+    }
+
     uint16_t Core::Impl::SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const
     {
         namespace REQ = CHI::Eb::Opcodes::REQ;
@@ -178,6 +211,11 @@ namespace CHI::Lunatic {
             }
         }
 
+        if (flow.dctActive && !PrepareDCTId(transaction))
+        {
+            transaction.readyTime = time;
+            return;
+        }
         transaction.snoopTargets = candidates;
         transaction.pendingSnoops.clear();
         transaction.snoopsRequired = true;
@@ -231,13 +269,46 @@ namespace CHI::Lunatic {
 
         const size_t index = flow.nextSnoop;
         const NodeId target = transaction.snoopTargets[index];
+        const bool forwarding = flow.dctActive && target == flow.dctTarget;
+        TransactionId allocated = 0;
+        if (forwarding)
+        {
+            if (!flow.dctSnoopIdValid)
+            {
+                Error(transaction.handle, "DCT snoop ID is not allocated");
+                transaction.canceled = true;
+                transaction.phase = Phase::Commit;
+                transaction.readyTime = time;
+                return false;
+            }
+            allocated = flow.dctSnoopId;
+        }
+        else
+        {
+            const auto id = snoopIdAllocator.Allocate();
+            if (!id)
+            {
+                pmu.RecordStall(WaitReason::Tracker);
+                transaction.readyTime = time;
+                return false;
+            }
+            allocated = *id;
+            flow.snoopIds[target] = allocated;
+        }
+        const auto releaseID = [&] {
+            if (!forwarding)
+            {
+                snoopIdAllocator.Release(allocated);
+                flow.snoopIds.erase(target);
+            }
+        };
+
         Snoop snoop;
         snoop.source = nodeId;
         snoop.target = target;
-        snoop.txnId = transaction.handle * options.snoopLimit + (index % options.snoopLimit);
-        if (flow.dctActive && target == flow.dctTarget)
+        snoop.txnId = allocated;
+        if (forwarding)
         {
-            snoop.txnId = transaction.handle;
             snoop.fwdNid = transaction.request.source;
             snoop.fwdTxnId = transaction.request.txnId;
         }
@@ -265,6 +336,7 @@ namespace CHI::Lunatic {
 
         if (tracker.FindSnoop(target, snoop.txnId))
         {
+            releaseID();
             Error(transaction.handle, "snoop response ID is still live");
             return false;
         }
@@ -272,17 +344,22 @@ namespace CHI::Lunatic {
         if (!flow.snoopWaveOwned && options.structure.snoopResourceLimit &&
             bank.activeSnoopWaves >= options.structure.snoopResourceLimit)
         {
+            releaseID();
             pmu.RecordStall(WaitReason::Snoop);
             return false;
         }
         if (options.structure.outgoingSnoopQueueLimit &&
             bank.outgoingSnoopQueue >= options.structure.outgoingSnoopQueueLimit)
         {
+            releaseID();
             pmu.RecordStall(WaitReason::OutputQueue);
             return false;
         }
         if (!Queue(txsnp, snoop, transaction.handle, transaction.actionAge, index + 1 == transaction.snoopTargets.size()))
+        {
+            releaseID();
             return false;
+        }
         ++bank.outgoingSnoopQueue;
         const bool newWave = !flow.snoopWaveOwned;
         if (newWave)
@@ -294,6 +371,7 @@ namespace CHI::Lunatic {
             flow.retToSrcUsed = true;
         if (!tracker.BindSnoop(transaction.handle, target, snoop.txnId))
         {
+            releaseID();
             if (newWave)
             {
                 --bank.activeSnoopWaves;
@@ -668,6 +746,11 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.dctActive && target == flow.dctTarget)
             flow.dctProviderResponded = true;
+        else if (const auto allocated = flow.snoopIds.find(target); allocated != flow.snoopIds.end())
+        {
+            snoopIdAllocator.Release(allocated->second);
+            flow.snoopIds.erase(allocated);
+        }
         const CacheState final = DecodeSnoopState(transaction, target, resp, withData, partial);
         const bool ambiguousUnique = final == CacheState::UD && !partial && (resp & 0b011) == 0b010 &&
             !(resp & CHI::Eb::Resps::PassDirty) && Bank(flow.snoopLine).snoopFilter.PossiblyClean(flow.snoopLine, target);

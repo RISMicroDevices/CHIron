@@ -335,6 +335,7 @@ namespace CHI::Lunatic {
         providerNext.clear();
         errors.clear();
         tracker.Clear();
+        snoopIdAllocator.Clear();
         ordering.Clear();
         for (BankState& bank : banks)
         {
@@ -885,7 +886,33 @@ namespace CHI::Lunatic {
                 return;
             }
             case Phase::Admit:
-                if (!tracker.BindDBID(transaction.handle, transaction.handle))
+            {
+                bool bound = false;
+                if (tracker.FindDBID(transaction.request.source, transaction.handle) == nullptr)
+                {
+                    bound = tracker.BindDBID(transaction.handle, transaction.handle);
+                }
+                else
+                {
+                    const auto allocated = snoopIdAllocator.Allocate([&](TransactionId candidate) {
+                        return tracker.FindDBID(transaction.request.source, candidate) == nullptr;
+                    });
+                    if (!allocated)
+                    {
+                        pmu.RecordStall(WaitReason::Tracker);
+                        transaction.readyTime = time;
+                        return;
+                    }
+                    bound = tracker.BindDBID(transaction.handle, *allocated);
+                    if (bound)
+                    {
+                        flow.allocatedDBID = *allocated;
+                        flow.allocatedDBIDValid = true;
+                    }
+                    else
+                        snoopIdAllocator.Release(*allocated);
+                }
+                if (!bound)
                 {
                     Error(transaction.handle, "unable to bind database ID");
                     transaction.canceled = true;
@@ -893,11 +920,11 @@ namespace CHI::Lunatic {
                     transaction.readyTime = time;
                     return;
                 }
-                transaction.dbid = transaction.handle;
                 Bank(transaction).hazards.Add(transaction.handle, transaction.request.Line(), transaction.actionAge);
                 transaction.phase = Phase::Hazard;
                 transaction.readyTime = ScheduleResult(transaction, SchedulePoint::Allocation, time);
                 return;
+            }
             case Phase::Hazard:
             {
                 if (!Bank(transaction).hazards.IsHead(transaction.handle, transaction.request.Line()) ||
@@ -1069,6 +1096,19 @@ namespace CHI::Lunatic {
         event.line = transaction->request.Line();
         events->Publish(std::move(event), false);
 
+        for (const auto& [target, txnId] : flow.snoopIds)
+            snoopIdAllocator.Release(txnId);
+        flow.snoopIds.clear();
+        if (flow.allocatedDBIDValid)
+        {
+            snoopIdAllocator.Release(flow.allocatedDBID);
+            flow.allocatedDBIDValid = false;
+        }
+        if (flow.dctSnoopIdValid)
+        {
+            snoopIdAllocator.Release(flow.dctSnoopId);
+            flow.dctSnoopIdValid = false;
+        }
         tracker.Retire(handle);
         flows.erase(handle);
         events->DispatchDeferred();
@@ -1131,18 +1171,27 @@ namespace CHI::Lunatic {
         {
             flows.at(transaction->handle).respSepEmitted = true;
             ordering.Release(transaction->handle);
+            if (flows.at(transaction->handle).dmtActive)
+                (void)tracker.ReleaseRequestId(transaction->handle);
             FinishResponse(*transaction);
             return;
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::StashDone)
         {
             flows.at(transaction->handle).stashDoneEmitted = true;
+            if (flows.at(transaction->handle).compEmitted)
+                (void)tracker.ReleaseRequestId(transaction->handle);
             FinishResponse(*transaction);
             return;
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Persist)
         {
             flows.at(transaction->handle).persistEmitted = true;
+            const FlowState& flow = flows.at(transaction->handle);
+            if (ClassifyRequest(transaction->request.opcode) == RequestClass::Persistence &&
+                transaction->request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep &&
+                !flow.directPersistActive && flow.compEmitted)
+                (void)tracker.ReleaseRequestId(transaction->handle);
             FinishResponse(*transaction);
             return;
         }
@@ -1150,6 +1199,7 @@ namespace CHI::Lunatic {
         {
             flows.at(transaction->handle).compEmitted = true;
             flows.at(transaction->handle).stashDoneEmitted = true;
+            (void)tracker.ReleaseRequestId(transaction->handle);
             FinishResponse(*transaction);
             return;
         }
@@ -1169,6 +1219,8 @@ namespace CHI::Lunatic {
             pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
         {
             flows.at(transaction->handle).compEmitted = true;
+            if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp && flows.at(transaction->handle).dwtActive)
+                (void)tracker.ReleaseRequestId(transaction->handle);
             if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
             {
                 flows.at(transaction->handle).dbidEmitted = true;
@@ -1178,12 +1230,44 @@ namespace CHI::Lunatic {
         }
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp && IsCopybackRequest(transaction->request.opcode))
         {
+            (void)tracker.ReleaseRequestId(transaction->handle);
             transaction->Mark(COMPLETE_RESPONSE);
             transaction->phase = Phase::WaitWriteData;
             transaction->wait = WaitReason::WriteData;
             transaction->readyTime = time;
             return;
         }
+        if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp &&
+            ClassifyRequest(transaction->request.opcode) == RequestClass::WriteEvictOrEvict &&
+            flows.at(transaction->handle).evictOrEvictNoData)
+            (void)tracker.ReleaseRequestId(transaction->handle);
+        const auto requestClass = ClassifyRequest(transaction->request.opcode);
+        const bool compDbidWrite = requestClass == RequestClass::NonCoherentWrite ||
+            requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::ZeroWrite ||
+            requestClass == RequestClass::WriteUniqueZero ||
+            (requestClass == RequestClass::Atomic &&
+             CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction->request.opcode));
+        if (compDbidWrite && flows.at(transaction->handle).dbidEmitted && flows.at(transaction->handle).compEmitted)
+            (void)tracker.ReleaseRequestId(transaction->handle);
+        const FlowState& responseFlow = flows.at(transaction->handle);
+        const bool persistenceComplete = requestClass == RequestClass::Persistence &&
+            !responseFlow.directPersistActive &&
+            (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompPersist ||
+             transaction->request.opcode != CHI::Eb::Opcodes::REQ::CleanSharedPersistSep);
+        const bool datalessResponse = requestClass == RequestClass::MakeUnique ||
+            requestClass == RequestClass::CMO || requestClass == RequestClass::CleanUnique ||
+            requestClass == RequestClass::Evict ||
+            (requestClass == RequestClass::Stash && !IsSeparatedStashRequest(transaction->request.opcode)) ||
+            persistenceComplete;
+        const bool separatedStashComplete = requestClass == RequestClass::Stash &&
+            IsSeparatedStashRequest(transaction->request.opcode) &&
+            responseFlow.compEmitted && responseFlow.stashDoneEmitted;
+        const bool separatedPersistenceComplete = requestClass == RequestClass::Persistence &&
+            transaction->request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep &&
+            !responseFlow.directPersistActive && responseFlow.compEmitted && responseFlow.persistEmitted;
+        if ((datalessResponse && responseFlow.compEmitted) || separatedStashComplete ||
+            separatedPersistenceComplete)
+            (void)tracker.ReleaseRequestId(transaction->handle);
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp ||
             pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompPersist ||
             pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompDBIDResp)
@@ -1240,9 +1324,16 @@ namespace CHI::Lunatic {
             ++flow.readBeatsEmitted;
         if (pending.last)
         {
-            if (IsAtomicRequest(transaction->request.opcode) &&
-                !CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction->request.opcode))
+            const bool nonStoreAtomic = IsAtomicRequest(transaction->request.opcode) &&
+                !CHI::Eb::Opcodes::REQ::AtomicStore::Is(transaction->request.opcode);
+            if (nonStoreAtomic)
                 flow.atomic.returnEmitted = true;
+            if (nonStoreAtomic && flow.dbidEmitted)
+                (void)tracker.ReleaseRequestId(transaction->handle);
+            const bool readOrderingComplete = flow.separatedResponse
+                ? flow.respSepEmitted : transaction->request.order == 0 || flow.readReceiptEmitted;
+            if (IsReadRequest(transaction->request.opcode) && !flow.dmtActive && readOrderingComplete)
+                (void)tracker.ReleaseRequestId(transaction->handle);
             FinishResponse(*transaction);
         }
     }
@@ -1255,7 +1346,7 @@ namespace CHI::Lunatic {
             return;
         FlowState& flow = flows.at(transaction->handle);
         if (flow.dctActive && pending.flit.target == flow.dctTarget &&
-            pending.flit.txnId == transaction->handle &&
+            flow.dctSnoopIdValid && pending.flit.txnId == flow.dctSnoopId &&
             pending.flit.fwdNid == transaction->request.source &&
             pending.flit.fwdTxnId == transaction->request.txnId)
             flow.dctSnoopEmitted = true;
@@ -1311,7 +1402,7 @@ namespace CHI::Lunatic {
             !txdat.empty() || !txsnp.empty() || !retries.empty() || !backendRetries.empty() ||
             !backendCredits.empty() || !availableCredits.empty() || !cancellationCredits.empty() ||
             !retrySources.empty() || !tracker.Empty() || !ordering.Empty() ||
-            (options.backend == BackendKind::AXI && axi.HasInflight()))
+            snoopIdAllocator.Size() != 0 || (options.backend == BackendKind::AXI && axi.HasInflight()))
             return true;
         for (const BankState& bank : banks)
             if (!bank.hazards.Empty() || bank.activeOriginals || bank.requestBufferOccupants ||
@@ -1329,6 +1420,8 @@ namespace CHI::Lunatic {
         const size_t capacity = options.structure.classes.enabled ?
             tracker.Limit() : OrdinaryTransactionLimit();
         if (!tracker.Validate() || !ordering.Validate() || occupancy > capacity)
+            return false;
+        if (tracker.Empty() && snoopIdAllocator.Size() != 0)
             return false;
 
         std::vector<size_t> expectedOriginals(banks.size(), 0);

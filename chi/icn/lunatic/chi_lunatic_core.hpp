@@ -14,6 +14,7 @@
 #include "chi_lunatic_protocol.hpp"
 #include "chi_lunatic_random.hpp"
 #include "chi_lunatic_snoop_filter.hpp"
+#include "chi_lunatic_snoop_id.hpp"
 #include "chi_lunatic_tracker.hpp"
 
 #include <deque>
@@ -76,6 +77,8 @@ namespace CHI::Lunatic {
         uint8_t                    writeResp = 0;
         std::map<NodeId, uint64_t> snoopBeatMasks;
         std::map<NodeId, uint8_t>  snoopResponses;
+        std::map<NodeId, TransactionId>
+                                   snoopIds;
         bool                       readReceiptSent = false;
         bool                       readReceiptEmitted = false;
         bool                       separatedResponse = false;
@@ -86,6 +89,8 @@ namespace CHI::Lunatic {
         bool                       dctSnoopEmitted = false;
         bool                       dctProviderResponded = false;
         NodeId                     dctTarget = 0;
+        TransactionId              dctSnoopId = 0;
+        bool                       dctSnoopIdValid = false;
         uint8_t                    dctFwdState = 0;
         bool                       retToSrcUsed = false;
         bool                       dwtActive = false;
@@ -109,6 +114,8 @@ namespace CHI::Lunatic {
         LineDataCheck              spillDataCheck{};
         ByteEnables                spillEnables{};
         bool                       victimSnoopFilterOnly = false;
+        TransactionId              allocatedDBID = 0;
+        bool                       allocatedDBIDValid = false;
         bool                       dbidSent = false;
         bool                       compSent = false;
         uint8_t                    responseForm = 0;
@@ -230,6 +237,7 @@ namespace CHI::Lunatic {
         std::unique_ptr<CachePolicy>
                                   policy;
         Tracker                   tracker;
+        SnoopIdAllocator          snoopIdAllocator;
         OrderingTracker           ordering;
         DeterministicRandom       random;
         SparseMemory              memory;
@@ -628,6 +636,7 @@ namespace CHI::Lunatic {
                             const ByteEnables& enables, bool generatedEviction = false);
         bool FetchBaseline(Transaction& transaction);
 
+        bool       PrepareDCTId(Transaction& transaction);
         uint16_t   SnoopOpcode(const Transaction& transaction, const FlowState& flow, NodeId target) const;
         void       PlanReadSnoops(Transaction& transaction);
         void       PlanCMOSnoops(Transaction& transaction);

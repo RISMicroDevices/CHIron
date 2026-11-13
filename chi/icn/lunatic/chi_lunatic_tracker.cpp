@@ -111,6 +111,37 @@ namespace CHI::Lunatic {
         return true;
     }
 
+    bool Tracker::RebindDBID(TransactionHandle handle, DataBufferId dbid)
+    {
+        Transaction* transaction = Find(handle);
+        if (!transaction)
+            return false;
+        if (transaction->dbid == dbid)
+            return true;
+
+        const RequestKey currentKey{ transaction->request.source, transaction->dbid };
+        const RequestKey nextKey{ transaction->request.source, dbid };
+        if (dbidMap.find(nextKey) != dbidMap.end())
+            return false;
+        const auto current = dbidMap.find(currentKey);
+        if (current == dbidMap.end() || current->second != handle)
+            return false;
+
+        dbidMap.erase(current);
+        try {
+            auto [next, inserted] = dbidMap.emplace(nextKey, handle);
+            if (!inserted) {
+                dbidMap.emplace(currentKey, handle);
+                return false;
+            }
+            transaction->dbid = dbid;
+            return true;
+        } catch (...) {
+            dbidMap.emplace(currentKey, handle);
+            throw;
+        }
+    }
+
     bool Tracker::BindSnoop(TransactionHandle handle, NodeId target, TransactionId txnId)
     {
         if (!Find(handle))
@@ -128,6 +159,16 @@ namespace CHI::Lunatic {
     bool Tracker::UnbindMemory(NodeId subordinate, TransactionId txnId)
     {
         return memoryMap.erase({ subordinate, txnId }) != 0;
+    }
+
+    bool Tracker::ReleaseRequestId(TransactionHandle handle)
+    {
+        Transaction* transaction = Find(handle);
+        if (!transaction || transaction->requestIdReleased)
+            return false;
+        transaction->requestIdReleased = true;
+        EraseHandle(requestMap, handle);
+        return true;
     }
 
     bool Tracker::Retire(TransactionHandle handle)
@@ -166,7 +207,9 @@ namespace CHI::Lunatic {
 
             const RequestKey key{ transaction->request.source, transaction->request.txnId };
             auto requestIt = requestMap.find(key);
-            if (requestIt == requestMap.end() || requestIt->second != handle)
+            if (!transaction->requestIdReleased && (requestIt == requestMap.end() || requestIt->second != handle))
+                return false;
+            if (transaction->requestIdReleased && requestIt != requestMap.end() && requestIt->second == handle)
                 return false;
 
             if (transaction->dbid != 0) {

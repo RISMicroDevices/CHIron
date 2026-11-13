@@ -2207,6 +2207,22 @@ namespace /*CHI::*/Xact {
                 });
         }
 
+        if (rspFlit.Opcode() == Opcodes::RSP::StashDone && rspFlit.TxnID() == 0)
+        {
+            xactionIter = std::find_if(txTransactions.begin(), txTransactions.end(),
+                [&](const auto& entry) {
+                    const auto& candidate = entry.second;
+                    const auto& first = candidate->GetFirst();
+                    if (!first.IsREQ())
+                        return false;
+                    const bool separated = first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepUnique ||
+                        first.flit.req.Opcode() == Opcodes::REQ::StashOnceSepShared;
+                    return separated && first.flit.req.SrcID() == rspFlit.TgtID() &&
+                        first.flit.req.StashGroupID() == rspFlit.StashGroupID() &&
+                        !candidate->HasRSP({ Opcodes::RSP::StashDone, Opcodes::RSP::CompStashDone });
+                });
+        }
+
         if (xactionIter == txTransactions.end())
             return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_TXNID_NOT_EXIST, firedRspFlit);
 
