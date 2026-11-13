@@ -373,11 +373,30 @@ namespace CHI::Lunatic {
     size_t Core::Impl::ChooseVictim(TransactionHandle handle, VictimDomain domain, const LineKey& line)
     {
         const bool directoryDomain = domain == VictimDomain::Directory;
-        if (events->OnVictimSelection.empty())
-            return directoryDomain ? Bank(line).directory.ChooseVictim(line) : Bank(line).snoopFilter.ChooseVictim(line);
-
+        BankState& bank = Bank(line);
+        const size_t set = directoryDomain ? bank.directory.SetIndex(line) : bank.snoopFilter.SetIndex(line);
         std::vector<size_t> candidates = directoryDomain
-            ? Bank(line).directory.VictimCandidates(line) : Bank(line).snoopFilter.VictimCandidates(line);
+            ? bank.directory.VictimCandidates(line) : bank.snoopFilter.VictimCandidates(line);
+        candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](size_t way) {
+            if (directoryDomain)
+            {
+                const HomeLine& candidate = bank.directory.At(set, way);
+                return candidate.valid && Bank(candidate.key).hazards.Has(candidate.key);
+            }
+            const SnoopFilterEntry& candidate = bank.snoopFilter.At(set, way);
+            return candidate.valid && Bank(candidate.key).hazards.Has(candidate.key);
+        }), candidates.end());
+        const size_t invalidWay = directoryDomain ? bank.directory.Ways() : bank.snoopFilter.Ways();
+        if (candidates.empty())
+            return invalidWay;
+
+        const auto choose = [&] {
+            return directoryDomain ? bank.directory.ChooseVictim(line, candidates)
+                                   : bank.snoopFilter.ChooseVictim(line, candidates);
+        };
+        if (events->OnVictimSelection.empty())
+            return choose();
+
         const auto decision = events->Decide(
             VictimSelectionEvent(time, nodeId, handle, domain, line, candidates));
         const auto selected = decision.GetSelectedVictim();
@@ -388,7 +407,7 @@ namespace CHI::Lunatic {
                     return way;
             Error(handle, "victim decision selected a way outside the legal candidate set");
         }
-        return directoryDomain ? Bank(line).directory.ChooseVictim(line) : Bank(line).snoopFilter.ChooseVictim(line);
+        return choose();
     }
 
     bool Core::Impl::PrepareSnoopFilterCapacity(Transaction& transaction)
@@ -403,6 +422,11 @@ namespace CHI::Lunatic {
 
         flow.victimSnoopFilterOnly = true;
         flow.victimWay = ChooseVictim(transaction.handle, VictimDomain::SnoopFilter, line);
+        if (flow.victimWay >= Bank(line).snoopFilter.Ways())
+        {
+            pmu.RecordStall(WaitReason::SameLine);
+            return false;
+        }
         const SnoopFilterEntry& victim = Bank(line).snoopFilter.At(Bank(line).snoopFilter.SetIndex(line), flow.victimWay);
         flow.victimLine = victim.key;
         flow.victimGeneration = victim.generation;
@@ -454,6 +478,11 @@ namespace CHI::Lunatic {
         if (!flow.victimPending)
         {
             flow.victimWay = ChooseVictim(transaction.handle, VictimDomain::Directory, line);
+            if (flow.victimWay >= Bank(line).directory.Ways())
+            {
+                pmu.RecordStall(WaitReason::SameLine);
+                return false;
+            }
             const HomeLine& victim = Bank(line).directory.At(Bank(line).directory.SetIndex(line), flow.victimWay);
             if (!victim.valid)
                 return true;

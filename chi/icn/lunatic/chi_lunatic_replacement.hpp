@@ -78,18 +78,45 @@ namespace CHI::Lunatic {
         }
 
         template<typename Entry>
-        size_t Choose(size_t set, const std::vector<Entry>& entries)
+        size_t Choose(size_t set, const std::vector<Entry>& entries,
+                      const std::vector<size_t>* candidates = nullptr)
         {
-            for (size_t way = 0; way < ways; ++way)
-                if (!entries[set * ways + way].valid)
-                    return way;
+            const auto available = [&](size_t first, size_t last) {
+                if (!candidates)
+                    return true;
+                for (size_t way = first; way < last; ++way)
+                    if (std::find(candidates->begin(), candidates->end(), way) != candidates->end())
+                        return true;
+                return false;
+            };
+            if (candidates)
+            {
+                for (size_t way : *candidates)
+                    if (!entries[set * ways + way].valid)
+                        return way;
+                if (candidates->size() == 1)
+                    return candidates->front();
+            }
+            else
+            {
+                for (size_t way = 0; way < ways; ++way)
+                    if (!entries[set * ways + way].valid)
+                        return way;
+            }
             if (ways == 1)
-                return 0;
+                return candidates ? candidates->front() : 0;
             if (kind == ReplacementKind::PseudoRandom)
-                return random->Bounded(ways - 1);
+                return candidates ? (*candidates)[random->Bounded(candidates->size() - 1)] : random->Bounded(ways - 1);
             if (kind == ReplacementKind::Age)
             {
-                size_t victim = 0;
+                size_t victim = candidates ? candidates->front() : 0;
+                if (candidates)
+                {
+                    for (size_t way : *candidates)
+                        if (entries[set * ways + way].age < entries[set * ways + victim].age)
+                            victim = way;
+                    return victim;
+                }
                 for (size_t way = 1; way < ways; ++way)
                     if (entries[set * ways + way].age < entries[set * ways + victim].age)
                         victim = way;
@@ -102,7 +129,9 @@ namespace CHI::Lunatic {
             while (remaining > 1)
             {
                 const size_t middle = remaining / 2;
-                if (plru[PLRUIndex(set, node)])
+                const bool lowerAvailable = available(way, way + middle);
+                const bool upperAvailable = available(way + middle, way + remaining);
+                if ((plru[PLRUIndex(set, node)] && upperAvailable) || !lowerAvailable)
                 {
                     way += middle;
                     remaining -= middle;

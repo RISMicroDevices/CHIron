@@ -49,6 +49,7 @@ namespace CHI::Lunatic {
         std::optional<size_t> FindWay(const LineKey& key) const noexcept;
         std::vector<size_t>    VictimCandidates(const LineKey& key) const;
         size_t                 ChooseVictim(const LineKey& key);
+        size_t                 ChooseVictim(const LineKey& key, const std::vector<size_t>& candidates);
         bool                   HasInvalidWay(const LineKey& key) const noexcept;
         void                   Invalidate(size_t set, size_t way) noexcept;
 

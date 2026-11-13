@@ -94,6 +94,13 @@ namespace CHI::Lunatic {
         return replacement.Choose(SetIndex(key), entries);
     }
 
+    size_t SnoopFilter::ChooseVictim(const LineKey& key, const std::vector<size_t>& candidates)
+    {
+        if (candidates.empty())
+            return ways;
+        return replacement.Choose(SetIndex(key), entries, &candidates);
+    }
+
     SnoopFilterEntry& SnoopFilter::Acquire(const LineKey& key, uint64_t age)
     {
         if (SnoopFilterEntry* current = Find(key)) {

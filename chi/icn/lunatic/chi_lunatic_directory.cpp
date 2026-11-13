@@ -92,6 +92,13 @@ namespace CHI::Lunatic {
         return replacement.Choose(SetIndex(key), lines);
     }
 
+    size_t Directory::ChooseVictim(const LineKey& key, const std::vector<size_t>& candidates)
+    {
+        if (candidates.empty())
+            return ways;
+        return replacement.Choose(SetIndex(key), lines, &candidates);
+    }
+
     HomeLine& Directory::Install(const LineKey& key, size_t way, uint64_t age)
     {
         if (way >= ways)

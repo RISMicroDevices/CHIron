@@ -106,6 +106,59 @@ namespace {
         LUNATIC_CHECK(driver.driver.node.InspectHome(a).data == dataA);
     }
 
+    void DirtyCapacityDirectoryEviction()
+    {
+        Options options;
+        options.policy = PolicyKind::NINE;
+        options.slcSets = 1;
+        options.slcWays = 1;
+        options.snoopFilterSets = 1;
+        options.snoopFilterWays = 1;
+        options.structure.bankCount = 4;
+        options.strategy.homeReplacement = ReplacementKind::PLRU;
+        options.strategy.snoopFilterReplacement = ReplacementKind::PseudoRandom;
+        CheckedDriver<Config256> driver(options);
+        const LineKey a = LineKey::FromAddress(0x21000, false);
+        const LineKey b = LineKey::FromAddress(0x21100, false);
+        const LineData dataA = SFData(29);
+        SFWriteback(driver, a, dataA);
+        LUNATIC_CHECK(driver.ReadData(5, 5, a.address, CHI::Eb::Opcodes::REQ::ReadUnique) == dataA);
+        driver.Quiesce();
+        LUNATIC_CHECK(driver.driver.node.InspectRequester(a, 5) == CacheState::UD);
+
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadClean, 6, 6, b.address, true));
+        auto victim = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanInvalid);
+        LUNATIC_CHECK(victim.target == 5);
+        driver.SnoopData(5, victim.flit.TxnID(), dataA, CHI::Eb::Resps::SnpRespData_I_PD);
+        DataBufferId dbid = 0;
+        for (size_t beat = 0; beat < 2; ++beat)
+        {
+            auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+            LUNATIC_CHECK(data.Resp() == CHI::Eb::Resps::CompData_SC);
+            dbid = data.DBID();
+        }
+        driver.CompAck(6, dbid);
+        driver.Quiesce();
+        LUNATIC_CHECK(!driver.driver.node.InspectHome(a).valid);
+        LUNATIC_CHECK(driver.driver.node.GetMemory().Read(a) == dataA);
+        driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadClean, 7, 7, a.address, true));
+        victim = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpCleanInvalid);
+        LUNATIC_CHECK(victim.target == 6);
+        driver.SnoopResponse(6, victim.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
+        LineData actual{};
+        dbid = 0;
+        for (size_t beat = 0; beat < 2; ++beat)
+        {
+            auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+            dbid = data.DBID();
+            for (size_t index = 0; index < 32; ++index)
+                actual[beat * 32 + index] = uint8_t(data.Data()[index / 8] >> ((index % 8) * 8));
+        }
+        driver.CompAck(7, dbid);
+        LUNATIC_CHECK(actual == dataA);
+        driver.Quiesce();
+    }
+
 }
 
 LUNATIC_TEST(Stage4SnoopFilterCleanCapacityPreciseAndLossy)
@@ -118,4 +171,10 @@ LUNATIC_TEST(Stage4SnoopFilterDirtyCapacityPreciseAndLossy)
 {
     DirtyCapacity(true);
     DirtyCapacity(false);
+}
+
+
+LUNATIC_TEST(Stage4SnoopFilterDirtyCapacityPreservesDirectoryEvictionData)
+{
+    DirtyCapacityDirectoryEviction();
 }
