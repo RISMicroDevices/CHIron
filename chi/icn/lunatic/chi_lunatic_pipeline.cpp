@@ -51,6 +51,7 @@ namespace CHI::Lunatic {
             case SchedulePoint::InputRegister: return options.timing.inputRegister;
             case SchedulePoint::RequestBuffer: return options.timing.requestBuffer;
             case SchedulePoint::Allocation: return options.timing.allocation;
+            case SchedulePoint::HazardRelease: return options.timing.hazardRelease;
             case SchedulePoint::LookupResult: return options.timing.lookupResult;
             case SchedulePoint::SnoopDecision: return options.timing.snoopDecision;
             case SchedulePoint::SnoopIssue: return options.timing.snoopIssue;

@@ -232,8 +232,10 @@ LUNATIC_TEST(Stage10MatrixF08SameLineReleaseDoesNotReallocate)
         driver.TickTo(21);
         ExpectTime(row, impl.flows.at(younger.handle).scheduleMarks.at(SchedulePoint::Allocation),
             3, "younger allocation after release");
+        ExpectTime(row, impl.flows.at(younger.handle).scheduleMarks.at(SchedulePoint::HazardRelease),
+            21 + options.timing.hazardRelease, "younger hazard release");
         ExpectTime(row, impl.flows.at(younger.handle).scheduleMarks.at(SchedulePoint::LookupResult),
-            24 + options.tagLatency, "younger lookup after release");
+            24 + options.tagLatency + options.timing.hazardRelease, "younger lookup after release");
         impl.Retire(younger.handle);
         TIMING_CHECK(row, impl.ValidateInvariants());
     }
@@ -271,7 +273,8 @@ LUNATIC_TEST(Stage10MatrixF09LinkedVictimReleaseBoundary)
         impl.Bank(victim).hazards.Release(olderVictim, victim);
         impl.Advance(transaction);
         TIMING_CHECK(row, transaction.phase == Phase::Lookup);
-        ExpectTime(row, transaction.readyTime, 4 + options.tagLatency, "linked victim lookup release");
+        ExpectTime(row, transaction.readyTime, 4 + options.tagLatency + options.timing.hazardRelease,
+            "linked victim lookup release");
         impl.Retire(transaction.handle);
         TIMING_CHECK(row, impl.ValidateInvariants());
     }

@@ -815,12 +815,12 @@ namespace CHI::Lunatic {
         }
     }
 
-    Time Core::Impl::ScheduleTag(Transaction& transaction)
+    Time Core::Impl::ScheduleTag(Transaction& transaction, Time earliest)
     {
         BankState& bank = Bank(transaction);
-        if (bank.pipeline.TagBusy(time))
+        if (bank.pipeline.TagBusy(earliest))
             pmu.RecordStall(WaitReason::TagPort);
-        return ScheduleResult(transaction, SchedulePoint::LookupResult, bank.pipeline.ScheduleTag(time));
+        return ScheduleResult(transaction, SchedulePoint::LookupResult, bank.pipeline.ScheduleTag(earliest));
     }
 
     Time Core::Impl::ScheduleData(Transaction& transaction, Time latency)
@@ -899,6 +899,7 @@ namespace CHI::Lunatic {
                 transaction.readyTime = ScheduleResult(transaction, SchedulePoint::Allocation, time);
                 return;
             case Phase::Hazard:
+            {
                 if (!Bank(transaction).hazards.IsHead(transaction.handle, transaction.request.Line()) ||
                     (flow.victimLinked && !Bank(flow.victimLine).hazards.IsHead(transaction.handle, flow.victimLine)))
                 {
@@ -907,11 +908,18 @@ namespace CHI::Lunatic {
                     pmu.RecordStall(WaitReason::SameLine);
                     return;
                 }
+                Time earliest = time;
+                if (transaction.wait == WaitReason::SameLine)
+                {
+                    flow.scheduleMarks.erase(SchedulePoint::HazardRelease);
+                    earliest = ScheduleResult(transaction, SchedulePoint::HazardRelease, time);
+                }
                 transaction.wait = WaitReason::None;
                 transaction.phase = Phase::Lookup;
-                transaction.readyTime = ScheduleTag(transaction);
+                transaction.readyTime = ScheduleTag(transaction, earliest);
                 ReleaseRequestBuffer(transaction);
                 return;
+            }
             case Phase::Lookup:
             {
                 const HomeLine* home = Bank(transaction).directory.Find(transaction.request.Line());

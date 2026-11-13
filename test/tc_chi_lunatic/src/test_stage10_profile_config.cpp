@@ -92,6 +92,7 @@ LUNATIC_TEST(Stage10ProfileConfigSelectsType3)
     LUNATIC_CHECK(options.dataLatency == 3);
     LUNATIC_CHECK(options.homeHitDataLatency == 2);
     LUNATIC_CHECK(options.cmoWriteLatency == 2);
+    LUNATIC_CHECK(options.timing.hazardRelease == 3);
     LUNATIC_CHECK(options.strategy.copybackResponseAtResolve);
     LUNATIC_CHECK(options.strategy.cmoBackendWhenRequired);
     LUNATIC_CHECK(options.strategy.cmoLocalCompI);
@@ -175,6 +176,7 @@ LUNATIC_TEST(Stage10ProfileConfigOverridesEveryOptionGroup)
     loader.values["lunatic.timing.input"] = "1";
     loader.values["lunatic.timing.requestbuffer"] = "2";
     loader.values["lunatic.timing.allocation"] = "3";
+    loader.values["lunatic.timing.hazard.release"] = "20";
     loader.values["lunatic.timing.lookup"] = "4";
     loader.values["lunatic.timing.snoop.decision"] = "5";
     loader.values["lunatic.timing.snoop.issue"] = "6";
@@ -241,6 +243,7 @@ LUNATIC_TEST(Stage10ProfileConfigOverridesEveryOptionGroup)
     LUNATIC_CHECK(options.timing.inputRegister == 1);
     LUNATIC_CHECK(options.timing.requestBuffer == 2);
     LUNATIC_CHECK(options.timing.allocation == 3);
+    LUNATIC_CHECK(options.timing.hazardRelease == 20);
     LUNATIC_CHECK(options.timing.lookupResult == 4);
     LUNATIC_CHECK(options.timing.snoopDecision == 5);
     LUNATIC_CHECK(options.timing.snoopIssue == 6);

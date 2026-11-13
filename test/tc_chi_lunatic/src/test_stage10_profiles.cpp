@@ -53,6 +53,7 @@ namespace {
         LUNATIC_CHECK(timing.inputRegister == 0);
         LUNATIC_CHECK(timing.requestBuffer == 0);
         LUNATIC_CHECK(timing.allocation == 0);
+        LUNATIC_CHECK(timing.hazardRelease == 0);
         LUNATIC_CHECK(timing.lookupResult == 0);
         LUNATIC_CHECK(timing.snoopDecision == 0);
         LUNATIC_CHECK(timing.snoopIssue == 0);
@@ -203,8 +204,10 @@ namespace {
         LUNATIC_CHECK(options.strategy.snoopIssueAtResolve == (options.profile == ProfileKind::Type3));
         LUNATIC_CHECK(options.strategy.snoopDataThroughDataPort == (options.profile == ProfileKind::Type3));
         OperationTiming legacyTiming = options.timing;
+        legacyTiming.hazardRelease = 0;
         legacyTiming.backendData = 0;
         CheckZeroTiming(legacyTiming);
+        LUNATIC_CHECK(options.timing.hazardRelease == 3);
         LUNATIC_CHECK(options.timing.backendData == 4);
     }
 

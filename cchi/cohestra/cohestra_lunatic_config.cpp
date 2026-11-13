@@ -259,6 +259,7 @@ namespace {
         ReadUInt64(loader, "timing.input", options.timing.inputRegister, ok);
         ReadUInt64(loader, "timing.requestbuffer", options.timing.requestBuffer, ok);
         ReadUInt64(loader, "timing.allocation", options.timing.allocation, ok);
+        ReadUInt64(loader, "timing.hazard.release", options.timing.hazardRelease, ok);
         ReadUInt64(loader, "timing.lookup", options.timing.lookupResult, ok);
         ReadUInt64(loader, "timing.snoop.decision", options.timing.snoopDecision, ok);
         ReadUInt64(loader, "timing.snoop.issue", options.timing.snoopIssue, ok);

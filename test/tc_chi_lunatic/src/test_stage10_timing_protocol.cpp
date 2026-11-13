@@ -1111,6 +1111,7 @@ LUNATIC_TEST(Stage10MatrixP16SaturatingScheduleAndCommit)
             .inputRegister = maximum,
             .requestBuffer = maximum,
             .allocation = maximum,
+            .hazardRelease = maximum,
             .lookupResult = maximum,
             .snoopDecision = maximum,
             .snoopIssue = maximum,
@@ -1129,9 +1130,10 @@ LUNATIC_TEST(Stage10MatrixP16SaturatingScheduleAndCommit)
             .commitSchedule = maximum
         };
         VirtualPipeline pipeline(options);
-        const std::array<SchedulePoint, 19> points = {
+        const std::array<SchedulePoint, 20> points = {
             SchedulePoint::InputRegister, SchedulePoint::RequestBuffer, SchedulePoint::Allocation,
-            SchedulePoint::LookupResult, SchedulePoint::SnoopDecision, SchedulePoint::SnoopIssue,
+            SchedulePoint::HazardRelease, SchedulePoint::LookupResult,
+            SchedulePoint::SnoopDecision, SchedulePoint::SnoopIssue,
             SchedulePoint::DataReturn, SchedulePoint::FastResponse, SchedulePoint::NormalResponse,
             SchedulePoint::BackendRequest, SchedulePoint::BackendData, SchedulePoint::RetryAck,
             SchedulePoint::CreditGrant, SchedulePoint::BackendResend, SchedulePoint::AtomicExecution,

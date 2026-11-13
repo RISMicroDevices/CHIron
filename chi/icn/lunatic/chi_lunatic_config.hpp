@@ -142,6 +142,7 @@ namespace CHI::Lunatic {
         InputRegister,
         RequestBuffer,
         Allocation,
+        HazardRelease,
         LookupResult,
         SnoopDecision,
         SnoopIssue,
@@ -164,6 +165,7 @@ namespace CHI::Lunatic {
         uint64_t    inputRegister = 0;
         uint64_t    requestBuffer = 0;
         uint64_t    allocation = 0;
+        uint64_t    hazardRelease = 0;
         uint64_t    lookupResult = 0;
         uint64_t    snoopDecision = 0;
         uint64_t    snoopIssue = 0;

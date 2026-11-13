@@ -131,6 +131,7 @@ namespace CHI::Lunatic {
         options.homeHitDataLatency = 2;
         options.snoopDataLatency = 4;
         options.cmoWriteLatency = 2;
+        options.timing.hazardRelease = 3;
         options.timing.backendData = 4;
 
         options.structure.bankCount = 4;
