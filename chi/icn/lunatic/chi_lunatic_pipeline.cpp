@@ -104,11 +104,11 @@ namespace CHI::Lunatic {
         return SaturatingAdd(slot, options.tagLatency);
     }
 
-    Time VirtualPipeline::ScheduleData(Time earliest) noexcept
+    Time VirtualPipeline::ScheduleData(Time earliest, Time latency) noexcept
     {
         const Time slot = std::max(earliest, dataPortFree);
         dataPortFree = SaturatingAdd(slot, options.structure.dataPortOccupancy);
-        return SaturatingAdd(slot, options.dataLatency);
+        return SaturatingAdd(slot, latency ? latency : options.dataLatency);
     }
 
     Time VirtualPipeline::SaturatingAdd(Time time, Time delay) const noexcept

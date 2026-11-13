@@ -184,6 +184,8 @@ namespace CHI::Lunatic {
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
         transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
+        if (options.strategy.snoopIssueAtResolve)
+            EmitSnoops(transaction);
     }
 
     void Core::Impl::PlanCMOSnoops(Transaction& transaction)
@@ -685,6 +687,13 @@ namespace CHI::Lunatic {
                 ReleaseSnoopWave(transaction);
             if (flow.dctForwarded && !flow.snoopForVictim && !flow.victimPending)
                 FinishResponse(transaction);
+            else if (options.strategy.snoopDataThroughDataPort)
+            {
+                transaction.wait = WaitReason::None;
+                ActionCoherent(transaction);
+                if (transaction.phase == Phase::Return)
+                    transaction.readyTime = ScheduleData(transaction, options.snoopDataLatency);
+            }
             else
             {
                 transaction.phase = Phase::Action;

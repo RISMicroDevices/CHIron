@@ -82,11 +82,18 @@ LUNATIC_TEST(Stage10ProfileConfigSelectsType3)
     LUNATIC_CHECK(options.snoopFilterSets == 128 && options.snoopFilterWays == 4);
     LUNATIC_CHECK(options.inputQueueLimit == 15);
     LUNATIC_CHECK(options.backend == BackendKind::CHI);
+    LUNATIC_CHECK(options.policy == PolicyKind::NINE);
     LUNATIC_CHECK(!options.retryEnabled);
     LUNATIC_CHECK(options.strategy.homeReplacement == ReplacementKind::PLRU);
     LUNATIC_CHECK(options.strategy.snoopFilterReplacement == ReplacementKind::PseudoRandom);
     LUNATIC_CHECK(options.strategy.requestArbitration == RequestArbitrationKind::RefillFirst);
     LUNATIC_CHECK(options.strategy.allocationStrategy == AllocationStrategyKind::SelectiveSharedCopyback);
+    LUNATIC_CHECK(options.tagLatency == 1);
+    LUNATIC_CHECK(options.dataLatency == 3);
+    LUNATIC_CHECK(options.homeHitDataLatency == 2);
+    LUNATIC_CHECK(options.strategy.copybackResponseAtResolve);
+    LUNATIC_CHECK(options.strategy.snoopIssueAtResolve);
+    LUNATIC_CHECK(options.strategy.snoopDataThroughDataPort);
 }
 
 LUNATIC_TEST(Stage10ProfileConfigSelectsType7)
@@ -147,12 +154,16 @@ LUNATIC_TEST(Stage10ProfileConfigOverridesEveryOptionGroup)
     loader.values["lunatic.strategy.atomic"] = "backend";
     loader.values["lunatic.strategy.immediate.response"] = "latecomp";
     loader.values["lunatic.strategy.copyback.resolve"] = "1";
+    loader.values["lunatic.strategy.snoop.resolve"] = "1";
+    loader.values["lunatic.strategy.snoop.dataport"] = "1";
     loader.values["lunatic.strategy.stash.response"] = "combined";
     loader.values["lunatic.strategy.persist.response"] = "compfirst";
     loader.values["lunatic.strategy.retry.upstream"] = "oldest";
     loader.values["lunatic.strategy.retry.downstream"] = "oldest";
     loader.values["lunatic.strategy.provider"] = "roundrobin";
     loader.values["lunatic.strategy.dct.forward"] = "0";
+    loader.values["lunatic.latency.homehit"] = "2";
+    loader.values["lunatic.latency.snoopdata"] = "4";
     loader.values["lunatic.timing.input"] = "1";
     loader.values["lunatic.timing.requestbuffer"] = "2";
     loader.values["lunatic.timing.allocation"] = "3";
@@ -205,12 +216,16 @@ LUNATIC_TEST(Stage10ProfileConfigOverridesEveryOptionGroup)
     LUNATIC_CHECK(options.strategy.atomicExecution == AtomicExecutionKind::Backend);
     LUNATIC_CHECK(options.strategy.immediateResponse == ImmediateResponseKind::LateComp);
     LUNATIC_CHECK(options.strategy.copybackResponseAtResolve);
+    LUNATIC_CHECK(options.strategy.snoopIssueAtResolve);
+    LUNATIC_CHECK(options.strategy.snoopDataThroughDataPort);
     LUNATIC_CHECK(options.strategy.stashResponse == StashResponseKind::Combined);
     LUNATIC_CHECK(options.strategy.persistResponse == PersistResponseKind::SeparateCompFirst);
     LUNATIC_CHECK(options.strategy.upstreamRetrySelection == RetrySelectionKind::Oldest);
     LUNATIC_CHECK(options.strategy.downstreamRetrySelection == RetrySelectionKind::Oldest);
     LUNATIC_CHECK(options.strategy.providerSelection == ProviderSelectionKind::RoundRobin);
     LUNATIC_CHECK(!options.strategy.forwardDct);
+    LUNATIC_CHECK(options.homeHitDataLatency == 2);
+    LUNATIC_CHECK(options.snoopDataLatency == 4);
     LUNATIC_CHECK(options.timing.inputRegister == 1);
     LUNATIC_CHECK(options.timing.requestBuffer == 2);
     LUNATIC_CHECK(options.timing.allocation == 3);

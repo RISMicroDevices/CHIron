@@ -557,7 +557,7 @@ namespace CHI::Lunatic {
         size_t BankRetryReservations(size_t bank) const noexcept;
         size_t TotalRetryReservations() const noexcept;
         Time ScheduleTag(Transaction& transaction);
-        Time ScheduleData(Transaction& transaction);
+        Time ScheduleData(Transaction& transaction, Time latency = 0);
         Time ScheduleResult(Transaction& transaction, SchedulePoint point, Time earliest);
         bool ScheduleTransition(Transaction& transaction, SchedulePoint point);
         Time ScheduleOutput(TransactionHandle handle, SchedulePoint point, Time earliest,

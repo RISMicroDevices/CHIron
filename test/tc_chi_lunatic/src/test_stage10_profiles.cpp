@@ -12,6 +12,8 @@ namespace {
     void CheckLegacyAuxiliaryDefaults(const Options& options)
     {
         LUNATIC_CHECK(options.memoryLatency == 8);
+        LUNATIC_CHECK(options.homeHitDataLatency == (options.profile == ProfileKind::Type3 ? 2 : 0));
+        LUNATIC_CHECK(options.snoopDataLatency == (options.profile == ProfileKind::Type3 ? 4 : 0));
         LUNATIC_CHECK(options.receiveDelay == 0);
         LUNATIC_CHECK(options.decodeDelay == 0);
         LUNATIC_CHECK(options.admissionDelay == 0);
@@ -127,6 +129,8 @@ namespace {
         LUNATIC_CHECK(options.strategy.providerSelection == ProviderSelectionKind::LowestNodeId);
         LUNATIC_CHECK(options.strategy.forwardDct);
         LUNATIC_CHECK(options.strategy.copybackResponseAtResolve == (options.profile == ProfileKind::Type3));
+        LUNATIC_CHECK(options.strategy.snoopIssueAtResolve == (options.profile == ProfileKind::Type3));
+        LUNATIC_CHECK(options.strategy.snoopDataThroughDataPort == (options.profile == ProfileKind::Type3));
         CheckZeroTiming(options.timing);
     }
 
@@ -146,7 +150,7 @@ namespace {
         LUNATIC_CHECK(options.tagLatency == 1);
         LUNATIC_CHECK(options.dataLatency == 3);
         CheckLegacyAuxiliaryDefaults(options);
-        LUNATIC_CHECK(options.policy == PolicyKind::Exclusive);
+        LUNATIC_CHECK(options.policy == PolicyKind::NINE);
         LUNATIC_CHECK(options.backend == BackendKind::CHI);
         LUNATIC_CHECK(options.preciseSnoopFilter);
         LUNATIC_CHECK(options.doNotGoToSD);
@@ -189,6 +193,8 @@ namespace {
         LUNATIC_CHECK(options.strategy.providerSelection == ProviderSelectionKind::LowestNodeId);
         LUNATIC_CHECK(options.strategy.forwardDct);
         LUNATIC_CHECK(options.strategy.copybackResponseAtResolve == (options.profile == ProfileKind::Type3));
+        LUNATIC_CHECK(options.strategy.snoopIssueAtResolve == (options.profile == ProfileKind::Type3));
+        LUNATIC_CHECK(options.strategy.snoopDataThroughDataPort == (options.profile == ProfileKind::Type3));
         OperationTiming legacyTiming = options.timing;
         legacyTiming.backendData = 0;
         CheckZeroTiming(legacyTiming);
@@ -254,6 +260,8 @@ namespace {
         LUNATIC_CHECK(options.strategy.providerSelection == ProviderSelectionKind::LowestNodeId);
         LUNATIC_CHECK(options.strategy.forwardDct);
         LUNATIC_CHECK(options.strategy.copybackResponseAtResolve == (options.profile == ProfileKind::Type3));
+        LUNATIC_CHECK(options.strategy.snoopIssueAtResolve == (options.profile == ProfileKind::Type3));
+        LUNATIC_CHECK(options.strategy.snoopDataThroughDataPort == (options.profile == ProfileKind::Type3));
         CheckZeroTiming(options.timing);
     }
 

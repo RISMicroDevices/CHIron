@@ -47,6 +47,11 @@ namespace LunaticTest::Timing {
         options.dctEnabled = false;
         options.dwtEnabled = false;
         options.directPersistEnabled = false;
+        options.policy = CHI::Lunatic::PolicyKind::Exclusive;
+        options.homeHitDataLatency = 0;
+        options.snoopDataLatency = 0;
+        options.strategy.snoopIssueAtResolve = false;
+        options.strategy.snoopDataThroughDataPort = false;
         options.inputQueueLimit = 64;
         options.outputQueueLimit = 64;
         return options;

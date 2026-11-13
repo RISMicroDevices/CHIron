@@ -121,12 +121,15 @@ namespace CHI::Lunatic {
         options.snoopFilterSets = 128;
         options.snoopFilterWays = 4;
         options.backend = BackendKind::CHI;
+        options.policy = PolicyKind::NINE;
         options.doNotGoToSD = true;
         options.retryEnabled = false;
         options.poisonEnabled = true;
         options.dataCheckEnabled = true;
         options.tagLatency = 1;
         options.dataLatency = 3;
+        options.homeHitDataLatency = 2;
+        options.snoopDataLatency = 4;
         options.timing.backendData = 4;
 
         options.structure.bankCount = 4;
@@ -142,6 +145,8 @@ namespace CHI::Lunatic {
         options.strategy.requestArbitration = RequestArbitrationKind::RefillFirst;
         options.strategy.allocationStrategy = AllocationStrategyKind::SelectiveSharedCopyback;
         options.strategy.copybackResponseAtResolve = true;
+        options.strategy.snoopIssueAtResolve = true;
+        options.strategy.snoopDataThroughDataPort = true;
 
         ValidateOptions(options);
         return options;

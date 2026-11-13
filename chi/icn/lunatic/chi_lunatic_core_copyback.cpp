@@ -269,6 +269,16 @@ namespace CHI::Lunatic {
             decision.removeHome = false;
             decision.mergeCopyback = true;
         }
+        const bool selectiveCleanWriteThrough =
+            options.strategy.allocationStrategy == AllocationStrategyKind::SelectiveSharedCopyback && hasData &&
+            !transaction.homeHit && transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteCleanFull &&
+            context.requesterRetains;
+        if (selectiveCleanWriteThrough)
+        {
+            decision.allocateHome = false;
+            decision.retainHome = false;
+            decision.mergeCopyback = false;
+        }
         bool otherRequesterValid = false;
         for (NodeId target : Bank(line).snoopFilter.Targets(line))
         {

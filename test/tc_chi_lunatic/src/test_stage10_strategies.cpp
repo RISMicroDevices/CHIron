@@ -112,6 +112,7 @@ namespace {
             CHI::Eb::Opcodes::DAT::CopyBackWrData, CHI::Eb::Resps::CopyBackWrData_UC);
         driver.Quiesce();
         LUNATIC_CHECK(!driver.node.InspectHome(line).valid);
+        LUNATIC_CHECK(driver.node.GetMemory().Read(line) == StrategyData(0x7d));
         LUNATIC_CHECK(driver.node.InspectRequester(line, 4) == CacheState::UC);
     }
 
@@ -235,6 +236,7 @@ LUNATIC_TEST(Stage10StrategiesSelectiveSharedAndCopybackAllocation)
     options.backend = BackendKind::Internal;
     options.poisonEnabled = false;
     options.dataCheckEnabled = false;
+    options.policy = PolicyKind::Exclusive;
     options.structure.bankCount = 1;
     Driver<Config256> driver(options);
     const LineKey shared = StrategyLine(0);

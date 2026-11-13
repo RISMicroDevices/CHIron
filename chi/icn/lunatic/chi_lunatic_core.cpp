@@ -823,13 +823,13 @@ namespace CHI::Lunatic {
         return ScheduleResult(transaction, SchedulePoint::LookupResult, bank.pipeline.ScheduleTag(time));
     }
 
-    Time Core::Impl::ScheduleData(Transaction& transaction)
+    Time Core::Impl::ScheduleData(Transaction& transaction, Time latency)
     {
         BankState& bank = Bank(transaction);
         if (bank.pipeline.DataBusy(time))
             pmu.RecordStall(WaitReason::DataPort);
         flows.at(transaction.handle).scheduleMarks.erase(SchedulePoint::DataReturn);
-        return ScheduleResult(transaction, SchedulePoint::DataReturn, bank.pipeline.ScheduleData(time));
+        return ScheduleResult(transaction, SchedulePoint::DataReturn, bank.pipeline.ScheduleData(time, latency));
     }
 
     void Core::Impl::Advance(Transaction& transaction)

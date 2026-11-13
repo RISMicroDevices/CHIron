@@ -250,7 +250,8 @@ namespace CHI::Lunatic {
             transaction.memoryRequired = false;
             transaction.Mark(COMPLETE_MEMORY);
             transaction.phase = Phase::Action;
-            transaction.readyTime = ScheduleData(transaction);
+            transaction.readyTime = ScheduleData(transaction,
+                transaction.homeHit ? options.homeHitDataLatency : 0);
             return;
         }
         if ((flow.snoopDataPartial || flow.victimDataPartial) && !transaction.homeHit)
