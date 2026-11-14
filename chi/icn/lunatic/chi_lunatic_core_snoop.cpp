@@ -759,7 +759,6 @@ namespace CHI::Lunatic {
             const SnoopFilterEntry& current = Bank(flow.snoopLine).snoopFilter.At(Bank(flow.snoopLine).snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
             if (current.valid && current.key == flow.victimLine && current.generation == flow.victimGeneration)
             {
-                Bank(flow.snoopLine).snoopFilter.Track(flow.snoopLine, target, final, time, ambiguousUnique);
                 flow.victimGeneration = current.generation;
                 flow.victimResponseUpdated = true;
             }

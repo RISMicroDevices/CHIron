@@ -186,3 +186,80 @@ LUNATIC_TEST(Stage9VictimWaitsForActiveCopyback)
     LUNATIC_CHECK(impl.ValidateInvariants());
     LUNATIC_CHECK(impl.errors.empty());
 }
+
+LUNATIC_TEST(Stage9VictimResponseDoesNotReleaseSnoopFilterWayEarly)
+{
+    Options options;
+    options.policy = PolicyKind::NINE;
+    options.slcSets = 1;
+    options.slcWays = 1;
+    options.snoopFilterSets = 1;
+    options.snoopFilterWays = 1;
+
+    Core::Impl impl(2, options, std::make_shared<EventHub>());
+    const LineKey victim = LineKey::FromAddress(0x40000, false);
+    const LineKey incoming = LineKey::FromAddress(0x40100, false);
+    const LineKey replacement = LineKey::FromAddress(0x40200, false);
+    const LineData latest = VictimPattern(93);
+    impl.Bank(victim).snoopFilter.Track(victim, 5, CacheState::UD, 0);
+
+    const auto makeRequest = [](NodeId source, TransactionId txnId, uint64_t address) {
+        Request request{};
+        request.source = source;
+        request.target = 2;
+        request.txnId = txnId;
+        request.address = address;
+        request.opcode = CHI::Eb::Opcodes::REQ::ReadClean;
+        request.memAttr = CHI::Eb::MemAttrs::WriteBack_Allocate;
+        request.snpAttr = 1;
+        return request;
+    };
+
+    Transaction* blocker = impl.tracker.Allocate(makeRequest(7, 1, victim.address), 10);
+    Transaction* operation = impl.tracker.Allocate(makeRequest(6, 2, incoming.address), 20);
+    LUNATIC_CHECK(blocker && operation);
+    impl.flows.emplace(blocker->handle, FlowState{});
+    impl.flows.emplace(operation->handle, FlowState{});
+    operation->phase = Phase::Action;
+    operation->Mark(COMPLETE_MEMORY);
+    LUNATIC_CHECK(impl.Bank(incoming).hazards.Add(operation->handle, incoming, operation->actionAge));
+
+    LUNATIC_CHECK(!impl.PrepareHomeCommit(*operation));
+    LUNATIC_CHECK(impl.flows.at(operation->handle).victimSnoopFilterOnly);
+    LUNATIC_CHECK(impl.flows.at(operation->handle).victimPending);
+    LUNATIC_CHECK(impl.EmitSnoops(*operation));
+    const Snoop snoop = impl.txsnp.front().flit;
+    LUNATIC_CHECK(impl.Bank(victim).hazards.Add(blocker->handle, victim, blocker->actionAge));
+
+    for (size_t beat = 0; beat < 2; ++beat)
+    {
+        Data response{};
+        response.source = 5;
+        response.target = 2;
+        response.homeNid = 2;
+        response.txnId = snoop.txnId;
+        response.opcode = CHI::Eb::Opcodes::DAT::SnpRespData;
+        response.resp = CHI::Eb::Resps::SnpRespData_I_PD;
+        response.dataId = beat == 0 ? 0 : 2;
+        for (size_t index = 0; index < 32; ++index)
+            response.bytes[index] = latest[beat * 32 + index];
+        response.byteEnables.fill(1);
+        impl.ProcessSnoopDAT(*operation, response);
+    }
+    LUNATIC_CHECK(impl.flows.at(operation->handle).victimPending);
+    LUNATIC_CHECK(impl.flows.at(operation->handle).victimResponseUpdated);
+
+    Transaction* competing = impl.tracker.Allocate(makeRequest(8, 3, replacement.address), 30);
+    LUNATIC_CHECK(competing);
+    impl.flows.emplace(competing->handle, FlowState{});
+    competing->phase = Phase::Action;
+    competing->Mark(COMPLETE_MEMORY);
+    LUNATIC_CHECK(impl.Bank(replacement).hazards.Add(competing->handle, replacement, competing->actionAge));
+    LUNATIC_CHECK(!impl.PrepareHomeCommit(*competing));
+
+    LUNATIC_CHECK(impl.Bank(victim).hazards.Release(blocker->handle, victim));
+    LUNATIC_CHECK(impl.CompleteVictim(*operation));
+    LUNATIC_CHECK(impl.memory.Read(victim) == latest);
+    LUNATIC_CHECK(impl.PrepareHomeCommit(*competing));
+    LUNATIC_CHECK(impl.errors.empty());
+}
