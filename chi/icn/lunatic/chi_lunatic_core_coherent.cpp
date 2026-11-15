@@ -42,12 +42,30 @@ namespace CHI::Lunatic {
                 ResolveImmediateWrite(transaction);
                 return;
             case RequestClass::WriteEvictOrEvict:
+                flow.expectedBeatMask = CopybackMask(transaction.request, options);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
+                return;
             case RequestClass::CopybackWrite:
                 flow.expectedBeatMask = CopybackMask(transaction.request, options);
-                pipeline.Advance(transaction, Phase::Action, time);
+                if (options.strategy.copybackResponseAtResolve && !flow.dbidSent)
+                {
+                    QueueComp(transaction, true);
+                    flow.dbidSent = flow.compSent;
+                    if (flow.compSent)
+                    {
+                        transaction.phase = Phase::WaitWriteData;
+                        transaction.wait = WaitReason::WriteData;
+                        transaction.readyTime = time;
+                        return;
+                    }
+                }
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case RequestClass::Evict:
-                pipeline.Advance(transaction, Phase::Action, time);
+                if (options.strategy.evictResponseAtResolve)
+                    ActionCoherent(transaction);
+                else
+                    Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 return;
             case RequestClass::CMO:
             case RequestClass::CleanUnique:
@@ -83,7 +101,7 @@ namespace CHI::Lunatic {
 
         if (flow.victimPending)
         {
-            if (flow.victimLinked && !hazards.IsHead(transaction.handle, flow.victimLine))
+            if (flow.victimLinked && !Bank(flow.victimLine).hazards.IsHead(transaction.handle, flow.victimLine))
             {
                 transaction.readyTime = time;
                 return;
@@ -181,7 +199,7 @@ namespace CHI::Lunatic {
                 return;
             case RequestClass::MakeReadUnique:
             {
-                const CacheState responseState = snoopFilter.State(transaction.request.Line(), transaction.request.source);
+                const CacheState responseState = Bank(transaction).snoopFilter.State(transaction.request.Line(), transaction.request.source);
                 if (!transaction.Complete(COMPLETE_MEMORY) && !transaction.homeHit && !IsValid(responseState) &&
                     (!flow.snoopDataValid || flow.snoopDataPartial))
                 {
@@ -277,11 +295,11 @@ namespace CHI::Lunatic {
                 QueueComp(transaction, false, CHI::Eb::Resps::Comp_I);
                 return;
             case RequestClass::CleanUnique:
-                if (snoopFilter.State(transaction.request.Line(), transaction.request.source) == CacheState::UDP)
+                if (Bank(transaction).snoopFilter.State(transaction.request.Line(), transaction.request.source) == CacheState::UDP)
                 {
                     Error(transaction.handle, "CleanUnique requester UDP is unsupported");
                     transaction.canceled = true;
-                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC, 0b10);
+                    QueueComp(transaction, false, CHI::Eb::Resps::Comp_UC, CHI::Eb::RespErrs::NDERR);
                     return;
                 }
                 if (!PrepareHomeCommit(transaction))
@@ -296,13 +314,18 @@ namespace CHI::Lunatic {
                 ActionPersistence(transaction);
                 return;
             case RequestClass::CMO:
+            {
                 if (!PrepareHomeCommit(transaction))
                 {
                     transaction.phase = Phase::Action;
                     transaction.readyTime = time;
                     return;
                 }
-                if (options.backend == BackendKind::CHI && flow.backendPhase == BackendPhase::None)
+                const bool writeCompleted = flow.backendCompReceived && flow.backendDataEmitted;
+                const bool forwardCmo = !options.strategy.cmoBackendWhenRequired ||
+                    (!writeCompleted && transaction.request.opcode != CHI::Eb::Opcodes::REQ::MakeInvalid &&
+                     (flow.dataDirty || flow.homeDirty));
+                if (options.backend == BackendKind::CHI && flow.backendPhase == BackendPhase::None && forwardCmo)
                 {
                     Request request = transaction.request;
                     request.source = nodeId;
@@ -316,8 +339,15 @@ namespace CHI::Lunatic {
                     request.doDwt = false;
                     request.stashNidValid = false;
                     request.stashLpidValid = false;
+                    if (!AcquireBackendOperation(transaction))
+                    {
+                        transaction.wait = WaitReason::Memory;
+                        transaction.readyTime = time;
+                        return;
+                    }
                     if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
                     {
+                        ReleaseBackendOperation(transaction);
                         transaction.readyTime = time;
                         return;
                     }
@@ -327,11 +357,14 @@ namespace CHI::Lunatic {
                     transaction.readyTime = time;
                     return;
                 }
-                if (options.backend == BackendKind::CHI && flow.backendPhase != BackendPhase::Done)
+                if (options.backend == BackendKind::CHI && flow.backendPhase != BackendPhase::Done && forwardCmo)
                     return;
-                QueueComp(transaction, false, flow.requesterFinal == CacheState::I ? CHI::Eb::Resps::Comp_I
-                    : flow.requesterFinal == CacheState::SC ? CHI::Eb::Resps::Comp_SC : CHI::Eb::Resps::Comp_UC);
+                const uint8_t response = options.strategy.cmoLocalCompI && !forwardCmo
+                    ? CHI::Eb::Resps::Comp_I : flow.requesterFinal == CacheState::I ? CHI::Eb::Resps::Comp_I
+                    : flow.requesterFinal == CacheState::SC ? CHI::Eb::Resps::Comp_SC : CHI::Eb::Resps::Comp_UC;
+                QueueComp(transaction, false, response);
                 return;
+            }
             default:
                 Error(transaction.handle, "invalid coherent action");
                 transaction.canceled = true;

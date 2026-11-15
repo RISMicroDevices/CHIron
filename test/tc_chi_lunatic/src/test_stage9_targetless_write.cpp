@@ -122,7 +122,7 @@ namespace {
             LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).RespErr() == CHI::Eb::RespErrs::NDERR);
         }
         else
-            LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).RespErr() == CHI::Eb::RespErrs::DERR);
+            LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).RespErr() == CHI::Eb::RespErrs::NDERR);
         driver.Quiesce();
         LUNATIC_CHECK(!driver.node.PeekTXSNP());
         LUNATIC_CHECK(!driver.node.InspectHome(line).valid);

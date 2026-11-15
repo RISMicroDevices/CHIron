@@ -1,5 +1,6 @@
 #include "chi_lunatic_core.hpp"
 
+#include <algorithm>
 #include <bit>
 
 namespace CHI::Lunatic {
@@ -19,7 +20,7 @@ namespace CHI::Lunatic {
             ? CHI::Eb::Opcodes::RSP::DBIDRespOrd : CHI::Eb::Opcodes::RSP::DBIDResp;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
-        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
         {
             flow.dbidSent = true;
             const auto requestClass = ClassifyRequest(transaction.request.opcode);
@@ -54,7 +55,7 @@ namespace CHI::Lunatic {
         response.respErr = respErr ? respErr : transaction.responseRespErr;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
-        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
         {
             flow.compSent = true;
             if (ClassifyRequest(transaction.request.opcode) == RequestClass::ImmediateWrite &&
@@ -86,7 +87,7 @@ namespace CHI::Lunatic {
         response.tagGroupId = transaction.request.tagGroupId;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
-        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
             flow.tagMatchSent = true;
     }
 
@@ -104,7 +105,7 @@ namespace CHI::Lunatic {
         response.opcode = CHI::Eb::Opcodes::RSP::ReadReceipt;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
-        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
             flow.readReceiptSent = true;
     }
 
@@ -125,29 +126,172 @@ namespace CHI::Lunatic {
             ? uint8_t(CHI::Eb::RespErrs::OK) : transaction.responseRespErr;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
-        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
             flow.respSepSent = true;
     }
 
-    void Core::Impl::QueueRetryCredit(size_t index)
+    size_t Core::Impl::ResponseCategory(const Response& response) const noexcept
+    {
+        switch (response.opcode)
+        {
+            case CHI::Eb::Opcodes::RSP::RetryAck:
+                return 1;
+            case CHI::Eb::Opcodes::RSP::PCrdGrant:
+                return 2;
+            case CHI::Eb::Opcodes::RSP::DBIDResp:
+            case CHI::Eb::Opcodes::RSP::DBIDRespOrd:
+            case CHI::Eb::Opcodes::RSP::CompDBIDResp:
+                return 0;
+            default:
+                return 3;
+        }
+    }
+
+    size_t Core::Impl::ResponseClass(const Pending<Response>& pending) const noexcept
+    {
+        if (pending.retry != std::numeric_limits<size_t>::max())
+        {
+            const auto retry = retries.find(pending.retry);
+            if (retry != retries.end())
+                return retry->second.classId;
+        }
+        if (pending.transaction != INVALID_TRANSACTION)
+        {
+            const auto flow = flows.find(pending.transaction);
+            if (flow != flows.end())
+                return flow->second.assignedClass;
+        }
+        return ClassForQos(pending.flit.qos);
+    }
+
+    size_t Core::Impl::SelectResponse(const std::deque<Pending<Response>>& queue,
+                                      std::optional<bool> downstream, bool commit)
+    {
+        Time oldest = std::numeric_limits<Time>::max();
+        for (const auto& pending : queue)
+            if ((!downstream || pending.downstream == *downstream) && pending.readyTime <= time)
+                oldest = std::min(oldest, pending.age);
+
+        std::array<bool, 4> categories{};
+        for (const auto& pending : queue)
+            if ((!downstream || pending.downstream == *downstream) && pending.readyTime <= time &&
+                pending.age == oldest && ResponseClass(pending) < categories.size())
+                categories[ResponseCategory(pending.flit)] = true;
+        const auto& classes = options.structure.classes;
+        const std::array<uint64_t, 4> categoryWeights = {
+            classes.fastResponseWeight, classes.retryResponseWeight,
+            classes.staticGrantResponseWeight, classes.normalResponseWeight
+        };
+        const size_t category = SelectWeighted(categoryWeights, categories, responseCategoryRound, false);
+        if (category == categories.size())
+            return queue.size();
+
+        std::array<bool, 4> eligibleClasses{};
+        for (const auto& pending : queue)
+            if ((!downstream || pending.downstream == *downstream) && pending.readyTime <= time &&
+                pending.age == oldest && ResponseCategory(pending.flit) == category &&
+                ResponseClass(pending) < eligibleClasses.size())
+                eligibleClasses[ResponseClass(pending)] = true;
+        const auto& classWeights = category == 1 || category == 2 ? classes.retryWeights : classes.requestWeights;
+        WeightedRoundState& classRound = responseClassRounds[category];
+        const size_t classId = SelectWeighted(classWeights, eligibleClasses, classRound, false);
+        if (classId == eligibleClasses.size())
+            return queue.size();
+
+        size_t selected = queue.size();
+        for (size_t index = 0; index < queue.size(); ++index)
+        {
+            const auto& pending = queue[index];
+            if ((downstream && pending.downstream != *downstream) || pending.readyTime > time ||
+                pending.age != oldest || ResponseCategory(pending.flit) != category ||
+                ResponseClass(pending) != classId)
+                continue;
+            if (selected == queue.size() || pending.serial < queue[selected].serial)
+                selected = index;
+        }
+        if (selected != queue.size() && commit)
+        {
+            SelectWeighted(categoryWeights, categories, responseCategoryRound, true);
+            SelectWeighted(classWeights, eligibleClasses, classRound, true);
+        }
+        return selected;
+    }
+
+    void Core::Impl::QueueRetryCredits()
+    {
+        if (!options.structure.classes.enabled)
+        {
+            for (const auto& [index, retry] : retries)
+            {
+                (void)retry;
+                QueueRetryCredit(index);
+            }
+            return;
+        }
+
+        Time oldest = std::numeric_limits<Time>::max();
+        for (const auto& [index, retry] : retries)
+        {
+            (void)index;
+            if (RetryCreditEligible(retry))
+                oldest = std::min(oldest, retry.age);
+        }
+        size_t tier = retryRounds.size();
+        for (const auto& [index, retry] : retries)
+        {
+            (void)index;
+            if (RetryCreditEligible(retry) && retry.age == oldest)
+                tier = std::min(tier, RetryTier(retry.bank, retry.classId));
+        }
+        if (tier == retryRounds.size())
+            return;
+
+        std::array<bool, 4> eligibleClasses{};
+        for (const auto& [index, retry] : retries)
+        {
+            (void)index;
+            if (RetryCreditEligible(retry) && retry.age == oldest &&
+                RetryTier(retry.bank, retry.classId) == tier)
+                eligibleClasses[retry.classId] = true;
+        }
+        WeightedRoundState& round = retryRounds[tier];
+        const size_t classId = SelectWeighted(options.structure.classes.retryWeights, eligibleClasses, round, false);
+        if (classId == eligibleClasses.size())
+            return;
+        size_t selected = std::numeric_limits<size_t>::max();
+        for (const auto& [index, retry] : retries)
+            if (RetryCreditEligible(retry) && retry.age == oldest && retry.classId == classId &&
+                RetryTier(retry.bank, retry.classId) == tier)
+            {
+                selected = index;
+                break;
+            }
+        if (selected != std::numeric_limits<size_t>::max() && QueueRetryCredit(selected))
+            SelectWeighted(options.structure.classes.retryWeights, eligibleClasses, round, true);
+    }
+
+    bool Core::Impl::QueueRetryCredit(size_t index)
     {
         auto it = retries.find(index);
-        if (it == retries.end() || !it->second.ackPopped || it->second.grantQueued)
-            return;
+        if (it == retries.end() || !RetryCreditEligible(it->second))
+            return false;
 
-        const NodeId source = it->second.request.source;
-        const uint8_t pCrdType = it->second.request.pCrdType;
-        if (OutstandingRetryCredits(source, pCrdType) >= RetryOriginals(source, pCrdType))
-            return;
-
+        RetryRecord& retry = it->second;
         Response response;
         response.source = nodeId;
-        response.target = source;
+        response.target = retry.request.source;
         response.opcode = CHI::Eb::Opcodes::RSP::PCrdGrant;
-        response.pCrdType = pCrdType;
-        response.traceTag = it->second.request.traceTag;
-        if (Queue(txrsp, response, INVALID_TRANSACTION, nextAge++, false, false, index))
-            it->second.grantQueued = true;
+        response.pCrdType = retry.request.pCrdType;
+        response.qos = retry.request.qos;
+        response.traceTag = retry.request.traceTag;
+        if (!Queue(txrsp, response, INVALID_TRANSACTION, nextAge++, false, false, index))
+            return false;
+
+        retry.grantQueued = true;
+        retry.creditReserved = true;
+        if (options.structure.classes.enabled)
+            ++banks[retry.bank].retryReservations[retry.classId];
+        return true;
     }
 
     size_t Core::Impl::OutstandingRetryCredits(NodeId source, uint8_t pCrdType) const noexcept
@@ -183,7 +327,11 @@ namespace CHI::Lunatic {
         for (auto iter = retries.begin(); iter != retries.end();)
         {
             if (iter->second.request.source == source && iter->second.request.pCrdType == pCrdType)
+            {
+                if (!iter->second.creditReturned)
+                    ReleaseRetrySource(iter->second.request.source, iter->second.bank, iter->second.classId);
                 iter = retries.erase(iter);
+            }
             else
                 ++iter;
         }
@@ -192,6 +340,8 @@ namespace CHI::Lunatic {
 
     bool Core::Impl::RetryReservationAvailable() const noexcept
     {
+        if (options.structure.classes.enabled)
+            return tracker.Size() + TotalRetryReservations() < OrdinaryTransactionLimit();
         size_t reserved = 0;
         for (const auto& [key, count] : availableCredits)
         {
@@ -200,36 +350,165 @@ namespace CHI::Lunatic {
         }
         for (const auto& pending : txrsp)
             reserved += pending.flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant ? 1 : 0;
-        return tracker.Size() + reserved < tracker.Limit();
+        return tracker.Size() + reserved < OrdinaryTransactionLimit();
     }
 
     bool Core::Impl::ConsumeRetryRequest(const Request& request, bool creditReturn)
     {
+        if (!options.structure.classes.enabled)
+        {
+            const auto creditKey = std::make_pair(request.source, request.pCrdType);
+            auto credit = availableCredits.find(creditKey);
+            if (credit == availableCredits.end() || credit->second == 0)
+                return false;
+
+            size_t originalIndex = std::numeric_limits<size_t>::max();
+            if (!creditReturn)
+            {
+                const auto original = SelectRetryIf([&](const auto& iter) {
+                    return RetryRequestCompatible(iter->second.request, request, nodeId);
+                });
+                if (original != retries.end())
+                    originalIndex = original->first;
+            }
+            else
+            {
+                if (RetryOriginals(request.source, request.pCrdType) == 0)
+                    return false;
+                const auto original = SelectRetryIf([&](const auto& iter) {
+                    return iter->second.request.source == request.source &&
+                        iter->second.request.pCrdType == request.pCrdType;
+                });
+                if (original != retries.end())
+                    originalIndex = original->first;
+            }
+            if (originalIndex == std::numeric_limits<size_t>::max())
+                return false;
+
+            const size_t originalBank = retries.at(originalIndex).bank;
+            const size_t originalClass = retries.at(originalIndex).classId;
+            if (!creditReturn && !ClassAdmissionAvailable(request, originalClass, true))
+                return false;
+
+            const auto donor = SelectRetryIf([&](const auto& iter) {
+                return iter->second.request.source == request.source &&
+                    iter->second.request.pCrdType == request.pCrdType &&
+                    iter->second.creditReserved && !iter->second.grantQueued;
+            });
+            if (donor != retries.end())
+                donor->second.creditReserved = false;
+            if (--credit->second == 0)
+                availableCredits.erase(credit);
+            if (creditReturn)
+            {
+                ++cancellationCredits[creditKey];
+                ++pmu.returnedCredits;
+            }
+            else
+            {
+                retries.erase(originalIndex);
+                ++pmu.creditedResends;
+            }
+            ReleaseRetrySource(request.source, originalBank, originalClass);
+            PurgeReturnedRetries(request.source, request.pCrdType);
+            return true;
+        }
+
         const auto creditKey = std::make_pair(request.source, request.pCrdType);
-        auto credit = availableCredits.find(creditKey);
+        const auto credit = availableCredits.find(creditKey);
         if (credit == availableCredits.end() || credit->second == 0)
             return false;
 
         size_t originalIndex = std::numeric_limits<size_t>::max();
+        size_t donorIndex = std::numeric_limits<size_t>::max();
         if (!creditReturn)
         {
-            for (auto iter = retries.rbegin(); iter != retries.rend(); ++iter)
-            {
-                if (!RetryRequestCompatible(iter->second.request, request, nodeId))
-                    continue;
-                originalIndex = iter->first;
-                break;
-            }
+            const auto original = SelectRetryIf([&](const auto& iter) {
+                return RetryRequestCompatible(iter->second.request, request, nodeId);
+            });
+            if (original != retries.end())
+                originalIndex = original->first;
             if (originalIndex == std::numeric_limits<size_t>::max())
                 return false;
+            const RetryRecord& originalRecord = retries.at(originalIndex);
+            if (originalRecord.creditReserved && !originalRecord.grantQueued)
+                donorIndex = originalIndex;
         }
         else if (RetryOriginals(request.source, request.pCrdType) == 0)
             return false;
 
-        if (--credit->second == 0)
-            availableCredits.erase(credit);
+        const auto donorMatch = SelectRetryIf([&](const auto& iter) {
+            return donorIndex == std::numeric_limits<size_t>::max() &&
+                iter->second.request.source == request.source &&
+                iter->second.request.pCrdType == request.pCrdType &&
+                iter->second.creditReserved && !iter->second.grantQueued;
+        });
+        if (donorMatch != retries.end())
+            donorIndex = donorMatch->first;
+        if (donorIndex == std::numeric_limits<size_t>::max())
+            return false;
+        if (creditReturn)
+            originalIndex = donorIndex;
+
+        RetryRecord& original = retries.at(originalIndex);
+        RetryRecord& donor = retries.at(donorIndex);
+        if (!creditReturn && !ClassAdmissionAvailable(request, original.classId, true))
+            return false;
+
+        size_t requiredCredits = 1;
+        size_t queuedGrant = txrsp.size();
+        if (originalIndex != donorIndex && original.creditReserved)
+        {
+            if (original.grantQueued)
+            {
+                for (size_t index = 0; index < txrsp.size(); ++index)
+                    if (txrsp[index].retry == originalIndex &&
+                        txrsp[index].flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant)
+                    {
+                        queuedGrant = index;
+                        break;
+                    }
+                if (queuedGrant == txrsp.size())
+                    return false;
+            }
+            else
+                ++requiredCredits;
+        }
+        if (credit->second < requiredCredits)
+            return false;
+
+        const auto consumeCredit = [&]() {
+            auto pooled = availableCredits.find(creditKey);
+            if (--pooled->second == 0)
+                availableCredits.erase(pooled);
+        };
+        const auto releaseReservation = [&](RetryRecord& retry) {
+            if (!retry.creditReserved)
+                return;
+            retry.creditReserved = false;
+            if (options.structure.classes.enabled)
+                --banks[retry.bank].retryReservations[retry.classId];
+        };
+
+        consumeCredit();
+        releaseReservation(donor);
+        if (originalIndex != donorIndex && original.creditReserved)
+        {
+            if (original.grantQueued)
+            {
+                txrsp.erase(txrsp.begin() + queuedGrant);
+                original.grantQueued = false;
+            }
+            else
+                consumeCredit();
+            releaseReservation(original);
+        }
+
+        const size_t originalBank = original.bank;
+        const size_t originalClass = original.classId;
         if (creditReturn)
         {
+            original.creditReturned = true;
             ++cancellationCredits[creditKey];
             ++pmu.returnedCredits;
         }
@@ -238,6 +517,7 @@ namespace CHI::Lunatic {
             retries.erase(originalIndex);
             ++pmu.creditedResends;
         }
+        ReleaseRetrySource(request.source, originalBank, originalClass);
         PurgeReturnedRetries(request.source, request.pCrdType);
         return true;
     }
@@ -245,6 +525,10 @@ namespace CHI::Lunatic {
     void Core::Impl::ReturnRead(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (transaction.canceled)
+            return;
+        if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::MakeReadUnique && flow.compSent)
+            return;
         if (transaction.request.order != 0 && !flow.separatedResponse && !flow.readReceiptEmitted)
         {
             if (!flow.readReceiptSent)
@@ -270,6 +554,8 @@ namespace CHI::Lunatic {
             mask = (uint64_t(1) << BeatsPerLine(options)) - 1;
         if (transaction.sentBeats >= size_t(std::popcount(mask)))
             return;
+        if (transaction.sentBeats != 0 && !ScheduleTransition(transaction, SchedulePoint::DataBeat))
+            return;
 
         uint64_t selected = mask;
         for (size_t index = 0; index < transaction.sentBeats; ++index)
@@ -291,7 +577,9 @@ namespace CHI::Lunatic {
         data.respErr = transaction.responseRespErr;
         const bool snoopErrorValid = flow.snoopDataRespErrMask & (uint64_t(1) << beat);
         const bool backendErrorValid = flow.backendReadRespErrMask & (uint64_t(1) << beat);
-        if (snoopErrorValid || backendErrorValid)
+        const auto backendBeatError = flow.backendBeatRespErr.find(beat);
+        const bool backendBeatErrorValid = backendBeatError != flow.backendBeatRespErr.end();
+        if (snoopErrorValid || backendErrorValid || backendBeatErrorValid)
         {
             data.respErr = transaction.responseRespErr == CHI::Eb::RespErrs::NDERR
                 ? uint8_t(CHI::Eb::RespErrs::NDERR) : uint8_t(CHI::Eb::RespErrs::OK);
@@ -299,6 +587,8 @@ namespace CHI::Lunatic {
                 data.respErr = MergeResponseErrors(data.respErr, flow.snoopDataRespErr[beat]);
             if (backendErrorValid)
                 data.respErr = MergeResponseErrors(data.respErr, flow.backendReadRespErr[beat]);
+            if (backendBeatErrorValid)
+                data.respErr = MergeResponseErrors(data.respErr, backendBeatError->second);
         }
         data.dataId = offset / 16;
         data.ccid = (transaction.request.address >> 4) & 3;
@@ -314,7 +604,7 @@ namespace CHI::Lunatic {
         for (size_t lane = 0; lane < bytes / 8; ++lane)
             data.poison[lane] = transaction.poison[offset / 8 + lane];
 
-        if (Queue(txdat, data, transaction.handle, transaction.actionAge, remaining == 0))
+        if (AcquireResponse(transaction, txdat) && Queue(txdat, data, transaction.handle, transaction.actionAge, remaining == 0))
             ++transaction.sentBeats;
     }
 
@@ -322,6 +612,17 @@ namespace CHI::Lunatic {
     {
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         const FlowState& flow = flows.at(transaction.handle);
+        const bool canceledResponsePending = transaction.canceled &&
+            ((flow.dbidSent && !flow.dbidEmitted) || (flow.compSent && !flow.compEmitted) ||
+             (flow.readReceiptSent && !flow.readReceiptEmitted) || (flow.respSepSent && !flow.respSepEmitted) ||
+             (flow.stashDoneSent && !flow.stashDoneEmitted) || (flow.persistSent && !flow.persistEmitted) ||
+             (flow.atomic.returnSent && !flow.atomic.returnEmitted));
+        if (canceledResponsePending)
+        {
+            transaction.phase = Phase::Action;
+            transaction.readyTime = time;
+            return;
+        }
         if (!transaction.canceled && flow.dwtActive &&
             (!flow.directoryCommitted || !flow.backendCompReceived || !flow.compEmitted))
         {
@@ -361,9 +662,7 @@ namespace CHI::Lunatic {
             transaction.readyTime = time;
             return;
         }
-        if (!transaction.canceled && requestClass == RequestClass::Persistence &&
-            transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep &&
-            flow.separatedPersistResponse && !flow.directPersistActive &&
+        if (!transaction.canceled && RequiresSeparatedPersist(transaction) &&
             (!flow.compEmitted || !flow.persistEmitted))
         {
             transaction.phase = Phase::Action;
@@ -384,6 +683,7 @@ namespace CHI::Lunatic {
                 ? WaitReason::CompAck : WaitReason::None;
             transaction.phase = transaction.wait == WaitReason::CompAck ? Phase::WaitCompAck : Phase::Commit;
             transaction.readyTime = time;
+            ReleaseResponseIfComplete(transaction);
             return;
         }
         if (!transaction.canceled && flow.dmtActive && !flow.backendReadReceiptReceived)
@@ -410,6 +710,7 @@ namespace CHI::Lunatic {
             ? WaitReason::CompAck : WaitReason::None;
         transaction.phase = transaction.wait == WaitReason::CompAck ? Phase::WaitCompAck : Phase::Commit;
         transaction.readyTime = time;
+        ReleaseResponseIfComplete(transaction);
     }
 
     bool Core::Impl::RequiresTransactionCompAck(const Transaction& transaction) const

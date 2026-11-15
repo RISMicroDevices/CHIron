@@ -18,7 +18,13 @@ namespace CHI::Lunatic {
         flow.snoopLine = transaction.request.Line();
         flow.expectedBeatMask = AtomicOperandBeatMask(transaction.request, options);
         flow.atomic.resultBeatMask = AtomicResultBeatMask(transaction.request, options);
-        flow.responseForm = transaction.handle % 3;
+        switch (options.strategy.immediateResponse)
+        {
+            case ImmediateResponseKind::Rotate: flow.responseForm = transaction.handle % 3; break;
+            case ImmediateResponseKind::EarlyDBID: flow.responseForm = 0; break;
+            case ImmediateResponseKind::LateComp: flow.responseForm = 1; break;
+            case ImmediateResponseKind::Combined: flow.responseForm = 2; break;
+        }
         for (NodeId target : SnoopTargets(transaction.request.Line()))
         {
             if (target != transaction.request.source || transaction.request.snoopMe)
@@ -28,7 +34,7 @@ namespace CHI::Lunatic {
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
-        transaction.readyTime = time;
+        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
     }
 
     void Core::Impl::ActionAtomic(Transaction& transaction)
@@ -57,7 +63,24 @@ namespace CHI::Lunatic {
                 transaction.responseResp = CHI::Eb::Resps::CompData_I;
                 transaction.sentBeats = 0;
                 transaction.phase = Phase::Return;
-                transaction.readyTime = ScheduleData();
+                transaction.readyTime = ScheduleData(transaction);
+            }
+            return;
+        }
+        if (transaction.canceled)
+        {
+            CompleteBackendOperation(transaction);
+            if (store)
+            {
+                if (!flow.compSent)
+                    QueueComp(transaction);
+                else if (flow.compEmitted)
+                    FinishResponse(transaction);
+            }
+            else
+            {
+                transaction.phase = Phase::Return;
+                transaction.readyTime = time;
             }
             return;
         }
@@ -104,10 +127,12 @@ namespace CHI::Lunatic {
             else
             {
                 transaction.phase = Phase::Return;
-                transaction.readyTime = ScheduleData();
+                transaction.readyTime = ScheduleData(transaction);
             }
             return;
         }
+        if (!ScheduleTransition(transaction, SchedulePoint::AtomicExecution))
+            return;
         if (!PrepareHomeCommit(transaction))
         {
             transaction.phase = Phase::Action;
@@ -117,7 +142,7 @@ namespace CHI::Lunatic {
         if (!store)
         {
             transaction.phase = Phase::Return;
-            transaction.readyTime = ScheduleData();
+            transaction.readyTime = ScheduleData(transaction);
             return;
         }
         if (!flow.compSent)
@@ -169,13 +194,28 @@ namespace CHI::Lunatic {
         }
         for (size_t lane = 0; lane < bytes / 8; ++lane)
             data.poison[lane] = transaction.poison[offset / 8 + lane];
-        if (Queue(txdat, data, transaction.handle, transaction.actionAge, true))
+        if (AcquireResponse(transaction, txdat) && Queue(txdat, data, transaction.handle, transaction.actionAge, true))
             flow.atomic.returnSent = true;
     }
 
     bool Core::Impl::HandleAtomicDAT(Transaction& transaction, const Data& flit)
     {
         FlowState& flow = flows.at(transaction.handle);
+        if (flit.opcode == CHI::Eb::Opcodes::DAT::WriteDataCancel)
+        {
+            const bool dataPhase = transaction.phase == Phase::WaitWriteData ||
+                (transaction.phase == Phase::Action && flow.dbidEmitted);
+            if (!dataPhase || !flow.dbidEmitted || flit.txnId != transaction.dbid ||
+                flit.ccid != ((transaction.request.address >> 4) & 3))
+                return false;
+            transaction.canceled = true;
+            transaction.receivedBeats = flow.expectedBeatMask;
+            transaction.Mark(COMPLETE_WRITE_DATA);
+            transaction.phase = Phase::Action;
+            transaction.wait = WaitReason::None;
+            transaction.readyTime = time;
+            return true;
+        }
         const bool dataPhase = transaction.phase == Phase::WaitWriteData ||
             ((transaction.phase == Phase::Action || transaction.phase == Phase::WaitMemory) && flow.dbidEmitted);
         if (!dataPhase || !flow.dbidEmitted || flit.opcode != CHI::Eb::Opcodes::DAT::NonCopyBackWrData ||
@@ -246,14 +286,14 @@ namespace CHI::Lunatic {
                     commitImage.poison[lane] |= flow.atomic.operandsPoison[lane];
         }
 
-        if (HomeLine* home = directory.Find(line))
+        if (HomeLine* home = Bank(line).directory.Find(line))
         {
             if (flow.atomic.execution.write || flow.dataDirty)
             {
                 home->data = commitImage.data;
                 CopyMetadata(*home, commitImage, options);
                 home->dirty = true;
-                directory.Touch(line);
+                Bank(line).directory.Touch(line);
             }
         }
         else if (flow.atomic.execution.write || flow.dataDirty)
@@ -273,12 +313,13 @@ namespace CHI::Lunatic {
             {
                 HomeLine& home = InstallHome(line, flow.victimWay, commitImage.data, true, time);
                 CopyMetadata(home, commitImage, options);
+                ReleaseRefill(transaction, line);
             }
             else if (!WriteLineImage(transaction, line, commitImage, AtomicFullEnables()))
                 return false;
         }
         flow.requesterFinal = CacheState::I;
-        snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
+        Bank(transaction).snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
         return true;
     }
 

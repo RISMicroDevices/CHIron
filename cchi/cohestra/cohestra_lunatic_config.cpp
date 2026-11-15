@@ -2,7 +2,12 @@
 
 #include "spdlog/spdlog.h"
 
+#include <array>
+#include <exception>
+#include <initializer_list>
+#include <limits>
 #include <string>
+#include <utility>
 
 namespace Cohestra {
 namespace {
@@ -61,8 +66,49 @@ namespace {
 
     ::CHI::Lunatic::NodeId CheckNodeId(uint32_t value, const char* key, bool& ok) noexcept;
 
+    template<typename T>
+    void ReadClassArray(const StringLoaderBase& loader, const char* key,
+        std::array<T, 4>& values, bool& ok,
+        uint64_t maximum = std::numeric_limits<T>::max()) noexcept
+    {
+        for (size_t index = 0; index < values.size(); ++index)
+        {
+            const std::string indexedKey = std::string(key) + std::to_string(index);
+            uint64_t parsed = values[index];
+            ReadUInt64(loader, indexedKey.c_str(), parsed, ok);
+            if (parsed > maximum)
+            {
+                spdlog::error("Lunatic configuration: [lunatic] {} exceeds {}.", indexedKey, maximum);
+                ok = false;
+            }
+            values[index] = static_cast<T>(parsed);
+        }
+    }
+
+    template<typename T>
+    void ReadChoice(const StringLoaderBase& loader, const char* key, T& destination, bool& ok,
+        std::initializer_list<std::pair<const char*, T>> choices) noexcept
+    {
+        std::string value;
+        ReadString(loader, key, value, ok);
+        if (value.empty())
+            return;
+        for (const auto& choice : choices)
+        {
+            if (value == choice.first)
+            {
+                destination = choice.second;
+                return;
+            }
+        }
+        spdlog::error("Lunatic configuration: unknown [lunatic] {} value: {}.", key, value);
+        ok = false;
+    }
+
     void ReadOptions(const StringLoaderBase& loader, LunaticModel::Config& options, bool& ok) noexcept
     {
+        using namespace ::CHI::Lunatic;
+
         ReadSize(loader, "queue.input", options.inputQueueLimit, ok);
         ReadSize(loader, "queue.output", options.outputQueueLimit, ok);
         ReadSize(loader, "transaction.limit", options.transactionLimit, ok);
@@ -73,6 +119,9 @@ namespace {
         ReadSize(loader, "snoopfilter.ways", options.snoopFilterWays, ok);
         ReadUInt64(loader, "latency.tag", options.tagLatency, ok);
         ReadUInt64(loader, "latency.data", options.dataLatency, ok);
+        ReadUInt64(loader, "latency.homehit", options.homeHitDataLatency, ok);
+        ReadUInt64(loader, "latency.snoopdata", options.snoopDataLatency, ok);
+        ReadUInt64(loader, "latency.cmowrite", options.cmoWriteLatency, ok);
         ReadUInt64(loader, "latency.memory", options.memoryLatency, ok);
         ReadUInt64(loader, "pipeline.receive", options.receiveDelay, ok);
         ReadUInt64(loader, "pipeline.decode", options.decodeDelay, ok);
@@ -112,19 +161,121 @@ namespace {
         ReadBool(loader, "poison.enable", options.poisonEnabled, ok);
         ReadBool(loader, "datacheck.enable", options.dataCheckEnabled, ok);
 
-        std::string policy;
-        ReadString(loader, "policy", policy, ok);
-        if (policy.empty() || policy == "exclusive")
-            options.policy = ::CHI::Lunatic::PolicyKind::Exclusive;
-        else if (policy == "inclusive")
-            options.policy = ::CHI::Lunatic::PolicyKind::Inclusive;
-        else if (policy == "nine")
-            options.policy = ::CHI::Lunatic::PolicyKind::NINE;
-        else
-        {
-            spdlog::error("Lunatic configuration: unknown [lunatic] policy: {}.", policy);
-            ok = false;
-        }
+        ReadChoice(loader, "policy", options.policy, ok, {
+            { "exclusive", PolicyKind::Exclusive },
+            { "inclusive", PolicyKind::Inclusive },
+            { "nine", PolicyKind::NINE }
+        });
+
+        ReadSize(loader, "structure.banks", options.structure.bankCount, ok);
+        ReadSize(loader, "structure.requestbuffer", options.structure.requestBufferLimit, ok);
+        ReadSize(loader, "structure.resource.refill", options.structure.refillResourceLimit, ok);
+        ReadSize(loader, "structure.resource.response", options.structure.responseResourceLimit, ok);
+        ReadSize(loader, "structure.resource.memory", options.structure.memoryResourceLimit, ok);
+        ReadSize(loader, "structure.resource.snoop", options.structure.snoopResourceLimit, ok);
+        ReadSize(loader, "structure.snoopqueue", options.structure.outgoingSnoopQueueLimit, ok);
+        ReadSize(loader, "structure.transaction.reserved", options.structure.reservedTransactionEntries, ok);
+        ReadSize(loader, "structure.retry.sources", options.structure.retrySourceLimit, ok);
+        ReadSize(loader, "structure.port.tag", options.structure.tagPortOccupancy, ok);
+        ReadSize(loader, "structure.port.data", options.structure.dataPortOccupancy, ok);
+        ReadBool(loader, "class.enable", options.structure.classes.enabled, ok);
+        ReadClassArray(loader, "class.qos.minimum.", options.structure.classes.qosMinimum, ok, 15);
+        ReadClassArray(loader, "class.qos.maximum.", options.structure.classes.qosMaximum, ok, 15);
+        ReadClassArray(loader, "class.dedicated.", options.structure.classes.dedicated, ok);
+        ReadClassArray(loader, "class.maximum.", options.structure.classes.maximum, ok);
+        ReadClassArray(loader, "class.contended.", options.structure.classes.contendedMinimum, ok);
+        ReadClassArray(loader, "class.weight.request.", options.structure.classes.requestWeights, ok);
+        ReadClassArray(loader, "class.weight.retry.", options.structure.classes.retryWeights, ok);
+        ReadUInt64(loader, "class.response.fast", options.structure.classes.fastResponseWeight, ok);
+        ReadUInt64(loader, "class.response.retry", options.structure.classes.retryResponseWeight, ok);
+        ReadUInt64(loader, "class.response.static", options.structure.classes.staticGrantResponseWeight, ok);
+        ReadUInt64(loader, "class.response.normal", options.structure.classes.normalResponseWeight, ok);
+
+        ReadChoice(loader, "strategy.home.replacement", options.strategy.homeReplacement, ok, {
+            { "age", ReplacementKind::Age },
+            { "plru", ReplacementKind::PLRU },
+            { "random", ReplacementKind::PseudoRandom }
+        });
+        ReadChoice(loader, "strategy.snoopfilter.replacement", options.strategy.snoopFilterReplacement, ok, {
+            { "age", ReplacementKind::Age },
+            { "plru", ReplacementKind::PLRU },
+            { "random", ReplacementKind::PseudoRandom }
+        });
+        ReadChoice(loader, "strategy.request.arbitration", options.strategy.requestArbitration, ok, {
+            { "age", RequestArbitrationKind::Age },
+            { "refillfirst", RequestArbitrationKind::RefillFirst },
+            { "classweighted", RequestArbitrationKind::OldestClassWeighted }
+        });
+        ReadChoice(loader, "strategy.output.arbitration", options.strategy.outputArbitration, ok, {
+            { "age", OutputArbitrationKind::Age },
+            { "classweighted", OutputArbitrationKind::OldestClassWeighted }
+        });
+        ReadChoice(loader, "strategy.allocation", options.strategy.allocationStrategy, ok, {
+            { "policy", AllocationStrategyKind::Policy },
+            { "selective", AllocationStrategyKind::SelectiveSharedCopyback }
+        });
+        ReadChoice(loader, "strategy.atomic", options.strategy.atomicExecution, ok, {
+            { "backend", AtomicExecutionKind::Backend },
+            { "local", AtomicExecutionKind::Local }
+        });
+        ReadChoice(loader, "strategy.immediate.response", options.strategy.immediateResponse, ok, {
+            { "rotate", ImmediateResponseKind::Rotate },
+            { "earlydbid", ImmediateResponseKind::EarlyDBID },
+            { "latecomp", ImmediateResponseKind::LateComp },
+            { "combined", ImmediateResponseKind::Combined }
+        });
+        ReadBool(loader, "strategy.copyback.resolve", options.strategy.copybackResponseAtResolve, ok);
+        ReadBool(loader, "strategy.cmo.whenrequired", options.strategy.cmoBackendWhenRequired, ok);
+        ReadBool(loader, "strategy.cmo.localcompi", options.strategy.cmoLocalCompI, ok);
+        ReadBool(loader, "strategy.evict.resolve", options.strategy.evictResponseAtResolve, ok);
+        ReadBool(loader, "strategy.snoop.resolve", options.strategy.snoopIssueAtResolve, ok);
+        ReadBool(loader, "strategy.snoop.dataport", options.strategy.snoopDataThroughDataPort, ok);
+        ReadChoice(loader, "strategy.stash.response", options.strategy.stashResponse, ok, {
+            { "rotate", StashResponseKind::Rotate },
+            { "compfirst", StashResponseKind::CompFirst },
+            { "stashdonefirst", StashResponseKind::StashDoneFirst },
+            { "combined", StashResponseKind::Combined }
+        });
+        ReadChoice(loader, "strategy.persist.response", options.strategy.persistResponse, ok, {
+            { "downstream", PersistResponseKind::Downstream },
+            { "combined", PersistResponseKind::Combined },
+            { "compfirst", PersistResponseKind::SeparateCompFirst },
+            { "persistfirst", PersistResponseKind::SeparatePersistFirst }
+        });
+        ReadChoice(loader, "strategy.retry.upstream", options.strategy.upstreamRetrySelection, ok, {
+            { "oldest", RetrySelectionKind::Oldest },
+            { "newest", RetrySelectionKind::Newest }
+        });
+        ReadChoice(loader, "strategy.retry.downstream", options.strategy.downstreamRetrySelection, ok, {
+            { "oldest", RetrySelectionKind::Oldest },
+            { "newest", RetrySelectionKind::Newest }
+        });
+        ReadChoice(loader, "strategy.provider", options.strategy.providerSelection, ok, {
+            { "lowestnode", ProviderSelectionKind::LowestNodeId },
+            { "roundrobin", ProviderSelectionKind::RoundRobin }
+        });
+        ReadBool(loader, "strategy.dct.forward", options.strategy.forwardDct, ok);
+
+        ReadUInt64(loader, "timing.input", options.timing.inputRegister, ok);
+        ReadUInt64(loader, "timing.requestbuffer", options.timing.requestBuffer, ok);
+        ReadUInt64(loader, "timing.allocation", options.timing.allocation, ok);
+        ReadUInt64(loader, "timing.hazard.release", options.timing.hazardRelease, ok);
+        ReadUInt64(loader, "timing.lookup", options.timing.lookupResult, ok);
+        ReadUInt64(loader, "timing.snoop.decision", options.timing.snoopDecision, ok);
+        ReadUInt64(loader, "timing.snoop.issue", options.timing.snoopIssue, ok);
+        ReadUInt64(loader, "timing.data.return", options.timing.dataReturn, ok);
+        ReadUInt64(loader, "timing.response.fast", options.timing.fastResponse, ok);
+        ReadUInt64(loader, "timing.response.normal", options.timing.normalResponse, ok);
+        ReadUInt64(loader, "timing.backend.request", options.timing.backendRequest, ok);
+        ReadUInt64(loader, "timing.backend.data", options.timing.backendData, ok);
+        ReadUInt64(loader, "timing.retry.ack", options.timing.retryAck, ok);
+        ReadUInt64(loader, "timing.credit.grant", options.timing.creditGrant, ok);
+        ReadUInt64(loader, "timing.backend.resend", options.timing.backendResend, ok);
+        ReadUInt64(loader, "timing.atomic", options.timing.atomicExecution, ok);
+        ReadUInt64(loader, "timing.persistence", options.timing.persistence, ok);
+        ReadUInt64(loader, "timing.data.beat", options.timing.dataBeat, ok);
+        ReadUInt64(loader, "timing.output", options.timing.output, ok);
+        ReadUInt64(loader, "timing.commit", options.timing.commitSchedule, ok);
     }
 
     ::CHI::Lunatic::NodeId CheckNodeId(uint32_t value, const char* key, bool& ok) noexcept
@@ -143,8 +294,11 @@ namespace {
     bool LoadLunaticIntegrationConfiguration(const StringLoaderBase& loader,
         LunaticIntegrationConfiguration& configuration) noexcept
     {
+        using namespace ::CHI::Lunatic;
+
         bool ok = true;
         configuration.model.rnPorts.clear();
+        configuration.model.options = {};
         ReadBool(loader, "enable", configuration.enabled, ok);
         ReadBool(loader, "require.activity", configuration.requireActivity, ok);
         ReadUInt32(loader, "drain.limit.cycles", configuration.drainCycleLimit, ok);
@@ -154,19 +308,35 @@ namespace {
         configuration.model.homeNodeId = CheckNodeId(homeNodeId, "home.nodeid", ok);
         ReadSize(loader, "service.quantum", configuration.model.serviceQuantum, ok);
 
+        std::string profile;
+        ReadString(loader, "profile", profile, ok);
+        if (profile.empty() || profile == "custom")
+        {
+            configuration.model.options.poisonEnabled = COHESTRA_CHI_POISON_PRESENT != 0;
+            configuration.model.options.dataCheckEnabled = COHESTRA_CHI_DATACHECK_PRESENT != 0;
+        }
+        else if (profile == "type3")
+            configuration.model.options = MakeType3Options();
+        else if (profile == "type7")
+            configuration.model.options = MakeType7Options();
+        else
+        {
+            spdlog::error("Lunatic configuration: unknown [lunatic] profile: {}.", profile);
+            configuration.model.options.poisonEnabled = COHESTRA_CHI_POISON_PRESENT != 0;
+            configuration.model.options.dataCheckEnabled = COHESTRA_CHI_DATACHECK_PRESENT != 0;
+            ok = false;
+        }
         configuration.model.options.dataWidth = COHESTRA_CHI_DATA_WIDTH;
-        configuration.model.options.poisonEnabled = COHESTRA_CHI_POISON_PRESENT != 0;
-        configuration.model.options.dataCheckEnabled = COHESTRA_CHI_DATACHECK_PRESENT != 0;
 
         std::string backend;
         ReadString(loader, "backend", backend, ok);
-        if (backend.empty() || backend == "internal")
-            configuration.model.options.backend = ::CHI::Lunatic::BackendKind::Internal;
+        if (backend == "internal")
+            configuration.model.options.backend = BackendKind::Internal;
         else if (backend == "axi")
-            configuration.model.options.backend = ::CHI::Lunatic::BackendKind::AXI;
+            configuration.model.options.backend = BackendKind::AXI;
         else if (backend == "chi")
-            configuration.model.options.backend = ::CHI::Lunatic::BackendKind::CHI;
-        else
+            configuration.model.options.backend = BackendKind::CHI;
+        else if (!backend.empty())
         {
             spdlog::error("Lunatic configuration: unknown [lunatic] backend: {}.", backend);
             ok = false;
@@ -232,6 +402,25 @@ namespace {
         if (!configuration.drainCycleLimit)
         {
             spdlog::error("Lunatic configuration: drain.limit.cycles must be non-zero.");
+            ok = false;
+        }
+        if (configuration.model.options.poisonEnabled && COHESTRA_CHI_POISON_PRESENT == 0)
+        {
+            spdlog::error("Lunatic configuration: poison.enable requires a typed Poison field.");
+            ok = false;
+        }
+        if (configuration.model.options.dataCheckEnabled && COHESTRA_CHI_DATACHECK_PRESENT == 0)
+        {
+            spdlog::error("Lunatic configuration: datacheck.enable requires a typed DataCheck field.");
+            ok = false;
+        }
+        try
+        {
+            ValidateOptions(configuration.model.options);
+        }
+        catch (const std::exception& error)
+        {
+            spdlog::error("Lunatic configuration: {}.", error.what());
             ok = false;
         }
         return ok;

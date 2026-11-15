@@ -424,7 +424,7 @@ LUNATIC_TEST(Stage9ErrorStructureReservedOrderStaysContained)
     auto request = InvalidWrite(driver, CHI::Eb::Opcodes::REQ::WriteNoSnpFull, 23, address);
     request.Order() = 1;
     LUNATIC_CHECK(driver.node.PushRXREQ(request));
-    LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).RespErr() == CHI::Eb::RespErrs::DERR);
+    LUNATIC_CHECK(driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp).RespErr() == CHI::Eb::RespErrs::NDERR);
     driver.Quiesce();
     LUNATIC_CHECK(!driver.node.GetErrors().empty());
 }

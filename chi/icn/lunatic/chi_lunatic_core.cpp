@@ -9,14 +9,305 @@ namespace CHI::Lunatic {
         : nodeId(nodeId)
         , options(std::move(options))
         , events(std::move(events))
-        , directory(this->options)
-        , snoopFilter(this->options)
+        , bankMap(this->options)
         , policy(MakePolicy(this->options.policy))
         , tracker(this->options.transactionLimit)
-        , pipeline(this->options)
         , random(this->options.seed)
         , axi(this->options)
     {
+        std::shared_ptr<DeterministicRandom> sharedRandom(&random, [](DeterministicRandom*) {});
+        banks.reserve(bankMap.Count());
+        for (size_t index = 0; index < bankMap.Count(); ++index)
+            banks.emplace_back(this->options, sharedRandom);
+    }
+
+    size_t Core::Impl::BankIndex(const LineKey& line) const noexcept
+    {
+        return bankMap.Index(line);
+    }
+
+    BankState& Core::Impl::Bank(const LineKey& line)
+    {
+        return banks[BankIndex(line)];
+    }
+
+    const BankState& Core::Impl::Bank(const LineKey& line) const
+    {
+        return banks[BankIndex(line)];
+    }
+
+    BankState& Core::Impl::Bank(const Transaction& transaction)
+    {
+        return Bank(transaction.request.Line());
+    }
+
+    const BankState& Core::Impl::Bank(const Transaction& transaction) const
+    {
+        return Bank(transaction.request.Line());
+    }
+
+    size_t Core::Impl::OrdinaryTransactionLimit() const noexcept
+    {
+        return tracker.Limit() - options.structure.reservedTransactionEntries;
+    }
+
+    bool Core::Impl::OriginalAdmissionAvailable(const LineKey& line, bool resend) const
+    {
+        const size_t capacity = resend && options.structure.classes.enabled ?
+            tracker.Limit() : OrdinaryTransactionLimit();
+        if (tracker.Size() >= capacity)
+            return false;
+        const BankState& bank = Bank(line);
+        const size_t reservations = !resend && options.structure.classes.enabled ?
+            BankRetryReservations(BankIndex(line)) : 0;
+        if (bankMap.Count() > 1 &&
+            bank.activeOriginals + reservations >= tracker.Limit() / bankMap.Count())
+            return false;
+        return !options.structure.requestBufferLimit ||
+            bank.requestBufferOccupants < options.structure.requestBufferLimit;
+    }
+
+    void Core::Impl::ReleaseOriginal(Transaction& transaction)
+    {
+        --Bank(transaction).activeOriginals;
+    }
+
+    void Core::Impl::ReleaseRequestBuffer(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.requestBufferOwned)
+            return;
+        flow.requestBufferOwned = false;
+        --Bank(transaction).requestBufferOccupants;
+    }
+
+    void Core::Impl::ReleaseSnoopWave(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.snoopWaveOwned)
+            return;
+        flow.snoopWaveOwned = false;
+        --Bank(flow.snoopLine).activeSnoopWaves;
+    }
+
+    bool Core::Impl::AcquireBackendOperation(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.backendOperationOwned)
+            return true;
+        BankState& bank = Bank(transaction);
+        if (options.structure.memoryResourceLimit &&
+            bank.backendOperations >= options.structure.memoryResourceLimit)
+        {
+            pmu.RecordStall(WaitReason::Memory);
+            return false;
+        }
+        ++bank.backendOperations;
+        flow.backendOperationOwned = true;
+        return true;
+    }
+
+    bool Core::Impl::AcquireRefill(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (flow.baselineOperationOwned)
+            return true;
+        BankState& bank = Bank(flow.baselineLine);
+        if (options.structure.refillResourceLimit &&
+            bank.refillOperations >= options.structure.refillResourceLimit)
+        {
+            pmu.RecordStall(WaitReason::Memory);
+            return false;
+        }
+        ++bank.refillOperations;
+        flow.baselineOperationOwned = true;
+        return true;
+    }
+
+    void Core::Impl::ReleaseResponse(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.responseOwned)
+            return;
+        flow.responseOwned = false;
+        --Bank(transaction).responseUnits;
+    }
+
+    void Core::Impl::ReleaseResponseIfComplete(Transaction& transaction)
+    {
+        if (transaction.Complete(COMPLETE_RESPONSE) &&
+            (!RequiresTransactionCompAck(transaction) || transaction.Complete(COMPLETE_COMPACK)))
+            ReleaseResponse(transaction);
+    }
+
+    void Core::Impl::ReleaseBackendOperation(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.backendOperationOwned)
+            return;
+        flow.backendOperationOwned = false;
+        --Bank(transaction).backendOperations;
+    }
+
+    void Core::Impl::CompleteBackendOperation(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        flow.backendPhase = BackendPhase::Done;
+        ReleaseBackendOperation(transaction);
+    }
+
+    void Core::Impl::ReleaseRefill(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.baselineOperationOwned)
+            return;
+        flow.baselineOperationOwned = false;
+        --Bank(flow.baselineLine).refillOperations;
+    }
+
+    void Core::Impl::ReleaseRefill(Transaction& transaction, const LineKey& line)
+    {
+        if (flows.at(transaction.handle).baselineLine == line)
+            ReleaseRefill(transaction);
+    }
+
+    size_t Core::Impl::ClassForQos(uint8_t qos) const noexcept
+    {
+        const auto& classes = options.structure.classes;
+        for (size_t index = 0; index < classes.qosMinimum.size(); ++index)
+            if (qos >= classes.qosMinimum[index] && qos <= classes.qosMaximum[index])
+                return index;
+        return classes.qosMinimum.size();
+    }
+
+    size_t Core::Impl::RetryTier(size_t bank, size_t classId) const noexcept
+    {
+        const auto& classes = options.structure.classes;
+        const size_t occupancy = banks[bank].activeClasses[classId] + banks[bank].retryReservations[classId];
+        if (occupancy < classes.dedicated[classId])
+            return 0;
+        if (occupancy < classes.contendedMinimum[classId])
+            return 1;
+        return 2;
+    }
+
+    bool Core::Impl::RetryCreditEligible(const RetryRecord& retry) const
+    {
+        if (!retry.ackPopped ||
+            (options.structure.classes.enabled ? retry.creditReserved || retry.creditReturned : retry.grantQueued) ||
+            OutstandingRetryCredits(retry.request.source, retry.request.pCrdType) >=
+                RetryOriginals(retry.request.source, retry.request.pCrdType))
+            return false;
+        return !options.structure.classes.enabled ||
+            banks[retry.bank].activeClasses[retry.classId] + banks[retry.bank].retryReservations[retry.classId] <
+                options.structure.classes.maximum[retry.classId];
+    }
+
+    bool Core::Impl::ClassAdmissionAvailable(const Request& request, size_t classId, bool resend) const
+    {
+        if (!OriginalAdmissionAvailable(request.Line(), resend))
+            return false;
+        if (!options.structure.classes.enabled)
+            return true;
+        if (classId >= options.structure.classes.maximum.size())
+            return false;
+
+        const auto& classes = options.structure.classes;
+        const BankState& bank = Bank(request.Line());
+        const size_t additional = resend ? 0 : 1;
+        if (bank.activeClasses[classId] + bank.retryReservations[classId] + additional >
+            classes.maximum[classId])
+            return false;
+        if (resend)
+            return true;
+
+        size_t dedicatedOthers = 0;
+        for (size_t index = 0; index < classes.dedicated.size(); ++index)
+            if (index != classId)
+                dedicatedOthers += classes.dedicated[index];
+        return tracker.Size() + TotalRetryReservations() + additional + dedicatedOthers <=
+            OrdinaryTransactionLimit();
+    }
+
+    bool Core::Impl::RetryAdmissionAvailable(const Request& request, size_t classId) const
+    {
+        (void)request;
+        return !options.structure.classes.enabled || classId < options.structure.classes.maximum.size();
+    }
+
+    size_t Core::Impl::RetrySourceCount() const noexcept
+    {
+        size_t sources = 0;
+        NodeId previous = 0;
+        bool havePrevious = false;
+        for (const auto& [key, count] : retrySources)
+        {
+            (void)count;
+            if (havePrevious && key.first == previous)
+                continue;
+            previous = key.first;
+            havePrevious = true;
+            ++sources;
+        }
+        return sources;
+    }
+
+    bool Core::Impl::RetrySourceAvailable(NodeId source) const noexcept
+    {
+        if (!options.structure.retrySourceLimit)
+            return true;
+        for (const auto& [key, count] : retrySources)
+        {
+            (void)count;
+            if (key.first == source)
+                return true;
+        }
+        return RetrySourceCount() < options.structure.retrySourceLimit;
+    }
+
+    void Core::Impl::AcquireRetrySource(const Request& request)
+    {
+        const size_t bank = BankIndex(request.Line());
+        const size_t classId = options.structure.classes.enabled ? ClassForQos(request.qos) : request.pCrdType;
+        ++retrySources[{ request.source, { bank, classId } }];
+    }
+
+    void Core::Impl::ReleaseRetrySource(NodeId source, size_t bank, size_t classId)
+    {
+        const auto key = std::make_pair(source, std::make_pair(bank, classId));
+        auto it = retrySources.find(key);
+        if (it == retrySources.end())
+            return;
+        if (it->second > 1)
+            --it->second;
+        else
+            retrySources.erase(it);
+    }
+
+    void Core::Impl::ReleaseClass(Transaction& transaction)
+    {
+        FlowState& flow = flows.at(transaction.handle);
+        if (!flow.classOwned)
+            return;
+        --Bank(transaction).activeClasses[flow.assignedClass];
+        flow.classOwned = false;
+    }
+
+    size_t Core::Impl::BankRetryReservations(size_t bank) const noexcept
+    {
+        size_t total = 0;
+        for (size_t count : banks[bank].retryReservations)
+            total += count;
+        return total;
+    }
+
+    size_t Core::Impl::TotalRetryReservations() const noexcept
+    {
+        size_t total = 0;
+        for (const BankState& bank : banks)
+            for (size_t count : bank.retryReservations)
+                total += count;
+        return total;
     }
 
     void Core::Impl::Reset()
@@ -24,6 +315,9 @@ namespace CHI::Lunatic {
         rxreq.clear();
         rxrsp.clear();
         rxdat.clear();
+        rxreqTimes.clear();
+        rxrspTimes.clear();
+        rxdatTimes.clear();
         txreq.clear();
         txrsp.clear();
         txdat.clear();
@@ -31,21 +325,35 @@ namespace CHI::Lunatic {
         retries.clear();
         availableCredits.clear();
         cancellationCredits.clear();
+        retrySources.clear();
         backendRetries.clear();
         backendCredits.clear();
         completedBackendReads.clear();
         completedBackendReadOrder.clear();
         flows.clear();
+        providerNext.clear();
         errors.clear();
         tracker.Clear();
         snoopIdAllocator.Clear();
-        hazards.Clear();
         ordering.Clear();
-        directory.Clear();
-        snoopFilter.Clear();
+        for (BankState& bank : banks)
+        {
+            bank.hazards.Clear();
+            bank.directory.Clear();
+            bank.snoopFilter.Clear();
+            bank.pipeline.Reset();
+            bank.activeOriginals = 0;
+            bank.requestBufferOccupants = 0;
+            bank.activeSnoopWaves = 0;
+            bank.outgoingSnoopQueue = 0;
+            bank.responseUnits = 0;
+            bank.backendOperations = 0;
+            bank.refillOperations = 0;
+            bank.activeClasses.fill(0);
+            bank.retryReservations.fill(0);
+        }
         memory.Clear();
         axi.Reset();
-        pipeline.Reset();
         random.Reset(options.seed);
         pmu.Reset();
         time = 0;
@@ -53,6 +361,12 @@ namespace CHI::Lunatic {
         nextSerial = 0;
         nextBackendRetry = 0;
         nextRetry = 0;
+        nextBackendSelection = 0;
+        retryRounds = {};
+        backendRetryRounds = {};
+        requestClassRound = {};
+        responseCategoryRound = {};
+        responseClassRounds = {};
 
         Event event;
         event.kind = EventKind::Reset;
@@ -78,24 +392,25 @@ namespace CHI::Lunatic {
         AdvanceTransactions();
         AdvanceBackendRetries();
 
-        for (const auto& [index, retry] : retries)
-            QueueRetryCredit(index);
+        QueueRetryCredits();
 
         RetireFinished();
     }
 
     void Core::Impl::ProcessResponses()
     {
-        while (!rxrsp.empty())
+        while (!rxrsp.empty() && rxrspTimes.front() <= time)
         {
             Response flit = std::move(rxrsp.front());
             rxrsp.pop_front();
+            rxrspTimes.pop_front();
             ProcessRSP(flit);
         }
-        while (!rxdat.empty())
+        while (!rxdat.empty() && rxdatTimes.front() <= time)
         {
             Data flit = std::move(rxdat.front());
             rxdat.pop_front();
+            rxdatTimes.pop_front();
             ProcessDAT(flit);
         }
     }
@@ -168,6 +483,7 @@ namespace CHI::Lunatic {
             }
             transaction->Mark(COMPLETE_COMPACK);
             ordering.ReleaseDMT(transaction->handle);
+            ReleaseResponseIfComplete(*transaction);
             if (orderedWrite)
             {
                 ordering.Release(transaction->handle);
@@ -325,12 +641,13 @@ namespace CHI::Lunatic {
 
     void Core::Impl::AdmitRequests()
     {
-        if (rxreq.empty())
+        if (rxreq.empty() || rxreqTimes.front() > time)
             return;
 
         if (rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PrefetchTgt)
         {
             rxreq.pop_front();
+            rxreqTimes.pop_front();
             return;
         }
 
@@ -343,7 +660,8 @@ namespace CHI::Lunatic {
 
         bool requestRetry = decision.IsRetryRequested();
         if (requestRetry && (!options.retryEnabled || !rxreq.front().allowRetry ||
-            rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PCrdReturn))
+            rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PCrdReturn ||
+            rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PrefetchTgt))
         {
             Error(INVALID_TRANSACTION, "requester retry decision is not legal for this request");
             requestRetry = false;
@@ -353,6 +671,7 @@ namespace CHI::Lunatic {
         {
             Request request = std::move(rxreq.front());
             rxreq.pop_front();
+            rxreqTimes.pop_front();
             if (!IsPCrdReturnValid(request))
             {
                 Deny(request, "invalid PCrdReturn fields");
@@ -363,24 +682,43 @@ namespace CHI::Lunatic {
             return;
         }
 
-        if (!rxreq.front().allowRetry)
+        if (!rxreq.front().allowRetry || rxreq.front().opcode == CHI::Eb::Opcodes::REQ::PrefetchTgt)
         {
-            if (tracker.Size() >= tracker.Limit() || !ordering.CanAdmit(rxreq.front()))
+            size_t classId = options.structure.classes.enabled ? ClassForQos(rxreq.front().qos) : 0;
+            bool resend = false;
+            const auto credit = availableCredits.find({ rxreq.front().source, rxreq.front().pCrdType });
+            if (credit != availableCredits.end() && credit->second != 0)
+            {
+                const auto original = SelectRetryIf([&](const auto& iter) {
+                    return RetryRequestCompatible(iter->second.request, rxreq.front(), nodeId);
+                });
+                if (original != retries.end())
+                {
+                    classId = original->second.classId;
+                    resend = true;
+                }
+            }
+            if (!ClassAdmissionAvailable(rxreq.front(), classId, resend) || !ordering.CanAdmit(rxreq.front()))
             {
                 pmu.RecordStall(WaitReason::InputQueue);
                 return;
             }
             Request request = std::move(rxreq.front());
             rxreq.pop_front();
-            ConsumeRetryRequest(request, false);
-            AdmitRequest(request);
+            rxreqTimes.pop_front();
+            if (resend)
+                ConsumeRetryRequest(request, false);
+            AdmitRequest(request, classId);
             return;
         }
 
-        const bool reservationAvailable = RetryReservationAvailable();
-        if (!reservationAvailable)
+        const size_t classId = options.structure.classes.enabled ? ClassForQos(rxreq.front().qos) :
+            rxreq.front().pCrdType;
+        const bool admissionAvailable = RetryReservationAvailable() &&
+            ClassAdmissionAvailable(rxreq.front(), classId, false);
+        if (!admissionAvailable)
             pmu.RecordStall(WaitReason::Tracker);
-        if (requestRetry || !reservationAvailable)
+        if (requestRetry || !admissionAvailable)
         {
             Request& request = rxreq.front();
             if (!options.retryEnabled || !request.allowRetry)
@@ -391,22 +729,36 @@ namespace CHI::Lunatic {
                 return;
             }
 
+            if (!RetryAdmissionAvailable(request, classId) || !RetrySourceAvailable(request.source))
+            {
+                pmu.RecordStall(WaitReason::Tracker);
+                return;
+            }
+            AcquireRetrySource(request);
             const size_t index = nextRetry++;
-            RetryRecord record{ request, false, false };
+            const Time age = nextAge++;
+            RetryRecord record{ request, BankIndex(request.Line()), classId, age, false, false, false };
+            record.request.pCrdType = classId;
             Response response;
             response.source = nodeId;
             response.target = request.source;
             response.txnId = request.txnId;
             response.opcode = CHI::Eb::Opcodes::RSP::RetryAck;
-            response.pCrdType = request.pCrdType;
+            response.pCrdType = classId;
             response.qos = request.qos;
             response.traceTag = request.traceTag;
             retries.emplace(index, record);
             rxreq.pop_front();
-            Queue(txrsp, response, INVALID_TRANSACTION, nextAge++, false, false, index);
+            rxreqTimes.pop_front();
+            Queue(txrsp, response, INVALID_TRANSACTION, age, false, false, index);
             return;
         }
 
+        if (!ClassAdmissionAvailable(rxreq.front(), classId, false))
+        {
+            pmu.RecordStall(WaitReason::Tracker);
+            return;
+        }
         if (!ordering.CanAdmit(rxreq.front()))
         {
             pmu.RecordStall(WaitReason::InputQueue);
@@ -415,11 +767,19 @@ namespace CHI::Lunatic {
 
         Request request = std::move(rxreq.front());
         rxreq.pop_front();
-        AdmitRequest(request);
+        rxreqTimes.pop_front();
+        AdmitRequest(request, classId);
     }
 
-    void Core::Impl::AdmitRequest(const Request& request)
+    void Core::Impl::AdmitRequest(const Request& request, size_t classId)
     {
+        if (classId == std::numeric_limits<size_t>::max())
+            classId = ClassForQos(request.qos);
+        if (options.structure.classes.enabled && classId >= options.structure.classes.maximum.size())
+        {
+            Deny(request, "request QoS has no assigned class");
+            return;
+        }
         const Time age = nextAge++;
         Transaction* transaction = tracker.Allocate(request, age);
         if (!transaction)
@@ -428,14 +788,22 @@ namespace CHI::Lunatic {
             return;
         }
         ++pmu.admittedTransactions;
+        BankState& bank = Bank(*transaction);
+        ++bank.activeOriginals;
+        ++bank.requestBufferOccupants;
 
         if (!ordering.Add(*transaction))
         {
-            Error(transaction->handle, "duplicate requester ordering gate");
-            transaction->canceled = true;
-            transaction->phase = Phase::Commit;
+            const TransactionHandle handle = transaction->handle;
+            --bank.activeOriginals;
+            --bank.requestBufferOccupants;
+            tracker.Retire(handle);
+            Error(handle, "duplicate requester ordering gate");
             return;
         }
+
+        if (options.structure.classes.enabled)
+            ++bank.activeClasses[classId];
 
         const auto requestClass = ClassifyRequest(request.opcode);
         const bool separatedEligible = requestClass == RequestClass::NonCoherentRead ||
@@ -443,6 +811,9 @@ namespace CHI::Lunatic {
         const bool separatedLegal = separatedEligible &&
             (request.order == 0 || RequiresCompAck(request));
         FlowState flow;
+        flow.requestBufferOwned = true;
+        flow.assignedClass = options.structure.classes.enabled ? classId : 0;
+        flow.classOwned = options.structure.classes.enabled;
         flow.separatedResponse = separatedLegal && options.separatedReadResponse;
         flow.separatedBackendRead = separatedLegal && options.separatedBackendRead;
         flow.dmtActive = options.dmtEnabled && options.backend == BackendKind::CHI && separatedLegal &&
@@ -456,10 +827,15 @@ namespace CHI::Lunatic {
             !request.expCompAck && !IsOrderedWriteObservation(request);
         flow.directPersistActive = options.directPersistEnabled && options.subordinatePersistSepEnabled &&
             options.backend == BackendKind::CHI && request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep;
-        flow.atomic.localExecution = requestClass == RequestClass::Atomic &&
-            ClassifyAtomicPath(request, options) == AtomicPath::Local;
+        const AtomicPath atomicPath = requestClass == RequestClass::Atomic
+            ? ClassifyAtomicPath(request, options) : AtomicPath::Error;
+        flow.atomic.localExecution = atomicPath != AtomicPath::Error &&
+            (atomicPath == AtomicPath::Local ||
+             (options.strategy.atomicExecution == AtomicExecutionKind::Local &&
+              (options.backend != BackendKind::CHI ||
+               !CHI::Eb::MemAttrs::ExtractDevice(request.memAttr))));
         flows.emplace(transaction->handle, std::move(flow));
-        if (!hazards.Add(transaction->handle, transaction->request.Line(), transaction->actionAge))
+        if (!Bank(*transaction).hazards.Add(transaction->handle, transaction->request.Line(), transaction->actionAge))
         {
             Error(transaction->handle, "duplicate requester hazard gate");
             transaction->canceled = true;
@@ -467,51 +843,20 @@ namespace CHI::Lunatic {
             transaction->readyTime = time;
             return;
         }
-        transaction->readyTime = pipeline.SaturatingAdd(time, 1);
+        transaction->readyTime = ScheduleResult(*transaction, SchedulePoint::RequestBuffer,
+            Bank(*transaction).pipeline.SaturatingAdd(time, 1));
         transaction->phase = Phase::Receive;
     }
 
     void Core::Impl::AdvanceTransactions()
     {
         std::vector<TransactionHandle> handles = tracker.Handles();
-        std::sort(handles.begin(), handles.end(), [&](TransactionHandle a, TransactionHandle b) {
-            const Transaction* ta = tracker.Find(a);
-            const Transaction* tb = tracker.Find(b);
-            if (ta->actionAge != tb->actionAge)
-                return ta->actionAge < tb->actionAge;
-            return a < b;
-        });
-
-        if (options.randomizeArbitration && handles.size() > 1)
-        {
-            struct WorkGroup {
-                LineKey                       line;
-                std::vector<TransactionHandle> handles;
-            };
-            std::vector<WorkGroup> groups;
-            std::map<LineKey, size_t> groupByLine;
-            for (TransactionHandle handle : handles)
-            {
-                const Transaction* transaction = tracker.Find(handle);
-                if (!transaction || !pipeline.Eligible(*transaction, time))
-                    continue;
-                const LineKey line = transaction->request.Line();
-                auto [it, inserted] = groupByLine.emplace(line, groups.size());
-                if (inserted)
-                    groups.push_back({ line, {} });
-                groups[it->second].handles.push_back(handle);
-            }
-            for (size_t size = groups.size(); size > 1; --size)
-                std::swap(groups[size - 1], groups[random.Bounded(size - 1)]);
-            handles.clear();
-            for (const WorkGroup& group : groups)
-                handles.insert(handles.end(), group.handles.begin(), group.handles.end());
-        }
+        OrderTransactions(handles);
 
         for (TransactionHandle handle : handles)
         {
             Transaction* transaction = tracker.Find(handle);
-            if (!transaction || !pipeline.Eligible(*transaction, time))
+            if (!transaction || !Bank(*transaction).pipeline.Eligible(*transaction, time))
                 continue;
 
             FlowState& flow = flows.at(handle);
@@ -522,10 +867,10 @@ namespace CHI::Lunatic {
             }
             if (!flow.timingApplied)
             {
-                Time delay = pipeline.PhaseDelay(transaction->phase);
-                if (options.randomDelayLimit && pipeline.DelayablePhase(transaction->phase))
-                    delay = pipeline.SaturatingAdd(delay, random.Bounded(options.randomDelayLimit));
-                transaction->readyTime = pipeline.SaturatingAdd(transaction->readyTime, delay);
+                Time delay = Bank(*transaction).pipeline.PhaseDelay(transaction->phase);
+                if (options.randomDelayLimit && Bank(*transaction).pipeline.DelayablePhase(transaction->phase))
+                    delay = Bank(*transaction).pipeline.SaturatingAdd(delay, random.Bounded(options.randomDelayLimit));
+                transaction->readyTime = Bank(*transaction).pipeline.SaturatingAdd(transaction->readyTime, delay);
                 flow.timingApplied = true;
             }
 
@@ -542,27 +887,30 @@ namespace CHI::Lunatic {
                     pmu.RecordStall(WaitReason::Decision);
                     continue;
                 }
-                transaction->readyTime = pipeline.SaturatingAdd(
+                transaction->readyTime = Bank(*transaction).pipeline.SaturatingAdd(
                     transaction->readyTime, decision.GetAdditionalDelay());
                 flow.eventApplied = true;
             }
-            if (pipeline.Eligible(*transaction, time))
+            if (Bank(*transaction).pipeline.Eligible(*transaction, time))
                 Advance(*transaction);
         }
     }
 
-    Time Core::Impl::ScheduleTag()
+    Time Core::Impl::ScheduleTag(Transaction& transaction, Time earliest)
     {
-        if (pipeline.TagBusy(time))
+        BankState& bank = Bank(transaction);
+        if (bank.pipeline.TagBusy(earliest))
             pmu.RecordStall(WaitReason::TagPort);
-        return pipeline.ScheduleTag(time);
+        return ScheduleResult(transaction, SchedulePoint::LookupResult, bank.pipeline.ScheduleTag(earliest));
     }
 
-    Time Core::Impl::ScheduleData()
+    Time Core::Impl::ScheduleData(Transaction& transaction, Time latency)
     {
-        if (pipeline.DataBusy(time))
+        BankState& bank = Bank(transaction);
+        if (bank.pipeline.DataBusy(time))
             pmu.RecordStall(WaitReason::DataPort);
-        return pipeline.ScheduleData(time);
+        flows.at(transaction.handle).scheduleMarks.erase(SchedulePoint::DataReturn);
+        return ScheduleResult(transaction, SchedulePoint::DataReturn, bank.pipeline.ScheduleData(time, latency));
     }
 
     void Core::Impl::Advance(Transaction& transaction)
@@ -571,7 +919,7 @@ namespace CHI::Lunatic {
         switch (transaction.phase)
         {
             case Phase::Receive:
-                pipeline.Advance(transaction, Phase::Decode, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Decode, time);
                 return;
             case Phase::Decode:
             {
@@ -620,7 +968,7 @@ namespace CHI::Lunatic {
                     CompleteErrorTransaction(transaction);
                     return;
                 }
-                pipeline.Advance(transaction, Phase::Admit, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Admit, time);
                 return;
             }
             case Phase::Admit:
@@ -659,25 +1007,34 @@ namespace CHI::Lunatic {
                     return;
                 }
                 transaction.phase = Phase::Hazard;
-                transaction.readyTime = time;
+                transaction.readyTime = ScheduleResult(transaction, SchedulePoint::Allocation, time);
                 return;
             }
             case Phase::Hazard:
-                if (!hazards.IsHead(transaction.handle, transaction.request.Line()) ||
-                    (flow.victimLinked && !hazards.IsHead(transaction.handle, flow.victimLine)))
+            {
+                if (!Bank(transaction).hazards.IsHead(transaction.handle, transaction.request.Line()) ||
+                    (flow.victimLinked && !Bank(flow.victimLine).hazards.IsHead(transaction.handle, flow.victimLine)))
                 {
                     transaction.wait = WaitReason::SameLine;
                     transaction.readyTime = time;
                     pmu.RecordStall(WaitReason::SameLine);
                     return;
                 }
+                Time earliest = time;
+                if (transaction.wait == WaitReason::SameLine)
+                {
+                    flow.scheduleMarks.erase(SchedulePoint::HazardRelease);
+                    earliest = ScheduleResult(transaction, SchedulePoint::HazardRelease, time);
+                }
                 transaction.wait = WaitReason::None;
                 transaction.phase = Phase::Lookup;
-                transaction.readyTime = ScheduleTag();
+                transaction.readyTime = ScheduleTag(transaction, earliest);
+                ReleaseRequestBuffer(transaction);
                 return;
+            }
             case Phase::Lookup:
             {
-                const HomeLine* home = directory.Find(transaction.request.Line());
+                const HomeLine* home = Bank(transaction).directory.Find(transaction.request.Line());
                 transaction.homeHit = home && home->valid;
                 flow.validBytes.fill(1);
                 if (transaction.homeHit)
@@ -686,6 +1043,9 @@ namespace CHI::Lunatic {
                     CopyMetadata(transaction, *home, options);
                     flow.homeDirty = home->dirty;
                     flow.validBytes = home->validBytes;
+                    if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique ||
+                        transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty)
+                        Bank(transaction).directory.Access(transaction.request.Line());
                 }
                 else if (IsReadRequest(transaction.request.opcode) || IsCMORequest(transaction.request.opcode))
                 {
@@ -693,10 +1053,10 @@ namespace CHI::Lunatic {
                     transaction.data = image.data;
                     CopyMetadata(transaction, image, options);
                 }
-                const CacheState requesterState = snoopFilter.State(transaction.request.Line(), transaction.request.source);
+                const CacheState requesterState = Bank(transaction).snoopFilter.State(transaction.request.Line(), transaction.request.source);
                 flow.requesterWasValid = IsValid(requesterState);
                 flow.requesterWasDirty = IsDirty(requesterState);
-                pipeline.Advance(transaction, Phase::Resolve, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Resolve, time);
                 return;
             }
             case Phase::Resolve:
@@ -721,7 +1081,7 @@ namespace CHI::Lunatic {
                 if (options.backend == BackendKind::Internal && transaction.memoryRequired)
                     CompleteMemoryRead(transaction);
                 else if (flow.backendPhase == BackendPhase::Done)
-                    pipeline.Advance(transaction, Phase::Action, time);
+                    Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 else
                     pmu.RecordStall(WaitReason::Memory);
                 return;
@@ -733,7 +1093,7 @@ namespace CHI::Lunatic {
                 return;
             case Phase::WaitSnoop:
                 if (transaction.pendingSnoops.empty())
-                    pipeline.Advance(transaction, Phase::Action, time);
+                    Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
                 else
                     pmu.RecordStall(WaitReason::Snoop);
                 return;
@@ -770,9 +1130,13 @@ namespace CHI::Lunatic {
         std::vector<TransactionHandle> handles;
         for (TransactionHandle handle : tracker.Handles())
         {
-            const Transaction* transaction = tracker.Find(handle);
-            if (transaction->phase == Phase::Commit && transaction->readyTime <= time &&
-                !RequiresBackendReadReceipt(flows.at(handle)))
+            Transaction* transaction = tracker.Find(handle);
+            const FlowState& flow = flows.at(handle);
+            const bool canceledBackendPending = transaction->canceled &&
+                (flow.backendOperationOwned || backendRetries.contains(handle));
+            if (transaction->phase == Phase::Commit && !RequiresBackendReadReceipt(flow) &&
+                !canceledBackendPending && ScheduleTransition(*transaction, SchedulePoint::CommitSchedule) &&
+                transaction->readyTime <= time)
                 handles.push_back(handle);
         }
         for (TransactionHandle handle : handles)
@@ -801,9 +1165,16 @@ namespace CHI::Lunatic {
         }
         ordering.Release(handle);
         ordering.ReleaseDMT(handle);
-        hazards.Remove(handle, transaction->request.Line());
+        ReleaseRequestBuffer(*transaction);
+        ReleaseSnoopWave(*transaction);
+        ReleaseOriginal(*transaction);
+        ReleaseClass(*transaction);
+        ReleaseResponse(*transaction);
+        ReleaseBackendOperation(*transaction);
+        ReleaseRefill(*transaction);
+        Bank(transaction->request.Line()).hazards.Remove(handle, transaction->request.Line());
         if (flow.victimLinked)
-            hazards.Remove(handle, flow.victimLine);
+            Bank(flow.victimLine).hazards.Remove(handle, flow.victimLine);
         ++pmu.retiredTransactions;
 
         Event event;
@@ -842,9 +1213,16 @@ namespace CHI::Lunatic {
         if (!transaction)
             return;
         FlowState& flow = flows.at(transaction->handle);
+        flow.backendRequest = pending.flit;
+        if (ClassifyRequest(transaction->request.opcode) == RequestClass::Prefetch)
+        {
+            CompleteBackendOperation(*transaction);
+            transaction->phase = Phase::Commit;
+            transaction->readyTime = time;
+            return;
+        }
         if (flow.backendPhase == BackendPhase::WaitRequestEmission)
         {
-            flow.backendRequest = pending.flit;
             flow.backendRetryAckReceived = false;
             flow.backendResponderKnown = false;
             flow.backendDBIDSource = 0;
@@ -959,8 +1337,9 @@ namespace CHI::Lunatic {
             (void)tracker.ReleaseRequestId(transaction->handle);
         const FlowState& responseFlow = flows.at(transaction->handle);
         const bool persistenceComplete = requestClass == RequestClass::Persistence &&
-            (transaction->request.opcode != CHI::Eb::Opcodes::REQ::CleanSharedPersistSep ||
-             (!responseFlow.separatedPersistResponse && !responseFlow.directPersistActive));
+            !responseFlow.directPersistActive &&
+            (pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompPersist ||
+             transaction->request.opcode != CHI::Eb::Opcodes::REQ::CleanSharedPersistSep);
         const bool datalessResponse = requestClass == RequestClass::MakeUnique ||
             requestClass == RequestClass::CMO || requestClass == RequestClass::CleanUnique ||
             requestClass == RequestClass::Evict ||
@@ -969,15 +1348,13 @@ namespace CHI::Lunatic {
         const bool separatedStashComplete = requestClass == RequestClass::Stash &&
             IsSeparatedStashRequest(transaction->request.opcode) &&
             responseFlow.compEmitted && responseFlow.stashDoneEmitted;
-        if ((datalessResponse && responseFlow.compEmitted) || separatedStashComplete)
-            (void)tracker.ReleaseRequestId(transaction->handle);
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Persist)
             flows.at(transaction->handle).persistEmitted = true;
         const bool separatedPersistenceComplete = requestClass == RequestClass::Persistence &&
             transaction->request.opcode == CHI::Eb::Opcodes::REQ::CleanSharedPersistSep &&
-            responseFlow.separatedPersistResponse && !responseFlow.directPersistActive &&
-            responseFlow.compEmitted && responseFlow.persistEmitted;
-        if (separatedPersistenceComplete)
+            !responseFlow.directPersistActive && responseFlow.compEmitted && responseFlow.persistEmitted;
+        if ((datalessResponse && responseFlow.compEmitted) || separatedStashComplete ||
+            separatedPersistenceComplete)
             (void)tracker.ReleaseRequestId(transaction->handle);
         if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::Comp ||
             pending.flit.opcode == CHI::Eb::Opcodes::RSP::CompPersist ||
@@ -1003,7 +1380,7 @@ namespace CHI::Lunatic {
                     const bool complete = store ? flow.backendCompReceived : flow.atomic.backendResultReceived;
                     if (complete)
                     {
-                        flow.backendPhase = BackendPhase::Done;
+                        CompleteBackendOperation(*transaction);
                         tracker.UnbindMemory(options.subordinateId, transaction->handle);
                         transaction->phase = Phase::Action;
                         transaction->readyTime = time;
@@ -1017,7 +1394,7 @@ namespace CHI::Lunatic {
                 }
                 if (flow.backendCompReceived)
                 {
-                    flow.backendPhase = BackendPhase::Done;
+                    CompleteBackendOperation(*transaction);
                     tracker.UnbindMemory(options.subordinateId, transaction->handle);
                     transaction->phase = Phase::Action;
                     transaction->readyTime = time;
@@ -1052,6 +1429,7 @@ namespace CHI::Lunatic {
 
     void Core::Impl::OnEmitted(const Pending<Snoop>& pending)
     {
+        --Bank(pending.flit.Line()).outgoingSnoopQueue;
         Transaction* transaction = tracker.Find(pending.transaction);
         if (!transaction)
             return;
@@ -1109,10 +1487,20 @@ namespace CHI::Lunatic {
 
     bool Core::Impl::HasInflight() const noexcept
     {
-        return !rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
-               !txdat.empty() || !txsnp.empty() || !retries.empty() || !backendRetries.empty() ||
-               !backendCredits.empty() || !tracker.Empty() || !hazards.Empty() || !ordering.Empty() ||
-               snoopIdAllocator.Size() != 0 || (options.backend == BackendKind::AXI && axi.HasInflight());
+        if (!rxreq.empty() || !rxrsp.empty() || !rxdat.empty() || !txreq.empty() || !txrsp.empty() ||
+            !txdat.empty() || !txsnp.empty() || !retries.empty() || !backendRetries.empty() ||
+            !backendCredits.empty() || !availableCredits.empty() || !cancellationCredits.empty() ||
+            !retrySources.empty() || !tracker.Empty() || !ordering.Empty() ||
+            snoopIdAllocator.Size() != 0 || (options.backend == BackendKind::AXI && axi.HasInflight()))
+            return true;
+        for (const BankState& bank : banks)
+            if (!bank.hazards.Empty() || bank.activeOriginals || bank.requestBufferOccupants ||
+                bank.activeSnoopWaves || bank.outgoingSnoopQueue || bank.responseUnits ||
+                bank.backendOperations || bank.refillOperations ||
+                std::any_of(bank.activeClasses.begin(), bank.activeClasses.end(), [](size_t count) { return count != 0; }) ||
+                std::any_of(bank.retryReservations.begin(), bank.retryReservations.end(), [](size_t count) { return count != 0; }))
+                return true;
+        return false;
     }
 
     bool Core::Impl::HasSnoopActivity(NodeId target) const noexcept
@@ -1133,37 +1521,230 @@ namespace CHI::Lunatic {
 
     bool Core::Impl::ValidateInvariants() const noexcept
     {
-        if (!tracker.Validate() || !hazards.Validate() || !ordering.Validate())
+        const size_t occupancy = tracker.Size();
+        if (!tracker.Validate() || !ordering.Validate())
             return false;
+        if (tracker.Empty() && snoopIdAllocator.Size() != 0)
+            return false;
+
+        size_t internalTransactions = 0;
+        std::vector<size_t> expectedOriginals(banks.size(), 0);
+        std::vector<size_t> expectedInternal(banks.size(), 0);
+        std::vector<size_t> expectedBuffers(banks.size(), 0);
+        std::vector<size_t> expectedWaves(banks.size(), 0);
+        std::vector<size_t> expectedOutgoing(banks.size(), 0);
+        std::vector<size_t> expectedResponses(banks.size(), 0);
+        std::vector<size_t> expectedBackend(banks.size(), 0);
+        std::vector<size_t> expectedRefills(banks.size(), 0);
+        std::vector<std::array<size_t, 4>> expectedClasses(banks.size());
+        std::vector<std::array<size_t, 4>> expectedRetryReservations(banks.size());
+        for (TransactionHandle handle : tracker.Handles())
+        {
+            const Transaction* transaction = tracker.Find(handle);
+            if (!transaction)
+                return false;
+            ++expectedOriginals[BankIndex(transaction->request.Line())];
+            const FlowState& flow = flows.at(handle);
+            const bool internal = flow.dataPullParent != INVALID_TRANSACTION;
+            if (internal)
+            {
+                ++internalTransactions;
+                ++expectedInternal[BankIndex(transaction->request.Line())];
+            }
+            if (flow.requestBufferOwned)
+                ++expectedBuffers[BankIndex(transaction->request.Line())];
+            if (flow.snoopWaveOwned)
+            {
+                const size_t owner = BankIndex(flow.snoopLine);
+                if (owner >= banks.size())
+                    return false;
+                ++expectedWaves[owner];
+            }
+            if (flow.responseOwned)
+                ++expectedResponses[BankIndex(transaction->request.Line())];
+            if (flow.backendOperationOwned)
+                ++expectedBackend[BankIndex(transaction->request.Line())];
+            if (flow.baselineOperationOwned)
+                ++expectedRefills[BankIndex(flow.baselineLine)];
+            if (options.structure.classes.enabled && !internal)
+            {
+                if (!flow.classOwned || flow.assignedClass >= expectedClasses[0].size() ||
+                    (flow.assignedClass != ClassForQos(transaction->request.qos) &&
+                     flow.assignedClass != transaction->request.pCrdType))
+                    return false;
+                ++expectedClasses[BankIndex(transaction->request.Line())][flow.assignedClass];
+            }
+            else if (flow.classOwned)
+                return false;
+        }
+        const size_t capacity = options.structure.classes.enabled || internalTransactions ?
+            tracker.Limit() : OrdinaryTransactionLimit();
+        if (occupancy > capacity)
+            return false;
+        for (const auto& pending : txsnp)
+            ++expectedOutgoing[BankIndex(pending.flit.Line())];
+
+        std::map<std::pair<NodeId, uint8_t>, size_t> sourceReservations;
+        std::map<std::pair<NodeId, uint8_t>, size_t> requiredReservations;
+        std::map<std::pair<NodeId, uint8_t>, size_t> reservedCredits;
+        if (options.structure.retrySourceLimit && RetrySourceCount() > options.structure.retrySourceLimit)
+            return false;
+        for (const auto& [key, count] : retrySources)
+        {
+            if (!count || key.second.first >= banks.size() ||
+                (options.structure.classes.enabled && key.second.second >= expectedRetryReservations[0].size()))
+                return false;
+            sourceReservations[{ key.first, key.second.second }] += count;
+        }
+        for (const auto& [index, retry] : retries)
+        {
+            if (retry.bank >= banks.size() ||
+                (options.structure.classes.enabled && retry.classId >= expectedRetryReservations[0].size()) ||
+                (options.structure.classes.enabled && retry.grantQueued && !retry.creditReserved))
+                return false;
+            ++requiredReservations[{ retry.request.source, retry.request.pCrdType }];
+            if (!options.structure.classes.enabled || !retry.creditReserved)
+                continue;
+            ++expectedRetryReservations[retry.bank][retry.classId];
+            ++reservedCredits[{ retry.request.source, retry.request.pCrdType }];
+            bool queued = false;
+            for (const auto& pending : txrsp)
+                queued = queued || (pending.retry == index &&
+                    pending.flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant);
+            if (retry.grantQueued != queued)
+                return false;
+        }
+        for (const auto& [key, count] : cancellationCredits)
+        {
+            auto original = requiredReservations.find(key);
+            if (original == requiredReservations.end() || count > original->second)
+                return false;
+            original->second -= count;
+        }
+        for (const auto& [key, count] : sourceReservations)
+        {
+            const auto required = requiredReservations.find(key);
+            if (required == requiredReservations.end() || count != required->second)
+                return false;
+        }
+        for (const auto& [key, count] : reservedCredits)
+            if (OutstandingRetryCredits(key.first, key.second) != count)
+                return false;
+        for (const auto& [key, count] : requiredReservations)
+        {
+            (void)count;
+            if (OutstandingRetryCredits(key.first, key.second) > RetryOriginals(key.first, key.second))
+                return false;
+        }
+        for (const auto& [key, count] : availableCredits)
+        {
+            (void)count;
+            if (OutstandingRetryCredits(key.first, key.second) > RetryOriginals(key.first, key.second))
+                return false;
+        }
+        for (const auto& pending : txrsp)
+            if (pending.flit.opcode == CHI::Eb::Opcodes::RSP::PCrdGrant &&
+                OutstandingRetryCredits(pending.flit.target, pending.flit.pCrdType) >
+                    RetryOriginals(pending.flit.target, pending.flit.pCrdType))
+                return false;
+
+        for (size_t owner = 0; owner < banks.size(); ++owner)
+        {
+            const BankState& bank = banks[owner];
+            if (bank.activeOriginals != expectedOriginals[owner] ||
+                bank.requestBufferOccupants != expectedBuffers[owner] ||
+                bank.activeSnoopWaves != expectedWaves[owner] ||
+                bank.outgoingSnoopQueue != expectedOutgoing[owner] ||
+                bank.responseUnits != expectedResponses[owner] ||
+                bank.backendOperations != expectedBackend[owner] ||
+                bank.refillOperations != expectedRefills[owner] ||
+                bank.activeClasses != expectedClasses[owner] ||
+                bank.retryReservations != expectedRetryReservations[owner])
+                return false;
+            const size_t ordinaryOriginals = expectedOriginals[owner] - expectedInternal[owner];
+            if (bankMap.Count() > 1 && ordinaryOriginals > tracker.Limit() / bankMap.Count())
+                return false;
+            if (options.structure.classes.enabled)
+                for (size_t classId = 0; classId < bank.activeClasses.size(); ++classId)
+                    if (bank.activeClasses[classId] + bank.retryReservations[classId] >
+                        options.structure.classes.maximum[classId])
+                        return false;
+            if (options.structure.requestBufferLimit &&
+                bank.requestBufferOccupants > options.structure.requestBufferLimit)
+                return false;
+            if (options.structure.snoopResourceLimit &&
+                bank.activeSnoopWaves > options.structure.snoopResourceLimit)
+                return false;
+            if (options.structure.outgoingSnoopQueueLimit &&
+                bank.outgoingSnoopQueue > options.structure.outgoingSnoopQueueLimit)
+                return false;
+            if (options.structure.responseResourceLimit &&
+                bank.responseUnits > options.structure.responseResourceLimit)
+                return false;
+            if (options.structure.memoryResourceLimit &&
+                bank.backendOperations > options.structure.memoryResourceLimit)
+                return false;
+            if (options.structure.refillResourceLimit &&
+                bank.refillOperations > options.structure.refillResourceLimit)
+                return false;
+        }
+
+        for (const BankState& bank : banks)
+        {
+            if (!bank.hazards.Validate())
+                return false;
+            const size_t owner = static_cast<size_t>(&bank - banks.data());
+            for (size_t set = 0; set < bank.directory.Sets(); ++set)
+            {
+                for (size_t way = 0; way < bank.directory.Ways(); ++way)
+                {
+                    const HomeLine& home = bank.directory.At(set, way);
+                    if (home.valid && BankIndex(home.key) != owner)
+                        return false;
+                }
+            }
+            for (size_t set = 0; set < bank.snoopFilter.Sets(); ++set)
+            {
+                for (size_t way = 0; way < bank.snoopFilter.Ways(); ++way)
+                {
+                    const SnoopFilterEntry& entry = bank.snoopFilter.At(set, way);
+                    if (entry.valid && BankIndex(entry.key) != owner)
+                        return false;
+                }
+            }
+        }
         if (!tracker.Empty())
             return true;
-        if (snoopIdAllocator.Size() != 0)
-            return false;
 
-        for (size_t set = 0; set < snoopFilter.Sets(); ++set)
+        for (const BankState& bank : banks)
         {
-            for (size_t way = 0; way < snoopFilter.Ways(); ++way)
+            for (size_t set = 0; set < bank.snoopFilter.Sets(); ++set)
             {
-                const SnoopFilterEntry& entry = snoopFilter.At(set, way);
-                if (!entry.valid)
-                    continue;
-                size_t validRequesters = 0;
-                size_t dirtyRequesters = 0;
-                for (const auto& [requester, state] : entry.requesters)
+                for (size_t way = 0; way < bank.snoopFilter.Ways(); ++way)
                 {
-                    validRequesters += IsValid(state) ? 1 : 0;
-                    dirtyRequesters += IsDirty(state) ? 1 : 0;
-                }
+                    const SnoopFilterEntry& entry = bank.snoopFilter.At(set, way);
+                    if (!entry.valid)
+                        continue;
+                    size_t validRequesters = 0;
+                    size_t dirtyRequesters = 0;
+                    for (const auto& [requester, state] : entry.requesters)
+                    {
+                        validRequesters += IsValid(state) ? 1 : 0;
+                        dirtyRequesters += IsDirty(state) ? 1 : 0;
+                    }
 
-                const HomeLine* home = directory.Find(entry.key);
-                if (options.policy == PolicyKind::Inclusive && validRequesters && (!home || !home->valid))
-                    return false;
-                if (options.policy == PolicyKind::Exclusive && validRequesters && home && home->valid)
-                    return false;
-                if (home && home->dirty && dirtyRequesters)
-                    return false;
-                if (dirtyRequesters > 1)
-                    return false;
+                    const HomeLine* home = Bank(entry.key).directory.Find(entry.key);
+                    if (options.policy == PolicyKind::Inclusive && validRequesters && (!home || !home->valid))
+                        return false;
+                    if (options.policy == PolicyKind::Exclusive &&
+                        options.strategy.allocationStrategy == AllocationStrategyKind::Policy &&
+                        validRequesters && home && home->valid)
+                        return false;
+                    if (home && home->dirty && dirtyRequesters)
+                        return false;
+                    if (dirtyRequesters > 1)
+                        return false;
+                }
             }
         }
         return true;

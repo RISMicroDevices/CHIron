@@ -1,5 +1,6 @@
 #include "chi_lunatic_core.hpp"
 
+#include <algorithm>
 #include <bit>
 
 namespace CHI::Lunatic {
@@ -49,12 +50,19 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         const bool awaitingWriteAcceptance = flow.backendPhase == BackendPhase::WaitDBID &&
             !flow.backendCompReceived && !flow.atomic.backendResultReceived;
-        if ((!transaction.memoryRequired && !awaitingWriteAcceptance) || !flow.backendRequest.allowRetry ||
-            backendRetries.contains(transaction.handle))
+        const bool canceledBackendWrite = transaction.canceled && flow.backendOperationOwned;
+        const bool pendingCmo = IsCMORequest(transaction.request.opcode) && flow.backendOperationOwned &&
+            !flow.backendCompReceived && !flow.backendPersistReceived;
+        if ((!transaction.memoryRequired && !awaitingWriteAcceptance && !canceledBackendWrite && !pendingCmo) ||
+            !flow.backendRequest.allowRetry || backendRetries.contains(transaction.handle))
             return false;
 
-        BackendRetryRecord record{ flow.backendRequest, transaction.handle, nextBackendRetry++, flit.pCrdType,
-                                   flit.source, 0, false };
+        BackendRetryRecord record{ flow.backendRequest, transaction.handle, nextBackendRetry++ };
+        record.bank = BankIndex(flow.backendRequest.Line());
+        record.classId = options.structure.classes.enabled ? ClassForQos(flow.backendRequest.qos)
+                                                           : flow.backendRequest.pCrdType;
+        record.retryAckPCrdType = flit.pCrdType;
+        record.retryAckSource = flit.source;
         backendRetries.emplace(transaction.handle, record);
         tracker.UnbindMemory(options.subordinateId, record.request.txnId);
         flow.backendPhase = BackendPhase::WaitRetry;
@@ -69,6 +77,8 @@ namespace CHI::Lunatic {
         flow.backendSeparatedPersistReceived = false;
         flow.persistSent = false;
         flow.persistEmitted = false;
+        flow.backendSeparatedPersistResponse = false;
+        flow.backendPersistFirst = false;
         flow.backendDataEmitted = false;
         flow.backendReadRespErrMask = 0;
         flow.backendReadResp = 0;
@@ -80,6 +90,8 @@ namespace CHI::Lunatic {
         flow.atomic.backendResultRespErr = 0;
         flow.atomic.backendDirtyCommitted = false;
         transaction.receivedBeats = 0;
+        transaction.responseRespErr = CHI::Eb::RespErrs::OK;
+        flow.backendBeatRespErr.clear();
         transaction.wait = WaitReason::Memory;
         transaction.phase = Phase::WaitMemory;
         transaction.readyTime = time;
@@ -94,34 +106,123 @@ namespace CHI::Lunatic {
 
     void Core::Impl::AdvanceBackendRetries()
     {
-        for (auto credit = backendCredits.begin(); credit != backendCredits.end();)
+        if (!options.structure.classes.enabled)
         {
-            while (credit->second)
+            for (auto credit = backendCredits.begin(); credit != backendCredits.end();)
             {
-                auto selected = backendRetries.end();
-                for (auto iter = backendRetries.begin(); iter != backendRetries.end(); ++iter)
+                while (credit->second)
                 {
-                    BackendRetryRecord& retry = iter->second;
-                    if (retry.creditReceived || retry.retryAckSource != credit->first.first ||
-                        retry.retryAckPCrdType != credit->first.second)
-                        continue;
-                    if (selected == backendRetries.end() || retry.serial > selected->second.serial)
-                        selected = iter;
+                    auto selected = backendRetries.end();
+                    for (auto iter = backendRetries.begin(); iter != backendRetries.end(); ++iter)
+                    {
+                        BackendRetryRecord& retry = iter->second;
+                        if (retry.creditReceived || retry.retryAckSource != credit->first.first ||
+                            retry.retryAckPCrdType != credit->first.second)
+                            continue;
+                        if (selected == backendRetries.end() ||
+                            (options.strategy.downstreamRetrySelection == RetrySelectionKind::Oldest
+                                ? retry.serial < selected->second.serial : retry.serial > selected->second.serial))
+                            selected = iter;
+                    }
+                    if (selected == backendRetries.end())
+                        break;
+                    selected->second.creditSource = credit->first.first;
+                    selected->second.creditReceived = true;
+                    --credit->second;
                 }
-                if (selected == backendRetries.end())
-                    break;
-                selected->second.creditSource = credit->first.first;
-                selected->second.creditReceived = true;
-                --credit->second;
+                if (!credit->second)
+                    credit = backendCredits.erase(credit);
+                else
+                    ++credit;
             }
-            if (!credit->second)
-                credit = backendCredits.erase(credit);
-            else
-                ++credit;
+        }
+        else
+        {
+            for (auto credit = backendCredits.begin(); credit != backendCredits.end();)
+            {
+                while (credit->second)
+                {
+                    const bool oldest = options.strategy.downstreamRetrySelection == RetrySelectionKind::Oldest;
+                    uint64_t selectedSerial = oldest ? std::numeric_limits<uint64_t>::max() : 0;
+                    for (const auto& [handle, retry] : backendRetries)
+                    {
+                        (void)handle;
+                        if (!retry.creditReceived && retry.retryAckSource == credit->first.first &&
+                            retry.retryAckPCrdType == credit->first.second)
+                        {
+                            if ((oldest && retry.serial < selectedSerial) || (!oldest && retry.serial > selectedSerial))
+                                selectedSerial = retry.serial;
+                        }
+                    }
+                    size_t tier = backendRetryRounds.size();
+                    for (const auto& [handle, retry] : backendRetries)
+                    {
+                        (void)handle;
+                        if (!retry.creditReceived && retry.retryAckSource == credit->first.first &&
+                            retry.retryAckPCrdType == credit->first.second && retry.serial == selectedSerial)
+                            tier = std::min(tier, RetryTier(retry.bank, retry.classId));
+                    }
+                    if (tier == backendRetryRounds.size())
+                        break;
+
+                    std::array<bool, 4> eligibleClasses{};
+                    for (const auto& [handle, retry] : backendRetries)
+                    {
+                        (void)handle;
+                        if (!retry.creditReceived && retry.retryAckSource == credit->first.first &&
+                            retry.retryAckPCrdType == credit->first.second && retry.serial == selectedSerial &&
+                            RetryTier(retry.bank, retry.classId) == tier)
+                            eligibleClasses[retry.classId] = true;
+                    }
+                    WeightedRoundState& round = backendRetryRounds[tier];
+                    const size_t classId = SelectWeighted(options.structure.classes.retryWeights,
+                        eligibleClasses, round, false);
+                    auto selected = backendRetries.end();
+                    for (auto iter = backendRetries.begin(); iter != backendRetries.end(); ++iter)
+                    {
+                        BackendRetryRecord& retry = iter->second;
+                        if (!retry.creditReceived && retry.retryAckSource == credit->first.first &&
+                            retry.retryAckPCrdType == credit->first.second && retry.serial == selectedSerial &&
+                            retry.classId == classId && RetryTier(retry.bank, retry.classId) == tier)
+                        {
+                            selected = iter;
+                            break;
+                        }
+                    }
+                    if (selected == backendRetries.end())
+                        break;
+                    selected->second.creditSource = credit->first.first;
+                    selected->second.creditReceived = true;
+                    selected->second.selection = nextBackendSelection++;
+                    --credit->second;
+                    SelectWeighted(options.structure.classes.retryWeights, eligibleClasses, round, true);
+                }
+                if (!credit->second)
+                    credit = backendCredits.erase(credit);
+                else
+                    ++credit;
+            }
         }
 
         for (auto iter = backendRetries.begin(); iter != backendRetries.end();)
         {
+            if (options.structure.classes.enabled)
+            {
+                auto selected = backendRetries.end();
+                for (auto candidate = backendRetries.begin(); candidate != backendRetries.end(); ++candidate)
+                {
+                    if (!candidate->second.creditReceived)
+                        continue;
+                    if (selected == backendRetries.end() ||
+                        candidate->second.selection < selected->second.selection ||
+                        (candidate->second.selection == selected->second.selection &&
+                         candidate->first < selected->first))
+                        selected = candidate;
+                }
+                if (selected == backendRetries.end())
+                    break;
+                iter = selected;
+            }
             BackendRetryRecord& retry = iter->second;
             if (!retry.creditReceived)
             {
@@ -149,16 +250,19 @@ namespace CHI::Lunatic {
                 request.pCrdType = retry.retryAckPCrdType;
             }
 
-            if (!Queue(txreq, request, retry.transaction, transaction->actionAge, false, true))
+            if (!Queue(txreq, request, retry.transaction, transaction->actionAge, false, true,
+                std::numeric_limits<size_t>::max(), SchedulePoint::BackendResend))
             {
                 transaction->readyTime = time;
+                if (options.structure.classes.enabled)
+                    break;
                 ++iter;
                 continue;
             }
 
             FlowState& flow = flows.at(transaction->handle);
             if (canceled)
-                flow.backendPhase = BackendPhase::Done;
+                CompleteBackendOperation(*transaction);
             else
             {
                 if (!tracker.BindMemory(transaction->handle, options.subordinateId, request.txnId))
@@ -178,10 +282,15 @@ namespace CHI::Lunatic {
     void Core::Impl::RetryBackendSubmission(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
+        ReleaseBackendOperation(transaction);
+        ReleaseRefill(transaction);
         transaction.memoryRequired = false;
         transaction.wait = WaitReason::None;
         transaction.readyTime = time;
         flow.backendCompReceived = false;
+        flow.backendPersistReceived = false;
+        flow.backendSeparatedPersistResponse = false;
+        flow.backendPersistFirst = false;
         flow.backendDataEmitted = false;
         flow.backendPhase = BackendPhase::None;
         flow.directoryCommitted = false;
@@ -212,7 +321,8 @@ namespace CHI::Lunatic {
             transaction.memoryRequired = false;
             transaction.Mark(COMPLETE_MEMORY);
             transaction.phase = Phase::Action;
-            transaction.readyTime = ScheduleData();
+            transaction.readyTime = ScheduleData(transaction,
+                transaction.homeHit ? options.homeHitDataLatency : 0);
             return;
         }
         if ((flow.snoopDataPartial || flow.victimDataPartial) && !transaction.homeHit)
@@ -222,14 +332,25 @@ namespace CHI::Lunatic {
             flow.baselineLine = flow.victimPending && flow.victimDataPartial ? flow.victimLine : transaction.request.Line();
         }
 
+        if (!AcquireBackendOperation(transaction) || (flow.baselineFetch && !AcquireRefill(transaction)))
+        {
+            ReleaseBackendOperation(transaction);
+            ReleaseRefill(transaction);
+            transaction.wait = WaitReason::Memory;
+            transaction.readyTime = time;
+            return;
+        }
         transaction.memoryRequired = true;
         flow.memoryWrite = false;
         flow.backendBeatMask = 0;
         flow.backendReadResp = 0;
         flow.backendReadRespValid = false;
+        const bool localAtomicRead = IsAtomicRequest(transaction.request.opcode) &&
+            (options.backend != BackendKind::CHI || options.strategy.atomicExecution == AtomicExecutionKind::Local);
+        flow.backendExpectedBeatMask = localAtomicRead ? (uint64_t(1) << BeatsPerLine(options)) - 1 : 0;
         if (options.backend == BackendKind::Internal)
         {
-            flow.memoryReady = pipeline.SaturatingAdd(time, memory.NextLatency(options.memoryLatency));
+            flow.memoryReady = Bank(transaction).pipeline.SaturatingAdd(time, memory.NextLatency(options.memoryLatency));
             transaction.phase = Phase::WaitMemory;
             transaction.wait = WaitReason::Memory;
             transaction.readyTime = time;
@@ -242,8 +363,8 @@ namespace CHI::Lunatic {
             operation.line = flow.baselineFetch ? flow.baselineLine : transaction.request.Line();
             operation.beatMask = flow.baselineFetch
                 ? (uint64_t(1) << BeatsPerLine(options)) - 1
-                : flow.expectedBeatMask
-                    ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+                : flow.backendExpectedBeatMask ? flow.backendExpectedBeatMask
+                : flow.expectedBeatMask ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
             Request geometryRequest = transaction.request;
             if (flow.baselineFetch)
             {
@@ -284,6 +405,8 @@ namespace CHI::Lunatic {
         }
         request.opcode = flow.separatedBackendRead
             ? CHI::Eb::Opcodes::REQ::ReadNoSnpSep : CHI::Eb::Opcodes::REQ::ReadNoSnp;
+        if (localAtomicRead)
+            request.size = 6;
         if (flow.baselineFetch)
         {
             request.address = flow.baselineLine.address;
@@ -360,9 +483,9 @@ namespace CHI::Lunatic {
         transaction.Mark(COMPLETE_MEMORY);
         transaction.memoryRequired = false;
         transaction.wait = WaitReason::None;
-        flow.backendPhase = BackendPhase::Done;
+        CompleteBackendOperation(transaction);
         transaction.phase = Phase::Action;
-        transaction.readyTime = ScheduleData();
+        transaction.readyTime = ScheduleData(transaction);
     }
 
     void Core::Impl::StartBackendWrite(Transaction& transaction)
@@ -370,17 +493,23 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         if (transaction.canceled)
         {
-            flow.backendPhase = BackendPhase::Done;
+            CompleteBackendOperation(transaction);
             transaction.phase = Phase::Action;
             transaction.readyTime = time;
             return;
         }
 
+        if (!AcquireBackendOperation(transaction))
+        {
+            transaction.wait = WaitReason::Memory;
+            transaction.readyTime = time;
+            return;
+        }
         if (options.backend == BackendKind::Internal)
         {
             transaction.memoryRequired = true;
             flow.memoryWrite = true;
-            flow.memoryReady = pipeline.SaturatingAdd(time, memory.NextLatency(options.memoryLatency));
+            flow.memoryReady = Bank(transaction).pipeline.SaturatingAdd(time, memory.NextLatency(options.memoryLatency));
             transaction.phase = Phase::WaitMemory;
             transaction.wait = WaitReason::Memory;
             transaction.readyTime = time;
@@ -454,7 +583,7 @@ namespace CHI::Lunatic {
             request.returnNid = transaction.request.source;
             request.returnTxnId = transaction.request.txnId;
             flow.directoryCommitted = true;
-            snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
+            Bank(transaction).snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
         }
         const auto requestClass = ClassifyRequest(transaction.request.opcode);
         if (requestClass == RequestClass::ImmediateWrite || requestClass == RequestClass::WriteEvictOrEvict)
@@ -511,6 +640,8 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         if (flow.backendPhase != BackendPhase::SendData)
+            return;
+        if (flow.backendBeatMask && !ScheduleTransition(transaction, SchedulePoint::DataBeat))
             return;
 
         const size_t bytes = BytesPerBeat(options);
@@ -596,7 +727,7 @@ namespace CHI::Lunatic {
             {
                 transaction.Mark(COMPLETE_MEMORY);
                 transaction.memoryRequired = false;
-                flow.backendPhase = BackendPhase::Done;
+                CompleteBackendOperation(transaction);
                 transaction.phase = Phase::Return;
                 transaction.readyTime = time;
             }
@@ -618,7 +749,7 @@ namespace CHI::Lunatic {
                 flow.backendCompReceived = true;
                 flow.backendCompRespErr = flit.respErr;
                 transaction.responseRespErr = flit.respErr;
-                flow.backendPhase = BackendPhase::Done;
+                CompleteBackendOperation(transaction);
                 tracker.UnbindMemory(options.subordinateId, transaction.handle);
                 transaction.phase = Phase::Action;
                 transaction.readyTime = time;
@@ -644,24 +775,32 @@ namespace CHI::Lunatic {
                 flow.backendCompRespErr = flit.respErr;
                 flow.backendSeparatedCompReceived = true;
                 flow.separatedPersistResponse = true;
+                flow.backendSeparatedPersistResponse = true;
             }
             else if (flit.opcode == RSP::Persist)
             {
                 if (flow.backendSeparatedPersistReceived || flit.pGroupId != transaction.request.pGroupId)
                     return false;
+                flow.backendPersistFirst = !flow.backendCompReceived;
                 flow.backendPersistReceived = true;
                 flow.backendPersistRespErr = flit.respErr;
                 flow.backendSeparatedPersistReceived = true;
                 flow.separatedPersistResponse = true;
+                flow.backendSeparatedPersistResponse = true;
             }
             else
                 return false;
 
             if (flow.backendCompReceived && flow.backendPersistReceived)
             {
-                flow.backendPhase = BackendPhase::Done;
+                CompleteBackendOperation(transaction);
                 tracker.UnbindMemory(options.subordinateId, transaction.handle);
                 transaction.phase = Phase::Action;
+            }
+            else
+            {
+                flow.backendPhase = BackendPhase::WaitComp;
+                transaction.phase = Phase::WaitMemory;
             }
             transaction.readyTime = time;
             return true;
@@ -683,7 +822,7 @@ namespace CHI::Lunatic {
             {
                 if (flow.backendCompReceived)
                 {
-                    flow.backendPhase = BackendPhase::Done;
+                    CompleteBackendOperation(transaction);
                     tracker.UnbindMemory(options.subordinateId, transaction.handle);
                     transaction.phase = Phase::Action;
                 }
@@ -708,7 +847,7 @@ namespace CHI::Lunatic {
             {
                 flow.backendCompReceived = true;
                 transaction.responseRespErr = flit.respErr;
-                flow.backendPhase = BackendPhase::Done;
+                CompleteBackendOperation(transaction);
                 tracker.UnbindMemory(options.subordinateId, transaction.handle);
                 transaction.phase = Phase::Action;
                 transaction.readyTime = time;
@@ -721,7 +860,7 @@ namespace CHI::Lunatic {
                     return false;
                 flow.backendCompReceived = true;
                 transaction.responseRespErr = flit.respErr;
-                flow.backendPhase = BackendPhase::Done;
+                CompleteBackendOperation(transaction);
                 tracker.UnbindMemory(options.subordinateId, transaction.handle);
                 transaction.phase = Phase::Action;
                 transaction.readyTime = time;
@@ -735,7 +874,7 @@ namespace CHI::Lunatic {
             transaction.responseRespErr = MergeResponseErrors(transaction.responseRespErr, flit.respErr);
             if (flow.backendDataEmitted)
             {
-                flow.backendPhase = BackendPhase::Done;
+                CompleteBackendOperation(transaction);
                 tracker.UnbindMemory(options.subordinateId, transaction.handle);
                 transaction.phase = Phase::Action;
             }
@@ -773,8 +912,8 @@ namespace CHI::Lunatic {
         const uint64_t bit = uint64_t(1) << beat;
         const uint64_t complete = flow.baselineFetch
             ? (uint64_t(1) << BeatsPerLine(options)) - 1
-            : flow.expectedBeatMask
-                ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
+            : flow.backendExpectedBeatMask ? flow.backendExpectedBeatMask
+            : flow.expectedBeatMask ? flow.expectedBeatMask : (uint64_t(1) << BeatsPerLine(options)) - 1;
         const uint64_t backendAddress = flow.baselineFetch ? flow.baselineLine.address
             : options.backend == BackendKind::CHI ? flow.backendRequest.address : transaction.request.address;
         uint64_t& received = flow.baselineFetch || localAtomicRead ? flow.backendBeatMask : transaction.receivedBeats;
@@ -818,6 +957,7 @@ namespace CHI::Lunatic {
         flow.backendReadRespErr[beat] = MergeResponseErrors(flit.respErr,
             HasUnsupportedMetadataError(flit, enables, offset, 0, bytes, options)
                 ? uint8_t(CHI::Eb::RespErrs::DERR) : uint8_t(CHI::Eb::RespErrs::OK));
+        flow.backendBeatRespErr[beat] = flow.backendReadRespErr[beat];
         flow.backendReadRespErrMask |= bit;
         if (transaction.responseRespErr == CHI::Eb::RespErrs::OK ||
             flow.backendReadRespErr[beat] == CHI::Eb::RespErrs::NDERR)
@@ -830,7 +970,7 @@ namespace CHI::Lunatic {
         transaction.Mark(COMPLETE_MEMORY);
         transaction.memoryRequired = false;
         transaction.wait = WaitReason::None;
-        flow.backendPhase = BackendPhase::Done;
+        CompleteBackendOperation(transaction);
         if (flow.baselineFetch)
         {
             flow.baselineFetched = true;
@@ -839,7 +979,7 @@ namespace CHI::Lunatic {
         if (flow.backendRequest.order == 0 || flow.backendReadReceiptReceived)
             tracker.UnbindMemory(options.subordinateId, transaction.handle);
         transaction.phase = Phase::Action;
-        transaction.readyTime = ScheduleData();
+        transaction.readyTime = ScheduleData(transaction);
         return true;
     }
 
@@ -857,6 +997,7 @@ namespace CHI::Lunatic {
         if (options.backend == BackendKind::Internal)
         {
             memory.WriteImage(line, image, enables, options);
+            ReleaseRefill(transaction, line);
             return true;
         }
 
@@ -875,6 +1016,7 @@ namespace CHI::Lunatic {
             spill.dataCheck = flow.spillDataCheck;
             if (!transaction.responseRespErr)
                 memory.WriteImage(flow.spillLine, spill, flow.spillEnables, options);
+            ReleaseRefill(transaction, flow.spillLine);
             flow.spillPending = false;
             flow.spillGeneratedEviction = false;
             flow.backendPhase = BackendPhase::None;

@@ -24,6 +24,7 @@ namespace {
         options.backend = BackendKind::CHI;
         options.subordinateId = 6;
         options.addressMap = std::make_shared<RangeAddressMap>();
+        options.strategy.immediateResponse = ImmediateResponseKind::EarlyDBID;
         return options;
     }
 

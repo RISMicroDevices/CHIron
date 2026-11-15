@@ -122,6 +122,7 @@ namespace {
         options.backend = BackendKind::CHI;
         options.subordinateId = 6;
         options.outputQueueLimit = 1;
+        options.strategy.persistResponse = PersistResponseKind::SeparateCompFirst;
         CheckedDriver<Config256> driver(options);
         SNOracle<Config256> oracle(2, 6);
         const auto downstream = StartPersistence(driver);
@@ -219,4 +220,71 @@ LUNATIC_TEST(Stage9SeparatedTxnIDPersistenceCompOnlyIsPremature)
                   std::string::npos);
     driver.NextRSP(CHI::Eb::Opcodes::RSP::Persist);
     driver.Quiesce();
+}
+
+namespace {
+
+    enum class StashDoneNegative {
+        WrongGroup,
+        Duplicate,
+        NonzeroTxnId
+    };
+
+    void ExpectStashDoneDenied(CheckedDriver<Config256>& driver, const CheckedDriver<Config256>::RSP& response)
+    {
+        bool denied = false;
+        try
+        {
+            driver.Oracle(4).Response(driver.driver.now, response);
+        }
+        catch (const std::exception& error)
+        {
+            denied = true;
+            LUNATIC_CHECK(std::string(error.what()).find("XACT_DENIED") != std::string::npos);
+        }
+        LUNATIC_CHECK(denied);
+    }
+
+    void RunStashDoneNegative(StashDoneNegative kind)
+    {
+        CheckedDriver<Config256> driver;
+        driver.PushRequest(StashRequest(driver, 0));
+        const auto snoop = driver.NextSNP(CHI::Eb::Opcodes::SNP::SnpStashUnique);
+        driver.SnoopResponse(5, snoop.flit.TxnID(), CHI::Eb::Resps::SnpResp_I);
+        driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
+        const auto valid = driver.driver.NextRSP(CHI::Eb::Opcodes::RSP::StashDone);
+
+        if (kind == StashDoneNegative::Duplicate)
+        {
+            driver.Oracle(4).Response(driver.driver.now, valid);
+            ExpectStashDoneDenied(driver, valid);
+        }
+        else
+        {
+            auto invalid = valid;
+            if (kind == StashDoneNegative::WrongGroup)
+                invalid.StashGroupID() = valid.StashGroupID() ^ 1;
+            else
+                invalid.TxnID() = 7;
+            ExpectStashDoneDenied(driver, invalid);
+            driver.Oracle(4).Response(driver.driver.now, valid);
+        }
+        driver.Quiesce();
+    }
+
+}
+
+LUNATIC_TEST(Stage9SeparatedTxnIDStashWrongGroupRejected)
+{
+    RunStashDoneNegative(StashDoneNegative::WrongGroup);
+}
+
+LUNATIC_TEST(Stage9SeparatedTxnIDDuplicateStashDoneRejected)
+{
+    RunStashDoneNegative(StashDoneNegative::Duplicate);
+}
+
+LUNATIC_TEST(Stage9SeparatedTxnIDNonzeroStashDoneTxnIDRejected)
+{
+    RunStashDoneNegative(StashDoneNegative::NonzeroTxnId);
 }

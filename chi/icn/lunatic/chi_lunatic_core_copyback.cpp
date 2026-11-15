@@ -84,7 +84,7 @@ namespace CHI::Lunatic {
         if (ClassifyRequest(transaction.request.opcode) == RequestClass::ReadOnce)
         {
             for (NodeId target : SnoopTargets(line))
-                context.requesterValid |= IsValid(snoopFilter.State(line, target));
+                context.requesterValid |= IsValid(Bank(line).snoopFilter.State(line, target));
         }
         PolicyDecision decision = ClassifyRequest(transaction.request.opcode) == RequestClass::ReadOnce
             ? policy->OnHomeAllocation(context) : policy->OnRNFill(context);
@@ -101,7 +101,7 @@ namespace CHI::Lunatic {
         size_t otherSharers = 0;
         for (NodeId target : SnoopTargets(line))
         {
-            if (target != transaction.request.source && IsValid(snoopFilter.State(line, target)))
+            if (target != transaction.request.source && IsValid(Bank(line).snoopFilter.State(line, target)))
                 ++otherSharers;
         }
 
@@ -121,11 +121,11 @@ namespace CHI::Lunatic {
                     else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty)
                         flow.requesterFinal = CacheState::SC;
                     else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadPreferUnique)
-                        flow.requesterFinal = snoopFilter.State(line, transaction.request.source) == CacheState::SD
+                        flow.requesterFinal = Bank(line).snoopFilter.State(line, transaction.request.source) == CacheState::SD
                             ? CacheState::SD : CacheState::SC;
                     else if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadClean)
                     {
-                        const CacheState initial = snoopFilter.State(line, transaction.request.source);
+                        const CacheState initial = Bank(line).snoopFilter.State(line, transaction.request.source);
                         switch (initial)
                         {
                             case CacheState::UC:
@@ -151,7 +151,7 @@ namespace CHI::Lunatic {
                     break;
                 case RequestClass::MakeReadUnique:
                 {
-                    const CacheState responseState = snoopFilter.State(line, transaction.request.source);
+                    const CacheState responseState = Bank(line).snoopFilter.State(line, transaction.request.source);
                     if (responseState == CacheState::SD)
                         flow.requesterFinal = CacheState::UD;
                     else if (responseState == CacheState::SC)
@@ -175,28 +175,41 @@ namespace CHI::Lunatic {
             }
         }
 
+        if (options.strategy.allocationStrategy == AllocationStrategyKind::SelectiveSharedCopyback &&
+            transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty &&
+            !transaction.homeHit && otherSharers != 0)
+        {
+            decision.allocateHome = true;
+            decision.retainHome = false;
+            decision.removeHome = false;
+            flow.allocateHome = true;
+            flow.retainHome = false;
+            flow.removeHome = false;
+        }
+
         if (decision.allocateHome && !transaction.homeHit && !PrepareVictim(transaction))
             return false;
 
         if (decision.allocateHome || decision.retainHome)
         {
-            const std::optional<size_t> currentWay = directory.FindWay(line);
+            const std::optional<size_t> currentWay = Bank(line).directory.FindWay(line);
             const size_t way = currentWay ? *currentWay : flow.victimWay;
             bool anyRequesterDirty = IsDirty(flow.requesterFinal);
             for (NodeId target : SnoopTargets(line))
             {
-                if (target != transaction.request.source && IsDirty(snoopFilter.State(line, target)))
+                if (target != transaction.request.source && IsDirty(Bank(line).snoopFilter.State(line, target)))
                     anyRequesterDirty = true;
             }
             const bool dirty = anyRequesterDirty ? false : flow.homeDirty || flow.dataDirty;
             HomeLine& home = InstallHome(line, way, transaction.data, dirty, time);
             CopyMetadata(home, transaction, options);
+            ReleaseRefill(transaction, line);
             home.validBytes = flow.validBytes;
         }
         else if (decision.removeHome && transaction.homeHit)
         {
-            if (const auto way = directory.FindWay(line); way)
-                directory.Invalidate(directory.SetIndex(line), *way);
+            if (const auto way = Bank(line).directory.FindWay(line); way)
+                Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(line), *way);
         }
 
         const bool invalidatingRead = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
@@ -205,10 +218,10 @@ namespace CHI::Lunatic {
         {
             if (!WriteLine(transaction, line, transaction.data, FullEnables()))
                 return false;
-            if (HomeLine* home = directory.Find(line))
+            if (HomeLine* home = Bank(line).directory.Find(line))
             {
                 home->dirty = false;
-                directory.Touch(line);
+                Bank(line).directory.Touch(line);
             }
         }
         else if (options.policy == PolicyKind::Exclusive && !decision.allocateHome && !decision.retainHome &&
@@ -217,9 +230,9 @@ namespace CHI::Lunatic {
 
         if (flow.dctForwarded || transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
             transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid)
-            snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
+            Bank(line).snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
         else if (ClassifyRequest(transaction.request.opcode) != RequestClass::ReadOnce)
-            snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
+            Bank(line).snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
         return true;
     }
 
@@ -269,11 +282,31 @@ namespace CHI::Lunatic {
         context.requesterDirty = dirty;
         context.requesterRetains = IsValid(flow.requesterFinal);
         context.evictionHasData = hasData;
-        const PolicyDecision decision = policy->OnCopyback(context);
+        PolicyDecision decision = policy->OnCopyback(context);
+        const bool selectiveCopyback = transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackFull ||
+            transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteEvictOrEvict;
+        if (options.strategy.allocationStrategy == AllocationStrategyKind::SelectiveSharedCopyback && hasData &&
+            !transaction.homeHit && selectiveCopyback)
+        {
+            decision.allocateHome = true;
+            decision.retainHome = false;
+            decision.removeHome = false;
+            decision.mergeCopyback = true;
+        }
+        const bool selectiveCleanWriteThrough =
+            options.strategy.allocationStrategy == AllocationStrategyKind::SelectiveSharedCopyback && hasData &&
+            !transaction.homeHit && transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteCleanFull &&
+            context.requesterRetains;
+        if (selectiveCleanWriteThrough)
+        {
+            decision.allocateHome = false;
+            decision.retainHome = false;
+            decision.mergeCopyback = false;
+        }
         bool otherRequesterValid = false;
         for (NodeId target : SnoopTargets(line))
         {
-            if (target != transaction.request.source && IsValid(snoopFilter.State(line, target)))
+            if (target != transaction.request.source && IsValid(Bank(line).snoopFilter.State(line, target)))
                 otherRequesterValid = true;
         }
         const bool writeThrough = options.policy == PolicyKind::Exclusive &&
@@ -286,9 +319,10 @@ namespace CHI::Lunatic {
             if (!writeThrough && decision.mergeCopyback &&
                 (decision.allocateHome || decision.retainHome || transaction.homeHit))
             {
-                const std::optional<size_t> currentWay = directory.FindWay(line);
+                const std::optional<size_t> currentWay = Bank(line).directory.FindWay(line);
                 HomeLine& home = InstallHome(line, currentWay ? *currentWay : flow.victimWay, transaction.data, dirty, time);
                 CopyMetadata(home, transaction, options);
+                ReleaseRefill(transaction, line);
                 if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::WriteBackPtl)
                     home.validBytes = transaction.byteEnables;
             }
@@ -297,9 +331,9 @@ namespace CHI::Lunatic {
         }
 
         if ((decision.removeHome || writeThrough) && transaction.homeHit)
-            if (const auto way = directory.FindWay(line); way)
-                directory.Invalidate(directory.SetIndex(line), *way);
-        snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
+            if (const auto way = Bank(line).directory.FindWay(line); way)
+                Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(line), *way);
+        Bank(line).snoopFilter.Track(line, transaction.request.source, flow.requesterFinal, time);
         return true;
     }
 
@@ -329,12 +363,12 @@ namespace CHI::Lunatic {
                               enables, 0, 0, LINE_SIZE, options);
             }
         }
-        HomeLine* home = directory.Find(line);
+        HomeLine* home = Bank(line).directory.Find(line);
 
         if (transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanShared ||
             ClassifyRequest(transaction.request.opcode) == RequestClass::Persistence)
         {
-            flow.requesterFinal = snoopFilter.State(line, transaction.request.source);
+            flow.requesterFinal = Bank(line).snoopFilter.State(line, transaction.request.source);
             if (home)
             {
                 if (flow.snoopDataValid)
@@ -343,7 +377,7 @@ namespace CHI::Lunatic {
                     CopyMetadata(*home, transaction, options);
                 }
                 home->dirty = false;
-                directory.Touch(line);
+                Bank(line).directory.Touch(line);
             }
             if ((flow.dataDirty || flow.homeDirty) && !WriteLine(transaction, line, transaction.data, FullEnables()))
                 return false;
@@ -355,20 +389,50 @@ namespace CHI::Lunatic {
             !WriteLine(transaction, line, transaction.data, FullEnables()))
             return false;
         if (home)
-            if (const auto way = directory.FindWay(line); way)
-                directory.Invalidate(directory.SetIndex(line), *way);
-        snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
+            if (const auto way = Bank(line).directory.FindWay(line); way)
+                Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(line), *way);
+        Bank(line).snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
         return true;
     }
 
     size_t Core::Impl::ChooseVictim(TransactionHandle handle, VictimDomain domain, const LineKey& line)
     {
         const bool directoryDomain = domain == VictimDomain::Directory;
-        if (events->OnVictimSelection.empty())
-            return directoryDomain ? directory.ChooseVictim(line) : snoopFilter.ChooseVictim(line);
-
+        BankState& bank = Bank(line);
+        const size_t set = directoryDomain ? bank.directory.SetIndex(line) : bank.snoopFilter.SetIndex(line);
         std::vector<size_t> candidates = directoryDomain
-            ? directory.VictimCandidates(line) : snoopFilter.VictimCandidates(line);
+            ? bank.directory.VictimCandidates(line) : bank.snoopFilter.VictimCandidates(line);
+        const Transaction* requester = tracker.Find(handle);
+        auto youngerActiveHead = [&](const LineKey& key) {
+            const auto head = Bank(key).hazards.Next(key);
+            if (!head)
+                return false;
+            const Transaction* active = tracker.Find(*head);
+            if (!requester || !active)
+                return true;
+            return active->actionAge > requester->actionAge ||
+                (active->actionAge == requester->actionAge && *head > handle);
+        };
+        candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](size_t way) {
+            if (directoryDomain)
+            {
+                const HomeLine& candidate = bank.directory.At(set, way);
+                return candidate.valid && youngerActiveHead(candidate.key);
+            }
+            const SnoopFilterEntry& candidate = bank.snoopFilter.At(set, way);
+            return candidate.valid && youngerActiveHead(candidate.key);
+        }), candidates.end());
+        const size_t invalidWay = directoryDomain ? bank.directory.Ways() : bank.snoopFilter.Ways();
+        if (candidates.empty())
+            return invalidWay;
+
+        const auto choose = [&] {
+            return directoryDomain ? bank.directory.ChooseVictim(line, candidates)
+                                   : bank.snoopFilter.ChooseVictim(line, candidates);
+        };
+        if (events->OnVictimSelection.empty())
+            return choose();
+
         const auto decision = events->Decide(
             VictimSelectionEvent(time, nodeId, handle, domain, line, candidates));
         const auto selected = decision.GetSelectedVictim();
@@ -379,13 +443,13 @@ namespace CHI::Lunatic {
                     return way;
             Error(handle, "victim decision selected a way outside the legal candidate set");
         }
-        return directoryDomain ? directory.ChooseVictim(line) : snoopFilter.ChooseVictim(line);
+        return choose();
     }
 
     bool Core::Impl::PrepareSnoopFilterCapacity(Transaction& transaction)
     {
         const LineKey line = transaction.request.Line();
-        if (snoopFilter.Find(line) || snoopFilter.HasInvalidWay(line))
+        if (Bank(line).snoopFilter.Find(line) || Bank(line).snoopFilter.HasInvalidWay(line))
             return true;
 
         FlowState& flow = flows.at(transaction.handle);
@@ -394,12 +458,17 @@ namespace CHI::Lunatic {
 
         flow.victimSnoopFilterOnly = true;
         flow.victimWay = ChooseVictim(transaction.handle, VictimDomain::SnoopFilter, line);
-        const SnoopFilterEntry& victim = snoopFilter.At(snoopFilter.SetIndex(line), flow.victimWay);
+        if (flow.victimWay >= Bank(line).snoopFilter.Ways())
+        {
+            pmu.RecordStall(WaitReason::SameLine);
+            return false;
+        }
+        const SnoopFilterEntry& victim = Bank(line).snoopFilter.At(Bank(line).snoopFilter.SetIndex(line), flow.victimWay);
         flow.victimLine = victim.key;
         flow.victimGeneration = victim.generation;
         flow.victimResponseUpdated = false;
         flow.victimPending = true;
-        if (const HomeLine* home = directory.Find(flow.victimLine))
+        if (const HomeLine* home = Bank(flow.victimLine).directory.Find(flow.victimLine))
         {
             flow.victimData = home->data;
             flow.victimPoison = options.poisonEnabled ? home->poison : LinePoison{};
@@ -416,7 +485,7 @@ namespace CHI::Lunatic {
         }
         flow.victimDataValid = true;
 
-        hazards.Append(transaction.handle, flow.victimLine, transaction.actionAge);
+        Bank(flow.victimLine).hazards.Append(transaction.handle, flow.victimLine, transaction.actionAge);
         flow.victimLinked = true;
         flow.snoopLine = flow.victimLine;
         flow.snoopForVictim = true;
@@ -424,7 +493,7 @@ namespace CHI::Lunatic {
         transaction.pendingSnoops.clear();
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
-        if (!hazards.IsHead(transaction.handle, flow.victimLine))
+        if (!Bank(flow.victimLine).hazards.IsHead(transaction.handle, flow.victimLine))
         {
             pmu.RecordStall(WaitReason::SameLine);
             return false;
@@ -445,13 +514,18 @@ namespace CHI::Lunatic {
         if (!flow.victimPending)
         {
             flow.victimWay = ChooseVictim(transaction.handle, VictimDomain::Directory, line);
-            const HomeLine& victim = directory.At(directory.SetIndex(line), flow.victimWay);
+            if (flow.victimWay >= Bank(line).directory.Ways())
+            {
+                pmu.RecordStall(WaitReason::SameLine);
+                return false;
+            }
+            const HomeLine& victim = Bank(line).directory.At(Bank(line).directory.SetIndex(line), flow.victimWay);
             if (!victim.valid)
                 return true;
             flow.victimPending = true;
             flow.victimLine = victim.key;
-        flow.victimGeneration = victim.generation;
-        flow.victimResponseUpdated = false;
+            flow.victimGeneration = victim.generation;
+            flow.victimResponseUpdated = false;
             flow.victimData = victim.data;
             flow.victimPoison = options.poisonEnabled ? victim.poison : LinePoison{};
             flow.victimDataCheck = options.dataCheckEnabled ? victim.dataCheck : LineDataCheck{};
@@ -461,7 +535,7 @@ namespace CHI::Lunatic {
 
         if (!flow.victimLinked)
         {
-            hazards.Append(transaction.handle, flow.victimLine, transaction.actionAge);
+            Bank(flow.victimLine).hazards.Append(transaction.handle, flow.victimLine, transaction.actionAge);
             flow.victimLinked = true;
         }
 
@@ -483,7 +557,7 @@ namespace CHI::Lunatic {
             return false;
         }
 
-        if (!hazards.IsHead(transaction.handle, flow.victimLine))
+        if (!Bank(flow.victimLine).hazards.IsHead(transaction.handle, flow.victimLine))
         {
             pmu.RecordStall(WaitReason::SameLine);
             return false;
@@ -500,10 +574,12 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         if (!flow.victimPending)
             return true;
+        const LineKey& line = flow.victimLine;
 
         auto discardVictim = [&] {
+            ReleaseSnoopWave(transaction);
             if (flow.victimLinked)
-                hazards.Release(transaction.handle, flow.victimLine);
+                Bank(flow.victimLine).hazards.Release(transaction.handle, flow.victimLine);
             flow.victimLinked = false;
             flow.victimPending = false;
             flow.victimSnoopFilterOnly = false;
@@ -526,7 +602,7 @@ namespace CHI::Lunatic {
         const bool snoopFilterOnly = flow.victimSnoopFilterOnly;
         if (snoopFilterOnly)
         {
-            const SnoopFilterEntry& current = snoopFilter.At(snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
+            const SnoopFilterEntry& current = Bank(line).snoopFilter.At(Bank(line).snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
             const bool identityMatches = current.valid ? current.key == flow.victimLine : flow.victimResponseUpdated;
             if (!identityMatches || current.generation != flow.victimGeneration)
             {
@@ -536,7 +612,7 @@ namespace CHI::Lunatic {
         }
         else
         {
-            const HomeLine& current = directory.At(directory.SetIndex(flow.victimLine), flow.victimWay);
+            const HomeLine& current = Bank(line).directory.At(Bank(line).directory.SetIndex(flow.victimLine), flow.victimWay);
             if (!current.valid || current.key != flow.victimLine || current.generation != flow.victimGeneration)
             {
                 discardVictim();
@@ -544,7 +620,7 @@ namespace CHI::Lunatic {
             }
         }
 
-        if (options.backend != BackendKind::Internal && flow.victimDataPartial && !directory.Find(flow.victimLine) &&
+        if (options.backend != BackendKind::Internal && flow.victimDataPartial && !Bank(flow.victimLine).directory.Find(flow.victimLine) &&
             !FetchBaseline(transaction))
             return false;
 
@@ -556,27 +632,27 @@ namespace CHI::Lunatic {
         {
             if (flow.victimDirty)
             {
-                if (HomeLine* home = directory.Find(flow.victimLine))
+                if (HomeLine* home = Bank(flow.victimLine).directory.Find(flow.victimLine))
                 {
                     home->data = flow.victimData;
                     home->poison = flow.victimPoison;
                     home->dataCheck = flow.victimDataCheck;
                     home->dirty = true;
-                    directory.Touch(flow.victimLine);
+                    Bank(line).directory.Touch(flow.victimLine);
                 }
                 else if (!WriteLineImage(transaction, flow.victimLine, victimImage, FullEnables(), true))
                     return false;
             }
-            const auto requesters = snoopFilter.Targets(flow.victimLine);
+            const auto requesters = Bank(flow.victimLine).snoopFilter.Targets(flow.victimLine);
             for (NodeId requester : requesters)
-                snoopFilter.Remove(flow.victimLine, requester);
-            snoopFilter.Invalidate(snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
+                Bank(line).snoopFilter.Remove(flow.victimLine, requester);
+            Bank(line).snoopFilter.Invalidate(Bank(line).snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
         }
         else
         {
             if (flow.victimDirty && !WriteLineImage(transaction, flow.victimLine, victimImage, FullEnables(), true))
                 return false;
-            directory.Invalidate(directory.SetIndex(flow.victimLine), flow.victimWay);
+            Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(flow.victimLine), flow.victimWay);
         }
 
         discardVictim();
@@ -585,7 +661,7 @@ namespace CHI::Lunatic {
 
     HomeLine& Core::Impl::InstallHome(const LineKey& line, size_t way, const LineData& data, bool dirty, Time age)
     {
-        HomeLine& home = directory.Install(line, way, age);
+        HomeLine& home = Bank(line).directory.Install(line, way, age);
         home.data = data;
         home.validBytes = FullEnables();
         home.dirty = dirty;
@@ -595,7 +671,7 @@ namespace CHI::Lunatic {
     void Core::Impl::EvictRequester(Transaction& transaction)
     {
         FlowState& flow = flows.at(transaction.handle);
-        snoopFilter.Remove(transaction.request.Line(), transaction.request.source);
+        Bank(transaction).snoopFilter.Remove(transaction.request.Line(), transaction.request.source);
         flow.requesterFinal = CacheState::I;
     }
 

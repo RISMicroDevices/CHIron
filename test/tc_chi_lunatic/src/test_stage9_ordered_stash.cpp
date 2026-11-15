@@ -204,8 +204,7 @@ LUNATIC_TEST(Stage9OrderedStashRejectsReservedControls)
         request.Order() = opcode == CHI::Eb::Opcodes::REQ::StashOnceShared ? 2 : 1;
         LUNATIC_CHECK(driver.node.PushRXREQ(request));
         const auto response = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-        LUNATIC_CHECK(response.RespErr() == (opcode == CHI::Eb::Opcodes::REQ::StashOnceShared
-            ? CHI::Eb::RespErrs::NDERR : CHI::Eb::RespErrs::DERR));
+        LUNATIC_CHECK(response.RespErr() == CHI::Eb::RespErrs::NDERR);
         driver.Quiesce();
         LUNATIC_CHECK(!driver.node.GetErrors().empty());
     }

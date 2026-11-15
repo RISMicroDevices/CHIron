@@ -44,6 +44,34 @@ namespace CHI::Lunatic {
         }
     }
 
+    Time VirtualPipeline::OperationDelay(SchedulePoint point) const noexcept
+    {
+        switch (point)
+        {
+            case SchedulePoint::InputRegister: return options.timing.inputRegister;
+            case SchedulePoint::RequestBuffer: return options.timing.requestBuffer;
+            case SchedulePoint::Allocation: return options.timing.allocation;
+            case SchedulePoint::HazardRelease: return options.timing.hazardRelease;
+            case SchedulePoint::LookupResult: return options.timing.lookupResult;
+            case SchedulePoint::SnoopDecision: return options.timing.snoopDecision;
+            case SchedulePoint::SnoopIssue: return options.timing.snoopIssue;
+            case SchedulePoint::DataReturn: return options.timing.dataReturn;
+            case SchedulePoint::FastResponse: return options.timing.fastResponse;
+            case SchedulePoint::NormalResponse: return options.timing.normalResponse;
+            case SchedulePoint::BackendRequest: return options.timing.backendRequest;
+            case SchedulePoint::BackendData: return options.timing.backendData;
+            case SchedulePoint::RetryAck: return options.timing.retryAck;
+            case SchedulePoint::CreditGrant: return options.timing.creditGrant;
+            case SchedulePoint::BackendResend: return options.timing.backendResend;
+            case SchedulePoint::AtomicExecution: return options.timing.atomicExecution;
+            case SchedulePoint::Persistence: return options.timing.persistence;
+            case SchedulePoint::DataBeat: return options.timing.dataBeat;
+            case SchedulePoint::Output: return options.timing.output;
+            case SchedulePoint::CommitSchedule: return options.timing.commitSchedule;
+            default: return 0;
+        }
+    }
+
     bool VirtualPipeline::DelayablePhase(Phase phase) const noexcept
     {
         switch (phase)
@@ -73,15 +101,15 @@ namespace CHI::Lunatic {
     Time VirtualPipeline::ScheduleTag(Time earliest) noexcept
     {
         const Time slot = std::max(earliest, tagPortFree);
-        tagPortFree = SaturatingAdd(slot, 1);
+        tagPortFree = SaturatingAdd(slot, options.structure.tagPortOccupancy);
         return SaturatingAdd(slot, options.tagLatency);
     }
 
-    Time VirtualPipeline::ScheduleData(Time earliest) noexcept
+    Time VirtualPipeline::ScheduleData(Time earliest, Time latency) noexcept
     {
         const Time slot = std::max(earliest, dataPortFree);
-        dataPortFree = SaturatingAdd(slot, 1);
-        return SaturatingAdd(slot, options.dataLatency);
+        dataPortFree = SaturatingAdd(slot, options.structure.dataPortOccupancy);
+        return SaturatingAdd(slot, latency ? latency : options.dataLatency);
     }
 
     Time VirtualPipeline::SaturatingAdd(Time time, Time delay) const noexcept

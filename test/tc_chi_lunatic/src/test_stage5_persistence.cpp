@@ -184,7 +184,7 @@ LUNATIC_TEST(Stage5CleanUniqueRejectsInvalidRequests)
         request.Size() = 4;
         LUNATIC_CHECK(driver.node.PushRXREQ(request));
         auto comp = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-        LUNATIC_CHECK(comp.RespErr() == 0b10);
+        LUNATIC_CHECK(comp.RespErr() == CHI::Eb::RespErrs::NDERR);
         driver.Quiesce();
         LUNATIC_CHECK(!driver.node.GetErrors().empty());
     }
@@ -348,7 +348,7 @@ LUNATIC_TEST(Stage5PersistenceRejectsInvalidRequests)
         request.Size() = 4;
         LUNATIC_CHECK(driver.node.PushRXREQ(request));
         auto comp = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-        LUNATIC_CHECK(comp.RespErr() == 0b10);
+        LUNATIC_CHECK(comp.RespErr() == CHI::Eb::RespErrs::NDERR);
         driver.Quiesce();
         LUNATIC_CHECK(!driver.node.GetErrors().empty());
     }

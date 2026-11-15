@@ -164,6 +164,21 @@ namespace Cohestra {
     X(TagOp)                                                                \
     X(TraceTag)
 
+#define V3_CHI_RSP_SAMPLE_FIELDS(X)                                         \
+    X(QoS)                                                                  \
+    X(TgtID)                                                                \
+    X(SrcID)                                                                \
+    X(TxnID)                                                                \
+    X(Opcode)                                                               \
+    X(RespErr)                                                              \
+    X(Resp)                                                                 \
+    X(FwdState)                                                             \
+    X(DataPull)                                                             \
+    X(CBusy)                                                                \
+    X(PCrdType)                                                             \
+    X(TagOp)                                                                \
+    X(TraceTag)
+
 #define V3_CHI_DAT_FIELDS(X)                                                \
     X(QoS)                                                                  \
     X(TgtID)                                                                \
@@ -611,7 +626,8 @@ namespace Cohestra {
         template<class VT, class Traits>
         inline void V3CHISeparateFieldSampleRSP(VT& verilated, Cohestra::CHI::RSPFlit& flit) noexcept
         {
-            V3_CHI_RSP_FIELDS(V3_CHI_RSP_FIELD_SAMPLE)
+            flit = {};
+            V3_CHI_RSP_SAMPLE_FIELDS(V3_CHI_RSP_FIELD_SAMPLE)
             namespace Opcodes = ::CHI::Eb::Opcodes::RSP;
             switch (flit.Opcode())
             {
@@ -620,6 +636,7 @@ namespace Cohestra {
                     if constexpr (requires { flit.PGroupID() = Traits::PGroupID(verilated); })
                         flit.PGroupID() = Traits::PGroupID(verilated);
                     break;
+                case Opcodes::StashDone:
                 case Opcodes::CompStashDone:
                     if constexpr (requires { flit.StashGroupID() = Traits::StashGroupID(verilated); })
                         flit.StashGroupID() = Traits::StashGroupID(verilated);

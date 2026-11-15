@@ -22,7 +22,8 @@ namespace CHI::Lunatic {
         CleanUnique,
         Persistence,
         Stash,
-        Atomic
+        Atomic,
+        Prefetch
     };
 
     RequestClass ClassifyRequest(uint16_t opcode) noexcept;

@@ -7,19 +7,22 @@
 namespace CHI::Lunatic {
 
     Directory::Directory(size_t sets, size_t ways)
-        : sets(sets), ways(ways)
+        : bankMap(1), sets(sets), ways(ways), replacement(ReplacementKind::Age, sets, ways, 0)
     {
-        if (!sets || !ways)
-            throw std::invalid_argument("Lunatic directory geometry must be non-zero");
         if (sets > std::numeric_limits<size_t>::max() / ways)
             throw std::invalid_argument("Lunatic directory geometry is too large");
 
         lines.resize(sets * ways);
     }
 
-    Directory::Directory(const Options& options)
-        : Directory(options.slcSets, options.slcWays)
+    Directory::Directory(const Options& options, std::shared_ptr<DeterministicRandom> random)
+        : bankMap(options), sets(options.slcSets), ways(options.slcWays),
+          replacement(options.strategy.homeReplacement, sets, ways, options.seed, std::move(random))
     {
+        if (sets > std::numeric_limits<size_t>::max() / ways)
+            throw std::invalid_argument("Lunatic directory geometry is too large");
+
+        lines.resize(sets * ways);
     }
 
     size_t Directory::Index(size_t set, size_t way) const noexcept
@@ -29,7 +32,7 @@ namespace CHI::Lunatic {
 
     size_t Directory::SetIndex(const LineKey& key) const noexcept
     {
-        return size_t((key.address / LINE_SIZE) % sets);
+        return bankMap.SetIndex(key, sets);
     }
 
     HomeLine* Directory::Find(const LineKey& key) noexcept
@@ -84,19 +87,16 @@ namespace CHI::Lunatic {
         return candidates;
     }
 
-    size_t Directory::ChooseVictim(const LineKey& key) const
+    size_t Directory::ChooseVictim(const LineKey& key)
     {
-        const size_t set = SetIndex(key);
-        size_t victim = 0;
-        for (size_t way = 0; way < ways; ++way) {
-            if (!At(set, way).valid)
-                return way;
-        }
-        for (size_t way = 1; way < ways; ++way) {
-            if (At(set, way).age < At(set, victim).age)
-                victim = way;
-        }
-        return victim;
+        return replacement.Choose(SetIndex(key), lines);
+    }
+
+    size_t Directory::ChooseVictim(const LineKey& key, const std::vector<size_t>& candidates)
+    {
+        if (candidates.empty())
+            return ways;
+        return replacement.Choose(SetIndex(key), lines, &candidates);
     }
 
     HomeLine& Directory::Install(const LineKey& key, size_t way, uint64_t age)
@@ -110,7 +110,14 @@ namespace CHI::Lunatic {
         line.age = age;
         line.generation = ++nextGeneration;
         line.valid = true;
+        replacement.Update(SetIndex(key), way);
         return line;
+    }
+
+    void Directory::Access(const LineKey& key) noexcept
+    {
+        if (const auto way = FindWay(key))
+            replacement.Update(SetIndex(key), *way);
     }
 
     void Directory::Touch(const LineKey& key) noexcept
@@ -127,6 +134,7 @@ namespace CHI::Lunatic {
     void Directory::Clear() noexcept
     {
         nextGeneration = 0;
+        replacement.Reset();
         for (HomeLine& line : lines)
             line = HomeLine{};
     }

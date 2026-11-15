@@ -47,6 +47,8 @@ namespace CHI::Lunatic {
         if (REQ::AtomicStore::Is(opcode) || REQ::AtomicLoad::Is(opcode) ||
             opcode == REQ::AtomicSwap || opcode == REQ::AtomicCompare)
             return RequestClass::Atomic;
+        if (opcode == REQ::PrefetchTgt)
+            return RequestClass::Prefetch;
         return RequestClass::Unsupported;
     }
 
@@ -92,6 +94,7 @@ namespace CHI::Lunatic {
             case REQ::StashOnceShared:
             case REQ::StashOnceSepUnique:
             case REQ::StashOnceSepShared:
+            case REQ::PrefetchTgt:
                 return true;
             default:
                 return false;

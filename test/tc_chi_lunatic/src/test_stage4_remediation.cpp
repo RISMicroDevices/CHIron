@@ -276,7 +276,7 @@ LUNATIC_TEST(Stage4UnsupportedRequestGetsErrorCompletion)
     Driver<Config256> driver;
     LUNATIC_CHECK(driver.node.PushRXREQ(driver.Request(CHI::Eb::Opcodes::REQ::AtomicSwap, 4, 124, 0x1b000)));
     auto response = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-    LUNATIC_CHECK(response.RespErr() == 0b10);
+    LUNATIC_CHECK(response.RespErr() == CHI::Eb::RespErrs::NDERR);
     LUNATIC_CHECK(!driver.node.GetErrors().empty());
     driver.Quiesce();
 }

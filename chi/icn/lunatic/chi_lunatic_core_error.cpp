@@ -76,7 +76,7 @@ namespace CHI::Lunatic {
             if (!bindErrorDBID())
                 return;
             transaction.phase = Phase::Return;
-            transaction.readyTime = ScheduleData();
+            transaction.readyTime = ScheduleData(transaction);
             return;
         }
         if (requestClass == RequestClass::ImmediateWrite &&
@@ -192,7 +192,7 @@ namespace CHI::Lunatic {
         }
         transaction.canceled = true;
         transaction.dbid = transaction.handle;
-        QueueComp(transaction, false, CHI::Eb::Resps::Comp_I, 0b10);
+        QueueComp(transaction, false, CHI::Eb::Resps::Comp_I, CHI::Eb::RespErrs::NDERR);
     }
 
 }

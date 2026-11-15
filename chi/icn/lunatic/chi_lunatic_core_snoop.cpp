@@ -73,7 +73,7 @@ namespace CHI::Lunatic {
 
     std::vector<NodeId> Core::Impl::SnoopTargets(const LineKey& line) const
     {
-        auto targets = snoopFilter.Targets(line);
+        auto targets = Bank(line).snoopFilter.Targets(line);
         targets.erase(std::remove_if(targets.begin(), targets.end(), [&](NodeId target) {
             return !IsSnoopableRequester(options, target);
         }), targets.end());
@@ -142,7 +142,7 @@ namespace CHI::Lunatic {
              transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceMakeInvalid))
         {
             if (transaction.homeHit)
-                pipeline.Advance(transaction, Phase::Action, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
             else
                 StartMemoryRead(transaction);
             return;
@@ -152,7 +152,7 @@ namespace CHI::Lunatic {
         {
             if (target == transaction.request.source)
                 continue;
-            const CacheState state = snoopFilter.State(transaction.request.Line(), target);
+            const CacheState state = Bank(flow.snoopLine).snoopFilter.State(transaction.request.Line(), target);
             const auto requestClass = ClassifyRequest(transaction.request.opcode);
             const bool needsUnique = transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadUnique ||
                                      transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadOnceCleanInvalid ||
@@ -163,7 +163,7 @@ namespace CHI::Lunatic {
                  transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadClean ||
                  transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadNotSharedDirty ||
                  transaction.request.opcode == CHI::Eb::Opcodes::REQ::ReadPreferUnique);
-            if (needsUnique || needsDowngrade || snoopFilter.PossiblyDirty(transaction.request.Line(), target))
+            if (needsUnique || needsDowngrade || Bank(flow.snoopLine).snoopFilter.PossiblyDirty(transaction.request.Line(), target))
                 candidates.push_back(target);
         }
 
@@ -183,7 +183,7 @@ namespace CHI::Lunatic {
         if (candidates.empty())
         {
             if (ClassifyRequest(transaction.request.opcode) == RequestClass::MakeUnique)
-                pipeline.Advance(transaction, Phase::Action, time);
+                Bank(transaction).pipeline.Advance(transaction, Phase::Action, time);
             else
                 StartMemoryRead(transaction);
             return;
@@ -205,9 +205,18 @@ namespace CHI::Lunatic {
                 (!uniqueProviderRequired || soleProvider);
             if (flow.dctActive)
             {
-                const auto decision = events->Decide(SnoopForwardingEvent(time, nodeId, transaction,
-                    flow.dctTarget, snoopFilter.State(transaction.request.Line(), flow.dctTarget),
-                    owners.size(), flow.homeDirty));
+                if (options.strategy.providerSelection == ProviderSelectionKind::RoundRobin)
+                {
+                    size_t& next = providerNext[transaction.request.Line()];
+                    flow.dctTarget = candidates[next % candidates.size()];
+                    ++next;
+                }
+                SnoopForwardingEvent choice(time, nodeId, transaction,
+                    flow.dctTarget, Bank(flow.snoopLine).snoopFilter.State(transaction.request.Line(), flow.dctTarget),
+                    owners.size(), flow.homeDirty);
+                if (!options.strategy.forwardDct)
+                    choice.UseNonForwarding();
+                const auto decision = events->Decide(std::move(choice));
                 flow.dctActive = decision.IsForwarding();
             }
         }
@@ -222,7 +231,9 @@ namespace CHI::Lunatic {
         transaction.snoopsRequired = true;
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
-        transaction.readyTime = time;
+        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
+        if (options.strategy.snoopIssueAtResolve)
+            EmitSnoops(transaction);
     }
 
     void Core::Impl::PlanCMOSnoops(Transaction& transaction)
@@ -234,7 +245,7 @@ namespace CHI::Lunatic {
                 continue;
             const bool cleanShared = transaction.request.opcode == CHI::Eb::Opcodes::REQ::CleanShared ||
                 ClassifyRequest(transaction.request.opcode) == RequestClass::Persistence;
-            if (!cleanShared || snoopFilter.PossiblyDirty(transaction.request.Line(), target) ||
+            if (!cleanShared || Bank(flow.snoopLine).snoopFilter.PossiblyDirty(transaction.request.Line(), target) ||
                 !options.preciseSnoopFilter)
                 transaction.snoopTargets.push_back(target);
         }
@@ -242,7 +253,15 @@ namespace CHI::Lunatic {
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
-        transaction.readyTime = time;
+        const bool writeRequired = options.strategy.cmoBackendWhenRequired &&
+            transaction.request.opcode != CHI::Eb::Opcodes::REQ::MakeInvalid &&
+            (flow.dataDirty || flow.homeDirty);
+        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision,
+            time + (writeRequired ? options.cmoWriteLatency : 0));
+        if (options.strategy.cmoBackendWhenRequired && transaction.snoopTargets.empty() &&
+            (transaction.request.opcode == CHI::Eb::Opcodes::REQ::MakeInvalid ||
+             (!flow.dataDirty && !flow.homeDirty)))
+            ActionCoherent(transaction);
     }
 
     bool Core::Impl::EmitSnoops(Transaction& transaction)
@@ -345,10 +364,32 @@ namespace CHI::Lunatic {
             Error(transaction.handle, "snoop response ID is still live");
             return false;
         }
+        BankState& bank = Bank(flow.snoopLine);
+        if (!flow.snoopWaveOwned && options.structure.snoopResourceLimit &&
+            bank.activeSnoopWaves >= options.structure.snoopResourceLimit)
+        {
+            releaseID();
+            pmu.RecordStall(WaitReason::Snoop);
+            return false;
+        }
+        if (options.structure.outgoingSnoopQueueLimit &&
+            bank.outgoingSnoopQueue >= options.structure.outgoingSnoopQueueLimit)
+        {
+            releaseID();
+            pmu.RecordStall(WaitReason::OutputQueue);
+            return false;
+        }
         if (!Queue(txsnp, snoop, transaction.handle, transaction.actionAge, index + 1 == transaction.snoopTargets.size()))
         {
             releaseID();
             return false;
+        }
+        ++bank.outgoingSnoopQueue;
+        const bool newWave = !flow.snoopWaveOwned;
+        if (newWave)
+        {
+            ++bank.activeSnoopWaves;
+            flow.snoopWaveOwned = true;
         }
         flow.snoopRetToSrc[target] = snoop.retToSrc;
         flow.snoopDoNotGoToSD[target] = snoop.doNotGoToSD;
@@ -357,6 +398,11 @@ namespace CHI::Lunatic {
         if (!tracker.BindSnoop(transaction.handle, target, snoop.txnId))
         {
             releaseID();
+            if (newWave)
+            {
+                --bank.activeSnoopWaves;
+                flow.snoopWaveOwned = false;
+            }
             Error(transaction.handle, "unable to bind snoop response ID");
             transaction.canceled = true;
             transaction.phase = Phase::Commit;
@@ -444,7 +490,7 @@ namespace CHI::Lunatic {
             return;
         flow.snoopResponses[flit.source] = flit.resp;
 
-        const CacheState initial = snoopFilter.State(flow.snoopLine, flit.source);
+        const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, flit.source);
         const bool dirty = IsDirty(initial) ||
             (flit.resp & CHI::Eb::Resps::PassDirty) != 0;
         const ByteEnables enables = ExpandedEnables(flit.byteEnables, offset, bytes);
@@ -531,9 +577,9 @@ namespace CHI::Lunatic {
         const std::optional<CacheState> requester = DecodeForwardedState(fwdState);
         if (!requester)
             return false;
-        const CacheState initial = snoopFilter.State(flow.snoopLine, target);
+        const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, target);
         std::vector<CacheState> possibleInitial = PossibleSnoopStates(initial);
-        if (initial == CacheState::UD && snoopFilter.PossiblyClean(flow.snoopLine, target))
+        if (initial == CacheState::UD && Bank(flow.snoopLine).snoopFilter.PossiblyClean(flow.snoopLine, target))
         {
             const std::vector<CacheState> cleanInitial = PossibleSnoopStates(CacheState::UC);
             possibleInitial.insert(possibleInitial.end(), cleanInitial.begin(), cleanInitial.end());
@@ -567,9 +613,9 @@ namespace CHI::Lunatic {
         if (std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target) == transaction.pendingSnoops.end())
             return false;
 
-        const CacheState initial = snoopFilter.State(flow.snoopLine, target);
+        const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, target);
         std::vector<CacheState> possibleInitial = PossibleSnoopStates(initial);
-        if (initial == CacheState::UD && snoopFilter.PossiblyClean(flow.snoopLine, target))
+        if (initial == CacheState::UD && Bank(flow.snoopLine).snoopFilter.PossiblyClean(flow.snoopLine, target))
         {
             const std::vector<CacheState> cleanInitial = PossibleSnoopStates(CacheState::UC);
             possibleInitial.insert(possibleInitial.end(), cleanInitial.begin(), cleanInitial.end());
@@ -591,7 +637,7 @@ namespace CHI::Lunatic {
                                             bool withData, bool partial) const
     {
         const FlowState& flow = flows.at(transaction.handle);
-        const CacheState initial = snoopFilter.State(flow.snoopLine, target);
+        const CacheState initial = Bank(flow.snoopLine).snoopFilter.State(flow.snoopLine, target);
         const uint16_t opcode = SnoopOpcode(transaction, flow, target);
         const bool stashRead = opcode == CHI::Eb::Opcodes::SNP::SnpStashUnique ||
             opcode == CHI::Eb::Opcodes::SNP::SnpStashShared;
@@ -631,19 +677,18 @@ namespace CHI::Lunatic {
         }
         const CacheState final = DecodeSnoopState(transaction, target, resp, withData, partial);
         const bool ambiguousUnique = final == CacheState::UD && !partial && (resp & 0b011) == 0b010 &&
-            !(resp & CHI::Eb::Resps::PassDirty) && snoopFilter.PossiblyClean(flow.snoopLine, target);
+            !(resp & CHI::Eb::Resps::PassDirty) && Bank(flow.snoopLine).snoopFilter.PossiblyClean(flow.snoopLine, target);
         if (flow.victimSnoopFilterOnly && flow.victimPending && flow.snoopLine == flow.victimLine)
         {
-            const SnoopFilterEntry& current = snoopFilter.At(snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
+            const SnoopFilterEntry& current = Bank(flow.snoopLine).snoopFilter.At(Bank(flow.snoopLine).snoopFilter.SetIndex(flow.victimLine), flow.victimWay);
             if (current.valid && current.key == flow.victimLine && current.generation == flow.victimGeneration)
             {
-                snoopFilter.Track(flow.snoopLine, target, final, time, ambiguousUnique);
                 flow.victimGeneration = current.generation;
                 flow.victimResponseUpdated = true;
             }
         }
         else
-            snoopFilter.Track(flow.snoopLine, target, final, time, ambiguousUnique);
+            Bank(flow.snoopLine).snoopFilter.Track(flow.snoopLine, target, final, time, ambiguousUnique);
         auto it = std::find(transaction.pendingSnoops.begin(), transaction.pendingSnoops.end(), target);
         if (it != transaction.pendingSnoops.end())
         {
@@ -652,8 +697,17 @@ namespace CHI::Lunatic {
         }
         if (transaction.pendingSnoops.empty())
         {
+            if (flow.nextSnoop >= transaction.snoopTargets.size())
+                ReleaseSnoopWave(transaction);
             if (flow.dctForwarded && !flow.snoopForVictim && !flow.victimPending)
                 FinishResponse(transaction);
+            else if (options.strategy.snoopDataThroughDataPort)
+            {
+                transaction.wait = WaitReason::None;
+                ActionCoherent(transaction);
+                if (transaction.phase == Phase::Return)
+                    transaction.readyTime = ScheduleData(transaction, options.snoopDataLatency);
+            }
             else
             {
                 transaction.phase = Phase::Action;

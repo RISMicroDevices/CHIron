@@ -11,6 +11,21 @@
 
 namespace LunaticTest {
 
+    inline CHI::Lunatic::Request Stage10PCrdReturn(CHI::Lunatic::NodeId source,
+        CHI::Lunatic::NodeId target, uint8_t pCrdType, uint8_t qos, uint8_t traceTag)
+    {
+        CHI::Lunatic::Request request;
+        request.source = source;
+        request.target = target;
+        request.opcode = CHI::Eb::Opcodes::REQ::PCrdReturn;
+        request.pCrdType = pCrdType;
+        request.qos = qos;
+        request.traceTag = traceTag;
+        request.allowRetry = false;
+        request.size = 0;
+        return request;
+    }
+
     using Config128 = CHI::Eb::FlitConfiguration<7, 48, 0, 0, 128, false, false, false>;
     using Config256 = CHI::Eb::FlitConfiguration<7, 48, 0, 0, 256, false, false, false>;
     using Config512 = CHI::Eb::FlitConfiguration<7, 48, 0, 0, 512, true, true, false>;

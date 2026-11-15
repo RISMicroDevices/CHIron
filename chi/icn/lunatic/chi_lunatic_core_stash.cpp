@@ -38,11 +38,13 @@ namespace CHI::Lunatic {
             return false;
         }
 
-        const std::optional<size_t> currentWay = directory.FindWay(transaction.request.Line());
+        const LineKey line = transaction.request.Line();
+        const std::optional<size_t> currentWay = Bank(line).directory.FindWay(line);
         const size_t way = currentWay ? *currentWay : flow.victimWay;
-        HomeLine& home = InstallHome(transaction.request.Line(), way, transaction.data,
+        HomeLine& home = InstallHome(line, way, transaction.data,
             flow.homeDirty || flow.dataDirty, time);
         CopyMetadata(home, transaction, options);
+        ReleaseRefill(transaction, line);
         home.validBytes = flow.validBytes;
         transaction.homeHit = true;
         flow.directoryCommitted = true;
@@ -53,7 +55,13 @@ namespace CHI::Lunatic {
     {
         FlowState& flow = flows.at(transaction.handle);
         flow.snoopLine = transaction.request.Line();
-        flow.responseForm = transaction.handle % 3;
+        switch (options.strategy.stashResponse)
+        {
+            case StashResponseKind::Rotate: flow.responseForm = transaction.handle % 3; break;
+            case StashResponseKind::CompFirst: flow.responseForm = 0; break;
+            case StashResponseKind::StashDoneFirst: flow.responseForm = 1; break;
+            case StashResponseKind::Combined: flow.responseForm = 2; break;
+        }
         flow.stashTarget = transaction.request.returnNid;
         flow.stashTargetValid = transaction.request.stashNidValid;
         if (flow.stashTargetValid)
@@ -65,7 +73,7 @@ namespace CHI::Lunatic {
         {
             for (NodeId target : SnoopTargets(transaction.request.Line()))
             {
-                const CacheState state = snoopFilter.State(flow.snoopLine, target);
+                const CacheState state = Bank(transaction).snoopFilter.State(flow.snoopLine, target);
                 flow.targetlessSharedPeer |= state == CacheState::SC || state == CacheState::SD;
                 if (IsUnique(state))
                     transaction.snoopTargets.push_back(target);
@@ -79,7 +87,7 @@ namespace CHI::Lunatic {
         if (transaction.phase != Phase::WaitMemory)
         {
             transaction.phase = Phase::Action;
-            transaction.readyTime = time;
+            transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
         }
     }
 
@@ -95,7 +103,7 @@ namespace CHI::Lunatic {
             }
             return;
         }
-        snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
+        Bank(transaction).snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
         if (!IsSeparatedStashRequest(transaction.request.opcode))
         {
             if (!flow.compSent)
@@ -146,7 +154,7 @@ namespace CHI::Lunatic {
         response.stashGroupId = transaction.request.stashGroupId;
         response.qos = transaction.request.qos;
         response.traceTag = transaction.request.traceTag;
-        if (Queue(txrsp, response, transaction.handle, transaction.actionAge))
+        if (AcquireResponse(transaction, txrsp) && Queue(txrsp, response, transaction.handle, transaction.actionAge))
         {
             flow.stashDoneSent = true;
             if (withComp)

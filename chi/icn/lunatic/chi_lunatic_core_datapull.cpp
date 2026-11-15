@@ -48,6 +48,8 @@ namespace CHI::Lunatic {
             return false;
         }
         ++pmu.admittedTransactions;
+        BankState& bank = Bank(*implied);
+        ++bank.activeOriginals;
 
         FlowState flow;
         flow.separatedResponse = options.separatedReadResponse;
@@ -60,20 +62,23 @@ namespace CHI::Lunatic {
         if (!ordering.Add(*implied))
         {
             Error(transaction.handle, "duplicate DataPull ordering gate");
+            --bank.activeOriginals;
             tracker.Retire(implied->handle);
             flows.erase(implied->handle);
             return false;
         }
-        if (!hazards.Add(implied->handle, implied->request.Line(), implied->actionAge))
+        if (!bank.hazards.Add(implied->handle, implied->request.Line(), implied->actionAge))
         {
             Error(transaction.handle, "duplicate DataPull hazard gate");
+            --bank.activeOriginals;
             ordering.Release(implied->handle);
             tracker.Retire(implied->handle);
             flows.erase(implied->handle);
             return false;
         }
         flows.at(transaction.handle).dataPullChildren.push_back(implied->handle);
-        implied->readyTime = pipeline.SaturatingAdd(time, 1);
+        implied->readyTime = ScheduleResult(*implied, SchedulePoint::RequestBuffer,
+            bank.pipeline.SaturatingAdd(time, 1));
         implied->phase = Phase::Receive;
         return true;
     }

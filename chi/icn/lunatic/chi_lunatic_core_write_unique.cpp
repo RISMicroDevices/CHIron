@@ -7,7 +7,13 @@ namespace CHI::Lunatic {
         FlowState& flow = flows.at(transaction.handle);
         flow.snoopLine = transaction.request.Line();
         flow.expectedBeatMask = TransferBeatMask(transaction.request, options);
-        flow.responseForm = transaction.handle % 3;
+        switch (options.strategy.immediateResponse)
+        {
+            case ImmediateResponseKind::Rotate: flow.responseForm = transaction.handle % 3; break;
+            case ImmediateResponseKind::EarlyDBID: flow.responseForm = 0; break;
+            case ImmediateResponseKind::LateComp: flow.responseForm = 1; break;
+            case ImmediateResponseKind::Combined: flow.responseForm = 2; break;
+        }
         if (ClassifyRequest(transaction.request.opcode) == RequestClass::WriteUniqueZero)
         {
             transaction.data.fill(0);
@@ -27,7 +33,8 @@ namespace CHI::Lunatic {
         {
             for (NodeId target : targets)
             {
-                if (target != transaction.request.source && IsUnique(snoopFilter.State(flow.snoopLine, target)))
+                if (target != transaction.request.source &&
+                    IsUnique(Bank(transaction).snoopFilter.State(flow.snoopLine, target)))
                 {
                     flow.stashTarget = target;
                     flow.stashTargetValid = true;
@@ -39,7 +46,7 @@ namespace CHI::Lunatic {
         bool stashTargetPlanned = false;
         for (NodeId target : targets)
         {
-            if (target != transaction.request.source)
+            if (target != transaction.request.source || transaction.request.snoopMe)
             {
                 transaction.snoopTargets.push_back(target);
                 stashTargetPlanned |= flow.stashTargetValid && target == flow.stashTarget;
@@ -53,7 +60,7 @@ namespace CHI::Lunatic {
         transaction.snoopsRequired = !transaction.snoopTargets.empty();
         flow.nextSnoop = 0;
         transaction.phase = Phase::Action;
-        transaction.readyTime = time;
+        transaction.readyTime = ScheduleResult(transaction, SchedulePoint::SnoopDecision, time);
     }
 
     void Core::Impl::QueueImmediateResponse(Transaction& transaction)
@@ -231,7 +238,7 @@ namespace CHI::Lunatic {
         {
             flow.backendPhase = BackendPhase::Done;
             flow.directoryCommitted = true;
-            snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
+            Bank(transaction).snoopFilter.Track(transaction.request.Line(), transaction.request.source, CacheState::I, time);
             return true;
         }
 
@@ -296,11 +303,12 @@ namespace CHI::Lunatic {
 
         if (flow.mergeImmediateHome)
         {
-            const std::optional<size_t> currentWay = directory.FindWay(line);
+            const std::optional<size_t> currentWay = Bank(line).directory.FindWay(line);
             const size_t way = currentWay ? *currentWay : flow.victimWay;
             const bool dirty = flow.homeDirty || flow.dataDirty || !flow.validBytes.empty();
             HomeLine& home = InstallHome(line, way, transaction.data, dirty, time);
             CopyMetadata(home, transaction, options);
+            ReleaseRefill(transaction, line);
             home.validBytes = flow.validBytes;
             flow.backendPhase = BackendPhase::Done;
         }
@@ -312,11 +320,11 @@ namespace CHI::Lunatic {
         }
 
         if (decision.removeHome && transaction.homeHit)
-            if (const auto way = directory.FindWay(line); way)
-                directory.Invalidate(directory.SetIndex(line), *way);
+            if (const auto way = Bank(line).directory.FindWay(line); way)
+                Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(line), *way);
 
         flow.requesterFinal = CacheState::I;
-        snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
+        Bank(transaction).snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
         flow.directoryCommitted = true;
         return true;
     }

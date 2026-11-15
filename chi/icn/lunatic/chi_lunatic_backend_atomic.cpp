@@ -13,7 +13,7 @@ namespace CHI::Lunatic {
                 : flow.atomic.backendResultReceived && flow.backendDataEmitted;
             if (!complete)
                 return;
-            flow.backendPhase = BackendPhase::Done;
+            impl.CompleteBackendOperation(transaction);
             impl.tracker.UnbindMemory(impl.options.subordinateId, transaction.handle);
             transaction.phase = Phase::Action;
             transaction.readyTime = impl.time;
@@ -42,10 +42,10 @@ namespace CHI::Lunatic {
                 return false;
             flow.atomic.backendDirtyCommitted = true;
         }
-        if (const auto way = directory.FindWay(line); way)
-            directory.Invalidate(directory.SetIndex(line), *way);
+        if (const auto way = Bank(line).directory.FindWay(line); way)
+            Bank(line).directory.Invalidate(Bank(line).directory.SetIndex(line), *way);
         flow.requesterFinal = CacheState::I;
-        snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
+        Bank(line).snoopFilter.Track(line, transaction.request.source, CacheState::I, time);
         return true;
     }
 
@@ -67,8 +67,15 @@ namespace CHI::Lunatic {
         request.stashNidValid = false;
         request.stashLpidValid = false;
         request.likelyShared = false;
+        if (!AcquireBackendOperation(transaction))
+        {
+            transaction.wait = WaitReason::Memory;
+            transaction.readyTime = time;
+            return;
+        }
         if (!Queue(txreq, request, transaction.handle, transaction.actionAge, false, true))
         {
+            ReleaseBackendOperation(transaction);
             transaction.readyTime = time;
             return;
         }
@@ -137,7 +144,7 @@ namespace CHI::Lunatic {
         else
         {
             transaction.phase = Phase::Return;
-            transaction.readyTime = ScheduleData();
+            transaction.readyTime = ScheduleData(transaction);
         }
     }
 
@@ -229,7 +236,7 @@ namespace CHI::Lunatic {
         if (store && flit.opcode == RSP::Comp)
         {
             if (flow.backendPhase != BackendPhase::WaitDBID && flow.backendPhase != BackendPhase::WaitComp &&
-                flow.backendPhase != BackendPhase::WaitDataEmission)
+                flow.backendPhase != BackendPhase::SendData && flow.backendPhase != BackendPhase::WaitDataEmission)
                 return false;
             flow.backendCompReceived = true;
             flow.backendCompRespErr = flit.respErr;

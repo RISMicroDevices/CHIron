@@ -43,7 +43,9 @@ namespace {
 
     void CheckSeparateErrors(bool persistFirst, uint8_t compErr, uint8_t persistErr)
     {
-        TestDriver driver(ErrorBackendOptions());
+        Options options = ErrorBackendOptions();
+        options.strategy.persistResponse = PersistResponseKind::SeparateCompFirst;
+        TestDriver driver(options);
         const auto request = StartPersistence(driver);
         SendResponse(driver, request, persistFirst ? CHI::Eb::Opcodes::RSP::Persist : CHI::Eb::Opcodes::RSP::Comp,
                      persistFirst ? persistErr : compErr);

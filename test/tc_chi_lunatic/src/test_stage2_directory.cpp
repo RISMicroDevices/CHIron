@@ -441,3 +441,49 @@ LUNATIC_TEST(Stage2PolicyFactoryRejectsInvalidKind)
 {
     CheckThrows([] { MakePolicy(static_cast<PolicyKind>(0xff)); });
 }
+
+
+LUNATIC_TEST(Stage2ReplacementCandidateSubset)
+{
+    const LineKey key = Line(8);
+    Options options;
+    options.slcSets = 1;
+    options.slcWays = 4;
+    options.snoopFilterSets = 1;
+    options.snoopFilterWays = 4;
+
+    options.strategy.homeReplacement = ReplacementKind::Age;
+    Directory oldest(options);
+    for (size_t way = 0; way < 4; ++way)
+        oldest.Install(Line(way), way, 40 - way * 10);
+    LUNATIC_CHECK(oldest.ChooseVictim(key, { 0, 2 }) == 2);
+    LUNATIC_CHECK(oldest.ChooseVictim(key, { 1, 2 }) == 2);
+    LUNATIC_CHECK(oldest.ChooseVictim(key, { 2 }) == 2);
+    LUNATIC_CHECK(oldest.ChooseVictim(key, {}) == 4);
+
+    options.strategy.homeReplacement = ReplacementKind::PLRU;
+    Directory plru(options);
+    for (size_t way = 0; way < 4; ++way)
+        plru.At(0, way).valid = true;
+    LUNATIC_CHECK(plru.ChooseVictim(key, { 1, 3 }) == 1);
+    plru.Install(Line(8), 1, 4);
+    LUNATIC_CHECK(plru.ChooseVictim(key, { 1, 3 }) == 3);
+    plru.Install(Line(9), 0, 5);
+    LUNATIC_CHECK(plru.ChooseVictim(key, { 0, 1 }) == 1);
+
+    options.strategy.homeReplacement = ReplacementKind::PseudoRandom;
+    Directory random(options);
+    for (size_t way = 0; way < 4; ++way)
+        random.At(0, way).valid = true;
+    const size_t selected = random.ChooseVictim(key, { 1, 3 });
+    LUNATIC_CHECK(selected == 1 || selected == 3);
+    random.Clear();
+    for (size_t way = 0; way < 4; ++way)
+        random.At(0, way).valid = true;
+    LUNATIC_CHECK(random.ChooseVictim(key, { 1, 3 }) == selected);
+    random.At(0, 0).valid = false;
+    LUNATIC_CHECK(random.ChooseVictim(key, { 0, 2 }) == 0);
+
+    SnoopFilter filter(options);
+    LUNATIC_CHECK(filter.ChooseVictim(key, {}) == 4);
+}

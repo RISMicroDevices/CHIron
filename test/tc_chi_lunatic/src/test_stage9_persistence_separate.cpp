@@ -47,6 +47,7 @@ namespace {
         options.backend = BackendKind::CHI;
         options.subordinateId = 6;
         options.outputQueueLimit = 1;
+        options.strategy.persistResponse = PersistResponseKind::SeparateCompFirst;
         Driver<Config256> driver(options);
         const auto request = StartPersistence(driver);
         if (persistFirst)

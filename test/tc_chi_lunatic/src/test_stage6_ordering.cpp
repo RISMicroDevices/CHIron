@@ -36,7 +36,7 @@ LUNATIC_TEST(Stage6OrderingRejectsReservedRNOrder)
     request.Order() = 1;
     LUNATIC_CHECK(driver.node.PushRXREQ(request));
     const auto response = driver.NextRSP(CHI::Eb::Opcodes::RSP::Comp);
-    LUNATIC_CHECK(response.RespErr() == CHI::Eb::RespErrs::DERR);
+    LUNATIC_CHECK(response.RespErr() == CHI::Eb::RespErrs::NDERR);
     LUNATIC_CHECK(!driver.node.GetErrors().empty());
     driver.Quiesce();
 }
