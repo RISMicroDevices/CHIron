@@ -90,6 +90,11 @@ namespace CCHI::Taurus {
             uint64_t    seed                = 0;
         };
 
+        enum class LoadThroughMode {
+            Inclusive,
+            Bypass
+        };
+
     public:
         // *NOTE: event listeners follow the same callback contract as FutureNow
         //        (no calls back into the same node - see ERRATA N3).
@@ -191,6 +196,7 @@ namespace CCHI::Taurus {
     public:
         class GrantedEvent;
         class EvictedEvent;
+        class ReadEvent;
 
         class CacheLine {
             friend class UpstreamNode<config>;
@@ -239,6 +245,7 @@ namespace CCHI::Taurus {
             
             std::shared_ptr<Xact::Xaction<config>>      activeREQ               = nullptr;
             std::shared_ptr<FutureNow<GrantedEvent>>    activeREQFuture         = nullptr;
+            std::shared_ptr<FutureNow<ReadEvent>>       activeREQLoadThroughFuture = nullptr;
             std::optional<Flits::REQ<config>>           pendingREQHazardTXREQ   = std::nullopt;
             std::optional<Flits::REQ<config>>           pendingREQChannelTXREQ  = std::nullopt;
             std::optional<Flits::UpRSP<config>>         pendingREQChannelTXRSP  = std::nullopt;
@@ -730,6 +737,7 @@ namespace CCHI::Taurus {
 
     protected:
         void                                    SetCacheLine(std::shared_ptr<CacheLine> cacheLine) noexcept;
+        static ReadEvent                        MakeReadSnapshot(const CacheLine& cacheLine) noexcept;
 
     public:
         std::shared_ptr<FutureNow<GrantedEvent>>        DoLoad(uint64_t PA, uint64_t tagAlias = 0) noexcept;
@@ -745,7 +753,7 @@ namespace CCHI::Taurus {
         std::shared_ptr<FutureNow<PrefetchEmittedEvent>>
                                                         DoPrefetchStore(uint64_t PA) noexcept;
 
-        std::shared_ptr<FutureNow<ReadEvent>>           DoLoadThrough(uint64_t PA) noexcept;
+        std::shared_ptr<FutureNow<ReadEvent>>           DoLoadThrough(uint64_t PA, LoadThroughMode mode = LoadThroughMode::Inclusive) noexcept;
         std::shared_ptr<FutureNow<CompleteEvent>>       DoStoreThrough(uint64_t PA, const uint64_t data[8]) noexcept;
 
         std::shared_ptr<FutureNow<ReadEvent>>           DoNonCacheableRead(uint64_t PA) noexcept;
@@ -2046,11 +2054,128 @@ namespace CCHI::Taurus {
     }
 
     template<FlitConfigurationConcept config>
-    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::ReadEvent>> UpstreamNode<config>::DoLoadThrough(uint64_t PA) noexcept
+    inline typename UpstreamNode<config>::ReadEvent UpstreamNode<config>::MakeReadSnapshot(const CacheLine& cacheLine) noexcept
     {
-        // TODO: not supported yet
+        auto data = std::make_shared<uint64_t[]>(8);
+        std::copy_n(cacheLine.data, 8, data.get());
+        return ReadEvent(cacheLine.PA, std::move(data));
+    }
 
-        return nullptr;
+    template<FlitConfigurationConcept config>
+    inline std::shared_ptr<FutureNow<typename UpstreamNode<config>::ReadEvent>> UpstreamNode<config>::DoLoadThrough(uint64_t PA, LoadThroughMode mode) noexcept
+    {
+        PA = LineBase(PA);
+
+        std::shared_ptr<CacheLine> cacheLine = GetCacheLine(PA);
+
+        bool hazard = false;
+
+        if (cacheLine)
+        {
+            if ((cacheLine->state == CacheState::Shared
+              || cacheLine->state == CacheState::UniqueClean
+              || cacheLine->state == CacheState::UniqueDirty)
+             && !IsREQFilling(*cacheLine))
+            {
+                if (mode == LoadThroughMode::Bypass)
+                    return std::make_shared<FutureNow<ReadEvent>>(Denial::REJECTED_TAURUS_PROTOCOL_DENIED);
+
+                return std::make_shared<FutureNow<ReadEvent>>(Denial::DONE, MakeReadSnapshot(*cacheLine));
+            }
+
+            if (IsREQInFlight(*cacheLine))
+                return std::make_shared<FutureNow<ReadEvent>>(Denial::REJECTED_TAURUS_PA_REQ_BUSY);
+
+            hazard = HasREQHazard(*cacheLine);
+        }
+        else
+        {
+            cacheLine = std::make_shared<CacheLine>(this, PA);
+            SetCacheLine(cacheLine);
+        }
+
+        InFlightUpdate inFlightUpdate(*this, *cacheLine);
+
+        if (CountInFlightREQ() >= xactionLimitREQ)
+            return std::make_shared<FutureNow<ReadEvent>>(Denial::REJECTED_TAURUS_REQ_LIMIT_EXCEEDED);
+
+        auto txnID = AllocateTxnID();
+        const uint64_t actionAge = NextEmissionAge();
+
+        if (!txnID)
+            return std::make_shared<FutureNow<ReadEvent>>(Denial::REJECTED_TAURUS_TOTAL_LIMIT_EXCEEDED);
+
+        Flits::REQ<config> reqFlit;
+        reqFlit.TxnID = *txnID;
+        reqFlit.SrcID = nodeID;
+        reqFlit.TgtID = sam->Map(PA);
+        reqFlit.Opcode = mode == LoadThroughMode::Inclusive ? Opcodes::REQ::ReadShared : Opcodes::REQ::ReadOnce;
+        reqFlit.Size = Sizes::B64;
+        reqFlit.Addr = PA;
+        if constexpr (Flits::REQ<config>::hasTagAlias)
+            reqFlit.TagAlias = 0;
+        reqFlit.NS = 0;
+        reqFlit.Order = 0;
+        reqFlit.MemAttr = 0;
+        reqFlit.Excl = 0;
+        reqFlit.ExpCompData = 1;
+        reqFlit.WayValid = 0;
+        reqFlit.Way = 0;
+        reqFlit.TraceTag = 0;
+
+        if (events)
+            events->OnREQPreHazardDetection(*this, *cacheLine, reqFlit, hazard);
+
+        if (events)
+            events->OnREQPostHazardDetection(*this, *cacheLine, reqFlit, hazard);
+
+        if (hazard)
+        {
+            DenialEnum denial = Denial::ACCEPTED;
+
+            if (events)
+                denial = events->OnREQPreHazardPending(*this, *cacheLine, reqFlit).GetDenial();
+
+            if (!denial->IsRejected())
+            {
+                cacheLine->pendingREQHazardTXREQ = { reqFlit };
+                cacheLine->ageTXREQ = actionAge;
+            }
+
+            if (events)
+                events->OnREQPostHazardPending(*this, *cacheLine, reqFlit, denial);
+
+            if (denial->IsRejected())
+            {
+                FreeTxnID(*txnID);
+                return std::make_shared<FutureNow<ReadEvent>>(denial);
+            }
+        }
+        else
+        {
+            DenialEnum denial = Denial::ACCEPTED;
+
+            if (events)
+                denial = events->OnREQPreChannelPending(*this, *cacheLine, reqFlit).GetDenial();
+
+            if (!denial->IsRejected())
+                PendREQChannelTXREQ(*cacheLine, reqFlit, actionAge);
+
+            if (events)
+                events->OnREQPostChannelPending(*this, *cacheLine, reqFlit, denial);
+
+            if (denial->IsRejected())
+            {
+                FreeTxnID(*txnID);
+                return std::make_shared<FutureNow<ReadEvent>>(denial);
+            }
+        }
+
+        std::shared_ptr<FutureNow<ReadEvent>> future
+            = std::make_shared<FutureNow<ReadEvent>>(Denial::ACCEPTED);
+
+        cacheLine->activeREQLoadThroughFuture = future;
+        return future;
     }
 
     template<FlitConfigurationConcept config>
@@ -2939,6 +3064,20 @@ namespace CCHI::Taurus {
                         cacheLine.activeREQFuture->Fire(GrantedEvent(it->second));
                     }
 
+                    if (xactionCacheableAllocatingRead.GotAllCompData()
+                     && cacheLine.activeREQLoadThroughFuture
+                     && !cacheLine.activeREQLoadThroughFuture->Fired())
+                    {
+                        if constexpr (Flits::REQ<config>::hasTagAlias)
+                            cacheLine.tagAlias = cacheLine.activeREQ->GetFirst().flit.req.TagAlias;
+
+                        if (events)
+                            events->OnCacheLineGranted(*this, cacheLine, cacheLine.activeREQ);
+
+                        cacheLine.activeREQLoadThroughFuture->Fire(MakeReadSnapshot(cacheLine));
+                        cacheLine.activeREQLoadThroughFuture.reset();
+                    }
+
                     if ((xactionCacheableAllocatingRead.GotComp() || xactionCacheableAllocatingRead.GotAnyCompData())
                      && !xactionCacheableAllocatingRead.GotCompAck()
                      && !cacheLine.pendingREQChannelTXRSP)
@@ -2961,6 +3100,19 @@ namespace CCHI::Taurus {
 
                         if (events)
                             events->OnREQCompAckPostChannelPending(*this, cacheLine, rspFlit);
+                    }
+                }
+                else if (cacheLine.activeREQ->GetType() == Xact::XactionType::CacheableTransientRead)
+                {
+                    Xact::XactionCacheableTransientRead<config>& xactionCacheableTransientRead
+                        = static_cast<Xact::XactionCacheableTransientRead<config>&>(*cacheLine.activeREQ);
+
+                    if (xactionCacheableTransientRead.GotAllCompData()
+                     && cacheLine.activeREQLoadThroughFuture
+                     && !cacheLine.activeREQLoadThroughFuture->Fired())
+                    {
+                        cacheLine.activeREQLoadThroughFuture->Fire(MakeReadSnapshot(cacheLine));
+                        cacheLine.activeREQLoadThroughFuture.reset();
                     }
                 }
 
@@ -4290,6 +4442,8 @@ namespace CCHI::Taurus {
             // 1. Cacheable Allocating Read
             //  - ReadShared -> [CompData] -> CompAck
             //  - ReadUnique -> [CompData] -> CompAck
+            // 2. Cacheable Transient Read
+            //  - ReadOnce -> [CompData]
 
             for (auto it = cacheable.begin(); it != cacheable.end(); ++it)
             {
@@ -4313,24 +4467,22 @@ namespace CCHI::Taurus {
                         if (events)
                             events->OnAcceptedDnDAT(*this, cacheLine, xaction, dndatFlit);
 
+                        size_t dataID = static_cast<size_t>(dndatFlit.DataID);
+
+                        if (dataID < 2)
+                        {
+                            cacheLine.data[dataID * 4 + 0] = dndatFlit.Data[0];
+                            cacheLine.data[dataID * 4 + 1] = dndatFlit.Data[1];
+                            cacheLine.data[dataID * 4 + 2] = dndatFlit.Data[2];
+                            cacheLine.data[dataID * 4 + 3] = dndatFlit.Data[3];
+                        }
+
                         CacheStateEnum state;
 
                         if (xaction->GetType() == Xact::XactionType::CacheableAllocatingRead)
                         {
                             std::shared_ptr<Xact::XactionCacheableAllocatingRead<config>> xactionCacheableAllocatingRead
                                 = std::static_pointer_cast<Xact::XactionCacheableAllocatingRead<config>>(xaction);
-
-                            // store the beat payload into the line (every beat;
-                            // the state promotion below stays first-beat-only)
-                            size_t dataID = static_cast<size_t>(dndatFlit.DataID);
-
-                            if (dataID < 2)
-                            {
-                                cacheLine.data[dataID * 4 + 0] = dndatFlit.Data[0];
-                                cacheLine.data[dataID * 4 + 1] = dndatFlit.Data[1];
-                                cacheLine.data[dataID * 4 + 2] = dndatFlit.Data[2];
-                                cacheLine.data[dataID * 4 + 3] = dndatFlit.Data[3];
-                            }
 
                             if (xaction->GetFirstDnDAT({ Opcodes::DnDAT::CompData }) != xaction->GetLastDnDAT({ Opcodes::DnDAT::CompData }))
                             {
@@ -4374,7 +4526,7 @@ namespace CCHI::Taurus {
 
                             cacheLine.state = state;
                         }
-                        else
+                        else if (xaction->GetType() != Xact::XactionType::CacheableTransientRead)
                             return true;
                     }
                     else
