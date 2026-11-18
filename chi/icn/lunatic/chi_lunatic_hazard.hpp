@@ -22,6 +22,7 @@ namespace CHI::Lunatic {
         bool                         Append(TransactionHandle handle, const LineKey& line, Time age);
         bool                         IsHead(TransactionHandle handle, const LineKey& line) const noexcept;
         bool                         Has(const LineKey& line) const noexcept;
+        bool                         HasVictim(const LineKey& line) const noexcept;
         std::optional<TransactionHandle>
                                      Next(const LineKey& line) const;
         std::vector<TransactionHandle>

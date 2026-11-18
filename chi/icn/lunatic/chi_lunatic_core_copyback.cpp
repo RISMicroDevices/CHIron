@@ -403,24 +403,29 @@ namespace CHI::Lunatic {
         std::vector<size_t> candidates = directoryDomain
             ? bank.directory.VictimCandidates(line) : bank.snoopFilter.VictimCandidates(line);
         const Transaction* requester = tracker.Find(handle);
-        auto youngerActiveHead = [&](const LineKey& key) {
-            const auto head = Bank(key).hazards.Next(key);
-            if (!head)
-                return false;
-            const Transaction* active = tracker.Find(*head);
-            if (!requester || !active)
+        auto unsafeVictim = [&](const LineKey& key) {
+            const HazardGraph& hazards = Bank(key).hazards;
+            if (hazards.HasVictim(key))
                 return true;
-            return active->actionAge > requester->actionAge ||
-                (active->actionAge == requester->actionAge && *head > handle);
+            for (const TransactionHandle activeHandle : hazards.Order(key))
+            {
+                const Transaction* active = tracker.Find(activeHandle);
+                if (!requester || !active)
+                    return true;
+                if (active->actionAge > requester->actionAge ||
+                    (active->actionAge == requester->actionAge && activeHandle > handle))
+                    return true;
+            }
+            return false;
         };
         candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](size_t way) {
             if (directoryDomain)
             {
                 const HomeLine& candidate = bank.directory.At(set, way);
-                return candidate.valid && youngerActiveHead(candidate.key);
+                return candidate.valid && unsafeVictim(candidate.key);
             }
             const SnoopFilterEntry& candidate = bank.snoopFilter.At(set, way);
-            return candidate.valid && youngerActiveHead(candidate.key);
+            return candidate.valid && unsafeVictim(candidate.key);
         }), candidates.end());
         const size_t invalidWay = directoryDomain ? bank.directory.Ways() : bank.snoopFilter.Ways();
         if (candidates.empty())
@@ -513,6 +518,7 @@ namespace CHI::Lunatic {
         const LineKey line = transaction.request.Line();
         if (!flow.victimPending)
         {
+            flow.victimSnoopFilterOnly = false;
             flow.victimWay = ChooseVictim(transaction.handle, VictimDomain::Directory, line);
             if (flow.victimWay >= Bank(line).directory.Ways())
             {

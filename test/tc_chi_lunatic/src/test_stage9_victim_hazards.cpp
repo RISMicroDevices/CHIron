@@ -263,3 +263,186 @@ LUNATIC_TEST(Stage9VictimResponseDoesNotReleaseSnoopFilterWayEarly)
     LUNATIC_CHECK(impl.PrepareHomeCommit(*competing));
     LUNATIC_CHECK(impl.errors.empty());
 }
+
+LUNATIC_TEST(Stage9VictimRejectsUnsafeHazard)
+{
+    Options options;
+    options.policy = PolicyKind::NINE;
+    options.slcSets = 1;
+    options.slcWays = 1;
+    options.snoopFilterSets = 1;
+    options.snoopFilterWays = 1;
+
+    Core::Impl impl(2, options, std::make_shared<EventHub>());
+    const LineKey incoming = LineKey::FromAddress(0x60100, false);
+    const LineKey victim = LineKey::FromAddress(0x60200, false);
+    const LineKey otherIncoming = LineKey::FromAddress(0x60300, false);
+    const auto makeRequest = [](NodeId source, TransactionId txnId, uint64_t address) {
+        Request request{};
+        request.source = source;
+        request.target = 2;
+        request.txnId = txnId;
+        request.address = address;
+        request.opcode = CHI::Eb::Opcodes::REQ::ReadClean;
+        request.memAttr = CHI::Eb::MemAttrs::WriteBack_Allocate;
+        request.snpAttr = 1;
+        return request;
+    };
+
+    Transaction* blocker = impl.tracker.Allocate(makeRequest(5, 1, victim.address), 10);
+    Transaction* requester = impl.tracker.Allocate(makeRequest(6, 2, incoming.address), 20);
+    Transaction* younger = impl.tracker.Allocate(makeRequest(7, 3, victim.address), 30);
+    Transaction* otherRequester = impl.tracker.Allocate(makeRequest(8, 4, otherIncoming.address), 40);
+    Transaction* olderVictim = impl.tracker.Allocate(makeRequest(9, 5, otherIncoming.address), 5);
+    LUNATIC_CHECK(blocker && requester && younger && otherRequester && olderVictim);
+    LUNATIC_CHECK(impl.Bank(victim).hazards.Add(blocker->handle, victim, blocker->actionAge));
+    LUNATIC_CHECK(impl.Bank(victim).hazards.Add(younger->handle, victim, younger->actionAge));
+    LUNATIC_CHECK(impl.Bank(victim).hazards.Next(victim) == blocker->handle);
+
+    impl.Bank(victim).directory.Install(victim, 0, 1);
+    impl.Bank(victim).snoopFilter.Track(victim, 5, CacheState::UD, 0);
+
+    LUNATIC_CHECK(impl.ChooseVictim(requester->handle, VictimDomain::Directory, incoming) ==
+        impl.Bank(incoming).directory.Ways());
+    LUNATIC_CHECK(impl.ChooseVictim(requester->handle, VictimDomain::SnoopFilter, incoming) ==
+        impl.Bank(incoming).snoopFilter.Ways());
+    LUNATIC_CHECK(impl.ChooseVictim(otherRequester->handle, VictimDomain::Directory, otherIncoming) == 0);
+    LUNATIC_CHECK(impl.ChooseVictim(otherRequester->handle, VictimDomain::SnoopFilter, otherIncoming) == 0);
+
+    LUNATIC_CHECK(impl.Bank(victim).hazards.Append(olderVictim->handle, victim, olderVictim->actionAge));
+    LUNATIC_CHECK(impl.Bank(victim).hazards.HasVictim(victim));
+    LUNATIC_CHECK(impl.ChooseVictim(otherRequester->handle, VictimDomain::Directory, otherIncoming) ==
+        impl.Bank(otherIncoming).directory.Ways());
+    LUNATIC_CHECK(impl.ChooseVictim(otherRequester->handle, VictimDomain::SnoopFilter, otherIncoming) ==
+        impl.Bank(otherIncoming).snoopFilter.Ways());
+    LUNATIC_CHECK(impl.errors.empty());
+}
+
+LUNATIC_TEST(Stage9VictimResponseAcceptsSameKeyGeneration)
+{
+    Options options;
+    options.policy = PolicyKind::NINE;
+    options.slcSets = 1;
+    options.slcWays = 1;
+    options.snoopFilterSets = 1;
+    options.snoopFilterWays = 1;
+
+    Core::Impl impl(2, options, std::make_shared<EventHub>());
+    const LineKey victim = LineKey::FromAddress(0x70100, false);
+    const LineKey incoming = LineKey::FromAddress(0x70200, false);
+    const LineData latest = VictimPattern(93);
+    impl.Bank(victim).snoopFilter.Track(victim, 5, CacheState::UD, 0);
+
+    Request request{};
+    request.source = 6;
+    request.target = 2;
+    request.txnId = 2;
+    request.address = incoming.address;
+    request.opcode = CHI::Eb::Opcodes::REQ::ReadClean;
+    request.memAttr = CHI::Eb::MemAttrs::WriteBack_Allocate;
+    request.snpAttr = 1;
+    Transaction* operation = impl.tracker.Allocate(request, 20);
+    LUNATIC_CHECK(operation);
+    impl.flows.emplace(operation->handle, FlowState{});
+    operation->phase = Phase::Action;
+    operation->Mark(COMPLETE_MEMORY);
+    LUNATIC_CHECK(impl.Bank(incoming).hazards.Add(operation->handle, incoming, operation->actionAge));
+
+    LUNATIC_CHECK(!impl.PrepareHomeCommit(*operation));
+    FlowState& flow = impl.flows.at(operation->handle);
+    LUNATIC_CHECK(flow.victimSnoopFilterOnly && flow.victimPending);
+    LUNATIC_CHECK(flow.victimLine == victim);
+    LUNATIC_CHECK(impl.EmitSnoops(*operation));
+    const Snoop snoop = impl.txsnp.front().flit;
+
+    impl.Bank(victim).snoopFilter.Track(victim, 5, CacheState::UD, impl.time + 1);
+    const SnoopFilterEntry& current = impl.Bank(victim).snoopFilter.At(
+        impl.Bank(victim).snoopFilter.SetIndex(victim), flow.victimWay);
+    LUNATIC_CHECK(current.valid && current.key == victim);
+    LUNATIC_CHECK(current.generation != flow.victimGeneration);
+
+    for (size_t beat = 0; beat < 2; ++beat)
+    {
+        Data response{};
+        response.source = 5;
+        response.target = 2;
+        response.homeNid = 2;
+        response.txnId = snoop.txnId;
+        response.opcode = CHI::Eb::Opcodes::DAT::SnpRespData;
+        response.resp = CHI::Eb::Resps::SnpRespData_I_PD;
+        response.dataId = beat == 0 ? 0 : 2;
+        for (size_t index = 0; index < 32; ++index)
+            response.bytes[index] = latest[beat * 32 + index];
+        response.byteEnables.fill(1);
+        impl.ProcessSnoopDAT(*operation, response);
+    }
+
+    LUNATIC_CHECK(flow.victimResponseUpdated);
+    LUNATIC_CHECK(impl.CompleteVictim(*operation));
+    LUNATIC_CHECK(!flow.victimPending);
+    LUNATIC_CHECK(impl.memory.Read(victim) == latest);
+    LUNATIC_CHECK(impl.Bank(victim).snoopFilter.State(victim, 5) == CacheState::I);
+    LUNATIC_CHECK(impl.errors.empty());
+}
+
+LUNATIC_TEST(Stage9DirectoryVictimClearsSnoopFilterOnly)
+{
+    Options options;
+    options.policy = PolicyKind::NINE;
+    options.slcSets = 1;
+    options.slcWays = 1;
+    options.snoopFilterSets = 1;
+    options.snoopFilterWays = 1;
+
+    Core::Impl impl(2, options, std::make_shared<EventHub>());
+    const LineKey incoming = LineKey::FromAddress(0x70800, false);
+    const LineKey blockedSF = LineKey::FromAddress(0x70900, false);
+    const LineKey victim = LineKey::FromAddress(0x70a00, false);
+    const LineData latest = VictimPattern(121);
+    const LineData stale = VictimPattern(7);
+    const auto makeRequest = [](NodeId source, TransactionId txnId, uint64_t address) {
+        Request request{};
+        request.source = source;
+        request.target = 2;
+        request.txnId = txnId;
+        request.address = address;
+        request.opcode = CHI::Eb::Opcodes::REQ::ReadClean;
+        request.memAttr = CHI::Eb::MemAttrs::WriteBack_Allocate;
+        request.snpAttr = 1;
+        return request;
+    };
+
+    Transaction* blocker = impl.tracker.Allocate(makeRequest(5, 1, blockedSF.address), 30);
+    Transaction* operation = impl.tracker.Allocate(makeRequest(6, 2, incoming.address), 20);
+    LUNATIC_CHECK(blocker && operation);
+    impl.flows.emplace(operation->handle, FlowState{});
+    operation->phase = Phase::Action;
+    operation->Mark(COMPLETE_MEMORY);
+    LUNATIC_CHECK(impl.Bank(incoming).hazards.Add(operation->handle, incoming, operation->actionAge));
+    LUNATIC_CHECK(impl.Bank(blockedSF).hazards.Add(blocker->handle, blockedSF, blocker->actionAge));
+    impl.Bank(blockedSF).snoopFilter.Track(blockedSF, 5, CacheState::UD, 0);
+
+    LUNATIC_CHECK(!impl.PrepareSnoopFilterCapacity(*operation));
+    FlowState& flow = impl.flows.at(operation->handle);
+    LUNATIC_CHECK(flow.victimSnoopFilterOnly);
+    LUNATIC_CHECK(!flow.victimPending);
+
+    LUNATIC_CHECK(impl.Bank(blockedSF).hazards.Remove(blocker->handle, blockedSF));
+    const size_t sfWay = *impl.Bank(blockedSF).snoopFilter.FindWay(blockedSF);
+    impl.Bank(blockedSF).snoopFilter.Invalidate(impl.Bank(blockedSF).snoopFilter.SetIndex(blockedSF), sfWay);
+    LUNATIC_CHECK(impl.PrepareSnoopFilterCapacity(*operation));
+    LUNATIC_CHECK(flow.victimSnoopFilterOnly);
+    LUNATIC_CHECK(!flow.victimPending);
+
+    HomeLine& home = impl.Bank(victim).directory.Install(victim, 0, 1);
+    home.data = latest;
+    home.validBytes = VictimEnables();
+    home.dirty = true;
+    impl.memory.WriteFull(victim, stale);
+
+    LUNATIC_CHECK(impl.PrepareVictim(*operation));
+    LUNATIC_CHECK(!flow.victimPending);
+    LUNATIC_CHECK(impl.memory.Read(victim) == latest);
+    LUNATIC_CHECK(!impl.Bank(victim).directory.Find(victim));
+    LUNATIC_CHECK(impl.errors.empty());
+}

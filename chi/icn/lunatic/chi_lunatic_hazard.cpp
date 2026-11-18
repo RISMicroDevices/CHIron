@@ -55,6 +55,16 @@ namespace CHI::Lunatic {
         return it != lines.end() && !it->second.empty();
     }
 
+    bool HazardGraph::HasVictim(const LineKey& line) const noexcept
+    {
+        auto it = lines.find(line);
+        if (it == lines.end())
+            return false;
+        return std::any_of(it->second.begin(), it->second.end(), [](const Entry& entry) {
+            return entry.victim;
+        });
+    }
+
     std::optional<TransactionHandle> HazardGraph::Next(const LineKey& line) const
     {
         auto it = lines.find(line);
