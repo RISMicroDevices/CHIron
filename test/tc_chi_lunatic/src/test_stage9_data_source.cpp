@@ -76,6 +76,8 @@ namespace {
         {
             const auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
             LUNATIC_CHECK(data.TgtID() == source && data.TxnID() == txnId);
+            LUNATIC_CHECK(data.DataSource() == 0);
+            LUNATIC_CHECK(data.CBusy() == 0);
             LUNATIC_CHECK(data.CCID() == criticalChunk);
             for (size_t index = 0; index < bytes; ++index)
                 LUNATIC_CHECK(uint8_t(data.Data()[index / 8] >> ((index % 8) * 8)) ==
@@ -187,4 +189,50 @@ LUNATIC_TEST(Stage9DataSourceVictim)
     driver.Quiesce();
     LUNATIC_CHECK(driver.driver.node.GetMemory().Read(b) == dataB);
     LUNATIC_CHECK(driver.driver.node.InspectRequester(b, 5) == CacheState::I);
+}
+
+LUNATIC_TEST(Stage9DataSourceSeparatedResponsePolicy)
+{
+    Options options;
+    options.separatedReadResponse = true;
+    CheckedDriver<Config256> driver(options);
+    driver.PushRequest(driver.Request(CHI::Eb::Opcodes::REQ::ReadNoSnp, 4, 100, 0x61300, true));
+    const auto response = driver.NextRSP(CHI::Eb::Opcodes::RSP::RespSepData);
+    LUNATIC_CHECK(response.CBusy() == 0);
+    for (size_t beat = 0; beat < 2; ++beat)
+    {
+        const auto data = driver.NextDAT(CHI::Eb::Opcodes::DAT::DataSepResp);
+        LUNATIC_CHECK(data.DataSource() == 0);
+        LUNATIC_CHECK(data.DataPull() == 0);
+        LUNATIC_CHECK(data.CBusy() == 0);
+    }
+    driver.CompAck(4, response.DBID());
+    driver.Quiesce();
+}
+
+LUNATIC_TEST(Stage9DataSourceAtomicResponsePolicy)
+{
+    CheckedDriver<Config256> driver;
+    auto request = driver.Request(CHI::Eb::Opcodes::REQ::AtomicSwap, 4, 101, 0x61340);
+    request.Size() = 2;
+    driver.PushRequest(request);
+    const auto response = driver.NextRSP(CHI::Eb::Opcodes::RSP::DBIDResp);
+    LUNATIC_CHECK(response.CBusy() == 0);
+
+    Driver<Config256>::DAT operand{};
+    operand.SrcID() = 4;
+    operand.TgtID() = driver.home;
+    operand.TxnID() = response.DBID();
+    operand.Opcode() = CHI::Eb::Opcodes::DAT::NonCopyBackWrData;
+    operand.BE() = 0b1111;
+    operand.Data()[0] = 0x04030201;
+    driver.Oracle(4).WriteData(driver.driver.now, operand);
+    LUNATIC_CHECK(driver.driver.node.PushRXDAT(operand));
+    driver.driver.Tick();
+
+    const auto result = driver.NextDAT(CHI::Eb::Opcodes::DAT::CompData);
+    LUNATIC_CHECK(result.DataSource() == 0);
+    LUNATIC_CHECK(result.DataPull() == 0);
+    LUNATIC_CHECK(result.CBusy() == 0);
+    driver.Quiesce();
 }
