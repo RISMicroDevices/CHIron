@@ -433,22 +433,37 @@ namespace CHI::Lunatic {
             response.opcode == SNP::SnpStashShared;
         if (!stashSnoop && response.dataPull != 0 && !response.withData)
             return false;
+        if (response.retToSrc && RetToSrcMustBeZero(response.opcode))
+            return false;
         if (stashSnoop && response.dataPull != 0)
         {
             if (response.dataPull != 1)
                 return false;
-            if (response.withData)
+            switch (response.opcode)
             {
-                if (response.partial ? response.resp != CHI::Eb::Resps::SnpRespDataPtl_I_PD
-                                     : response.resp != CHI::Eb::Resps::SnpRespData_I_PD)
+                case SNP::SnpUniqueStash:
+                    if (!response.withData)
+                        return response.resp == CHI::Eb::Resps::SnpResp_I;
+                    if (response.partial)
+                        return response.resp == CHI::Eb::Resps::SnpRespDataPtl_I_PD;
+                    return response.resp == CHI::Eb::Resps::SnpRespData_I ||
+                        response.resp == CHI::Eb::Resps::SnpRespData_I_PD;
+                case SNP::SnpMakeInvalidStash:
+                    return !response.withData && response.resp == CHI::Eb::Resps::SnpResp_I;
+                case SNP::SnpStashUnique:
+                    return !response.withData &&
+                        (response.resp == CHI::Eb::Resps::SnpResp_I ||
+                         response.resp == CHI::Eb::Resps::SnpResp_UC ||
+                         response.resp == CHI::Eb::Resps::SnpResp_SC ||
+                         response.resp == CHI::Eb::Resps::SnpResp_SD);
+                case SNP::SnpStashShared:
+                    return !response.withData &&
+                        (response.resp == CHI::Eb::Resps::SnpResp_I ||
+                         response.resp == CHI::Eb::Resps::SnpResp_UC);
+                default:
                     return false;
             }
-            else if (response.resp != CHI::Eb::Resps::SnpResp_I)
-                return false;
-            return true;
         }
-        if (response.retToSrc && RetToSrcMustBeZero(response.opcode))
-            return false;
         for (CacheState initial : possibleInitial)
             if (MatchesResponse(response.opcode, initial, response))
                 return true;

@@ -518,6 +518,10 @@ namespace CHI {
                 std::shared_ptr<Xaction<config>>)>;
 
         private:
+            XactDenialEnum              NextDataPull(const Global<config>&, FiredResponseFlit<config>&,
+                                            std::shared_ptr<Xaction<config>>) noexcept;
+
+        private:
             std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        txTransactions;
             std::unordered_map<uint64_t, std::shared_ptr<Xaction<config>>>        rxTransactions;
 
@@ -1970,6 +1974,35 @@ namespace /*CHI::*/Xact {
     }
 
     template<FlitConfigurationConcept config>
+    inline XactDenialEnum RNFJoint<config>::NextDataPull(
+        const Global<config>&             glbl,
+        FiredResponseFlit<config>&        flit,
+        std::shared_ptr<Xaction<config>>  xaction) noexcept
+    {
+        if (xaction->GetType() != XactionType::HomeSnoop)
+            return XactDenial::ACCEPTED;
+
+        auto snoop = std::static_pointer_cast<XactionHomeSnoop<config>>(xaction);
+        if (!snoop->IsDataPull())
+            return XactDenial::ACCEPTED;
+
+        txreqid_t key;
+        key.value   = 0;
+        key.id.src  = flit.IsRSP() ? flit.flit.rsp.SrcID() : flit.flit.dat.SrcID();
+        key.id.txn  = snoop->GetDataPullDBID();
+
+        auto [iter, inserted] = txTransactions.try_emplace(key, xaction);
+        if (!inserted && iter->second != xaction)
+            return this->ResponseDeniedByJoint(flit.IsRSP()
+                ? XactDenial::DENIED_RSP_DBID_IN_USE : XactDenial::DENIED_DAT_DBID_IN_USE, flit, xaction);
+
+        if (inserted)
+            this->FireXactionTxnIDAllocation(xaction);
+
+        return XactDenial::ACCEPTED;
+    }
+
+    template<FlitConfigurationConcept config>
     inline XactDenialEnum RNFJoint<config>::NextTXRSP(
         const Global<config>&             glbl,
         uint64_t                          time,
@@ -2035,11 +2068,18 @@ namespace /*CHI::*/Xact {
 
             if (denial != XactDenial::ACCEPTED)
                 return this->ResponseDeniedByXaction(denial, firedRspFlit, xaction);
+
+            denial = NextDataPull(glbl, firedRspFlit, xaction);
+            if (denial != XactDenial::ACCEPTED)
+                return denial;
         }
         else
             return this->ResponseDeniedByJoint(XactDenial::DENIED_RSP_OPCODE, firedRspFlit);
 
-        if (xaction->GetFirst().IsREQ())
+        const bool dataPullAck = rspFlit.Opcode() == Opcodes::RSP::CompAck &&
+            xaction->GetType() == XactionType::HomeSnoop &&
+            std::static_pointer_cast<XactionHomeSnoop<config>>(xaction)->IsDataPull();
+        if (xaction->GetFirst().IsREQ() || dataPullAck)
         {
             // on DBID free
             if (xaction->IsDBIDComplete(glbl))
@@ -2112,11 +2152,19 @@ namespace /*CHI::*/Xact {
         }
         else // SNP
         {
+            bool snoopComplete = xaction->IsComplete(glbl);
+            if (xaction->GetType() == XactionType::HomeSnoop)
+            {
+                auto snoop = std::static_pointer_cast<XactionHomeSnoop<config>>(xaction);
+                snoopComplete = snoop->IsResponseComplete(glbl) && snoop->IsDataComplete(glbl);
+            }
+
             // on completion
-            if (xaction->IsComplete(glbl))
+            if (snoopComplete)
             {
                 // event on completion
-                this->FireXactionComplete(xaction, rspFlit.SrcID());
+                if (xaction->IsComplete(glbl))
+                    this->FireXactionComplete(xaction, rspFlit.SrcID());
 
                 rxsnpid_t key;
                 key.value   = 0;
@@ -2301,7 +2349,9 @@ namespace /*CHI::*/Xact {
             }
         }
 
-        if (xaction->GetFirst().IsREQ())
+        const bool dataPull = xaction->GetType() == XactionType::HomeSnoop &&
+            std::static_pointer_cast<XactionHomeSnoop<config>>(xaction)->IsDataPull();
+        if (xaction->GetFirst().IsREQ() || dataPull)
         {
             // on TxnID free
             if (xaction->IsTxnIDComplete(glbl))
@@ -2312,8 +2362,10 @@ namespace /*CHI::*/Xact {
                 // remove related TxnID mapping
                 txreqid_t key;
                 key.value   = 0;
-                key.id.src  = xaction->GetFirst().flit.req.SrcID();
-                key.id.txn  = xaction->GetFirst().flit.req.TxnID();
+                key.id.src  = dataPull ? rspFlit.TgtID() : xaction->GetFirst().flit.req.SrcID();
+                key.id.txn  = dataPull
+                    ? std::static_pointer_cast<XactionHomeSnoop<config>>(xaction)->GetDataPullDBID()
+                    : xaction->GetFirst().flit.req.TxnID();
 
                 txTransactions.erase(key);
             }
@@ -2533,6 +2585,10 @@ namespace /*CHI::*/Xact {
 
             if (denial != XactDenial::ACCEPTED)
                 return this->ResponseDeniedByXaction(denial, firedDatFlit, xaction);
+
+            denial = NextDataPull(glbl, firedDatFlit, xaction);
+            if (denial != XactDenial::ACCEPTED)
+                return denial;
         }
         else
         {
@@ -2687,10 +2743,50 @@ namespace /*CHI::*/Xact {
         }
         else // SNP
         {
-            if (xaction->IsComplete(glbl))
+            auto snoop = xaction->GetType() == XactionType::HomeSnoop
+                ? std::static_pointer_cast<XactionHomeSnoop<config>>(xaction) : nullptr;
+            const bool snoopComplete = snoop
+                ? snoop->IsResponseComplete(glbl) && snoop->IsDataComplete(glbl) : xaction->IsComplete(glbl);
+
+            if (snoopComplete)
             {
+                if (snoop && snoop->IsDataPull() && snoop->IsTxnIDComplete(glbl))
+                {
+                    txreqid_t dataPullKey;
+                    dataPullKey.value   = 0;
+                    dataPullKey.id.src  = datFlit.SrcID();
+                    dataPullKey.id.txn  = snoop->GetDataPullDBID();
+                    if (txTransactions.erase(dataPullKey))
+                        this->FireXactionTxnIDFree(xaction);
+                }
+
+                if (snoop && snoop->IsDataPull() && snoop->IsDBIDComplete(glbl))
+                {
+                    const FiredResponseFlit<config>* source = xaction->GetDBIDSource();
+                    if (source)
+                    {
+                        txreqdbid_t keyDBID;
+                        keyDBID.value   = 0;
+                        if (source->IsRSP())
+                        {
+                            keyDBID.id.db   = source->flit.rsp.DBID();
+                            keyDBID.id.src  = source->flit.rsp.SrcID();
+                            keyDBID.id.tgt  = source->flit.rsp.TgtID();
+                        }
+                        else
+                        {
+                            keyDBID.id.db   = source->flit.dat.DBID();
+                            keyDBID.id.src  = source->flit.dat.HomeNID();
+                            keyDBID.id.tgt  = source->flit.dat.TgtID();
+                        }
+                        if (txDBIDTransactions.erase(keyDBID))
+                            this->FireXactionDBIDFree(xaction);
+                    }
+                }
+
                 // event on completion
-                this->FireXactionComplete(xaction, datFlit.SrcID());
+                if (xaction->IsComplete(glbl))
+                    this->FireXactionComplete(xaction, datFlit.SrcID());
                     
                 rxsnpid_t key;
                 key.value   = 0;
@@ -2768,7 +2864,9 @@ namespace /*CHI::*/Xact {
             }
         }
 
-        if (xaction->GetFirst().IsREQ())
+        const bool dataPull = xaction->GetType() == XactionType::HomeSnoop &&
+            std::static_pointer_cast<XactionHomeSnoop<config>>(xaction)->IsDataPull();
+        if (xaction->GetFirst().IsREQ() || dataPull)
         {
             // on TxnID free
             if (xaction->IsTxnIDComplete(glbl))
@@ -2776,13 +2874,15 @@ namespace /*CHI::*/Xact {
                 // event on TxnID free
                 this->FireXactionTxnIDFree(xaction);
 
-                if (xaction->GetFirst().IsREQ())
+                if (xaction->GetFirst().IsREQ() || dataPull)
                 {
                     // remove related TxnID mapping
                     txreqid_t key;
                     key.value   = 0;
-                    key.id.src  = xaction->GetFirst().flit.req.SrcID();
-                    key.id.txn  = xaction->GetFirst().flit.req.TxnID();
+                    key.id.src  = dataPull ? datFlit.TgtID() : xaction->GetFirst().flit.req.SrcID();
+                    key.id.txn  = dataPull
+                        ? std::static_pointer_cast<XactionHomeSnoop<config>>(xaction)->GetDataPullDBID()
+                        : xaction->GetFirst().flit.req.TxnID();
 
                     txTransactions.erase(key);
                 }
@@ -2843,7 +2943,8 @@ namespace /*CHI::*/Xact {
                         if (xactionDBIDIter != txDBIDTransactions.end())
                         {
                             auto xactionDBID = xactionDBIDIter->second;
-                            if (xactionDBID->GetFirst().flit.req.TxnID() == xaction->GetFirst().flit.req.TxnID())
+                            if (dataPull ? xactionDBID == xaction
+                                         : xactionDBID->GetFirst().flit.req.TxnID() == xaction->GetFirst().flit.req.TxnID())
                                 txDBIDTransactions.erase(xactionDBIDIter);
                         }
                     }
